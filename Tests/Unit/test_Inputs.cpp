@@ -70,8 +70,8 @@ TEST (Inputs, ParsesEveryMeshAndIOKey)
 {
     ScopedKeys guard;
     add_inputs_text("mesh.n_cell = 24 20 16\n"
-                    "mesh.prob_lo = -10 -20 5\n"
-                    "mesh.prob_hi = 230 180 1605\n"
+                    "mesh.prob_lo = -10 -20 0\n"
+                    "mesh.prob_hi = 230 180 1600\n"
                     "mesh.is_periodic = 1 0 0\n"
                     "mesh.max_grid_size = 8 10\n"
                     "io.plot_file = myplt\n"
@@ -92,10 +92,10 @@ TEST (Inputs, ParsesEveryMeshAndIOKey)
     EXPECT_EQ(in.mesh.n_cell, amrex::IntVect(24, 20, 16));
     EXPECT_EQ(in.mesh.prob_lo[0], -10);
     EXPECT_EQ(in.mesh.prob_lo[1], -20);
-    EXPECT_EQ(in.mesh.prob_lo[2], 5);
+    EXPECT_EQ(in.mesh.prob_lo[2], 0);
     EXPECT_EQ(in.mesh.prob_hi[0], 230);
     EXPECT_EQ(in.mesh.prob_hi[1], 180);
-    EXPECT_EQ(in.mesh.prob_hi[2], 1605);
+    EXPECT_EQ(in.mesh.prob_hi[2], 1600);
     EXPECT_EQ(in.mesh.is_periodic[0], 1);
     EXPECT_EQ(in.mesh.is_periodic[1], 0);
     EXPECT_EQ(in.mesh.is_periodic[2], 0);
@@ -169,6 +169,30 @@ TEST (Inputs, RangeChecksNameTheInput)
         {"io.chk_file",        [] (ablsteady::Inputs& in) { in.io.chk_file.clear(); }},
         {"io.write_plotfile",  [] (ablsteady::Inputs& in) { in.io.write_plotfile = 2; }},
         {"io.write_checkpoint", [] (ablsteady::Inputs& in) { in.io.write_checkpoint = -1; }},
+        {"mesh.prob_lo: the z value must be 0", [] (ablsteady::Inputs& in) { in.mesh.prob_lo[2] = 10; }},
+        {"mesh.dz0 must be finite and >= 0", [] (ablsteady::Inputs& in) { in.mesh.dz0 = -1; }},
+        {"mesh.dz0 must not exceed",        [] (ablsteady::Inputs& in) { in.mesh.dz0 = 101; }},
+        {"mesh.stretch_ratio needs mesh.dz0 > 0", [] (ablsteady::Inputs& in) { in.mesh.stretch_ratio = amrex::Real(1.1); }},
+        {"mesh.stretch_ratio must be finite and >= 1", [] (ablsteady::Inputs& in) {
+             in.mesh.dz0 = 10; in.mesh.stretch_ratio_given = true; }},
+        {"terrain.hill_height must be finite and > 0", [] (ablsteady::Inputs& in) {
+             in.terrain.type = "agnesi"; in.terrain.hill_half_width = 100; }},
+        {"mesh.zlevels_file and mesh.dz0 cannot both", [] (ablsteady::Inputs& in) { in.mesh.dz0 = 10; in.mesh.zlevels_file = "z.txt"; }},
+        {"terrain.type must be",            [] (ablsteady::Inputs& in) { in.terrain.type = "hill"; }},
+        {"terrain.file is required",        [] (ablsteady::Inputs& in) { in.terrain.type = "xyz"; }},
+        {"terrain.smoothing must be",       [] (ablsteady::Inputs& in) { in.terrain.smoothing = 3; }},
+        {"terrain.gamma_m must be > 0 and < 1", [] (ablsteady::Inputs& in) { in.terrain.gamma_m = 1; }},
+        {"terrain.hill_half_width must be", [] (ablsteady::Inputs& in) { in.terrain.type = "agnesi"; in.terrain.hill_height = 50; }},  // hill_half_width left at 0
+        {"terrain.hill_shape must be",      [] (ablsteady::Inputs& in) {
+             in.terrain.type = "agnesi"; in.terrain.hill_height = 50; in.terrain.hill_half_width = 100;
+             in.terrain.hill_shape = "cone"; }},
+        {"terrain.idw_neighbors must be",   [] (ablsteady::Inputs& in) {
+             in.terrain.type = "xyz"; in.terrain.file = "t.xyz"; in.terrain.idw_neighbors = 0; }},
+        {"terrain.gamma_m has no effect unless terrain.smoothing = 1", [] (ablsteady::Inputs& in) {
+             in.terrain.smoothing = 0; in.terrain.given.emplace_back("gamma_m"); }},
+        {"terrain.file has no effect",      [] (ablsteady::Inputs& in) { in.terrain.given.emplace_back("file"); }},
+        {"terrain.hill_height has no effect", [] (ablsteady::Inputs& in) { in.terrain.given.emplace_back("hill_height"); }},
+        {"terrain.idw_power has no effect", [] (ablsteady::Inputs& in) { in.terrain.given.emplace_back("idw_power"); }},
         {"mesh.prob_lo and mesh.prob_hi must be finite",
          [] (ablsteady::Inputs& in) { in.mesh.prob_hi[1] = std::numeric_limits<amrex::Real>::infinity(); }},
     };

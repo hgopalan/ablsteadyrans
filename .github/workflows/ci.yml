@@ -229,7 +229,9 @@ jobs:
 
       - name: No trailing whitespace
         run: |
-          if git grep -nI '[[:space:]]$' -- ':!external'; then
+          # Copies of ERF files and gold outputs stay byte-identical to their
+          # source (.gitattributes), so they are not checked.
+          if git grep -nI '[[:space:]]$' -- ':!external' ':!extern_erf' ':!Tests/Gold'; then
             echo "Trailing whitespace on the lines above."
             exit 1
           fi

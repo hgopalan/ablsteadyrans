@@ -1,0 +1,1200 @@
+#ifndef ERF_TERRAIN_METRIC_H_
+#define ERF_TERRAIN_METRIC_H_
+
+#include <AMReX.H>
+#include <AMReX_Geometry.H>
+#include <AMReX_MultiFab.H>
+#include <ERF_IndexDefines.H>
+#include <cmath>
+#include <ERF_NumericalConstants.H>
+
+/**
+ * Routine to define default z_phys_nd and z_phys_cc
+ */
+void
+init_default_zphys (int lev, const amrex::Geometry& geom,
+                    amrex::MultiFab& z_phys_nd, amrex::MultiFab& z_phys_cc,
+                    amrex::Real z_offset = zero);
+
+/**
+ * The cells of a (cell-centered) BoxArray as boxes that are never stacked on each other:
+ * wherever a box sits on the top face of another, the run of cells in z that the two belong
+ * to becomes a single box.  Returns ba itself when no two boxes of ba are stacked.
+ *
+ * @param[in] ba cell-centered BoxArray
+ */
+amrex::BoxArray
+join_boxes_stacked_in_z (const amrex::BoxArray& ba);
+
+/**
+ * Utility routines for constructing terrain metric terms
+ */
+
+// Declare functions for ERF.cpp
+/**
+ * Initialize staggered z-levels and stretched vertical spacing.
+ *
+ * @param[out] zlevels_stag Staggered z-levels.
+ * @param[out] stretched_dz_h Host stretched vertical spacing.
+ * @param[out] stretched_dz_d Device stretched vertical spacing.
+ * @param[in] geom Geometry information.
+ * @param[in] ref_ratio Refinement ratios.
+ * @param[in] grid_stretching_ratio Ratio for grid stretching; zero with a positive dz0
+ *                                  solves for the ratio that closes on the domain top.
+ * @param[in] zsurf Surface height.
+ * @param[in] dz0 Initial vertical spacing.
+ */
+void
+init_zlevels (amrex::Vector<amrex::Vector<amrex::Real>>& zlevels_stag,
+              amrex::Vector<amrex::Vector<amrex::Real>>& stretched_dz_h,
+              amrex::Vector<amrex::Gpu::DeviceVector<amrex::Real>>& stretched_dz_d,
+              amrex::Vector<amrex::Geometry> const& geom,
+              amrex::Vector<amrex::IntVect>  const& ref_ratio,
+              const amrex::Real grid_stretching_ratio,
+              const amrex::Real zsurf,
+              const amrex::Real dz0);
+
+/**
+ * How the terrain-fitted mesh on a fine level is built when erf.terrain_smoothing != 0.
+ *
+ * The STF and Sullivan TF transformations are not defined on a level that does not
+ * reach the top of the domain, so on a fine level we instead start from the mesh
+ * interpolated from the coarse level.  A caller that has done that interpolation --
+ * and, for Transform, has also written the fine-resolution terrain into the k=0 slab
+ * and saved the pre-overwrite field -- says so by passing anything other than None.
+ * Every other caller keeps the historical behavior of aborting, because it has not
+ * prepared z_phys_nd in a way this path can use.
+ */
+enum struct FineTerrain {
+    None,        //!< caller has not prepared a fine mesh from the coarse level
+    Interpolate, //!< use the coordinates interpolated from the coarse level as-is
+    Transform    //!< add the fine terrain as a correction that decays with height
+};
+
+/**
+ * Read erf.amr_terrain_refinement and translate it into a FineTerrain.
+ *
+ * Aborts on any value other than "interpolate" or "transform" so that a typo cannot
+ * silently select a path that leaves the fine mesh untransformed.
+ */
+FineTerrain
+which_fine_terrain ();
+
+/**
+ * Construct terrain-fitted coordinates.
+ *
+ * @param[in] lev Level index.
+ * @param[in] geom Geometry information.
+ * @param[out] z_phys_nd Nodal physical height field.
+ * @param[in] z_levels_h Host z-levels.
+ * @param[in] phys_bc_type Physical boundary condition types.
+ * @param[in] terrain_smoothing 0 BTF, 1 STF (Klemp 2011), 2 Sullivan.
+ * @param[in] terrain_gamma_m STF minimum fractional layer thickness.
+ * @param[out] n_capped If not null: STF levels where that minimum stopped the smoothing.
+ */
+void
+make_terrain_fitted_coords (int lev, const amrex::Geometry& geom,
+                            amrex::MultiFab& z_phys_nd,
+                            amrex::Vector<amrex::Real> const& z_levels_h,
+                            amrex::GpuArray<ERF_BC, AMREX_SPACEDIM*2>& phys_bc_type,
+                            int terrain_smoothing,
+                            amrex::Real terrain_gamma_m,
+                            int* n_capped = nullptr);
+
+/** Verify that a fitted mesh is horizontally flat and follows z_levels_h. */
+void
+validate_flat_terrain (int lev,
+                       const amrex::MultiFab& z_phys_nd,
+                       const amrex::Vector<amrex::Real>& z_levels_h);
+
+/**
+ * Initialize the terrain grid mapping.
+ *
+ * @param[in] lev Level index.
+ * @param[in] geom Geometry information.
+ * @param[out] z_phys_nd Nodal physical height field.
+ * @param[in] z_levels_h Host z-levels.
+ * @param[in] terrain_smoothing 0 BTF, 1 STF (Klemp 2011), 2 Sullivan.
+ * @param[in] terrain_gamma_m STF minimum fractional layer thickness.
+ * @param[out] n_capped If not null: STF levels where that minimum stopped the smoothing.
+ */
+void
+init_which_terrain_grid (int lev, const amrex::Geometry& geom,
+                         amrex::MultiFab& z_phys_nd,
+                         amrex::Vector<amrex::Real> const& z_levels_h,
+                         int terrain_smoothing,
+                         amrex::Real terrain_gamma_m,
+                         int* n_capped = nullptr);
+
+/**
+ * Finish the terrain-fitted mesh on a fine level whose interior was set by
+ * interpolation from the coarse level (erf.terrain_smoothing != 0).
+ *
+ * For FineTerrain::Transform this adds the fine-resolution terrain as a correction
+ * that decays linearly to zero at the top of the fine grids.  For both modes it then
+ * fills the nodes outside the lateral domain boundary and the layer below the
+ * surface, which init_which_terrain_grid()'s BTF branch would otherwise have filled.
+ *
+ * @param[in] lev Level index.
+ * @param[in] geom Geometry information.
+ * @param[in,out] z_phys_nd Nodal physical height field.
+ * @param[in] z_levels_h Host z-levels.
+ * @param[in] fine_terrain Interpolate or Transform.
+ * @param[in] z_phys_interp Mesh interpolated from the coarse level; see above.
+ */
+void
+init_fine_terrain_grid (int lev, const amrex::Geometry& geom,
+                        amrex::MultiFab& z_phys_nd,
+                        amrex::Vector<amrex::Real> const& z_levels_h,
+                        FineTerrain fine_terrain,
+                        amrex::MultiFab const* z_phys_interp);
+
+// Compute the min dz at cell center with terrain
+/**
+ * Compute the minimum vertical spacing with terrain.
+ *
+ * @param[in] z_phys_nd Nodal physical height field.
+ * @return Minimum vertical grid spacing.
+ */
+amrex::Real
+get_dzmin_terrain (amrex::MultiFab& z_phys_nd);
+
+/**
+ * Re-derive the stretched vertical spacing at one level from the nominal z-levels.
+ *
+ * init_zlevels() fills both zlevels_stag and stretched_dz_* together, but
+ * zlevels_stag can be replaced after construction (init_from_wrfinput() does this
+ * when erf.avg_grid_faces_to_nodes = false, and restart reads it back from the
+ * checkpoint).  Call this whenever zlevels_stag[lev] changes so that the cell
+ * heights never drift out of sync with the levels they are supposed to describe.
+ *
+ * @param[in] lev Level index.
+ * @param[in] zlevels_stag Staggered z-levels (the source of truth).
+ * @param[out] stretched_dz_h Host stretched vertical spacing.
+ * @param[out] stretched_dz_d Device stretched vertical spacing.
+ */
+void
+update_stretched_dz (int lev,
+                     amrex::Vector<amrex::Vector<amrex::Real>> const& zlevels_stag,
+                     amrex::Vector<amrex::Vector<amrex::Real>>& stretched_dz_h,
+                     amrex::Vector<amrex::Gpu::DeviceVector<amrex::Real>>& stretched_dz_d);
+
+//*****************************************************************************************
+// Compute terrain metric terms at cell-center
+//*****************************************************************************************
+// Metric is at cell center
+/**
+ * Compute the zeta metric term at the cell center.
+ *
+ * @param[in] i x-index
+ * @param[in] j y-index
+ * @param[in] k z-index
+ * @param[in] cellSizeInv Inverse cell spacing.
+ * @param[in] z_nd Nodal physical height field.
+ * @return Zeta metric term.
+ */
+AMREX_GPU_HOST_DEVICE
+AMREX_FORCE_INLINE
+amrex::Real
+Compute_h_zeta_AtCellCenter (const int &i, const int &j, const int &k,
+                             const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& cellSizeInv,
+                             const amrex::Array4<const amrex::Real>& z_nd)
+{
+    amrex::Real dzInv = cellSizeInv[2];
+    amrex::Real met_h_zeta = fourth * dzInv *
+      ( z_nd(i+1,j,k+1) + z_nd(i+1,j+1,k+1) + z_nd(i,j,k+1) + z_nd(i,j+1,k+1)
+      - z_nd(i+1,j,k  ) - z_nd(i+1,j+1,k  ) - z_nd(i,j,k  ) - z_nd(i,j+1,k  ) );
+    return met_h_zeta;
+}
+
+// Metric is at cell center
+/**
+ * Compute the xi metric term at the cell center.
+ *
+ * @param[in] i x-index
+ * @param[in] j y-index
+ * @param[in] k z-index
+ * @param[in] cellSizeInv Inverse cell spacing.
+ * @param[in] z_nd Nodal physical height field.
+ * @return Xi metric term.
+ */
+AMREX_GPU_HOST_DEVICE
+AMREX_FORCE_INLINE
+amrex::Real
+Compute_h_xi_AtCellCenter (const int &i, const int &j, const int &k,
+                           const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& cellSizeInv,
+                           const amrex::Array4<const amrex::Real>& z_nd)
+{
+    amrex::Real dxInv = cellSizeInv[0];
+    amrex::Real met_h_xi   = fourth * dxInv *
+      ( z_nd(i+1,j,k) + z_nd(i+1,j+1,k) + z_nd(i+1,j,k+1) + z_nd(i+1,j+1,k+1)
+      - z_nd(i  ,j,k) - z_nd(i  ,j+1,k) - z_nd(i  ,j,k+1) - z_nd(i  ,j+1,k+1) );
+    return met_h_xi;
+}
+
+// Metric is at cell center
+/**
+ * Compute the eta metric term at the cell center.
+ *
+ * @param[in] i x-index
+ * @param[in] j y-index
+ * @param[in] k z-index
+ * @param[in] cellSizeInv Inverse cell spacing.
+ * @param[in] z_nd Nodal physical height field.
+ * @return Eta metric term.
+ */
+AMREX_GPU_HOST_DEVICE
+AMREX_FORCE_INLINE
+amrex::Real
+Compute_h_eta_AtCellCenter (const int &i, const int &j, const int &k,
+                            const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& cellSizeInv,
+                            const amrex::Array4<const amrex::Real>& z_nd)
+{
+    amrex::Real dyInv = cellSizeInv[1];
+    amrex::Real met_h_eta  = fourth * dyInv *
+      ( z_nd(i,j+1,k) + z_nd(i+1,j+1,k) + z_nd(i,j+1,k+1) + z_nd(i+1,j+1,k+1)
+      - z_nd(i,j  ,k) - z_nd(i+1,j  ,k) - z_nd(i,j  ,k+1) - z_nd(i+1,j  ,k+1) );
+    return met_h_eta;
+}
+
+
+//*****************************************************************************************
+// Compute terrain metric terms at face-centers
+//*****************************************************************************************
+// Metric coincides with U location
+/**
+ * Compute the zeta metric term at the i-face.
+ *
+ * @param[in] i x-index
+ * @param[in] j y-index
+ * @param[in] k z-index
+ * @param[in] cellSizeInv Inverse cell spacing.
+ * @param[in] z_nd Nodal physical height field.
+ * @return Zeta metric term.
+ */
+AMREX_GPU_DEVICE
+AMREX_FORCE_INLINE
+amrex::Real
+Compute_h_zeta_AtIface (const int &i, const int &j, const int &k,
+                        const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& cellSizeInv,
+                        const amrex::Array4<const amrex::Real>& z_nd)
+{
+    amrex::Real met_h_zeta = myhalf * cellSizeInv[2] * ( (z_nd(i,j  ,k+1) - z_nd(i,j  ,k))
+                                                       + (z_nd(i,j+1,k+1) - z_nd(i,j+1,k)) );
+    return met_h_zeta;
+}
+
+// Metric coincides with U location
+/**
+ * Compute the xi metric term at the i-face.
+ *
+ * @param[in] i x-index
+ * @param[in] j y-index
+ * @param[in] k z-index
+ * @param[in] cellSizeInv Inverse cell spacing.
+ * @param[in] z_nd Nodal physical height field.
+ * @return Xi metric term.
+ */
+AMREX_GPU_HOST_DEVICE
+AMREX_FORCE_INLINE
+amrex::Real
+Compute_h_xi_AtIface (const int &i, const int &j, const int &k,
+                      const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& cellSizeInv,
+                      const amrex::Array4<const amrex::Real>& z_nd)
+{
+    amrex::Real met_h_xi   = amrex::Real(0.125) * cellSizeInv[0] * (
+      (z_nd(i+1,j  ,k  ) - z_nd(i-1,j  ,k  )) + (z_nd(i+1,j  ,k+1) - z_nd(i-1,j  ,k+1)) +
+      (z_nd(i+1,j+1,k  ) - z_nd(i-1,j+1,k  )) + (z_nd(i+1,j+1,k+1) - z_nd(i-1,j+1,k+1)) );
+    return met_h_xi;
+}
+
+// Metric coincides with U location
+/**
+ * Compute the eta metric term at the i-face.
+ *
+ * @param[in] i x-index
+ * @param[in] j y-index
+ * @param[in] k z-index
+ * @param[in] cellSizeInv Inverse cell spacing.
+ * @param[in] z_nd Nodal physical height field.
+ * @return Eta metric term.
+ */
+AMREX_GPU_DEVICE
+AMREX_FORCE_INLINE
+amrex::Real
+Compute_h_eta_AtIface (const int &i, const int &j, const int &k,
+                       const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& cellSizeInv,
+                       const amrex::Array4<const amrex::Real>& z_nd)
+{
+    amrex::Real met_h_eta  = myhalf * cellSizeInv[1] * ( (z_nd(i,j+1,k  ) - z_nd(i,j,k  ))
+                                                       + (z_nd(i,j+1,k+1) - z_nd(i,j,k+1)) );
+    return met_h_eta;
+}
+
+// Metric coincides with V location
+/**
+ * Compute the zeta metric term at the j-face.
+ *
+ * @param[in] i x-index
+ * @param[in] j y-index
+ * @param[in] k z-index
+ * @param[in] cellSizeInv Inverse cell spacing.
+ * @param[in] z_nd Nodal physical height field.
+ * @return Zeta metric term.
+ */
+AMREX_GPU_DEVICE
+AMREX_FORCE_INLINE
+amrex::Real
+Compute_h_zeta_AtJface (const int &i, const int &j, const int &k,
+                        const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& cellSizeInv,
+                        const amrex::Array4<const amrex::Real>& z_nd)
+{
+    amrex::Real met_h_zeta = myhalf * cellSizeInv[2] * ( (z_nd(i  ,j,k+1) - z_nd(i  ,j,k  ))
+                                                       + (z_nd(i+1,j,k+1) - z_nd(i+1,j,k  )) );
+    return met_h_zeta;
+}
+
+// Metric coincides with V location
+/**
+ * Compute the xi metric term at the j-face.
+ *
+ * @param[in] i x-index
+ * @param[in] j y-index
+ * @param[in] k z-index
+ * @param[in] cellSizeInv Inverse cell spacing.
+ * @param[in] z_nd Nodal physical height field.
+ * @return Xi metric term.
+ */
+AMREX_GPU_DEVICE
+AMREX_FORCE_INLINE
+amrex::Real
+Compute_h_xi_AtJface (const int &i, const int &j, const int &k,
+                      const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& cellSizeInv,
+                      const amrex::Array4<const amrex::Real>& z_nd)
+{
+    amrex::Real met_h_xi   = myhalf * cellSizeInv[0] * ( (z_nd(i+1,j,k  ) - z_nd(i,j,k  ))
+                                                       + (z_nd(i+1,j,k+1) - z_nd(i,j,k+1)) );
+    return met_h_xi;
+}
+
+// Metric coincides with V location
+/**
+ * Compute the eta metric term at the j-face.
+ *
+ * @param[in] i x-index
+ * @param[in] j y-index
+ * @param[in] k z-index
+ * @param[in] cellSizeInv Inverse cell spacing.
+ * @param[in] z_nd Nodal physical height field.
+ * @return Eta metric term.
+ */
+AMREX_GPU_HOST_DEVICE
+AMREX_FORCE_INLINE
+amrex::Real
+Compute_h_eta_AtJface (const int &i, const int &j, const int &k,
+                       const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& cellSizeInv,
+                       const amrex::Array4<const amrex::Real>& z_nd)
+{
+    amrex::Real met_h_eta  = amrex::Real(0.125) * cellSizeInv[1] *
+      ( (z_nd(i  ,j+1,k  ) - z_nd(i  ,j-1,k  )) + (z_nd(i  ,j+1,k+1) - z_nd(i  ,j-1,k+1)) +
+        (z_nd(i+1,j+1,k  ) - z_nd(i+1,j-1,k  )) + (z_nd(i+1,j+1,k+1) - z_nd(i+1,j-1,k+1)) );
+    return met_h_eta;
+}
+
+// Metric coincides with K location
+/**
+ * Compute the zeta metric term at the k-face.
+ *
+ * @param[in] i x-index
+ * @param[in] j y-index
+ * @param[in] k z-index
+ * @param[in] cellSizeInv Inverse cell spacing.
+ * @param[in] z_nd Nodal physical height field.
+ * @return Zeta metric term.
+ */
+AMREX_GPU_HOST_DEVICE
+AMREX_FORCE_INLINE
+amrex::Real
+Compute_h_zeta_AtKface (const int &i, const int &j, const int &k,
+                        const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& cellSizeInv,
+                        const amrex::Array4<const amrex::Real>& z_nd)
+{
+    amrex::Real met_h_zeta = amrex::Real(0.125) * cellSizeInv[2] *
+      ( (z_nd(i  ,j  ,k+1) - z_nd(i  ,j  ,k-1)) + (z_nd(i+1,j  ,k+1) - z_nd(i+1,j  ,k-1)) +
+        (z_nd(i  ,j+1,k+1) - z_nd(i  ,j+1,k-1)) + (z_nd(i+1,j+1,k+1) - z_nd(i+1,j+1,k-1)) );
+    return met_h_zeta;
+}
+
+// Metric coincides with K location
+/**
+ * Compute the xi metric term at the k-face.
+ *
+ * @param[in] i x-index
+ * @param[in] j y-index
+ * @param[in] k z-index
+ * @param[in] cellSizeInv Inverse cell spacing.
+ * @param[in] z_nd Nodal physical height field.
+ * @return Xi metric term.
+ */
+AMREX_GPU_HOST_DEVICE
+AMREX_FORCE_INLINE
+amrex::Real
+Compute_h_xi_AtKface (const int &i, const int &j, const int &k,
+                      const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& cellSizeInv,
+                      const amrex::Array4<const amrex::Real>& z_nd)
+{
+    amrex::Real met_h_xi   = myhalf * cellSizeInv[0] * ( (z_nd(i+1,j  ,k) - z_nd(i,j  ,k))
+                                                       + (z_nd(i+1,j+1,k) - z_nd(i,j+1,k)) );
+    return met_h_xi;
+}
+
+// Metric coincides with K location
+/**
+ * Compute the eta metric term at the k-face.
+ *
+ * @param[in] i x-index
+ * @param[in] j y-index
+ * @param[in] k z-index
+ * @param[in] cellSizeInv Inverse cell spacing.
+ * @param[in] z_nd Nodal physical height field.
+ * @return Eta metric term.
+ */
+AMREX_GPU_HOST_DEVICE
+AMREX_FORCE_INLINE
+amrex::Real
+Compute_h_eta_AtKface (const int &i, const int &j, const int &k,
+                       const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& cellSizeInv,
+                       const amrex::Array4<const amrex::Real>& z_nd)
+{
+    amrex::Real met_h_eta  = myhalf * cellSizeInv[1] * ( (z_nd(i  ,j+1,k) - z_nd(i  ,j,k))
+                                                       + (z_nd(i+1,j+1,k) - z_nd(i+1,j,k)) );
+    return met_h_eta;
+}
+
+
+//*****************************************************************************************
+// Compute terrain metric terms at edge-centers
+//*****************************************************************************************
+// -- EdgeCenterK --
+
+// Metric is at edge and center Z (red pentagon)
+/**
+ * Compute the zeta metric term at the k-edge center.
+ *
+ * @param[in] i x-index
+ * @param[in] j y-index
+ * @param[in] k z-index
+ * @param[in] cellSizeInv Inverse cell spacing.
+ * @param[in] z_nd Nodal physical height field.
+ * @return Zeta metric term.
+ */
+AMREX_GPU_DEVICE
+AMREX_FORCE_INLINE
+amrex::Real
+Compute_h_zeta_AtEdgeCenterK (const int &i, const int &j, const int &k,
+                              const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& cellSizeInv,
+                              const amrex::Array4<const amrex::Real>& z_nd)
+{
+    amrex::Real dzInv = cellSizeInv[2];
+    amrex::Real met_h_zeta = dzInv * (z_nd(i,j,k+1) - z_nd(i,j,k));
+    return met_h_zeta;
+}
+
+// Metric is at edge and center Z (red pentagon)
+/**
+ * Compute the xi metric term at the k-edge center.
+ *
+ * @param[in] i x-index
+ * @param[in] j y-index
+ * @param[in] k z-index
+ * @param[in] cellSizeInv Inverse cell spacing.
+ * @param[in] z_nd Nodal physical height field.
+ * @return Xi metric term.
+ */
+AMREX_GPU_DEVICE
+AMREX_FORCE_INLINE
+amrex::Real
+Compute_h_xi_AtEdgeCenterK (const int &i, const int &j, const int &k,
+                            const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& cellSizeInv,
+                            const amrex::Array4<const amrex::Real>& z_nd)
+{
+    amrex::Real dxInv = cellSizeInv[0];
+    amrex::Real met_h_xi  = fourth * dxInv *
+      ( z_nd(i+1,j,k) + z_nd(i+1,j,k+1)
+      - z_nd(i-1,j,k) - z_nd(i-1,j,k+1) );
+    return met_h_xi;
+}
+
+// Metric is at edge and center Z (red pentagon)
+/**
+ * Compute the eta metric term at the k-edge center.
+ *
+ * @param[in] i x-index
+ * @param[in] j y-index
+ * @param[in] k z-index
+ * @param[in] cellSizeInv Inverse cell spacing.
+ * @param[in] z_nd Nodal physical height field.
+ * @return Eta metric term.
+ */
+AMREX_GPU_DEVICE
+AMREX_FORCE_INLINE
+amrex::Real
+Compute_h_eta_AtEdgeCenterK (const int &i, const int &j, const int &k,
+                             const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& cellSizeInv,
+                             const amrex::Array4<const amrex::Real>& z_nd)
+{
+    amrex::Real dyInv = cellSizeInv[1];
+    amrex::Real met_h_eta = fourth * dyInv *
+      ( z_nd(i,j+1,k) + z_nd(i,j+1,k+1)
+      - z_nd(i,j-1,k) - z_nd(i,j-1,k+1) );
+    return met_h_eta;
+}
+
+// -- EdgeCenterJ --
+
+// Metric is at edge and center Y (magenta cross)
+/**
+ * Compute the zeta metric term at the j-edge center.
+ *
+ * @param[in] i x-index
+ * @param[in] j y-index
+ * @param[in] k z-index
+ * @param[in] cellSizeInv Inverse cell spacing.
+ * @param[in] z_nd Nodal physical height field.
+ * @return Zeta metric term.
+ */
+AMREX_GPU_DEVICE
+AMREX_FORCE_INLINE
+amrex::Real
+Compute_h_zeta_AtEdgeCenterJ (const int &i, const int &j, const int &k,
+                              const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& cellSizeInv,
+                              const amrex::Array4<const amrex::Real>& z_nd)
+{
+    amrex::Real dzInv = cellSizeInv[2];
+    amrex::Real met_h_zeta = fourth * dzInv * ( z_nd(i,j,k+1) + z_nd(i,j+1,k+1)
+                                              - z_nd(i,j,k-1) - z_nd(i,j+1,k-1) );
+    return met_h_zeta;
+}
+
+// Metric is at edge and center Y (magenta cross)
+/**
+ * Compute the xi metric term at the j-edge center.
+ *
+ * @param[in] i x-index
+ * @param[in] j y-index
+ * @param[in] k z-index
+ * @param[in] cellSizeInv Inverse cell spacing.
+ * @param[in] z_nd Nodal physical height field.
+ * @return Xi metric term.
+ */
+AMREX_GPU_DEVICE
+AMREX_FORCE_INLINE
+amrex::Real
+Compute_h_xi_AtEdgeCenterJ (const int &i, const int &j, const int &k,
+                            const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& cellSizeInv,
+                            const amrex::Array4<const amrex::Real>& z_nd)
+{
+    amrex::Real dxInv = cellSizeInv[0];
+    amrex::Real met_h_xi = fourth * dxInv *
+      ( z_nd(i+1,j+1,k) + z_nd(i+1,j  ,k)
+      - z_nd(i-1,j+1,k) - z_nd(i-1,j  ,k) );
+    return met_h_xi;
+}
+
+// Metric is at edge and center Y (magenta cross)
+/**
+ * Compute the eta metric term at the j-edge center.
+ *
+ * @param[in] i x-index
+ * @param[in] j y-index
+ * @param[in] k z-index
+ * @param[in] cellSizeInv Inverse cell spacing.
+ * @param[in] z_nd Nodal physical height field.
+ * @return Eta metric term.
+ */
+AMREX_GPU_DEVICE
+AMREX_FORCE_INLINE
+amrex::Real
+Compute_h_eta_AtEdgeCenterJ (const int &i, const int &j, const int &k,
+                             const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& cellSizeInv,
+                             const amrex::Array4<const amrex::Real>& z_nd)
+{
+    amrex::Real dyInv = cellSizeInv[1];
+    amrex::Real met_h_eta = dyInv * ( z_nd(i,j+1,k) - z_nd(i,j,k) );
+    return met_h_eta;
+}
+
+// -- EdgeCenterI --
+
+// Metric is at edge and center X (purple hexagon)
+/**
+ * Compute the zeta metric term at the i-edge center.
+ *
+ * @param[in] i x-index
+ * @param[in] j y-index
+ * @param[in] k z-index
+ * @param[in] cellSizeInv Inverse cell spacing.
+ * @param[in] z_nd Nodal physical height field.
+ * @return Zeta metric term.
+ */
+AMREX_GPU_DEVICE
+AMREX_FORCE_INLINE
+amrex::Real
+Compute_h_zeta_AtEdgeCenterI (const int &i, const int &j, const int &k,
+                              const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& cellSizeInv,
+                              const amrex::Array4<const amrex::Real>& z_nd)
+{
+    amrex::Real dzInv = cellSizeInv[2];
+    amrex::Real met_h_zeta = fourth * dzInv * ( z_nd(i,j,k+1) + z_nd(i+1,j,k+1)
+                                              - z_nd(i,j,k-1) - z_nd(i+1,j,k-1) );
+    return met_h_zeta;
+}
+
+// Metric is at edge and center X (purple hexagon)
+/**
+ * Compute the xi metric term at the i-edge center.
+ *
+ * @param[in] i x-index
+ * @param[in] j y-index
+ * @param[in] k z-index
+ * @param[in] cellSizeInv Inverse cell spacing.
+ * @param[in] z_nd Nodal physical height field.
+ * @return Xi metric term.
+ */
+AMREX_GPU_DEVICE
+AMREX_FORCE_INLINE
+amrex::Real
+Compute_h_xi_AtEdgeCenterI (const int &i, const int &j, const int &k,
+                            const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& cellSizeInv,
+                            const amrex::Array4<const amrex::Real>& z_nd)
+{
+    amrex::Real dxInv = cellSizeInv[0];
+    amrex::Real met_h_xi  = dxInv * ( z_nd(i+1,j,k) - z_nd(i,j,k) );
+    return met_h_xi;
+}
+
+// Metric is at edge and center X (purple hexagon)
+/**
+ * Compute the eta metric term at the i-edge center.
+ *
+ * @param[in] i x-index
+ * @param[in] j y-index
+ * @param[in] k z-index
+ * @param[in] cellSizeInv Inverse cell spacing.
+ * @param[in] z_nd Nodal physical height field.
+ * @return Eta metric term.
+ */
+AMREX_GPU_DEVICE
+AMREX_FORCE_INLINE
+amrex::Real
+Compute_h_eta_AtEdgeCenterI (const int &i, const int &j, const int &k,
+                             const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& cellSizeInv,
+                             const amrex::Array4<const amrex::Real>& z_nd)
+{
+    amrex::Real dyInv = cellSizeInv[1];
+    amrex::Real met_h_eta = fourth * dyInv *
+      ( z_nd(i+1,j+1,k) + z_nd(i,j+1,k)
+      - z_nd(i+1,j-1,k) - z_nd(i,j-1,k) );
+    return met_h_eta;
+}
+
+// Relative height above terrain surface at cell center from z_nd (nodal absolute height)
+/**
+ * Compute the physical height at the cell center.
+ *
+ * @param[in] i x-index
+ * @param[in] j y-index
+ * @param[in] k z-index
+ * @param[in] z_nd Nodal physical height field.
+ * @return Physical height at cell center.
+ */
+AMREX_GPU_DEVICE
+AMREX_FORCE_INLINE
+amrex::Real
+Compute_Z_AtCellCenter (const int &i, const int &j, const int &k,
+                        const amrex::Array4<const amrex::Real>& z_nd)
+{
+    const amrex::Real z_cc = amrex::Real(0.125)*(  z_nd(i  ,j  ,k) + z_nd(i  ,j  ,k+1)
+                                                 + z_nd(i+1,j  ,k) + z_nd(i+1,j  ,k+1)
+                                                 + z_nd(i  ,j+1,k) + z_nd(i  ,j+1,k+1)
+                                                 + z_nd(i+1,j+1,k) + z_nd(i+1,j+1,k+1));
+
+    return z_cc;
+}
+
+// Relative height above terrain surface at cell center from z_nd (nodal absolute height)
+/**
+ * Compute the physical height at the W-face.
+ *
+ * @param[in] i x-index
+ * @param[in] j y-index
+ * @param[in] k z-index
+ * @param[in] z_nd Nodal physical height field.
+ * @return Physical height at W-face.
+ */
+AMREX_GPU_HOST_DEVICE
+AMREX_FORCE_INLINE
+amrex::Real
+Compute_Z_AtWFace (const int &i, const int &j, const int &k,
+                   const amrex::Array4<const amrex::Real>& z_nd)
+{
+    const amrex::Real z_wf = fourth*( z_nd(i  ,j  ,k) + z_nd(i+1,j  ,k)
+                                    + z_nd(i  ,j+1,k) + z_nd(i+1,j+1,k) );
+
+    return z_wf;
+}
+
+// Relative height above terrain surface at cell center from z_nd (nodal absolute height)
+/**
+ * Compute the relative height above the terrain surface at the cell center.
+ *
+ * @param[in] i x-index
+ * @param[in] j y-index
+ * @param[in] k z-index
+ * @param[in] z_nd Nodal physical height field.
+ * @return Relative height at cell center.
+ */
+AMREX_GPU_HOST_DEVICE
+AMREX_FORCE_INLINE
+amrex::Real
+Compute_Zrel_AtCellCenter (const int &i, const int &j, const int &k,
+                           const amrex::Array4<const amrex::Real>& z_nd)
+{
+    const amrex::Real z_cc = amrex::Real(0.125)*(  z_nd(i  ,j  ,k) + z_nd(i  ,j  ,k+1) +
+                                                 + z_nd(i+1,j  ,k) + z_nd(i+1,j  ,k+1)
+                                                 + z_nd(i  ,j+1,k) + z_nd(i  ,j+1,k+1)
+                                                 + z_nd(i+1,j+1,k) + z_nd(i+1,j+1,k+1));
+
+    // Note: we assume the z_nd array spans from the bottom to top of the domain
+    // i.e. no domain decomposition across processors in vertical direction
+    const amrex::Real z0_cc = fourth*( z_nd(i  ,j  ,0) + z_nd(i  ,j+1,0)
+                                     + z_nd(i+1,j  ,0) + z_nd(i+1,j+1,0));
+
+    return (z_cc - z0_cc);
+}
+
+
+//*****************************************************************************************
+// Contravariant velocity computation
+//*****************************************************************************************
+
+// Define omega given u,v and w (4th order)
+/**
+ * Compute the contravariant vertical velocity omega from w.
+ *
+ * @param[in] i x-index
+ * @param[in] j y-index
+ * @param[in] k z-index
+ * @param[in] w Vertical velocity.
+ * @param[in] u_arr X-velocity array.
+ * @param[in] v_arr Y-velocity array.
+ * @param[in] mf_u X-velocity map factor.
+ * @param[in] mf_v Y-velocity map factor.
+ * @param[in] z_nd Nodal physical height field.
+ * @param[in] dxInv Inverse cell spacing.
+ * @return Contravariant vertical velocity.
+ */
+AMREX_GPU_DEVICE
+AMREX_FORCE_INLINE
+amrex::Real
+OmegaFromW (int& i, int& j, int& k, amrex::Real w,
+            const amrex::Array4<const amrex::Real>& u_arr,
+            const amrex::Array4<const amrex::Real>& v_arr,
+            const amrex::Array4<const amrex::Real>& mf_u,
+            const amrex::Array4<const amrex::Real>& mf_v,
+            const amrex::Array4<const amrex::Real>& z_nd,
+            const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& dxInv)
+{
+    // This is dh/dxi at hi and lo edges
+    amrex::Real z_x_p2  = Compute_Z_AtWFace(i+2,j,k,z_nd);
+    amrex::Real z_x_p1  = Compute_Z_AtWFace(i+1,j,k,z_nd);
+    amrex::Real z_x_m1  = Compute_Z_AtWFace(i-1,j,k,z_nd);
+    amrex::Real z_x_m2  = Compute_Z_AtWFace(i-2,j,k,z_nd);
+    amrex::Real met_xi  = (amrex::Real(1.0/amrex::Real(12.0))*(z_x_m2 - z_x_p2)
+                         + amrex::Real(8.0/amrex::Real(12.0))*(z_x_p1 - z_x_m1)) * dxInv[0];
+
+    // This is dh/deta at hi and lo edges
+    amrex::Real z_y_p2   = Compute_Z_AtWFace(i,j+2,k,z_nd);
+    amrex::Real z_y_p1   = Compute_Z_AtWFace(i,j+1,k,z_nd);
+    amrex::Real z_y_m1   = Compute_Z_AtWFace(i,j-1,k,z_nd);
+    amrex::Real z_y_m2   = Compute_Z_AtWFace(i,j-2,k,z_nd);
+    amrex::Real met_eta  = (amrex::Real(1.0/amrex::Real(12.0))*(z_y_m2 - z_y_p2)
+                          + amrex::Real(8.0/amrex::Real(12.0))*(z_y_p1 - z_y_m1)) * dxInv[1];
+
+    // Use extrapolation instead of interpolation if at the bottom boundary
+    amrex::Real u_hi = (k == 0) ? amrex::Real(1.5) *   u_arr(i+1,j  ,k  ) - myhalf * u_arr(i+1,j  ,k+1)  :
+                                  myhalf * ( u_arr(i+1,j  ,k-1) +       u_arr(i+1,j  ,k  ) );
+    amrex::Real u_lo = (k == 0) ? amrex::Real(1.5) *   u_arr(i  ,j  ,k  ) - myhalf * u_arr(i  ,j  ,k+1)  :
+                                  myhalf * ( u_arr(i  ,j  ,k-1) +       u_arr(i  ,j  ,k  ) );
+    amrex::Real mf_u_hi = mf_u(i+1,j,0);
+    amrex::Real mf_u_lo = mf_u(i  ,j,0);
+
+    amrex::Real v_hi = (k == 0) ? amrex::Real(1.5) *   v_arr(i  ,j+1,k  ) - myhalf * v_arr(i  ,j+1,k+1)  :
+                                  myhalf * ( v_arr(i  ,j+1,k-1) +       v_arr(i  ,j+1,k  ) );
+    amrex::Real v_lo = (k == 0) ? amrex::Real(1.5) *   v_arr(i  ,j  ,k  ) - myhalf * v_arr(i  ,j  ,k+1)  :
+                                  myhalf * ( v_arr(i  ,j  ,k-1) +       v_arr(i  ,j  ,k  ) );
+    amrex::Real mf_v_hi = mf_v(i,j+1,0);
+    amrex::Real mf_v_lo = mf_v(i,j  ,0);
+
+    amrex::Real u_met = met_xi  * myhalf * ( u_hi*mf_u_hi + u_lo*mf_u_lo );
+    amrex::Real v_met = met_eta * myhalf * ( v_hi*mf_v_hi + v_lo*mf_v_lo );
+
+    amrex::Real omega =  w - u_met - v_met;
+    return omega;
+}
+
+// Define w given u and v arrays and scalar omega (4th order)
+/**
+ * Compute the vertical velocity w from the contravariant omega.
+ *
+ * @param[in] i x-index
+ * @param[in] j y-index
+ * @param[in] k z-index
+ * @param[in] omega Contravariant vertical velocity.
+ * @param[in] u_arr X-velocity array.
+ * @param[in] v_arr Y-velocity array.
+ * @param[in] mf_u X-velocity map factor.
+ * @param[in] mf_v Y-velocity map factor.
+ * @param[in] z_nd Nodal physical height field.
+ * @param[in] dxInv Inverse cell spacing.
+ * @return Vertical velocity w.
+ */
+AMREX_GPU_DEVICE
+AMREX_FORCE_INLINE
+amrex::Real
+WFromOmega (int& i, int& j, int& k, amrex::Real omega,
+            const amrex::Array4<const amrex::Real>& u_arr,
+            const amrex::Array4<const amrex::Real>& v_arr,
+            const amrex::Array4<const amrex::Real>& mf_u,
+            const amrex::Array4<const amrex::Real>& mf_v,
+            const amrex::Array4<const amrex::Real>& z_nd,
+            const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& dxInv)
+{
+    // This is dh/dxi at hi and lo edges
+    amrex::Real z_x_p2  = Compute_Z_AtWFace(i+2,j,k,z_nd);
+    amrex::Real z_x_p1  = Compute_Z_AtWFace(i+1,j,k,z_nd);
+    amrex::Real z_x_m1  = Compute_Z_AtWFace(i-1,j,k,z_nd);
+    amrex::Real z_x_m2  = Compute_Z_AtWFace(i-2,j,k,z_nd);
+    amrex::Real met_xi  = (amrex::Real(1.0/amrex::Real(12.0))*(z_x_m2 - z_x_p2)
+                         + amrex::Real(8.0/amrex::Real(12.0))*(z_x_p1 - z_x_m1)) * dxInv[0];
+
+    // This is dh/deta at hi and lo edges
+    amrex::Real z_y_p2   = Compute_Z_AtWFace(i,j+2,k,z_nd);
+    amrex::Real z_y_p1   = Compute_Z_AtWFace(i,j+1,k,z_nd);
+    amrex::Real z_y_m1   = Compute_Z_AtWFace(i,j-1,k,z_nd);
+    amrex::Real z_y_m2   = Compute_Z_AtWFace(i,j-2,k,z_nd);
+    amrex::Real met_eta  = (amrex::Real(1.0/amrex::Real(12.0))*(z_y_m2 - z_y_p2)
+                          + amrex::Real(8.0/amrex::Real(12.0))*(z_y_p1 - z_y_m1)) * dxInv[1];
+
+    // Use extrapolation instead of interpolation if at the bottom boundary
+    amrex::Real u_hi = (k == 0) ? amrex::Real(1.5) *   u_arr(i+1,j  ,k  ) - myhalf * u_arr(i+1,j  ,k+1)  :
+                                  myhalf * ( u_arr(i+1,j  ,k-1) +       u_arr(i+1,j  ,k  ) );
+    amrex::Real u_lo = (k == 0) ? amrex::Real(1.5) *   u_arr(i  ,j  ,k  ) - myhalf * u_arr(i  ,j  ,k+1)  :
+                                  myhalf * ( u_arr(i  ,j  ,k-1) +       u_arr(i  ,j  ,k  ) );
+    amrex::Real mf_u_hi = mf_u(i+1,j,0);
+    amrex::Real mf_u_lo = mf_u(i  ,j,0);
+
+    amrex::Real v_hi = (k == 0) ? amrex::Real(1.5) *   v_arr(i  ,j+1,k  ) - myhalf * v_arr(i  ,j+1,k+1)  :
+                                  myhalf * ( v_arr(i  ,j+1,k-1) +       v_arr(i  ,j+1,k  ) );
+    amrex::Real v_lo = (k == 0) ? amrex::Real(1.5) *   v_arr(i  ,j  ,k  ) - myhalf * v_arr(i  ,j  ,k+1)  :
+                                  myhalf * ( v_arr(i  ,j  ,k-1) +       v_arr(i  ,j  ,k  ) );
+    amrex::Real mf_v_hi = mf_v(i,j+1,0);
+    amrex::Real mf_v_lo = mf_v(i,j  ,0);
+
+    amrex::Real u_met = met_xi  * myhalf * ( u_hi*mf_u_hi + u_lo*mf_u_lo );
+    amrex::Real v_met = met_eta * myhalf * ( v_hi*mf_v_hi + v_lo*mf_v_lo );
+
+    amrex::Real w = omega + u_met + v_met;
+    return w;
+}
+
+//
+// NOTE: 2nd order kept here for debugging purposes
+//
+
+# if 0
+// Define omega given u,v and w (2nd order)
+/**
+ * Compute the contravariant vertical velocity omega from w (2nd order).
+ *
+ * @param[in] i x-index
+ * @param[in] j y-index
+ * @param[in] k z-index
+ * @param[in] w Vertical velocity.
+ * @param[in] u_arr X-velocity array.
+ * @param[in] v_arr Y-velocity array.
+ * @param[in] mf_u X-velocity map factor.
+ * @param[in] mf_v Y-velocity map factor.
+ * @param[in] z_nd Nodal physical height field.
+ * @param[in] dxInv Inverse cell spacing.
+ * @return Contravariant vertical velocity.
+ */
+AMREX_GPU_DEVICE
+AMREX_FORCE_INLINE
+amrex::Real
+OmegaFromW (int& i, int& j, int& k, amrex::Real w,
+            const amrex::Array4<const amrex::Real>& u_arr,
+            const amrex::Array4<const amrex::Real>& v_arr,
+            const amrex::Array4<const amrex::Real>& mf_u,
+            const amrex::Array4<const amrex::Real>& mf_v,
+            const amrex::Array4<const amrex::Real>& z_nd,
+            const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& dxInv)
+{
+    // This is dh/dxi at hi and lo edges
+    amrex::Real z_x_h  = Compute_Z_AtWFace(i+1,j,k,z_nd);
+    amrex::Real z_x_l  = Compute_Z_AtWFace(i-1,j,k,z_nd);
+    amrex::Real met_xi = myhalf * (z_x_h - z_x_l) * dxInv[0];
+
+    // This is dh/deta at hi and lo edges
+    amrex::Real z_y_h   = Compute_Z_AtWFace(i,j+1,k,z_nd);
+    amrex::Real z_y_l   = Compute_Z_AtWFace(i,j-1,k,z_nd);
+    amrex::Real met_eta = myhalf * (z_y_h - z_y_l) * dxInv[1];
+
+    // Use extrapolation instead of interpolation if at the bottom boundary
+    amrex::Real u_hi = (k == 0) ? amrex::Real(1.5) *   u_arr(i+1,j  ,k  ) - myhalf * u_arr(i+1,j  ,k+1)  :
+                                  myhalf * ( u_arr(i+1,j  ,k-1) +       u_arr(i+1,j  ,k  ) );
+    amrex::Real u_lo = (k == 0) ? amrex::Real(1.5) *   u_arr(i  ,j  ,k  ) - myhalf * u_arr(i  ,j  ,k+1)  :
+                                  myhalf * ( u_arr(i  ,j  ,k-1) +       u_arr(i  ,j  ,k  ) );
+    amrex::Real mf_u_hi = mf_u(i+1,j,0);
+    amrex::Real mf_u_lo = mf_u(i  ,j,0);
+
+    amrex::Real v_hi = (k == 0) ? amrex::Real(1.5) *   v_arr(i  ,j+1,k  ) - myhalf * v_arr(i  ,j+1,k+1)  :
+                                  myhalf * ( v_arr(i  ,j+1,k-1) +       v_arr(i  ,j+1,k  ) );
+    amrex::Real v_lo = (k == 0) ? amrex::Real(1.5) *   v_arr(i  ,j  ,k  ) - myhalf * v_arr(i  ,j  ,k+1)  :
+                                  myhalf * ( v_arr(i  ,j  ,k-1) +       v_arr(i  ,j  ,k  ) );
+    amrex::Real mf_v_hi = mf_v(i,j+1,0);
+    amrex::Real mf_v_lo = mf_v(i,j  ,0);
+
+    amrex::Real u_met = met_xi  * myhalf * ( u_hi*mf_u_hi + u_lo*mf_u_lo );
+    amrex::Real v_met = met_eta * myhalf * ( v_hi*mf_v_hi + v_lo*mf_v_lo );
+
+    amrex::Real omega =  w - u_met - v_met;
+    return omega;
+}
+
+// Define w given u and v arrays and scalar omega (2nd order)
+/**
+ * Compute the vertical velocity w from the contravariant omega (2nd order).
+ *
+ * @param[in] i x-index
+ * @param[in] j y-index
+ * @param[in] k z-index
+ * @param[in] omega Contravariant vertical velocity.
+ * @param[in] u_arr X-velocity array.
+ * @param[in] v_arr Y-velocity array.
+ * @param[in] mf_u X-velocity map factor.
+ * @param[in] mf_v Y-velocity map factor.
+ * @param[in] z_nd Nodal physical height field.
+ * @param[in] dxInv Inverse cell spacing.
+ * @return Vertical velocity w.
+ */
+AMREX_GPU_DEVICE
+AMREX_FORCE_INLINE
+amrex::Real
+WFromOmega (int& i, int& j, int& k, amrex::Real omega,
+            const amrex::Array4<const amrex::Real>& u_arr,
+            const amrex::Array4<const amrex::Real>& v_arr,
+            const amrex::Array4<const amrex::Real>& mf_u,
+            const amrex::Array4<const amrex::Real>& mf_v,
+            const amrex::Array4<const amrex::Real>& z_nd,
+            const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& dxInv)
+{
+    // This is dh/dxi at hi and lo edges
+    amrex::Real z_x_h  = Compute_Z_AtWFace(i+1,j,k,z_nd);
+    amrex::Real z_x_l  = Compute_Z_AtWFace(i-1,j,k,z_nd);
+    amrex::Real met_xi = myhalf * (z_x_h - z_x_l) * dxInv[0];
+
+    // This is dh/deta at hi and lo edges
+    amrex::Real z_y_h   = Compute_Z_AtWFace(i,j+1,k,z_nd);
+    amrex::Real z_y_l   = Compute_Z_AtWFace(i,j-1,k,z_nd);
+    amrex::Real met_eta = myhalf * (z_y_h - z_y_l) * dxInv[1];
+
+    // Use extrapolation instead of interpolation if at the bottom boundary
+    amrex::Real u_hi = (k == 0) ? amrex::Real(1.5) *   u_arr(i+1,j  ,k  ) - myhalf * u_arr(i+1,j  ,k+1)  :
+                                  myhalf * ( u_arr(i+1,j  ,k-1) +       u_arr(i+1,j  ,k  ) );
+    amrex::Real u_lo = (k == 0) ? amrex::Real(1.5) *   u_arr(i  ,j  ,k  ) - myhalf * u_arr(i  ,j  ,k+1)  :
+                                  myhalf * ( u_arr(i  ,j  ,k-1) +       u_arr(i  ,j  ,k  ) );
+    amrex::Real mf_u_hi = mf_u(i+1,j,0);
+    amrex::Real mf_u_lo = mf_u(i  ,j,0);
+
+    amrex::Real v_hi = (k == 0) ? amrex::Real(1.5) *   v_arr(i  ,j+1,k  ) - myhalf * v_arr(i  ,j+1,k+1)  :
+                                  myhalf * ( v_arr(i  ,j+1,k-1) +       v_arr(i  ,j+1,k  ) );
+    amrex::Real v_lo = (k == 0) ? amrex::Real(1.5) *   v_arr(i  ,j  ,k  ) - myhalf * v_arr(i  ,j  ,k+1)  :
+                                  myhalf * ( v_arr(i  ,j  ,k-1) +       v_arr(i  ,j  ,k  ) );
+    amrex::Real mf_v_hi = mf_v(i,j+1,0);
+    amrex::Real mf_v_lo = mf_v(i,j  ,0);
+
+    amrex::Real u_met = met_xi  * myhalf * ( u_hi*mf_u_hi + u_lo*mf_u_lo );
+    amrex::Real v_met = met_eta * myhalf * ( v_hi*mf_v_hi + v_lo*mf_v_lo );
+
+    amrex::Real w = omega + u_met + v_met;
+    return w;
+}
+#endif
+
+
+//*****************************************************************************************
+// Rotate scalar flux vector and stress tensor for MOST
+//*****************************************************************************************
+/**
+ * Rotate a scalar flux vector into terrain-following coordinates.
+ *
+ * @param[in] i x-index
+ * @param[in] j y-index
+ * @param[in] klo z-index
+ * @param[in] flux Scalar flux value.
+ * @param[in] dxInv Inverse cell spacing.
+ * @param[in] zphys_arr Physical height field.
+ * @param[out] phi1_arr Rotated flux component 1.
+ * @param[out] phi2_arr Rotated flux component 2.
+ * @param[out] phi3_arr Rotated flux component 3.
+ */
+AMREX_GPU_DEVICE
+AMREX_FORCE_INLINE
+void
+rotate_scalar_flux (const int& i,
+                    const int& j,
+                    const int& klo,
+                    const int& /*dir*/,
+                    const amrex::Real& flux,
+                    const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& dxInv,
+                    const amrex::Array4<const amrex::Real>& zphys_arr,
+                    const amrex::Array4<amrex::Real>& phi1_arr,
+                    const amrex::Array4<amrex::Real>& phi2_arr,
+                    const amrex::Array4<amrex::Real>& phi3_arr)
+{
+    amrex::Real h_xi  = Compute_h_xi_AtCellCenter(i, j, klo, dxInv, zphys_arr);
+    amrex::Real h_eta = Compute_h_eta_AtCellCenter(i, j, klo, dxInv, zphys_arr);
+    amrex::Real InvNorm  = one / std::sqrt(one + h_xi*h_xi + h_eta*h_eta);
+    phi1_arr(i,j,klo) = -h_xi  * flux * InvNorm;
+    phi2_arr(i,j,klo) = -h_eta * flux * InvNorm;
+    phi3_arr(i,j,klo) =          flux * InvNorm;
+}
+
+/**
+ * Rotate the stress tensor for the MOST model.
+ *
+ * @param[in] i x-index
+ * @param[in] j y-index
+ * @param[in] klo z-index
+ * @param[in] flux Flux value used for rotation.
+ * @param[in] dxInv Inverse cell spacing.
+ * @param[in] zphys_arr Physical height field.
+ * @param[in] u_arr X-velocity array.
+ * @param[in] v_arr Y-velocity array.
+ * @param[in] w_arr Z-velocity array.
+ * @param[out] tau11_arr Stress component tau11.
+ * @param[out] tau22_arr Stress component tau22.
+ * @param[out] tau33_arr Stress component tau33.
+ * @param[out] tau12_arr Stress component tau12.
+ * @param[out] tau21_arr Stress component tau21.
+ * @param[out] tau13_arr Stress component tau13.
+ * @param[out] tau31_arr Stress component tau31.
+ * @param[out] tau23_arr Stress component tau23.
+ * @param[out] tau32_arr Stress component tau32.
+ */
+AMREX_GPU_DEVICE
+AMREX_FORCE_INLINE
+void
+rotate_stress_tensor (const int& i,
+                      const int& j,
+                      const int& klo,
+                      const int& /*dir*/,
+                      const amrex::Real& flux,
+                      const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM>& dxInv,
+                      const amrex::Array4<const amrex::Real>& zphys_arr,
+                      const amrex::Array4<const amrex::Real>& u_arr,
+                      const amrex::Array4<const amrex::Real>& v_arr,
+                      const amrex::Array4<const amrex::Real>& w_arr,
+                      const amrex::Array4<amrex::Real>& /*tau11_arr*/,
+                      const amrex::Array4<amrex::Real>& /*tau22_arr*/,
+                      const amrex::Array4<amrex::Real>& /*tau33_arr*/,
+                      const amrex::Array4<amrex::Real>& /*tau12_arr*/,
+                      const amrex::Array4<amrex::Real>& /*tau21_arr*/,
+                      const amrex::Array4<amrex::Real>& tau13_arr,
+                      const amrex::Array4<amrex::Real>& tau31_arr,
+                      const amrex::Array4<amrex::Real>& tau23_arr,
+                      const amrex::Array4<amrex::Real>& tau32_arr)
+{
+    // Unit-normal vector
+    amrex::Array1D<amrex::Real,0,2> n_hat;
+
+    // Unit-tangent vectors
+    amrex::Array1D<amrex::Real,0,2> u_t_hat;
+
+    // Final basis vector for right-hand coord sys
+    amrex::Array1D<amrex::Real,0,2> a_hat;
+
+    // Rotation matrix
+    amrex::Array2D<amrex::Real,0,2,0,2> R_mat;
+
+    // Metric data
+    amrex::Real h_xi   =   Compute_h_xi_AtIface(i, j, klo, dxInv, zphys_arr);
+    amrex::Real h_eta  =  Compute_h_eta_AtIface(i, j, klo, dxInv, zphys_arr);
+    amrex::Real h_zeta = Compute_h_zeta_AtIface(i, j, klo, dxInv, zphys_arr);
+
+    // Populate the inward normal vector
+    amrex::Real Inormn = one/std::sqrt(one + h_xi*h_xi + h_eta*h_eta);
+    n_hat(0) = -Inormn*h_xi; n_hat(1) = -Inormn*h_eta; n_hat(2) = Inormn;
+
+    // Populate the u_t vector (u_t = u - (u \cdot n)n)
+    amrex::Real u    = u_arr(i,j,klo);
+    amrex::Real v    = fourth * ( v_arr(i  ,j,klo) + v_arr(i  ,j+1,klo)
+                                + v_arr(i-1,j,klo) + v_arr(i-1,j+1,klo) );
+    amrex::Real w    = myhalf * ( w_arr(i  ,j,klo) + w_arr(i-1,j  ,klo) );
+    amrex::Real u_dot_n = n_hat(0)*u + n_hat(1)*v + n_hat(2)*w;
+    u_t_hat(0) = u - u_dot_n*n_hat(0);
+    u_t_hat(1) = v - u_dot_n*n_hat(1);
+    u_t_hat(2) = w - u_dot_n*n_hat(2);
+    amrex::Real Norm_u_t = u_t_hat(0)*u_t_hat(0)
+                         + u_t_hat(1)*u_t_hat(1)
+                         + u_t_hat(2)*u_t_hat(2);
+
+    // NOTE: the direction of the tangential velocity is undefined when that
+    //       velocity vanishes (a quiescent surface cell, or flow normal to the
+    //       terrain), so we cannot normalize. Leaving u_t_hat as the zero vector
+    //       is the only rotation-invariant choice, and it is the right limit for
+    //       a quiescent cell since the flux vanishes with the surface wind too.
+    amrex::Real Inorm_u_t = (Norm_u_t > zero) ? one/std::sqrt(Norm_u_t) : zero;
+    for (int icol(0); icol<3; ++icol) {
+        u_t_hat(icol) *= Inorm_u_t;
+    }
+
+    // Populate the a_hat = n_hat X u_t_hat vector
+    a_hat(0) =   n_hat(1)*u_t_hat(2) - n_hat(2)*u_t_hat(1);
+    a_hat(1) = -(n_hat(0)*u_t_hat(2) - n_hat(2)*u_t_hat(0));
+    a_hat(2) =   n_hat(0)*u_t_hat(1) - n_hat(1)*u_t_hat(0);
+
+    // Copy column vectors into R_mat
+    // NOTE: basis vectors form rows of R_mat
+    int icol = 0;
+    for (int jrow(0); jrow<3; ++jrow) {
+        R_mat(icol,jrow) = u_t_hat(jrow);
+    }
+    icol = 1;
+    for (int jrow(0); jrow<3; ++jrow) {
+        R_mat(icol,jrow) = a_hat(jrow);
+    }
+    icol = 2;
+    for (int jrow(0); jrow<3; ++jrow) {
+        R_mat(icol,jrow) = n_hat(jrow);
+    }
+
+    // Body-fixed stresses
+    amrex::Real T11    = two*R_mat(0,0)*R_mat(2,0)*flux;
+    amrex::Real T22    = two*R_mat(0,1)*R_mat(2,1)*flux;
+    //amrex::Real T33    = two*R_mat(0,2)*R_mat(2,2)*flux;
+    amrex::Real T12    = (R_mat(0,0)*R_mat(2,1) + R_mat(2,0)*R_mat(0,1))*flux;
+    amrex::Real T13    = (R_mat(0,0)*R_mat(2,2) + R_mat(0,2)*R_mat(2,0))*flux;
+    amrex::Real T23    = (R_mat(0,2)*R_mat(2,1) + R_mat(0,1)*R_mat(2,2))*flux;
+
+    // Populate the stress tensor (apply JT)
+    // NOTE: We cannot set the stresses that do not live at the
+    //       bottom face --- e.g., tau11/22/33/12/21.
+    tau13_arr(i,j,klo) =  -h_xi*T11 - h_eta*T12 + T13;
+    tau31_arr(i,j,klo) = h_zeta*T13;
+
+    tau23_arr(i,j,klo) =  -h_xi*T12 - h_eta*T22 + T23;
+    tau32_arr(i,j,klo) = h_zeta*T23;
+}
+#endif

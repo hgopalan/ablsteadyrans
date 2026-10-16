@@ -5,8 +5,8 @@ boundary layer over complex terrain. It reuses [ERF](https://github.com/erf-mode
 k–L closure, terrain-following mesh, terrain Poisson solver, MOST surface layer) and starts from a mass-consistent
 initializer that builds on [FastWindTerrain](https://github.com/hgopalan/FastWindTerrain).
 
-**Status:** phase 1 of 4 under way. Inputs, mesh, I/O, restart and the definition of a steady solution are in
-place; there is no solver yet.
+**Status:** phase 1 of 4 under way. Inputs, the terrain-following mesh (ERF's BTF, STF and Sullivan mappings),
+I/O, restart, ERF reference archives and the definition of a steady solution are in place; there is no solver yet.
 
 ## Quick start
 

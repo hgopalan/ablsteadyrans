@@ -1,0 +1,49 @@
+--- a/Source/Utils/ERF_TerrainMetrics.H
++++ b/extern_erf/ERF_TerrainMetrics.H
+@@ -88,18 +88,18 @@
+  * @param[out] z_phys_nd Nodal physical height field.
+  * @param[in] z_levels_h Host z-levels.
+  * @param[in] phys_bc_type Physical boundary condition types.
+- * @param[in] fine_terrain How a fine level with terrain_smoothing != 0 is to be built.
+- * @param[in] z_phys_interp Mesh interpolated from the coarse level before the fine
+- *                          terrain was written into the k=0 slab; required by, and
+- *                          only used for, FineTerrain::Transform.
++ * @param[in] terrain_smoothing 0 BTF, 1 STF (Klemp 2011), 2 Sullivan.
++ * @param[in] terrain_gamma_m STF minimum fractional layer thickness.
++ * @param[out] n_capped If not null: STF levels where that minimum stopped the smoothing.
+  */
+ void
+ make_terrain_fitted_coords (int lev, const amrex::Geometry& geom,
+                             amrex::MultiFab& z_phys_nd,
+                             amrex::Vector<amrex::Real> const& z_levels_h,
+                             amrex::GpuArray<ERF_BC, AMREX_SPACEDIM*2>& phys_bc_type,
+-                            FineTerrain fine_terrain = FineTerrain::None,
+-                            amrex::MultiFab const* z_phys_interp = nullptr);
++                            int terrain_smoothing,
++                            amrex::Real terrain_gamma_m,
++                            int* n_capped = nullptr);
+ 
+ /** Verify that a fitted mesh is horizontally flat and follows z_levels_h. */
+ void
+@@ -114,15 +114,17 @@
+  * @param[in] geom Geometry information.
+  * @param[out] z_phys_nd Nodal physical height field.
+  * @param[in] z_levels_h Host z-levels.
+- * @param[in] fine_terrain How a fine level with terrain_smoothing != 0 is to be built.
+- * @param[in] z_phys_interp Mesh interpolated from the coarse level; see above.
++ * @param[in] terrain_smoothing 0 BTF, 1 STF (Klemp 2011), 2 Sullivan.
++ * @param[in] terrain_gamma_m STF minimum fractional layer thickness.
++ * @param[out] n_capped If not null: STF levels where that minimum stopped the smoothing.
+  */
+ void
+ init_which_terrain_grid (int lev, const amrex::Geometry& geom,
+                          amrex::MultiFab& z_phys_nd,
+                          amrex::Vector<amrex::Real> const& z_levels_h,
+-                         FineTerrain fine_terrain = FineTerrain::None,
+-                         amrex::MultiFab const* z_phys_interp = nullptr);
++                         int terrain_smoothing,
++                         amrex::Real terrain_gamma_m,
++                         int* n_capped = nullptr);
+ 
+ /**
+  * Finish the terrain-fitted mesh on a fine level whose interior was set by

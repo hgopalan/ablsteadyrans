@@ -21,9 +21,12 @@ add_executable(unit_tests
     Unit/test_SteadyCriterion.cpp
     Unit/test_Sha256.cpp
     Unit/test_Reference.cpp
+    Unit/test_Mesh.cpp
 )
 target_include_directories(unit_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Unit)
 target_link_libraries(unit_tests PRIVATE ablsteady_core GTest::gtest)
+# Gold files (Tests/Gold) are read from the source tree.
+target_compile_definitions(unit_tests PRIVATE ABLSTEADY_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 if(ABLSTEADY_GPU_BACKEND STREQUAL "CUDA")
     setup_target_for_cuda_compilation(unit_tests)
 endif()
@@ -165,6 +168,42 @@ ablsteady_add_test(NAME abort_restart_overwrite NP 1 LABELS "regression;smoke" R
                           "io\\.chk_file = smoke_chk would overwrite io\\.restart = smoke_chk00000" --
                    COMMAND $<TARGET_FILE:ablsteady> ${DECKS}/inputs_abort_restart_overwrite
                            ${ABLSTEADY_TEST_AMREX_FLAGS})
+
+# --- Mesh (sub-phase 1.4) -----------------------------------------------------
+set(CHECK_MESH ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/check_mesh.py)
+set(GOLD ${CMAKE_CURRENT_SOURCE_DIR}/Gold)
+# The mesh golds are double-precision values: a single-precision build
+# compares the plotfile at a single-precision tolerance and skips the
+# statistics checks, whose reader (ERF's extern_erf/erf_plotfile.py) handles
+# double-precision plotfiles only.
+if(ABLSTEADY_PRECISION STREQUAL "SINGLE")
+    set(FCOMPARE_RTOL 1e-5)
+else()
+    set(FCOMPARE_RTOL 1e-12)
+    # RT-1.4.1 and RT-1.4.2: ERF's Askervein mesh, coarsened; field
+    # statistics of z and detJ and the quality report against
+    # Gold/askervein_mesh.json.
+    ablsteady_add_test(NAME rt_askervein_mesh NP 2 LABELS "regression;smoke"
+                       PREFIX ${CHECK_MESH} ${GOLD}/askervein_mesh.json --
+                       COMMAND $<TARGET_FILE:ablsteady> ${DECKS}/inputs_mesh_askervein
+                               terrain.file=${PROJECT_SOURCE_DIR}/extern_erf/askervein.txt
+                               ${ABLSTEADY_TEST_AMREX_FLAGS})
+    # RT-1.4.2: the quality report of a steep ridge, with the STF warning.
+    ablsteady_add_test(NAME rt_steep_ridge_quality NP 1 LABELS "regression;smoke"
+                       PREFIX ${CHECK_MESH} ${GOLD}/steep_ridge_mesh.json --
+                       COMMAND $<TARGET_FILE:ablsteady> ${DECKS}/inputs_mesh_steep_ridge
+                               ${ABLSTEADY_TEST_AMREX_FLAGS})
+endif()
+# RT-1.4.3: a run without a solve writes the mapped-grid plotfile of the 2-D
+# hill; it matches Gold/hill2d_plt00000 (relative tolerance 1e-12: compilers
+# that fuse multiply-adds differ from those that do not in the last bit).
+set(HILL2D_DIR ${CMAKE_CURRENT_BINARY_DIR}/run/rt_hill2d)
+ablsteady_add_test(NAME rt_hill2d_run NP 2 LABELS "regression;smoke" RUN_DIR ${HILL2D_DIR}
+                   FIXTURES_SETUP hill2d
+                   COMMAND $<TARGET_FILE:ablsteady> ${DECKS}/inputs_mesh_hill2d ${ABLSTEADY_TEST_AMREX_FLAGS})
+ablsteady_add_test(NAME rt_hill2d_matches NP 1 LABELS "regression;smoke" RUN_DIR ${HILL2D_DIR}
+                   FIXTURES_REQUIRED hill2d
+                   COMMAND ${FCOMPARE} --rel_tol ${FCOMPARE_RTOL} hill2d_plt00000 ${GOLD}/hill2d_plt00000)
 
 # --- Reference archives (sub-phase 1.1): ablsteady_refavg end to end --------
 # Three copies of the smoke plotfile at t = 0, 5 and 10 s: their trapezoid

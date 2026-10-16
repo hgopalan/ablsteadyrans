@@ -8,11 +8,21 @@ set(ABLSTEADY_SOURCES
     SteadyCriterion.cpp
     Sha256.cpp
     Reference.cpp
+    ZLevels.cpp
+    TerrainSurface.cpp
+    SmoothSurface.cpp
+    Mesh.cpp
     App.cpp
+    # Copied from ERF (extern_erf/EXTRACTED.md)
+    ${PROJECT_SOURCE_DIR}/extern_erf/ERF_TerrainMetrics.cpp
+    ${PROJECT_SOURCE_DIR}/extern_erf/ERF_ChopGrids.cpp
 )
 
 add_library(ablsteady_core STATIC ${ABLSTEADY_SOURCES})
-target_include_directories(ablsteady_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+# extern_erf/ holds the copied ERF files; erf_shims/ the small headers that
+# stand in for ERF headers they include but ablsteady does not copy.
+target_include_directories(ablsteady_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}
+                           ${PROJECT_SOURCE_DIR}/extern_erf ${CMAKE_CURRENT_SOURCE_DIR}/erf_shims)
 target_link_libraries(ablsteady_core PUBLIC AMReX::amrex)
 
 # Intel's compilers default to a fast floating-point model that may reorder

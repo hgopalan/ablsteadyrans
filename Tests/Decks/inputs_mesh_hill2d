@@ -1,0 +1,14 @@
+# The 2-D Witch of Agnesi ridge of ERF's Neutral_Hill_2D deck (hmax 100 m,
+# L 500 m) on 32 x 1 x 16 cells, STF smoothing (the default). RT-1.4.3.
+mesh.n_cell        = 32 1 16
+mesh.prob_lo       = -2560. 0. 0.
+mesh.prob_hi       =  2560. 40. 1000.
+mesh.is_periodic   = 1 1 0
+
+terrain.type            = agnesi
+terrain.hill_shape      = ridge_x
+terrain.hill_height     = 100.
+terrain.hill_half_width = 500.
+
+io.plot_file        = hill2d_plt
+io.write_checkpoint = 0

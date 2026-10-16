@@ -1,0 +1,13 @@
+# A steep 2-D ridge (600 m high, 300 m half-width) under STF: the smoothing
+# must stop early at several levels and the report must warn. RT-1.4.2.
+mesh.n_cell        = 32 1 16
+mesh.prob_lo       = -2560. 0. 0.
+mesh.prob_hi       =  2560. 40. 1000.
+mesh.is_periodic   = 1 1 0
+
+terrain.type            = agnesi
+terrain.hill_height     = 600.
+terrain.hill_half_width = 300.
+
+io.plot_file        = steep_plt
+io.write_checkpoint = 0

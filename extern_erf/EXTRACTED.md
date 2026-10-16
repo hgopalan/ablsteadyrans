@@ -19,6 +19,16 @@ ERF's `LICENSE.md` goes into `extern_erf/` with the first copied file. Copied fi
 <!-- manifest:start -->
 | Local file | ERF source | ERF SHA | Status | Notes |
 |---|---|---|---|---|
+| `extern_erf/ERF_GridUtils.H` | `Source/Utils/ERF_GridUtils.H` | 92410d578f612ab9e844c450bf8e900194becfb5 | unchanged | Geometric vertical stretch (build_geometric_zlevels) |
+| `extern_erf/ERF_Constants.H` | `Source/ERF_Constants.H` | 92410d578f612ab9e844c450bf8e900194becfb5 | unchanged | bogus_large_value and constants used by ERF_TerrainMetrics.cpp |
+| `extern_erf/ERF_NumericalConstants.H` | `Source/ERF_NumericalConstants.H` | 92410d578f612ab9e844c450bf8e900194becfb5 | unchanged | zero, one, myhalf, PI |
+| `extern_erf/ERF_Interpolation_1D.H` | `Source/Utils/ERF_Interpolation_1D.H` | 92410d578f612ab9e844c450bf8e900194becfb5 | unchanged | Included by ERF_TerrainMetrics.cpp |
+| `extern_erf/ERF_TerrainMetrics.H` | `Source/Utils/ERF_TerrainMetrics.H` | 92410d578f612ab9e844c450bf8e900194becfb5 | modified | Terrain-fitted coordinate builders take terrain_smoothing, terrain_gamma_m and return the STF capped count |
+| `extern_erf/ERF_TerrainMetrics.cpp` | `Source/Utils/ERF_TerrainMetrics.cpp` | 92410d578f612ab9e844c450bf8e900194becfb5 | modified | Same signatures; no ParmParse reads; lev > 0 (AMR) paths removed; STF note names terrain.gamma_m; BTF leaves the ground layer as given (ERF's in-place rewrite is a GPU race) |
+| `extern_erf/ERF_ChopGrids.cpp` | `Source/Utils/ERF_ChopGrids.cpp` | 92410d578f612ab9e844c450bf8e900194becfb5 | unchanged | ChopGrids2D, referenced by make_terrain_fitted_coords |
+| `extern_erf/erf_plotfile.py` | `Exec/CanonicalTests/Canonical_RANS/erf_plotfile.py` | 92410d578f612ab9e844c450bf8e900194becfb5 | unchanged | Plotfile reader for the regression check scripts |
+| `extern_erf/askervein.txt` | `Exec/CanonicalTests/Real_Terrain/Askervein/askervein.txt` | 92410d578f612ab9e844c450bf8e900194becfb5 | unchanged | Askervein terrain (ERF's structured terrain format) |
 <!-- manifest:end -->
 
-No files are copied yet. The first copies arrive with sub-phase 1.4 (mesh and terrain metrics).
+The shims in `Source/erf_shims/` stand in for two ERF headers the copied files include (`ERF_IndexDefines.H`: only
+the `ERF_BC` enum; `ERF_Utils.H`: only declarations of functions defined here).

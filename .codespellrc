@@ -1,4 +1,4 @@
 [codespell]
 # ABL: atmospheric boundary layer.
-skip = ./external,./.git,./build-*,./docs/_build
+skip = ./external,./.git,./build-*,./docs/_build,./Tests/Gold
 ignore-words-list = abl

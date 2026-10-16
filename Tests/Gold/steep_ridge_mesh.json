@@ -1,0 +1,29 @@
+{
+  "report": {
+    "max aspect ratio max(dx,dy) / thickness": 4.835192486,
+    "max coordinate-surface slope (deg)": 49.36775833,
+    "max ground height (m)": 600.0,
+    "max ground slope (deg)": 49.36775833,
+    "max top-node displacement (m)": 138.1896408,
+    "min cell thickness / flat layer thickness": 0.5294515176,
+    "min first-cell centre above ground (m)": 21.71488453,
+    "min nodal layer thickness / flat thickness": 0.5021026428
+  },
+  "stats": {
+    "detJ": {
+      "max": 1.095856262218856,
+      "min": 0.529451517639689,
+      "sum": 480.7593264773936,
+      "sum_sq": 458.22843878995127
+    },
+    "z": {
+      "max": 1118.485009361122,
+      "min": 39.98197754047282,
+      "sum": 296237.6911747506,
+      "sum_sq": 214327244.95489812
+    }
+  },
+  "stf_capped": 16,
+  "top_warning": true,
+  "warning": true
+}

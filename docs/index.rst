@@ -44,6 +44,7 @@ There is no solver yet.
    :maxdepth: 2
    :caption: Method
 
+   mesh
    steady
    cases
    references

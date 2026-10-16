@@ -41,6 +41,22 @@ Current tests
    * - ``abort_unknown_key``, ``abort_range``, ``abort_repeated_key``, ``abort_restart_mesh``,
        ``abort_restart_overwrite``
      - Decks that must stop, with the input named in the message.
+   * - ``rt_askervein_mesh``
+     - RT-1.4.1 and RT-1.4.2: ERF's Askervein mesh coarsened to 60 × 60 × 18 (20 m × 1.08 layers, BTF, ERF's terrain
+       file): statistics of ``z`` and ``detJ`` and the quality report against ``Tests/Gold/askervein_mesh.json``.
+       Double-precision builds only: the statistics use ERF's plotfile reader, which reads double-precision
+       plotfiles.
+   * - ``rt_steep_ridge_quality``
+     - RT-1.4.2: a 600 m ridge under STF: the report against its gold, including both warnings (STF capped, top
+       not flat). Double-precision builds only.
+   * - ``rt_hill2d_run``, ``rt_hill2d_matches``
+     - RT-1.4.3: a run without a solve writes the mapped-grid plotfile of the 2-D hill; ``amrex_fcompare`` against
+       ``Tests/Gold/hill2d_plt00000`` at relative tolerance 1e-12 (1e-5 in single precision). The plotfile holds
+       cell fields only, so the nodal heights are not compared here; UT-1.4.7 compares them with ERF.
+
+       The golds of the three mesh tests above were written by ablsteady itself (``Tests/check_mesh.py --write``):
+       they detect changes, they do not show correctness. Correctness of the same code paths comes from UT-1.4.7
+       (ERF's own output) and the closed-form unit tests.
    * - ``drift_check_selftest``
      - The ``extern_erf`` drift check on a throw-away ERF repository (:doc:`extraction`).
    * - ``refavg_snapshots``, ``refavg_build``, ``refavg_verify``, ``refavg_matches``
@@ -83,6 +99,38 @@ GoogleTest suite
    * - UT-1.1.4
      - *Beyond the plan.* SHA-256 against the NIST example vectors, at every padding boundary and chunking;
        ``hex()`` can be called repeatedly.
+   * - UT-1.4.1
+     - Vertical levels: uniform; solved ratio (top exact, ratio 1.0421553943273616 from an independent exact-rational bisection);
+       fixed ratio (ERF's Askervein 20 m × 1.08, top 749.0048747962335 m); z-levels file and its errors.
+   * - UT-1.4.2
+     - Flat terrain gives the Cartesian levels: bit for bit for STF and Sullivan, within 2 ulp for BTF.
+   * - UT-1.4.3
+     - Free-stream preservation on round Witch-of-Agnesi and Gaussian hills, all three mappings: divergence below
+       1e-12 of :math:`(|U|+|V|)/\Delta x`. The cancellation is algebraic for any node heights, so this test does
+       not detect wrong heights; UT-1.4.7 does.
+   * - UT-1.4.4
+     - Cell volumes sum to the column volumes above the ground to 1e-12, and to a 1 m quadrature of the domain
+       above the hill to 1e-4 (the bilinear ground differs from the continuous hill by 2.4e-5 of the domain).
+   * - UT-1.4.5
+     - Smoothing: a constant is unchanged; a Fourier mode is damped by the analytic factor per pass; β ≥ 1/4 is
+       refused. *Beyond the plan:* on a non-periodic domain, edge nodes use themselves as the outside neighbour and
+       ghost nodes take the nearest domain node.
+   * - UT-1.4.6
+     - IDW returns input points and, with 4 neighbours, is exact on a plane at a symmetric query (with the
+       default 6 the two extra neighbours break the symmetry and IDW is not exact on a plane); ERF's bilinear form
+       is exact on planes anywhere, with ERF's edge fallback; ``terrain.idw_neighbors`` above the number of points is
+       refused.
+   * - UT-1.4.7
+     - ``z_phys``, ``detJ`` and nodal heights equal ERF's own output for the same 2-D hill deck (BTF, STF,
+       Sullivan; STF and Sullivan bit for bit on macOS, BTF to rounding because ablsteady keeps the ground layer as
+       given, all within 1e-13 elsewhere); STF capped at 2 of 16 levels, as ERF reports.
+   * - UT-1.4.8
+     - *Beyond the plan.* The IDW bucket search equals brute force bit for bit (random cloud with far queries, a
+       regular grid with exact distance ties, a tie across a bucket edge, a transect queried from a 2-D domain, one
+       point); UTM-sized coordinates are read and interpolated in double; file terrain on a periodic domain has one
+       seam height; every mapping keeps the ground layer as given; ground at the top and inverted cells stop the
+       run; the slope of a diagonal ridge is reported in full; a restart with changed terrain is refused; the report
+       of a steep ridge carries both warnings.
    * - UT-1.2.1
      - Steady-criterion verdicts on converging, stalling (including a residual stuck exactly at the tolerance) and
        oscillating histories. The converging history becomes

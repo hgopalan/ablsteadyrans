@@ -74,6 +74,41 @@ Inputs parse_inputs ()
     }
 
     {
+        amrex::ParmParse pp("mesh");
+        for (const char* key : {"dz0", "stretch_ratio", "zlevels_file"}) {
+            if (pp.contains(key) && pp.countval(key) != 1) {
+                in.parse_errors.emplace_back(std::string("mesh.") + key + " takes exactly one value");
+            }
+        }
+        pp.query("dz0", in.mesh.dz0);
+        in.mesh.stretch_ratio_given = pp.query("stretch_ratio", in.mesh.stretch_ratio) != 0;
+        pp.query("zlevels_file", in.mesh.zlevels_file);
+    }
+
+    {
+        amrex::ParmParse pp("terrain");
+        auto& t = in.terrain;
+        for (const char* key : {"type", "file", "smoothing", "gamma_m", "hill_height", "hill_half_width",
+                                "hill_shape", "idw_neighbors", "idw_power"}) {
+            if (pp.contains(key)) {
+                t.given.emplace_back(key);
+                if (pp.countval(key) != 1) {
+                    in.parse_errors.emplace_back(std::string("terrain.") + key + " takes exactly one value");
+                }
+            }
+        }
+        pp.query("type", t.type);
+        pp.query("file", t.file);
+        pp.query("smoothing", t.smoothing);
+        pp.query("gamma_m", t.gamma_m);
+        pp.query("hill_height", t.hill_height);
+        pp.query("hill_half_width", t.hill_half_width);
+        pp.query("hill_shape", t.hill_shape);
+        pp.query("idw_neighbors", t.idw_neighbors);
+        pp.query("idw_power", t.idw_power);
+    }
+
+    {
         amrex::ParmParse pp("io");
         // Scalar keys take exactly one value; extra tokens are an error, not dropped.
         for (const char* key : {"plot_file", "chk_file", "restart", "write_plotfile",
@@ -91,7 +126,10 @@ Inputs parse_inputs ()
 
     // A key given twice would silently take its last value.
     for (const auto& [ns, keys] : std::vector<std::pair<std::string, std::vector<std::string>>>{
-             {"mesh", {"n_cell", "prob_lo", "prob_hi", "is_periodic", "max_grid_size"}},
+             {"mesh", {"n_cell", "prob_lo", "prob_hi", "is_periodic", "max_grid_size", "dz0",
+                       "stretch_ratio", "zlevels_file"}},
+             {"terrain", {"type", "file", "smoothing", "gamma_m", "hill_height", "hill_half_width",
+                          "hill_shape", "idw_neighbors", "idw_power"}},
              {"io", {"plot_file", "chk_file", "restart", "write_plotfile", "write_checkpoint"}}}) {
         amrex::ParmParse pp(ns);
         for (const auto& key : keys) {
@@ -150,6 +188,78 @@ std::vector<std::string> validate (const Inputs& in)
     }
     if (in.io.write_checkpoint != 0 && in.io.write_checkpoint != 1) {
         err.emplace_back("io.write_checkpoint must be 0 or 1");
+    }
+
+    // Vertical grid. The node heights start at the ground of a flat mesh,
+    // z = 0, as ERF's z-levels do.
+    if (std::isfinite(m.prob_lo[2]) && m.prob_lo[2] != 0) {
+        err.emplace_back("mesh.prob_lo: the z value must be 0 (node heights start at the flat ground)");
+    }
+    const amrex::Real ztop = m.prob_hi[2];
+    if (!std::isfinite(m.dz0) || !(m.dz0 >= 0)) {
+        err.emplace_back("mesh.dz0 must be finite and >= 0 (0: uniform layers)");
+    } else if (m.stretch_ratio == 0 && m.n_cell[2] >= 1 && std::isfinite(ztop)
+               && m.dz0 > ztop / static_cast<amrex::Real>(m.n_cell[2])) {
+        err.emplace_back("mesh.dz0 must not exceed prob_hi z / n_cell z (a stretched grid starts thinner than uniform)");
+    }
+    if (m.stretch_ratio_given || m.stretch_ratio != 0) {
+        if (!std::isfinite(m.stretch_ratio) || !(m.stretch_ratio >= 1)) {
+            err.emplace_back("mesh.stretch_ratio must be finite and >= 1");
+        }
+        if (!(m.dz0 > 0)) { err.emplace_back("mesh.stretch_ratio needs mesh.dz0 > 0"); }
+    }
+    if (!m.zlevels_file.empty() && m.dz0 > 0) {
+        err.emplace_back("mesh.zlevels_file and mesh.dz0 cannot both be given");
+    }
+
+    // Terrain. A key that has no effect for the chosen type is an error.
+    const auto& t = in.terrain;
+    auto given = [&t] (const char* k) {
+        return std::find(t.given.begin(), t.given.end(), k) != t.given.end();
+    };
+    const bool is_file = t.type == "xyz" || t.type == "erf_grid";
+    if (t.type != "flat" && t.type != "agnesi" && !is_file) {
+        err.emplace_back("terrain.type must be flat, agnesi, xyz or erf_grid (got " + t.type + ")");
+    }
+    if (is_file && t.file.empty()) {
+        err.emplace_back("terrain.file is required for terrain.type = " + t.type);
+    }
+    if (!is_file && given("file")) {
+        err.emplace_back("terrain.file has no effect with terrain.type = " + t.type);
+    }
+    if (t.smoothing < 0 || t.smoothing > 2) {
+        err.emplace_back("terrain.smoothing must be 0 (BTF), 1 (STF) or 2 (Sullivan)");
+    }
+    if (!std::isfinite(t.gamma_m) || !(t.gamma_m > 0) || !(t.gamma_m < 1)) {
+        err.emplace_back("terrain.gamma_m must be > 0 and < 1");
+    }
+    if (given("gamma_m") && t.smoothing != 1) {
+        err.emplace_back("terrain.gamma_m has no effect unless terrain.smoothing = 1");
+    }
+    if (t.type == "agnesi") {
+        if (!std::isfinite(t.hill_height) || !(t.hill_height > 0)) {
+            err.emplace_back("terrain.hill_height must be finite and > 0 (use terrain.type = flat for no hill)");
+        }
+        if (!std::isfinite(t.hill_half_width) || !(t.hill_half_width > 0)) {
+            err.emplace_back("terrain.hill_half_width must be finite and > 0");
+        }
+        if (t.hill_shape != "ridge_x" && t.hill_shape != "ridge_y" && t.hill_shape != "round") {
+            err.emplace_back("terrain.hill_shape must be ridge_x, ridge_y or round (got " + t.hill_shape + ")");
+        }
+    } else {
+        for (const char* k : {"hill_height", "hill_half_width", "hill_shape"}) {
+            if (given(k)) { err.emplace_back(std::string("terrain.") + k + " has no effect unless terrain.type = agnesi"); }
+        }
+    }
+    if (t.type == "xyz") {
+        if (t.idw_neighbors < 1) { err.emplace_back("terrain.idw_neighbors must be >= 1"); }
+        if (!std::isfinite(t.idw_power) || !(t.idw_power > 0)) {
+            err.emplace_back("terrain.idw_power must be finite and > 0");
+        }
+    } else {
+        for (const char* k : {"idw_neighbors", "idw_power"}) {
+            if (given(k)) { err.emplace_back(std::string("terrain.") + k + " has no effect unless terrain.type = xyz"); }
+        }
     }
     return err;
 }

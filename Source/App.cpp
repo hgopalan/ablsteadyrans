@@ -2,6 +2,7 @@
 
 #include "IO.H"
 #include "Inputs.H"
+#include "Mesh.H"
 #include "State.H"
 
 #include <AMReX_Print.H>
@@ -24,10 +25,13 @@ void run ()
 
     State state;
     state.define(ba, dm);
+    Mesh mesh;
+    mesh.define(ba, dm);
     if (in.io.restart.empty()) {
-        init_flat_z_phys_nd(state.z_phys_nd, geom);
+        mesh.build(in, geom, state.z_phys_nd);
     } else {
         read_checkpoint(in.io.restart, state, in.mesh);
+        mesh.check_restart(in, geom, state.z_phys_nd);
         amrex::Print() << "ablsteady: restarted from " << in.io.restart
                        << " at step " << state.step << "\n";
         // Writing a checkpoint of the same name would move the one just read
@@ -41,9 +45,11 @@ void run ()
         }
     }
 
+    amrex::Print() << mesh.quality_report();
+
     // No solver yet (sub-phases 1.13-1.15); the run writes its state and stops.
     if (in.io.write_plotfile == 1) {
-        const auto name = write_plotfile(in.io.plot_file, state, geom);
+        const auto name = write_plotfile(in.io.plot_file, state, geom, &mesh.detJ);
         amrex::Print() << "ablsteady: wrote " << name << "\n";
     }
     if (in.io.write_checkpoint == 1) {

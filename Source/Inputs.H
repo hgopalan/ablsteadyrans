@@ -38,6 +38,46 @@ struct MeshInputs
     amrex::Array<int, 3> is_periodic{0, 0, 0};
     //! Largest box size in x and y; z is never split.
     amrex::Array<int, 2> max_grid_size{64, 64};
+    //! prob_hi z is the computational top: it sets the uniform computational
+    //! spacing dzeta = prob_hi z / nz. The physical top is the last of the
+    //! levels below, which equals prob_hi z unless stretch_ratio or
+    //! zlevels_file place it elsewhere.
+    //!
+    //! First layer thickness of a geometrically stretched vertical grid; 0
+    //! means uniform layers. Without stretch_ratio the ratio is solved so the
+    //! top node is at prob_hi z.
+    amrex::Real dz0{0};
+    //! With dz0: a fixed ratio between successive layers; the top node is then
+    //! wherever the layers end (ERF's grid_stretching_ratio + initial_dz).
+    amrex::Real stretch_ratio{0};
+    //! stretch_ratio appeared in the inputs (an explicit 0 is an error).
+    bool stretch_ratio_given{false};
+    //! File of nz+1 increasing node heights, the first 0, instead of dz0.
+    std::string zlevels_file;
+};
+
+//! The ground surface and how the mesh follows it (sub-phase 1.4).
+struct TerrainInputs
+{
+    //! flat, agnesi (Witch of Agnesi hill, as ERF's WoA), xyz (point cloud,
+    //! inverse-distance weighting) or erf_grid (ERF's structured terrain file,
+    //! bilinear as in ERF).
+    std::string type{"flat"};
+    std::string file;
+    //! 0 basic terrain following (BTF), 1 smoothed (STF, Klemp 2011), 2 Sullivan.
+    int smoothing{1};
+    //! STF: smallest layer thickness as a fraction of the flat layer.
+    amrex::Real gamma_m{amrex::Real(0.5)};
+    //! agnesi: h = hill_height / (1 + (r / hill_half_width)^2), centred in the domain.
+    amrex::Real hill_height{0};
+    amrex::Real hill_half_width{0};
+    //! agnesi: ridge_x (varies in x), ridge_y, or round (radial).
+    std::string hill_shape{"ridge_x"};
+    //! xyz: nearest points used and the weight power (FastWindTerrain's defaults).
+    int idw_neighbors{6};
+    amrex::Real idw_power{2};
+    //! Keys given in the inputs (a key with no effect for the chosen type is an error).
+    std::vector<std::string> given;
 };
 
 struct IOInputs
@@ -53,6 +93,7 @@ struct IOInputs
 struct Inputs
 {
     MeshInputs mesh;
+    TerrainInputs terrain;
     IOInputs io;
     //! Value-count errors found while parsing; validate() reports them.
     std::vector<std::string> parse_errors;

@@ -13,9 +13,10 @@ const amrex::Vector<std::string>& plot_var_names ();
 
 //! Write <prefix>NNNNN (step from state). Besides the cell-centred variables,
 //! the nodal heights go to <plotfile>/Level_0/z_phys_nd as a VisMF MultiFab,
-//! ghost nodes included. Returns the directory name.
+//! ghost nodes included. With detJ (the mesh's cell volume factor), it is
+//! added as an eighth variable "detJ". Returns the directory name.
 std::string write_plotfile (const std::string& prefix, const State& state,
-                            const amrex::Geometry& geom);
+                            const amrex::Geometry& geom, const amrex::MultiFab* detJ = nullptr);
 
 //! Write <prefix>NNNNN: a text Header (format version, bytes per real, step,
 //! mesh in hex floats, BoxArray) and every State field as a VisMF MultiFab

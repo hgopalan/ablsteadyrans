@@ -14,7 +14,14 @@ file, its ERF source path, the ERF commit it was copied from, its status, and no
 - Status ``modified``: the local changes are recorded in ``extern_erf/patches/<file>.patch``, a unified diff from
   the ERF file to the local file.
 
-No files are copied yet. The first copies arrive with sub-phase 1.4 (mesh and terrain metrics).
+Copied so far (sub-phase 1.4): the mesh and terrain-metric code (``ERF_GridUtils.H``, ``ERF_TerrainMetrics.{H,cpp}``,
+``ERF_ChopGrids.cpp`` and the small headers they include), ERF's Python plotfile reader for the check scripts, and
+the Askervein terrain file. ``ERF_TerrainMetrics.{H,cpp}`` are modified: the coordinate builders take the smoothing
+choice and :math:`\gamma_m` as arguments instead of reading ERF's inputs, return the number of STF levels capped,
+and lose the refined-level (AMR) paths, which ablsteady does not use. BTF no longer rewrites the ground layer: ERF
+writes :math:`h\,z_\mathrm{top}/z_\mathrm{top}` there (within 1 ulp of :math:`h`) while other GPU threads read the
+same nodes, so the result depended on thread order. Two shim headers in ``Source/erf_shims/`` stand
+in for ERF headers the copies include.
 
 The drift check
 ---------------
@@ -42,7 +49,7 @@ Licences and attribution
      - How ablsteady uses it
      - Licence and what it requires
    * - ERF
-     - Copied files in ``extern_erf/`` (from sub-phase 1.4).
+     - Copied files in ``extern_erf/``; ``Tests/Gold/erf_hill2d_*`` are ERF outputs at the pinned commit.
      - BSD-style licence with the LBNL "Enhancements" clause (ERF ``LICENSE.md``). Redistributed source must keep
        ERF's copyright notice, conditions and disclaimer: ERF's ``LICENSE.md`` is copied into ``extern_erf/`` with
        the first copied file, and copied files keep their headers.
