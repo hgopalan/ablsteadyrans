@@ -1,0 +1,9 @@
+# Must abort: restarting from smoke_chk00000 with io.chk_file = smoke_chk would
+# write smoke_chk00000 again and move the checkpoint just read aside.
+mesh.n_cell        = 16 12 8
+mesh.prob_lo       = 0. 0. 0.
+mesh.prob_hi       = 1600. 1200. 800.
+mesh.is_periodic   = 1 1 0
+io.restart          = smoke_chk00000
+io.chk_file         = smoke_chk
+io.write_plotfile   = 0

@@ -1,0 +1,10 @@
+# Smoke deck: build the mesh and state, write a plotfile and a checkpoint.
+# 16 x 12 x 8 cells cut 8 x 8 in x/y: 2 x 2 boxes, each spanning the full z column.
+mesh.n_cell        = 16 12 8
+mesh.prob_lo       = 0. 0. 0.
+mesh.prob_hi       = 1600. 1200. 800.
+mesh.is_periodic   = 1 1 0
+mesh.max_grid_size = 8
+
+io.plot_file = smoke_plt
+io.chk_file  = smoke_chk
