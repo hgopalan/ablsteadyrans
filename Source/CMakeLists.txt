@@ -6,6 +6,8 @@ set(ABLSTEADY_SOURCES
     IO.cpp
     Reductions.cpp
     SteadyCriterion.cpp
+    Sha256.cpp
+    Reference.cpp
     App.cpp
 )
 
@@ -22,8 +24,13 @@ endif()
 add_executable(ablsteady main.cpp)
 target_link_libraries(ablsteady PRIVATE ablsteady_core)
 
+# Builds and verifies ERF reference archives (sub-phase 1.1).
+add_executable(ablsteady_refavg RefAvgTool.cpp)
+target_link_libraries(ablsteady_refavg PRIVATE ablsteady_core)
+
 if(ABLSTEADY_GPU_BACKEND STREQUAL "CUDA")
     include(AMReXTargetHelpers)
     setup_target_for_cuda_compilation(ablsteady_core)
     setup_target_for_cuda_compilation(ablsteady)
+    setup_target_for_cuda_compilation(ablsteady_refavg)
 endif()

@@ -156,6 +156,12 @@ std::vector<std::string> validate (const Inputs& in)
 
 std::vector<std::string> unknown_inputs (const std::vector<InputEntry>& entries)
 {
+    return unknown_inputs(entries, owned_namespaces());
+}
+
+std::vector<std::string> unknown_inputs (const std::vector<InputEntry>& entries,
+                                         const std::vector<std::string>& owned)
+{
     std::vector<std::string> msg;
     for (const auto& e : entries) {
         const auto dot = e.name.find('.');
@@ -164,7 +170,7 @@ std::vector<std::string> unknown_inputs (const std::vector<InputEntry>& entries)
             continue;
         }
         const std::string ns = e.name.substr(0, dot);
-        if (contains(owned_namespaces(), ns)) {
+        if (contains(owned, ns)) {
             if (!e.used) {
                 msg.emplace_back("unknown input '" + e.name + "': not an input of namespace '"
                                  + ns + "' in this version");

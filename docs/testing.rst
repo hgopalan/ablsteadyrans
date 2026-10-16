@@ -43,6 +43,22 @@ Current tests
      - Decks that must stop, with the input named in the message.
    * - ``drift_check_selftest``
      - The ``extern_erf`` drift check on a throw-away ERF repository (:doc:`extraction`).
+   * - ``refavg_snapshots``, ``refavg_build``, ``refavg_verify``, ``refavg_matches``
+     - ``ablsteady_refavg`` end to end: three copies of the smoke plotfile at 0, 5 and 10 s are archived on 2
+       ranks with two inputs files; the archive verifies on 3 ranks with the expected metadata, AU and a zero
+       half-window change; the average equals the smoke plotfile at zero tolerance. This checks the round trip;
+       identical snapshots cannot check the weights, which UT-1.1.2 does.
+   * - ``refavg_damage``, ``abort_refavg_damaged``, ``abort_refavg_inputs``, ``abort_refavg_verify_keys``
+     - A copy of the archive with one bit flipped is refused, naming the file; bad tool inputs stop the tool with
+       each input named; a build key given with ``refavg.verify`` is reported.
+   * - ``versions_check``, ``versions_check_selftest``
+     - ``external/VERSIONS`` is well formed and its ``amrex`` entry matches the submodule; the self-test shows a
+       mismatch with a throw-away submodule is reported.
+   * - ``kestrel_parse_*``, ``kestrel_dryrun``
+     - The Kestrel scripts parse; a dry run with stub ``module``/``sbatch``/``srun`` checks the Askervein job
+       script (run length, plot period, no 2-D plotfiles, ranks) and archives a fake finished run, averaging only
+       the 3-D plotfiles in the final window and archiving the inputs but not the run's outputs; a second case
+       with the default prefix ``plt`` keeps its ``plt2d_`` plotfiles out.
 
 GoogleTest suite
 ~~~~~~~~~~~~~~~~
@@ -53,6 +69,20 @@ GoogleTest suite
 
    * - ID
      - Check
+   * - UT-1.1.1
+     - A reference archive written, verified and loaded: fields bit-identical to the average, metadata and field
+       statistics unchanged; a changed byte, a missing file, an extra file, edited AU, and data changed together
+       with its checksum are each found and named, and loading refuses.
+   * - UT-1.1.2
+     - *Beyond the plan.* The average equals a host-side recomputation bit for bit and, for fields linear in
+       time, the mid-window value to 8 ε; trapezoid weights for uneven spacing; the half-window change is exact
+       for a linear drift and zero for a steady field; a snapshot with a NaN, fewer than 3 snapshots and times out of
+       order are refused with their messages; a trailing ``/`` is handled.
+   * - UT-1.1.3
+     - *Beyond the plan.* AU = nodes × hours × rate (10 CPU, 100 GPU); metadata range checks name their inputs.
+   * - UT-1.1.4
+     - *Beyond the plan.* SHA-256 against the NIST example vectors, at every padding boundary and chunking;
+       ``hex()`` can be called repeatedly.
    * - UT-1.2.1
      - Steady-criterion verdicts on converging, stalling (including a residual stuck exactly at the tolerance) and
        oscillating histories. The converging history becomes

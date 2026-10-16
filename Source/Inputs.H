@@ -76,6 +76,11 @@ struct InputEntry
 //! namespace. Returns one message per key, naming it.
 std::vector<std::string> unknown_inputs (const std::vector<InputEntry>& entries);
 
+//! The same check for a program that owns other namespaces (a tool such as
+//! ablsteady_refavg owns only "refavg").
+std::vector<std::string> unknown_inputs (const std::vector<InputEntry>& entries,
+                                         const std::vector<std::string>& owned);
+
 //! The current ParmParse table as InputEntry records.
 std::vector<InputEntry> parmparse_entries ();
 

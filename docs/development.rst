@@ -23,10 +23,11 @@ Layout
 
 .. code-block:: text
 
-   Source/          application: inputs, state, I/O, reductions, steady criterion
+   Source/          application and ablsteady_refavg: inputs, state, I/O, reductions,
+                    steady criterion, reference archives
    Tests/Unit/      GoogleTest unit tests
    Tests/Decks/     input decks for the smoke and abort tests
    docs/            this documentation (Sphinx)
    extern_erf/      files copied from ERF, listed in EXTRACTED.md
-   tools/           drift check and Kestrel build script
+   tools/           drift check, VERSIONS check, Kestrel scripts (tools/kestrel/)
    external/        AMReX and GoogleTest submodules

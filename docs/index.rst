@@ -46,6 +46,7 @@ There is no solver yet.
 
    steady
    cases
+   references
    numerics
 
 .. toctree::
