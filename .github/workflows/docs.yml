@@ -1,0 +1,71 @@
+name: Docs
+
+# The documentation is part of each pull request: a change that breaks it
+# fails the PR. docs/Makefile carries -W --keep-going, so `make -C docs html`
+# is the same strict build here and on a developer's machine.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build documentation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install Sphinx
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r docs/requirements.txt
+
+      - name: Build the docs, treating warnings as errors
+        run: make -C docs html
+
+      # The HTML is kept with the run, so a PR's docs can be read without
+      # publishing anything.
+      - name: Upload the HTML
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-html
+          path: docs/_build/html
+
+  linkcheck:
+    name: Link check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install Sphinx
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r docs/requirements.txt
+
+      # Reaches third-party sites, so it can fail for reasons outside this
+      # repository; it is a separate job so the build job's result stays clean.
+      - name: Check every link resolves
+        run: make -C docs linkcheck

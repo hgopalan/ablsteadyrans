@@ -70,3 +70,8 @@ Testing/
 # ablsteady
 .worktrees/
 .ccache/
+
+# Sphinx output
+docs/_build/
+# The docs Makefile is source, not CMake output.
+!docs/Makefile

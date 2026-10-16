@@ -4,7 +4,9 @@ Rules for working on **ablsteady** (`hgopalan/ablsteadyrans`), a stand-alone AMR
 atmospheric boundary layer. This is the subset of the multi-code rules (written for ERF, AMR-Wind and related codes)
 that applies here, plus what is specific to this repository.
 
-- Development plan: `ablsteady_plan_rev6.md` (4 phases, 36 sub-phases, one PR each).
+- Development plan: `ablsteady_plan_rev6.md` (4 phases, 36 sub-phases, one PR each). Tests beyond the plan are
+  welcome (mark them "beyond the plan"); variations from the plan go in a "Variations from the plan" list in the
+  PR body, with the reason.
 - PR tracker (order, status, inputs, tests): https://claude.ai/artifact/2DtP1MQHaQ91HFHAbPuWE6. Update the PR's row
   when its state changes.
 
@@ -23,6 +25,7 @@ Every PR body, comment and review reply uses a neutral, factual tone.
 - `## Changes`: numbered bold headings (`file:line`); an `Input | Default | Effect` table for every new input.
 - `## Results`: compact tables; recommended configuration in bold.
 - `## Test(s)`: exact CTest names and status; explain any expected change.
+- `## Variations from the plan` (when any): each change from the plan and why.
 - `## Not in this PR`: deferred items.
 
 ## Three review lenses (parallel agents)
@@ -73,7 +76,9 @@ and every finding is resolved.
   `amrex.init_snan=1 amrex.fpe_trap_invalid=1`. AppleClang does not trap FPEs; use Linux/GCC for that check.
 
 ### Documentation and clean-up
-- An input-table row for every new key, matching its range check.
+- Detail goes in the Sphinx documentation (`docs/`); `README.md` stays short and points there.
+- An input-table row in `docs/inputs.rst` for every new key, matching its range check.
+- `make -C docs html` builds without warnings (`-W`) before pushing.
 - `codespell`, no trailing whitespace, `git diff --check` clean.
 - Never commit `docs/notes/`, plotfiles or checkpoints.
 

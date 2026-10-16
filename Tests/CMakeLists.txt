@@ -18,6 +18,7 @@ add_executable(unit_tests
     Unit/test_Inputs.cpp
     Unit/test_IO.cpp
     Unit/test_Reductions.cpp
+    Unit/test_SteadyCriterion.cpp
 )
 target_include_directories(unit_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Unit)
 target_link_libraries(unit_tests PRIVATE ablsteady_core GTest::gtest)
@@ -90,18 +91,15 @@ if(ABLSTEADY_MPI)
 else()
     set(_unit_nps 1)
 endif()
-# amrex.throw_exception=1: amrex::Abort throws std::runtime_error, so unit
-# tests can check that a guard fires (EXPECT_THROW).
 foreach(np IN LISTS _unit_nps)
     ablsteady_add_test(NAME unit_np${np} NP ${np} LABELS unit
-                       COMMAND $<TARGET_FILE:unit_tests> ${ABLSTEADY_TEST_AMREX_FLAGS}
-                               amrex.throw_exception=1)
+                       COMMAND $<TARGET_FILE:unit_tests> ${ABLSTEADY_TEST_AMREX_FLAGS})
 endforeach()
 
 # The same suite with tiling off (one tile per box, as on a GPU).
 ablsteady_add_test(NAME unit_notiling NP 2 LABELS unit
                    COMMAND $<TARGET_FILE:unit_tests> ${ABLSTEADY_TEST_AMREX_FLAGS}
-                           amrex.throw_exception=1 "fabarray.mfiter_tile_size=1024 1024 1024")
+                           "fabarray.mfiter_tile_size=1024 1024 1024")
 
 # --- Smoke run, then restart onto another layout and rank count ---------------
 set(SMOKE_DIR ${CMAKE_CURRENT_BINARY_DIR}/run/smoke)
@@ -135,7 +133,8 @@ ablsteady_add_test(NAME abort_unknown_key NP 1 LABELS "regression;smoke"
                    PREFIX ${EXPECT_ABORT}
                           "mesh\\.max_grid_sise.*not an input of namespace 'mesh'"
                           "turb\\.Cmu0.*not an input of namespace 'turb'"
-                          "mehs\\.n_cell.*unknown namespace 'mehs'" --
+                          "mehs\\.n_cell.*unknown namespace 'mehs'"
+                          "steady\\.residual_tol.*not an input of namespace 'steady'" --
                    COMMAND $<TARGET_FILE:ablsteady> ${DECKS}/inputs_abort_unknown_key
                            ${ABLSTEADY_TEST_AMREX_FLAGS})
 ablsteady_add_test(NAME abort_range NP 1 LABELS "regression;smoke"
