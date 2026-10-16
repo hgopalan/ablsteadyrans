@@ -4,6 +4,7 @@
 #include <AMReX_MultiFab.H>
 #include <AMReX_ParallelReduce.H>
 
+#include <cfenv>
 #include <cstring>
 #include <limits>
 
@@ -81,6 +82,37 @@ inline void set_one_nan (amrex::MultiFab& mf, const amrex::IntVect& iv)
         });
     }
 }
+
+//! Switches off the floating-point invalid-operation trap for its lifetime and
+//! restores it afterwards. For tests that deliberately write data containing
+//! NaN: AMReX's plotfile writer takes each box's min and max for the header,
+//! and comparisons with a NaN raise FE_INVALID, which amrex.fpe_trap_invalid=1
+//! traps on Linux. The code under test never needs this (it checks for NaN
+//! with isnan, which does not raise). Without glibc's trap control (macOS),
+//! where no trap is armed, it does nothing.
+class ScopedNoInvalidTrap
+{
+public:
+    ScopedNoInvalidTrap ()
+    {
+#if defined(__GLIBC__)
+        m_was_on = (fegetexcept() & FE_INVALID) != 0;
+        if (m_was_on) { fedisableexcept(FE_INVALID); }
+#endif
+    }
+    ~ScopedNoInvalidTrap ()
+    {
+        std::feclearexcept(FE_INVALID);
+#if defined(__GLIBC__)
+        if (m_was_on) { feenableexcept(FE_INVALID); }
+#endif
+    }
+    ScopedNoInvalidTrap (const ScopedNoInvalidTrap&) = delete;
+    ScopedNoInvalidTrap& operator= (const ScopedNoInvalidTrap&) = delete;
+
+private:
+    bool m_was_on{false};
+};
 
 } // namespace ablsteady::test
 

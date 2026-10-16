@@ -205,8 +205,13 @@ TEST (Reference, NaNSnapshotIsRefused)
     amrex::MultiFab theta(mf, amrex::make_alias, 1, 1);
     ablsteady::test::set_one_nan(theta, amrex::IntVect(5, 3, 2));
     remove_stale("ut_ref_nan_1");
-    amrex::WriteSingleLevelPlotfile("ut_ref_nan_1", mf, kVars, ablsteady::make_geometry(mesh),
-                                    amrex::Real(1.0), 100);
+    {
+        // Only the deliberate NaN write runs without the trap; the averaging
+        // below runs with it, so it must not touch the NaN arithmetically.
+        const ablsteady::test::ScopedNoInvalidTrap no_trap;
+        amrex::WriteSingleLevelPlotfile("ut_ref_nan_1", mf, kVars, ablsteady::make_geometry(mesh),
+                                        amrex::Real(1.0), 100);
+    }
     EXPECT_NE(thrown([&] { (void)ablsteady::average_plotfiles(keep.paths); })
                   .find("ut_ref_nan_1 has NaN in theta"), std::string::npos);
 }
