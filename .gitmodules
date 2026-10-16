@@ -1,0 +1,6 @@
+[submodule "external/amrex"]
+	path = external/amrex
+	url = https://github.com/AMReX-Codes/amrex.git
+[submodule "external/googletest"]
+	path = external/googletest
+	url = https://github.com/google/googletest.git

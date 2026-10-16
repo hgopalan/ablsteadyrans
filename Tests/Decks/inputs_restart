@@ -1,0 +1,11 @@
+# Restart from the smoke deck's checkpoint on another box layout (and, in
+# CTest, another rank count); the plotfile must match the smoke run's.
+mesh.n_cell        = 16 12 8
+mesh.prob_lo       = 0. 0. 0.
+mesh.prob_hi       = 1600. 1200. 800.
+mesh.is_periodic   = 1 1 0
+mesh.max_grid_size = 16 4
+
+io.restart          = smoke_chk00000
+io.plot_file        = restart_plt
+io.write_checkpoint = 0

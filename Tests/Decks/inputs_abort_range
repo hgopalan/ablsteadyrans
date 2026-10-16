@@ -1,0 +1,7 @@
+# Must abort: z periodic, a zero cell count and an infinite coordinate.
+mesh.n_cell        = 16 0 8
+mesh.prob_lo       = 0. 0. 0.
+mesh.prob_hi       = 1600. 1200. inf
+mesh.is_periodic   = 1 1 1
+io.write_plotfile   = 0
+io.write_checkpoint = 0

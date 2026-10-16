@@ -1,0 +1,233 @@
+name: CI
+
+# Runs on every pull request, so a change that breaks a build, a unit test or
+# a smoke run shows up on the PR rather than after it merges. Kestrel runs
+# the --physics and performance tests nightly; they are not part of this file.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CCACHE_DIR: ${{ github.workspace }}/.ccache
+  CCACHE_COMPRESS: "true"
+  CCACHE_MAXSIZE: "1G"
+
+jobs:
+  # ---------------------------------------------------------------------
+  # CPU with MPI, double precision: build, then the unit and smoke tests.
+  # The unit tests run on 1, 2 and 4 ranks; the runners have 2 cores, so
+  # Open MPI gets --oversubscribe. GCC on Linux traps floating-point
+  # exceptions (amrex.fpe_trap_invalid=1 in every test), which macOS does
+  # not, so this is where an invalid operation shows up.
+  # ---------------------------------------------------------------------
+  cpu:
+    name: CPU ${{ matrix.compiler }} ${{ matrix.build_type }}${{ matrix.testing && ' (AMReX_TESTING)' || '' }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - compiler: gcc
+            build_type: Release
+            testing: false
+          - compiler: gcc
+            build_type: Debug
+            testing: true
+          - compiler: clang
+            build_type: Release
+            testing: false
+
+    steps:
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            build-essential clang cmake ninja-build ccache \
+            libopenmpi-dev openmpi-bin libfftw3-dev
+
+      - name: Set up ccache
+        uses: actions/cache@v4
+        with:
+          path: .ccache
+          key: ccache-${{ matrix.compiler }}-${{ matrix.build_type }}-${{ github.sha }}
+          restore-keys: ccache-${{ matrix.compiler }}-${{ matrix.build_type }}-
+
+      - name: Configure
+        run: |
+          if [ "${{ matrix.compiler }}" = clang ]; then
+            export CC=clang CXX=clang++
+            export OMPI_CC=clang OMPI_CXX=clang++
+          fi
+          cmake -S . -B build-ci -G Ninja \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DABLSTEADY_MPI=ON \
+            -DABLSTEADY_TESTING=${{ matrix.testing && 'ON' || 'OFF' }} \
+            -DABLSTEADY_MPIEXEC_PREFLAGS=--oversubscribe \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+      - name: Build
+        run: cmake --build build-ci --parallel
+
+      - name: Unit and smoke tests
+        run: ctest --test-dir build-ci -L "unit|smoke" --output-on-failure
+
+      # Tests write only under build-ci/, which is ignored; anything else
+      # they leave behind would land in a commit.
+      - name: Working tree stays clean
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "The build or the tests left files behind:"
+            git status --porcelain
+            exit 1
+          fi
+
+      - name: ccache stats
+        if: always()
+        run: ccache -s
+
+  # ---------------------------------------------------------------------
+  # Single precision: compile only. The 1e-8 steady stop needs double
+  # precision, so single is kept compiling (literals, Real vs double) but
+  # not run.
+  # ---------------------------------------------------------------------
+  single:
+    name: Single precision (compile only)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build ccache libfftw3-dev
+
+      - name: Set up ccache
+        uses: actions/cache@v4
+        with:
+          path: .ccache
+          key: ccache-single-${{ github.sha }}
+          restore-keys: ccache-single-
+
+      - name: Configure and build
+        run: |
+          cmake -S . -B build-ci -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DABLSTEADY_MPI=OFF \
+            -DABLSTEADY_PRECISION=SINGLE \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          cmake --build build-ci --parallel
+
+  # ---------------------------------------------------------------------
+  # CUDA for the H100 (compute capability 9.0): compile only. Hosted
+  # runners have no GPU. A device lambda that captures `this` or a host
+  # container is a compile error under nvcc and invisible to a CPU build;
+  # this job catches it. The H100 runs are on Kestrel.
+  # ---------------------------------------------------------------------
+  cuda:
+    name: CUDA sm_90 (compile only)
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install CUDA toolkit
+        uses: Jimver/cuda-toolkit@v0.2.19
+        with:
+          cuda: '12.4.1'
+          method: 'network'
+          use-github-cache: 'false'
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build
+
+      - name: Configure and build
+        run: |
+          cmake -S . -B build-ci -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DABLSTEADY_MPI=OFF \
+            -DABLSTEADY_GPU_BACKEND=CUDA \
+            -DAMReX_CUDA_ARCH=9.0
+          cmake --build build-ci --parallel
+
+  # ---------------------------------------------------------------------
+  # RT-1.3.1: code copied from ERF must match extern_erf/EXTRACTED.md at
+  # the pinned ERF SHA. The job also lists upstream ERF changes to each
+  # copied file since its pin; that list is a report and never fails.
+  # ---------------------------------------------------------------------
+  extern-erf-drift:
+    name: extern_erf drift check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Clone ERF (history only; files fetched on demand)
+        run: git clone --filter=blob:none --no-checkout https://github.com/erf-model/ERF.git "$RUNNER_TEMP/ERF"
+
+      - name: Drift check self-tests
+        working-directory: tools
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: python3 -m unittest -v test_check_extern_erf
+
+      - name: Drift check and upstream report
+        run: |
+          python3 tools/check_extern_erf.py --erf "$RUNNER_TEMP/ERF" \
+            --report-upstream origin/development
+
+  # ---------------------------------------------------------------------
+  # Spelling and whitespace, as in the multi-code PR checklist.
+  # ---------------------------------------------------------------------
+  lint:
+    name: Spelling and whitespace
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: codespell
+        run: |
+          python -m pip install codespell
+          python -m codespell   # settings in .codespellrc
+
+      - name: No trailing whitespace
+        run: |
+          if git grep -nI '[[:space:]]$' -- ':!external'; then
+            echo "Trailing whitespace on the lines above."
+            exit 1
+          fi

@@ -1,0 +1,8 @@
+# Must abort: restart onto a mesh with a different cell count.
+mesh.n_cell        = 16 12 10
+mesh.prob_lo       = 0. 0. 0.
+mesh.prob_hi       = 1600. 1200. 800.
+mesh.is_periodic   = 1 1 0
+io.restart          = smoke_chk00000
+io.write_plotfile   = 0
+io.write_checkpoint = 0

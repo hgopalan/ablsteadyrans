@@ -1,0 +1,9 @@
+# Must abort: a key given twice (the last value would win silently) and
+# scalar keys given extra values (the extra tokens would be dropped).
+mesh.n_cell        = 16 12 8
+mesh.prob_lo       = 0. 0. 0.
+mesh.prob_hi       = 1600. 1200. 800.
+mesh.n_cell        = 16 12 4
+io.write_plotfile   = 1 2
+io.restart          = chk00000 x
+io.write_checkpoint = 0
