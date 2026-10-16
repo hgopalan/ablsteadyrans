@@ -36,7 +36,8 @@ fixed state (for example RT-1.8.1 on the flat case); the last column is the firs
      - 1.16 (RT-1.16.2)
    * - 5
      - Askervein
-     - Real terrain and field measurements (lines A and AA).
+     - Real terrain and field measurements (lines A and AA). The ERF reference runs 3600 s, longer than the
+       deck's 600 s (:doc:`references`).
      - Yes
      - 1.16 (RT-1.16.3)
    * - 6
@@ -55,12 +56,16 @@ The ERF Canonical_RANS set also has stratified flat cases:
      - Steady expected?
      - Reason
    * - ``Stable_ABL_Flat``
-     - **Possibly not**
-     - Stable stratification.
+     - **No**
+     - Transient by design: GABLS1 cools the surface throughout, and its low-level jet is an inertial
+       oscillation. Compared through quasi-steady measures (u*, jet height, boundary-layer depth), not as a
+       steady field.
    * - ``Convective_ABL_Flat``
-     - Yes, in RANS
-     - The closure carries the convective mixing; recheck if a run oscillates.
+     - **No**
+     - Transient by design: the mixed layer deepens and warms throughout. Compared through quasi-steady
+       measures, not as a steady field.
 
-A case run with Coriolis forcing is labelled *possibly non-steady* whatever its row says, because of inertial
-oscillations. A *possibly non-steady* case is still run. If it does not meet the definition of steady
+A case run with Coriolis forcing from a uniform geostrophic start oscillates with the inertial period
+:math:`2\pi/f` (17.5 h at :math:`f = 10^{-4}` s\ :sup:`-1`) before it settles; its ERF reference runs 48 h
+(:doc:`references`). A *possibly non-steady* case is still run. If it does not meet the definition of steady
 (:doc:`steady`), it is reported as non-steady, not tuned until it passes.

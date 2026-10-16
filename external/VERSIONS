@@ -1,0 +1,12 @@
+# Pinned versions of the codes ablsteady builds on or compares with
+# (development plan rev. 6, sub-phase 1.1). One "name sha" per line.
+# tools/check_versions.py checks the amrex entry against the submodule.
+#
+# erf:             reference solutions and copied files (extern_erf/)
+# amrex:           the external/amrex submodule
+# fastwindterrain: method of the mass-consistent initializer (no code copied)
+# kynema-sgf:      cross-check of the Axell-Liungman closure (no code copied)
+erf             92410d578f612ab9e844c450bf8e900194becfb5
+amrex           347a3a2d26750c0e35f0b949368645b872d5c5e9
+fastwindterrain 648f8f1eb0fd833a47b2ffbabcb21e1cf2c3741e
+kynema-sgf      8500c568c1053a4c417b7b355e7c383ef4fd0d60

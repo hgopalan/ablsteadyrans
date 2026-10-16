@@ -72,11 +72,12 @@ Kestrel
 -------
 
 ``tools/kestrel/build_kestrel.sh cpu`` (on a CPU login node) or ``tools/kestrel/build_kestrel.sh gpu`` (on a GPU
-login node) loads the modules from ERF's Kestrel guide and builds into ``build-kestrel-<cpu|gpu>``. Kestrel's
+login node) builds into ``build-kestrel-<cpu|gpu>``. The modules come from ``tools/kestrel/kestrel_env.sh``, which
+follows ERF's Kestrel profiles at the pinned commit (after Kestrel's RHEL9 upgrade, erf-model/ERF#4292). Kestrel's
 module names change with system updates, so check them with ``module avail`` first. A CUDA build needs memory: on
 a shared node, build inside an allocation with ``--mem=240G`` or ``--exclusive``.
 
-The script has not yet been run on Kestrel; its first run is part of sub-phase 1.1.
+The scripts have not yet been run on Kestrel. :doc:`references` describes the ERF reference runs.
 
 Documentation
 -------------

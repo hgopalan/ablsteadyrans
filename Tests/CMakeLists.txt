@@ -19,6 +19,8 @@ add_executable(unit_tests
     Unit/test_IO.cpp
     Unit/test_Reductions.cpp
     Unit/test_SteadyCriterion.cpp
+    Unit/test_Sha256.cpp
+    Unit/test_Reference.cpp
 )
 target_include_directories(unit_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Unit)
 target_link_libraries(unit_tests PRIVATE ablsteady_core GTest::gtest)
@@ -163,6 +165,90 @@ ablsteady_add_test(NAME abort_restart_overwrite NP 1 LABELS "regression;smoke" R
                           "io\\.chk_file = smoke_chk would overwrite io\\.restart = smoke_chk00000" --
                    COMMAND $<TARGET_FILE:ablsteady> ${DECKS}/inputs_abort_restart_overwrite
                            ${ABLSTEADY_TEST_AMREX_FLAGS})
+
+# --- Reference archives (sub-phase 1.1): ablsteady_refavg end to end --------
+# Three copies of the smoke plotfile at t = 0, 5 and 10 s: their trapezoid
+# average (weights 1/4, 1/2, 1/4, fma) reproduces the plotfile bit for bit.
+# This checks the archive round trip; the weights themselves are tested in
+# the unit tests (identical snapshots cannot tell weights apart).
+set(REFAVG_FIX ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/refavg_fixtures.py)
+set(REFAVG_META refavg.case=Smoke refavg.erf_sha=92410d578f612ab9e844c450bf8e900194becfb5
+                refavg.machine=kestrel-cpu refavg.nodes=2 refavg.ranks=8 refavg.wall_seconds=1800)
+add_test(NAME refavg_snapshots
+         COMMAND ${REFAVG_FIX} snapshots smoke_plt00000 refsnap_a:0 refsnap_b:5 refsnap_c:10
+         WORKING_DIRECTORY ${SMOKE_DIR})
+set_tests_properties(refavg_snapshots PROPERTIES LABELS "regression;smoke"
+                     FIXTURES_REQUIRED smoke FIXTURES_SETUP refavg_snapshots
+                     ENVIRONMENT PYTHONDONTWRITEBYTECODE=1)
+ablsteady_add_test(NAME refavg_build NP 2 LABELS "regression;smoke" RUN_DIR ${SMOKE_DIR}
+                   FIXTURES_REQUIRED refavg_snapshots FIXTURES_SETUP refavg_archive
+                   COMMAND $<TARGET_FILE:ablsteady_refavg> "refavg.plotfiles=refsnap_a refsnap_b refsnap_c/"
+                           refavg.output=ref_archive
+                           "refavg.inputs_files=${DECKS}/inputs_smoke ${DECKS}/inputs_restart"
+                           ${REFAVG_META} ${ABLSTEADY_TEST_AMREX_FLAGS})
+# 2 nodes x 0.5 h x 10 AU = 10 AU
+ablsteady_add_test(NAME refavg_verify NP 3 LABELS "regression;smoke" RUN_DIR ${SMOKE_DIR}
+                   FIXTURES_REQUIRED refavg_archive
+                   PREFIX ${EXPECT_ABORT} --success
+                          "ref_archive verifies: case Smoke, ERF 92410d578, 3 snapshots, kestrel-cpu, 2 node\\(s\\), 8 rank\\(s\\), 10.000 AU"
+                          "theta +half-window change 0.000e\\+00" --
+                   COMMAND $<TARGET_FILE:ablsteady_refavg> refavg.verify=ref_archive
+                           ${ABLSTEADY_TEST_AMREX_FLAGS})
+ablsteady_add_test(NAME refavg_matches NP 1 LABELS "regression;smoke" RUN_DIR ${SMOKE_DIR}
+                   FIXTURES_REQUIRED refavg_archive
+                   COMMAND ${FCOMPARE} --allow_diff_grids smoke_plt00000 ref_archive/average)
+add_test(NAME refavg_damage
+         COMMAND ${REFAVG_FIX} damage ref_archive ref_archive_damaged
+         WORKING_DIRECTORY ${SMOKE_DIR})
+set_tests_properties(refavg_damage PROPERTIES LABELS "regression;smoke"
+                     FIXTURES_REQUIRED refavg_archive FIXTURES_SETUP refavg_damaged
+                     ENVIRONMENT PYTHONDONTWRITEBYTECODE=1)
+ablsteady_add_test(NAME abort_refavg_damaged NP 2 LABELS "regression;smoke" RUN_DIR ${SMOKE_DIR}
+                   FIXTURES_REQUIRED refavg_damaged
+                   PREFIX ${EXPECT_ABORT}
+                          "reference ref_archive_damaged does not verify"
+                          "average/Level_0/Cell_D_00000: SHA-256 differs from MANIFEST" --
+                   COMMAND $<TARGET_FILE:ablsteady_refavg> refavg.verify=ref_archive_damaged
+                           ${ABLSTEADY_TEST_AMREX_FLAGS})
+ablsteady_add_test(NAME abort_refavg_inputs NP 1 LABELS "regression;smoke"
+                   PREFIX ${EXPECT_ABORT}
+                          "refavg\\.machine must be kestrel-cpu, kestrel-gpu or local \\(got kestrel\\)"
+                          "refavg\\.nodes must be >= 1"
+                          "refavg\\.erf_sha must be a full 40-character"
+                          "refavg\\.plotfiles needs at least 3 plotfiles"
+                          "'refavg\\.typo': not an input of namespace 'refavg'" --
+                   COMMAND $<TARGET_FILE:ablsteady_refavg> refavg.plotfiles=only_one refavg.output=x
+                           refavg.case=C refavg.erf_sha=92410d5 refavg.machine=kestrel refavg.nodes=0
+                           refavg.typo=1 ${ABLSTEADY_TEST_AMREX_FLAGS})
+
+ablsteady_add_test(NAME abort_refavg_verify_keys NP 1 LABELS "regression;smoke" RUN_DIR ${SMOKE_DIR}
+                   FIXTURES_REQUIRED refavg_archive
+                   PREFIX ${EXPECT_ABORT}
+                          "refavg\\.output has no effect with refavg\\.verify; remove it" --
+                   COMMAND $<TARGET_FILE:ablsteady_refavg> refavg.verify=ref_archive refavg.output=x
+                           ${ABLSTEADY_TEST_AMREX_FLAGS})
+
+# --- external/VERSIONS and the Kestrel scripts --------------------------------
+add_test(NAME versions_check
+         COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/check_versions.py)
+set_tests_properties(versions_check PROPERTIES LABELS unit ENVIRONMENT PYTHONDONTWRITEBYTECODE=1)
+add_test(NAME versions_check_selftest
+         COMMAND ${Python3_EXECUTABLE} -m unittest -v test_check_versions
+         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/tools)
+set_tests_properties(versions_check_selftest PROPERTIES LABELS unit ENVIRONMENT PYTHONDONTWRITEBYTECODE=1)
+# The Kestrel scripts cannot run here; at least they must parse.
+file(GLOB KESTREL_SCRIPTS ${PROJECT_SOURCE_DIR}/tools/kestrel/*.sh)
+foreach(script IN LISTS KESTREL_SCRIPTS)
+    get_filename_component(sname ${script} NAME_WE)
+    add_test(NAME kestrel_parse_${sname} COMMAND bash -n ${script})
+    set_tests_properties(kestrel_parse_${sname} PROPERTIES LABELS unit)
+endforeach()
+# ... and a dry run with stub module/sbatch/srun exercises submit and archive.
+add_test(NAME kestrel_dryrun
+         COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/kestrel_dryrun.sh ${PROJECT_SOURCE_DIR}
+                 $<TARGET_FILE:ablsteady_refavg> ${SMOKE_DIR}/smoke_plt00000
+                 ${CMAKE_CURRENT_BINARY_DIR}/run/kestrel_dryrun)
+set_tests_properties(kestrel_dryrun PROPERTIES LABELS "regression;smoke" FIXTURES_REQUIRED smoke)
 
 # --- RT-1.3.1 helper: the extern_erf drift check's own tests -----------------
 add_test(NAME drift_check_selftest
