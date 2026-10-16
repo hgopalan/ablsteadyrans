@@ -121,7 +121,9 @@ std::vector<std::string> validate (const Inputs& in)
         }
     }
     for (int d = 0; d < 3; ++d) {
-        if (!(m.prob_hi[d] > m.prob_lo[d])) {
+        // Compared only when finite: a NaN in an ordered comparison raises FE_INVALID.
+        if (std::isfinite(m.prob_lo[d]) && std::isfinite(m.prob_hi[d])
+            && !(m.prob_hi[d] > m.prob_lo[d])) {
             std::ostringstream os;
             os << "mesh.prob_hi must exceed mesh.prob_lo in every direction (direction " << d
                << ": prob_lo = " << m.prob_lo[d] << ", prob_hi = " << m.prob_hi[d] << ")";

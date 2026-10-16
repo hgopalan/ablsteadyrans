@@ -21,15 +21,17 @@ std::string fmt (amrex::Real x)
 
 } // namespace
 
+// Every check tests std::isfinite first: an ordered comparison (<, >) with a
+// NaN raises FE_INVALID, which the GPU-CI flag amrex.fpe_trap_invalid=1 traps.
 std::vector<std::string> validate (const SteadyParams& p)
 {
     std::vector<std::string> err;
-    if (!(p.residual_tol > 0) || !std::isfinite(p.residual_tol)) {
+    if (!std::isfinite(p.residual_tol) || !(p.residual_tol > 0)) {
         err.emplace_back("steady.residual_tol must be finite and > 0");
     }
     // Above max_exponent10 orders, 10^-orders underflows to 0 and only an
     // exact zero residual would pass.
-    if (!(p.residual_drop_orders >= 0)
+    if (!std::isfinite(p.residual_drop_orders) || !(p.residual_drop_orders >= 0)
         || !(p.residual_drop_orders <= std::numeric_limits<amrex::Real>::max_exponent10)) {
         err.emplace_back("steady.residual_drop_orders must be >= 0 and <= "
                          + std::to_string(std::numeric_limits<amrex::Real>::max_exponent10));
@@ -37,7 +39,7 @@ std::vector<std::string> validate (const SteadyParams& p)
     if (p.residual_ref_iterations < 1) {
         err.emplace_back("steady.residual_ref_iterations must be >= 1");
     }
-    if (!(p.monitor_rel_tol > 0) || !std::isfinite(p.monitor_rel_tol)) {
+    if (!std::isfinite(p.monitor_rel_tol) || !(p.monitor_rel_tol > 0)) {
         err.emplace_back("steady.monitor_rel_tol must be finite and > 0");
     }
     if (p.monitor_window < 2) {
@@ -53,7 +55,7 @@ SteadyCriterion::SteadyCriterion (const SteadyParams& p, std::vector<std::string
     auto err = validate(m_p);
     if (m_res_names.empty()) { err.emplace_back("SteadyCriterion needs at least one residual"); }
     for (const auto& m : m_mon) {
-        if (!(m.scale > 0) || !std::isfinite(m.scale)) {
+        if (!std::isfinite(m.scale) || !(m.scale > 0)) {
             err.emplace_back("monitor '" + m.name + "': scale must be finite and > 0");
         }
     }
