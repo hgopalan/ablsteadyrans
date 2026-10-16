@@ -3,13 +3,24 @@
 #include <AMReX.H>
 #include <AMReX_ParallelDescriptor.H>
 #include <AMReX_ParallelReduce.H>
+#include <AMReX_ParmParse.H>
 
 #include <gtest/gtest.h>
 
 int main (int argc, char* argv[])
 {
     ::testing::InitGoogleTest(&argc, argv);
-    amrex::Initialize(argc, argv);
+    // amrex::Abort throws std::runtime_error, so tests can check that a guard
+    // fires (EXPECT_THROW), however the binary is launched.
+#ifdef AMREX_USE_MPI
+    const MPI_Comm comm = MPI_COMM_WORLD;
+#else
+    const amrex::MPI_Comm comm = amrex::MPI_COMM_WORLD;   // stand-ins without MPI
+#endif
+    amrex::Initialize(argc, argv, true, comm, [] () {
+        amrex::ParmParse pp("amrex");
+        pp.add("throw_exception", 1);
+    });
 
     if (!amrex::ParallelDescriptor::IOProcessor()) {
         auto& listeners = ::testing::UnitTest::GetInstance()->listeners();

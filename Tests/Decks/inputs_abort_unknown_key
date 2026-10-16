@@ -1,10 +1,13 @@
 # Must abort: a typo in an owned namespace, a key in a namespace with no
-# inputs yet, and an unknown namespace. All three are reported in one message.
+# inputs yet, an unknown namespace, and a steady.* key (read from sub-phase
+# 1.13). All are reported in one message.
 mesh.n_cell        = 16 12 8
 mesh.prob_lo       = 0. 0. 0.
 mesh.prob_hi       = 1600. 1200. 800.
 mesh.max_grid_sise = 8
 turb.Cmu0          = 0.5562
+# Read from sub-phase 1.13 (the steady driver); until then not an input.
+steady.residual_tol = 1e-6
 mehs.n_cell        = 4 4 4
 io.write_plotfile   = 0
 io.write_checkpoint = 0

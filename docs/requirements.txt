@@ -1,0 +1,4 @@
+# Documentation build: plain reStructuredText, Sphinx's built-in math
+# (MathJax) and the Read the Docs theme.
+sphinx>=7.0
+sphinx_rtd_theme>=1.0

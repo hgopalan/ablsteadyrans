@@ -5,6 +5,7 @@ set(ABLSTEADY_SOURCES
     State.cpp
     IO.cpp
     Reductions.cpp
+    SteadyCriterion.cpp
     App.cpp
 )
 

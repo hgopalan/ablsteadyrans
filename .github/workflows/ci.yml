@@ -102,9 +102,9 @@ jobs:
         run: ccache -s
 
   # ---------------------------------------------------------------------
-  # Single precision: compile only. The 1e-8 steady stop needs double
-  # precision, so single is kept compiling (literals, Real vs double) but
-  # not run.
+  # Single precision: compile only. The plan runs in double precision
+  # (bit-reproducible residual histories, Newton finish to 1e-8 in phase 3);
+  # single is kept compiling (literals, Real vs double) but not run here.
   # ---------------------------------------------------------------------
   single:
     name: Single precision (compile only)
@@ -223,7 +223,9 @@ jobs:
       - name: codespell
         run: |
           python -m pip install codespell
-          python -m codespell   # settings in .codespellrc
+          # The codespell package has no __main__ module, so `python -m
+          # codespell` fails; call its console script. Settings: .codespellrc.
+          codespell
 
       - name: No trailing whitespace
         run: |
