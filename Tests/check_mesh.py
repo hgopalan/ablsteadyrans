@@ -28,6 +28,8 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "extern_erf"))
+# No __pycache__ in the source tree: CI fails a run that leaves files behind.
+sys.dont_write_bytecode = True
 import erf_plotfile  # noqa: E402  (ERF's reader, extern_erf/)
 
 FIELDS = ("z", "detJ")
