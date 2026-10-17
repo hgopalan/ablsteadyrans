@@ -29,8 +29,9 @@ TerrainPoints read_xyz_points (const std::string& file);
 //! Points sit in a grid of about two per bucket, sized per axis (a transect
 //! gets one row). A query visits rings of buckets around the nearest bucket,
 //! perimeter only, until k points are known that are nearer than anything
-//! outside the visited rectangle; ties are broken by point index, so the
-//! result equals the brute-force one. Aborts unless 1 <= k <= number of
+//! outside the visited rectangle; ties are broken by point index, so it picks
+//! the brute-force neighbours (the last bits of the weighted sum may differ
+//! where a compiler fuses multiply-adds differently). Aborts unless 1 <= k <= number of
 //! points (terrain.idw_neighbors). Double precision in every build.
 class IdwInterpolator
 {

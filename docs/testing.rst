@@ -125,9 +125,9 @@ GoogleTest suite
        Sullivan; STF and Sullivan bit for bit on macOS, BTF to rounding because ablsteady keeps the ground layer as
        given, all within 1e-13 elsewhere); STF capped at 2 of 16 levels, as ERF reports.
    * - UT-1.4.8
-     - *Beyond the plan.* The IDW bucket search equals brute force bit for bit (random cloud with far queries, a
-       regular grid with exact distance ties, a tie across a bucket edge, a transect queried from a 2-D domain, one
-       point); UTM-sized coordinates are read and interpolated in double; file terrain on a periodic domain has one
+     - *Beyond the plan.* The IDW bucket search picks the brute-force neighbours; results agree to 1e-13 (random
+       cloud with far queries, a regular grid with exact distance ties, a tie across a bucket edge, a transect
+       queried from a 2-D domain, one point); UTM-sized coordinates are read and interpolated in double; file terrain on a periodic domain has one
        seam height; every mapping keeps the ground layer as given; ground at the top and inverted cells stop the
        run; the slope of a diagonal ridge is reported in full; a restart with changed terrain is refused; the report
        of a steep ridge carries both warnings.

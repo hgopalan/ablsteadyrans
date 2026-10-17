@@ -442,7 +442,7 @@ TEST (Mesh, TerrainInterpolation)
         }
     }
     const ablsteady::IdwInterpolator idw4(pts, 4, 2);
-    EXPECT_EQ(idw4(500.0, 320.0), plane(500.0, 320.0));   // an input point
+    EXPECT_EQ(idw4(500.0, 320.0), pts.z[4 * 13 + 5]);   // an input point: its stored height
     EXPECT_NEAR(idw4(550.0, 360.0), plane(550.0, 360.0), 1e-12);   // centre of 4 points (double in every build)
 
     ablsteady::TerrainGrid g;
@@ -464,6 +464,11 @@ TEST (Mesh, TerrainInterpolation)
     EXPECT_EQ(ablsteady::erf_bilinear(g, 1000.0, 1000.0), g.z.back());
 }
 
+// The bucket search and brute force pick the same neighbours and weights, but
+// a compiler may fuse multiply-adds in one and not the other (x86 vs arm64):
+// the last bits may differ. A wrong neighbour changes the result by O(1).
+constexpr double kSameBits = 1e-13;
+
 // Brute-force IDW (k nearest by distance, ties by index), as the bucket search.
 double idw_brute (const ablsteady::TerrainPoints& pts, int k, double xq, double yq)
 {
@@ -483,8 +488,8 @@ double idw_brute (const ablsteady::TerrainPoints& pts, int k, double xq, double 
     return zs / ws;
 }
 
-// Beyond the plan: the bucket search gives exactly the brute-force IDW answer
-// (double precision in every build): a random cloud with queries inside and
+// Beyond the plan: the bucket search gives the brute-force IDW answer, the
+// same neighbours to the last bits (double precision in every build): a random cloud with queries inside and
 // far outside; a regular grid, whose queries at bucket corners and edge
 // midpoints have exact distance ties; a transect (all y = 0) queried from a
 // 2-D domain, which once took minutes; and a single point.
@@ -501,10 +506,10 @@ TEST (Mesh, IdwBucketsEqualBruteForce)
     const ablsteady::IdwInterpolator idw(cloud, 6, 2);
     for (int q = 0; q < 300; ++q) {
         const double xq = u(rng) * 1.2 - 100, yq = u(rng) * 0.6 - 50;
-        ASSERT_EQ(idw(xq, yq), idw_brute(cloud, 6, xq, yq)) << xq << " " << yq;
+        ASSERT_NEAR(idw(xq, yq), idw_brute(cloud, 6, xq, yq), kSameBits * std::abs(idw_brute(cloud, 6, xq, yq))) << xq << " " << yq;
     }
     for (const auto& [xq, yq] : std::vector<std::pair<double, double>>{{-1e7, 3e6}, {5e6, -5e6}}) {
-        ASSERT_EQ(idw(xq, yq), idw_brute(cloud, 6, xq, yq)) << xq << " " << yq;
+        ASSERT_NEAR(idw(xq, yq), idw_brute(cloud, 6, xq, yq), kSameBits * std::abs(idw_brute(cloud, 6, xq, yq))) << xq << " " << yq;
     }
 
     ablsteady::TerrainPoints grid;
@@ -520,7 +525,7 @@ TEST (Mesh, IdwBucketsEqualBruteForce)
         for (int j = -2; j <= 20; ++j) {
             for (int i = -2; i <= 20; ++i) {
                 const double xq = 5.0 * i, yq = 5.0 * j;
-                ASSERT_EQ(g(xq, yq), idw_brute(grid, k, xq, yq)) << "k " << k << " at " << xq << " " << yq;
+                ASSERT_NEAR(g(xq, yq), idw_brute(grid, k, xq, yq), kSameBits * std::abs(idw_brute(grid, k, xq, yq))) << "k " << k << " at " << xq << " " << yq;
             }
         }
     }
@@ -535,7 +540,7 @@ TEST (Mesh, IdwBucketsEqualBruteForce)
     for (int j = 0; j <= 16; ++j) {
         for (int i = 0; i <= 16; ++i) {
             const double xq = 125.0 * i, yq = 125.0 * j;
-            ASSERT_EQ(tl(xq, yq), idw_brute(line, 6, xq, yq)) << xq << " " << yq;
+            ASSERT_NEAR(tl(xq, yq), idw_brute(line, 6, xq, yq), kSameBits * std::abs(idw_brute(line, 6, xq, yq))) << xq << " " << yq;
         }
     }
 
@@ -548,8 +553,8 @@ TEST (Mesh, IdwBucketsEqualBruteForce)
     tie.y = {0.0, 0.0, 0.0, 0.0};
     tie.z = {100.0, 0.0, 50.0, 7.0};
     const ablsteady::IdwInterpolator ti(tie, 2, 2);
-    EXPECT_EQ(ti(2.5, 0.0), idw_brute(tie, 2, 2.5, 0.0));
-    EXPECT_EQ(idw_brute(tie, 2, 2.5, 0.0), (50.0 / 2.25 + 100.0 / 6.25) / (1 / 2.25 + 1 / 6.25));
+    EXPECT_NEAR(ti(2.5, 0.0), idw_brute(tie, 2, 2.5, 0.0), kSameBits * 100);
+    EXPECT_NEAR(idw_brute(tie, 2, 2.5, 0.0), (50.0 / 2.25 + 100.0 / 6.25) / (1 / 2.25 + 1 / 6.25), kSameBits * 100);
 
     ablsteady::TerrainPoints one;
     one.x = {3.0};
