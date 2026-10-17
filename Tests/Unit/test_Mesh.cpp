@@ -754,4 +754,36 @@ TEST (Mesh, GroundLayerIsTheGivenSurface)
     }
 }
 
+// Beyond the plan: every node of z_phys_nd, ghosts included, holds a height,
+// for all three mappings with periodic and non-periodic sides. ERF's builder
+// first sets the nodes outside the domain to bogus_large_value (1e150); the
+// BTF fix of #4 (the ground layer is not rewritten) had left the ground nodes
+// of the ghost columns outside non-periodic sides at that value, and the
+// extrapolation below the ground at 2e150, which a Dirichlet-ground Poisson
+// solve then read (sub-phase 1.11).
+TEST (Mesh, NoSentinelNodesLeft)
+{
+    for (const int sm : {0, 1, 2}) {
+        for (const int per : {0, 1}) {
+            MeshCase s = hill3d(sm);
+            s.in.mesh.is_periodic = {per, per, 0};
+            s.make();
+            s.mesh.build(s.in, s.geom, s.z);
+            double worst = 0;
+            for (amrex::MFIter mfi(s.z, false); mfi.isValid(); ++mfi) {
+                const amrex::Box gb = mfi.fabbox();
+                amrex::FArrayBox f(gb, 1, amrex::The_Pinned_Arena());
+                f.copy<amrex::RunOn::Device>(s.z[mfi], gb);
+                amrex::Gpu::streamSynchronize();
+                amrex::LoopOnCpu(gb, [&] (int i, int j, int k) {
+                    const double v = f(amrex::IntVect(i, j, k));
+                    worst = std::isfinite(v) ? std::max(worst, std::abs(v)) : 1e300;
+                });
+            }
+            amrex::ParallelAllReduce::Max(worst, amrex::ParallelDescriptor::Communicator());
+            EXPECT_LT(worst, 1e4) << "smoothing " << sm << " periodic " << per;
+        }
+    }
+}
+
 } // namespace

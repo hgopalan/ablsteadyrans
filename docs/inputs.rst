@@ -168,19 +168,26 @@ in ``Source/Poisson.cpp``.
      - Range and meaning
    * - ``solver.poisson_reltol``
      - ``1e-10`` (``1e-5`` single)
-     - ≥ 10 machine epsilon and < 1. Converged when the residual 2-norm is below this fraction of the initial one.
+     - ≥ 10 machine epsilon and < 1. Converged when the residual is below this fraction of the initial one: the
+       2-norm under GMRES (``gmres_fft``, ``gmres_mlmg``), the maximum norm under ``mlmg``. In single precision
+       rounding sets a floor near :math:`\varepsilon N_z^2/2` (:doc:`poisson`).
    * - ``solver.poisson_abstol``
      - ``0``
-     - Finite, ≥ 0. Or when the residual 2-norm is below this value.
+     - Finite, ≥ 0. Or when the residual (in the same norm) is below this value.
    * - ``solver.poisson_max_iter``
      - ``200``
-     - ≥ 1. GMRES iterations; reaching it stops the run.
+     - ≥ 1. GMRES iterations, or MLMG V-cycles under ``mlmg``; reaching it stops the run.
    * - ``solver.poisson_restart``
      - ``50``
-     - ≥ 1. GMRES restart length (ERF's value).
+     - ≥ 1. GMRES restart length (ERF's value); ``gmres_fft`` and ``gmres_mlmg`` only (an error with ``mlmg``).
    * - ``solver.poisson_precond``
      - ``fft``
-     - ``fft`` (ERF's FFT preconditioner on the flat stretched grid) or ``none``.
+     - ``fft`` (ERF's FFT preconditioner on the flat stretched grid) or ``none``; ``gmres_fft`` only (an error with
+       back end B).
+   * - ``solver.poisson_backend``
+     - ``gmres_fft``
+     - ``gmres_fft`` (back end A: ERF's operator, GMRES, FFT preconditioner), ``mlmg`` or ``gmres_mlmg`` (back end
+       B: AMReX's ``MLTerrainPoisson`` with multigrid, alone or under GMRES).
    * - ``solver.poisson_verbose``
      - ``0``
      - ≥ 0. 1 prints each solve's iterations, residuals and (singular problems) removed mean, and AMReX GMRES's solve

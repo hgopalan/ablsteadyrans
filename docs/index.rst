@@ -46,6 +46,7 @@ of a steady solution and the Poisson layer are in place. There is no flow solver
 
    mesh
    poisson
+   walldistance
    steady
    cases
    references

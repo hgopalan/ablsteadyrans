@@ -4,9 +4,14 @@
 #include <ERF_TerrainPoisson.H>
 
 #include <AMReX_GMRES.H>
+#include <AMReX_GMRES_MLMG.H>
+#include <AMReX_MLMG.H>
+#include <AMReX_MLTerrainPoisson.H>
 #include <AMReX_ParmParse.H>
 #include <AMReX_Print.H>
 
+#include <algorithm>
+#include <cfenv>
 #include <cmath>
 #include <limits>
 #include <sstream>
@@ -14,6 +19,11 @@
 namespace ablsteady {
 
 namespace {
+
+bool op_dir_ground (const PoissonBC& bc)
+{
+    return bc.face[amrex::Orientation(2, amrex::Orientation::low)] == PoissonFace::dirichlet;
+}
 
 bool is_dirichlet_anywhere (const PoissonBC& bc)
 {
@@ -66,6 +76,54 @@ void fill_beta_cell (amrex::MultiFab& cell, const amrex::MultiFab* bx_face, cons
     }
 }
 
+// Fill phi's ghost cells for bc: periodic images, then even (Neumann) or odd
+// (Dirichlet) copies across the non-periodic faces, x first, then y over the
+// x ghosts, then z over both (TerrainPoisson::apply_bcs's order, with the
+// ground odd when it is Dirichlet). A free function: CUDA does not allow
+// device lambdas in private member functions.
+void fill_bc_ghosts (amrex::MultiFab& phi, const amrex::Geometry& geom, const PoissonBC& bc)
+{
+    phi.FillBoundary(geom.periodicity());
+    const amrex::Box& dom = geom.Domain();
+    for (int d = 0; d < AMREX_SPACEDIM; ++d) {
+        if (geom.isPeriodic(d)) { continue; }
+        for (const auto side : {amrex::Orientation::low, amrex::Orientation::high}) {
+            const PoissonFace f = bc.face[amrex::Orientation(d, side)];
+            const amrex::Real sign = (f == PoissonFace::dirichlet) ? amrex::Real(-1) : amrex::Real(1);
+            const bool lo = side == amrex::Orientation::low;
+            const int edge = lo ? dom.smallEnd(d) : dom.bigEnd(d);
+            for (amrex::MFIter mfi(phi, false); mfi.isValid(); ++mfi) {
+                const amrex::Box vb = mfi.validbox();
+                if ((lo && vb.smallEnd(d) != edge) || (!lo && vb.bigEnd(d) != edge)) { continue; }
+                // The ghost slab next to the face, grown over the other
+                // directions: fully over those already filled (e < d), and
+                // over the later ones (e > d) only where the neighbours hold
+                // values now (inside the domain or across a periodic face),
+                // so every corner ends up filled.
+                amrex::Box gb = vb;
+                for (int e = 0; e < AMREX_SPACEDIM; ++e) {
+                    if (e == d) { continue; }
+                    gb.grow(e, 1);
+                    if (e > d && !geom.isPeriodic(e)) {
+                        gb.setSmall(e, std::max(gb.smallEnd(e), dom.smallEnd(e)));
+                        gb.setBig(e, std::min(gb.bigEnd(e), dom.bigEnd(e)));
+                    }
+                }
+                gb.setSmall(d, lo ? edge - 1 : edge + 1);
+                gb.setBig(d, lo ? edge - 1 : edge + 1);
+                gb &= mfi.fabbox();
+                const auto p = phi.array(mfi);
+                const int s = lo ? 1 : -1;
+                const int di = (d == 0) ? s : 0, dj = (d == 1) ? s : 0, dk = (d == 2) ? s : 0;
+                amrex::ParallelFor(gb, [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
+                {
+                    p(i, j, k) = sign * p(i + di, j + dj, k + dk);
+                });
+            }
+        }
+    }
+}
+
 } // namespace
 
 // The linear operator for amrex::GMRES: ERF's TerrainPoisson, with
@@ -80,14 +138,92 @@ public:
     using RT = amrex::Real;   // amrex::GMRES's scalar type
 
     Op (TerrainPoisson& tp, const amrex::Geometry& geom, const Mesh& mesh, const amrex::MultiFab& z,
-        const amrex::MultiFab* dcross, const amrex::MultiFab* beta_cell, const PoissonBC& bc)
-        : m_tp(tp), m_geom(geom), m_mesh(mesh), m_z(z), m_dcross(dcross), m_beta_cell(beta_cell), m_bc(bc)
+        const amrex::MultiFab* dcross, const amrex::MultiFab* beta_cell, const PoissonBC& bc,
+        const amrex::MultiFab& ax, const amrex::MultiFab& ay, const amrex::MultiFab& az)
+        : m_tp(tp), m_geom(geom), m_mesh(mesh), m_z(z), m_dcross(dcross), m_beta_cell(beta_cell), m_bc(bc),
+          m_ax(ax), m_ay(ay), m_az(az),
+          m_dir_ground(bc.face[amrex::Orientation(2, amrex::Orientation::low)] == PoissonFace::dirichlet)
     {}
 
     void apply (amrex::MultiFab& lhs, amrex::MultiFab const& rhs)
     {
-        m_tp.apply(lhs, rhs);   // fills rhs's ghosts for the boundary conditions
+        if (m_dir_ground) {
+            apply_dirichlet_ground(lhs, rhs);
+        } else {
+            m_tp.apply(lhs, rhs);   // fills rhs's ghosts for the boundary conditions
+        }
         if (m_dcross != nullptr) { add_cross(lhs, rhs); }
+    }
+
+    // A phi with phi = 0 on the ground: ERF's kernel with an odd ghost below
+    // the ground (so the bottom row's cross terms see the Dirichlet value),
+    // plus the ground-face flux ERF's kernel leaves out, from ERF's own
+    // one-sided Dirichlet formula (terrpoisson_flux_zlo_dir).
+    void apply_dirichlet_ground (amrex::MultiFab& lhs, amrex::MultiFab const& rhs)
+    {
+        auto& x = const_cast<amrex::MultiFab&>(rhs);
+        fill_bc_ghosts(x, m_geom, m_bc);
+        const auto dxinv = m_geom.InvCellSizeArray();
+        const int zf = m_tp.zeroFluxFaces();
+        const amrex::Dim3 dlo = amrex::lbound(m_geom.Domain());
+        const amrex::Dim3 dhi = amrex::ubound(m_geom.Domain());
+        const int k0 = m_geom.Domain().smallEnd(2);
+        for (amrex::MFIter mfi(lhs, amrex::TilingIfNotGPU()); mfi.isValid(); ++mfi) {
+            const amrex::Box bx = mfi.tilebox();
+            const auto y = lhs.array(mfi);
+            const auto xa = x.const_array(mfi);
+            const auto ax = m_ax.const_array(mfi);
+            const auto ay = m_ay.const_array(mfi);
+            const auto az = m_az.const_array(mfi);
+            const auto J = m_mesh.detJ.const_array(mfi);
+            const auto zp = m_z.const_array(mfi);
+            amrex::ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
+            {
+                terrpoisson_adotx(i, j, k, y, xa, ax, ay, az, J, zp, dxinv[0], dxinv[1], dxinv[2], dlo, dhi, zf);
+                if (k == k0) {
+                    y(i, j, k) += az(i, j, k) * terrpoisson_flux_zlo_dir(i, j, k, xa, zp, dxinv[0], dxinv[1])
+                                * dxinv[2] / J(i, j, k);
+                }
+            });
+        }
+    }
+
+    // The fluxes with phi = 0 on the ground (as apply_dirichlet_ground).
+    void fluxes_dirichlet_ground (amrex::MultiFab& phi, amrex::Array<amrex::MultiFab, AMREX_SPACEDIM>& fl)
+    {
+        fill_bc_ghosts(phi, m_geom, m_bc);
+        const auto dxinv = m_geom.InvCellSizeArray();
+        const int zf = m_tp.zeroFluxFaces();
+        const amrex::Dim3 dlo = amrex::lbound(m_geom.Domain());
+        const amrex::Dim3 dhi = amrex::ubound(m_geom.Domain());
+        const int k0 = m_geom.Domain().smallEnd(2);
+        for (amrex::MFIter mfi(phi, false); mfi.isValid(); ++mfi) {
+            const auto xa = phi.const_array(mfi);
+            const auto zp = m_z.const_array(mfi);
+            const auto fx = fl[0].array(mfi);
+            const auto fy = fl[1].array(mfi);
+            const auto fz = fl[2].array(mfi);
+            amrex::ParallelFor(fl[0][mfi].box(), [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
+            {
+                const bool zero = ((zf & tp_face_xlo) && i == dlo.x) || ((zf & tp_face_xhi) && i == dhi.x + 1);
+                fx(i, j, k) = zero ? amrex::Real(0) : terrpoisson_flux_x(i, j, k, xa, zp, dxinv[0]);
+            });
+            amrex::ParallelFor(fl[1][mfi].box(), [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
+            {
+                const bool zero = ((zf & tp_face_ylo) && j == dlo.y) || ((zf & tp_face_yhi) && j == dhi.y + 1);
+                fy(i, j, k) = zero ? amrex::Real(0) : terrpoisson_flux_y(i, j, k, xa, zp, dxinv[1]);
+            });
+            amrex::ParallelFor(fl[2][mfi].box(), [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
+            {
+                if ((zf & tp_face_zhi) && k == dhi.z + 1) {
+                    fz(i, j, k) = amrex::Real(0);
+                } else if (k == k0) {
+                    fz(i, j, k) = terrpoisson_flux_zlo_dir(i, j, k, xa, zp, dxinv[0], dxinv[1]);
+                } else {
+                    fz(i, j, k) = terrpoisson_flux_z(i, j, k, xa, zp, dxinv[0], dxinv[1]);
+                }
+            });
+        }
     }
 
     // A phi += (1/J) d_zeta (a_z (beta_z - z_cross) cross) on the faces whose
@@ -170,6 +306,10 @@ private:
     const amrex::MultiFab* m_dcross;
     const amrex::MultiFab* m_beta_cell;
     PoissonBC m_bc;
+    const amrex::MultiFab& m_ax;
+    const amrex::MultiFab& m_ay;
+    const amrex::MultiFab& m_az;
+    bool m_dir_ground;
 };
 
 std::vector<std::string> check_poisson_bc (const PoissonBC& bc, const amrex::Geometry& geom)
@@ -185,9 +325,6 @@ std::vector<std::string> check_poisson_bc (const PoissonBC& bc, const amrex::Geo
                                  + name[d]);
             }
         }
-    }
-    if (bc.face[amrex::Orientation(2, amrex::Orientation::low)] != PoissonFace::neumann) {
-        err.emplace_back("Poisson BC zlo: the ground is a wall (Neumann)");
     }
     return err;
 }
@@ -211,6 +348,17 @@ std::vector<std::string> check_poisson_options (const PoissonOptions& opt)
         err.emplace_back("solver.poisson_precond must be fft or none (got " + opt.precond + ")");
     }
     if (opt.verbose < 0) { err.emplace_back("solver.poisson_verbose must be >= 0"); }
+    if (opt.backend != "gmres_fft" && opt.backend != "mlmg" && opt.backend != "gmres_mlmg") {
+        err.emplace_back("solver.poisson_backend must be gmres_fft, mlmg or gmres_mlmg (got " + opt.backend + ")");
+    }
+    auto given = [&opt] (const char* k) { return std::find(opt.given.begin(), opt.given.end(), k) != opt.given.end(); };
+    if (given("poisson_precond") && opt.backend != "gmres_fft") {
+        err.emplace_back("solver.poisson_precond has no effect with solver.poisson_backend = " + opt.backend
+                         + " (back end A only)");
+    }
+    if (given("poisson_restart") && opt.backend == "mlmg") {
+        err.emplace_back("solver.poisson_restart has no effect with solver.poisson_backend = mlmg (no GMRES)");
+    }
     return err;
 }
 
@@ -220,11 +368,12 @@ PoissonOptions read_poisson_options ()
     std::vector<std::string> err;
     amrex::ParmParse pp("solver");
     for (const char* key : {"poisson_reltol", "poisson_abstol", "poisson_max_iter", "poisson_restart",
-                            "poisson_precond", "poisson_verbose"}) {
+                            "poisson_precond", "poisson_verbose", "poisson_backend"}) {
         if (pp.countname(key) > 1) { err.emplace_back(std::string("solver.") + key + " is given more than once"); }
         if (pp.contains(key) && pp.countval(key) != 1) {
             err.emplace_back(std::string("solver.") + key + " takes exactly one value");
         }
+        if (pp.contains(key)) { opt.given.emplace_back(key); }
     }
     pp.query("poisson_reltol", opt.reltol);
     pp.query("poisson_abstol", opt.abstol);
@@ -232,6 +381,7 @@ PoissonOptions read_poisson_options ()
     pp.query("poisson_restart", opt.restart);
     pp.query("poisson_precond", opt.precond);
     pp.query("poisson_verbose", opt.verbose);
+    pp.query("poisson_backend", opt.backend);
     auto range = check_poisson_options(opt);
     err.insert(err.end(), range.begin(), range.end());
     if (!err.empty()) { abort_all(err); }
@@ -257,6 +407,12 @@ void PoissonSolver::check_layout (const amrex::MultiFab& mf, const char* what) c
         amrex::Abort(std::string("ablsteady: PoissonSolver: ") + what
                      + " must be on the mesh's BoxArray and DistributionMapping");
     }
+    // The ghost fills assume boxes that span the z column (make_box_array).
+    for (int b = 0; b < cc.size(); ++b) {
+        if (cc[b].smallEnd(2) != m_geom.Domain().smallEnd(2) || cc[b].bigEnd(2) != m_geom.Domain().bigEnd(2)) {
+            amrex::Abort("ablsteady: PoissonSolver: every box must span the full z column");
+        }
+    }
 }
 
 void PoissonSolver::prepare (const FaceCoeffs& coeffs, const PoissonBC& bc)
@@ -281,9 +437,11 @@ void PoissonSolver::prepare (const FaceCoeffs& coeffs, const PoissonBC& bc)
     }
 
     // A new mesh layout invalidates everything cached.
-    const bool new_layout = !m_ax.ok() || m_op_ba != m_mesh.detJ.boxArray()
-                            || m_ax.DistributionMap() != m_mesh.ax.DistributionMap();
+    const bool new_layout = !m_ax.ok() || m_layout_ba != m_mesh.detJ.boxArray()
+                            || m_layout_dm != m_mesh.detJ.DistributionMap();
     if (new_layout) {
+        m_layout_ba = m_mesh.detJ.boxArray();
+        m_layout_dm = m_mesh.detJ.DistributionMap();
         m_ax.define(m_mesh.ax.boxArray(), m_mesh.ax.DistributionMap(), 1, 0);
         m_ay.define(m_mesh.ay.boxArray(), m_mesh.ay.DistributionMap(), 1, 0);
         m_az.define(m_mesh.az.boxArray(), m_mesh.az.DistributionMap(), 1, 0);
@@ -297,8 +455,16 @@ void PoissonSolver::prepare (const FaceCoeffs& coeffs, const PoissonBC& bc)
         if (b[d] != nullptr) { amrex::MultiFab::Multiply(*ab[d], *b[d], 0, 0, 1, 0); }
     }
 
-    // z_cross: the z-face correction beta_z - z_cross.
+    // z_cross: the z-face correction beta_z - z_cross (back end A, Neumann
+    // ground; its kernel has no Dirichlet ground face).
     m_split = coeffs.z_cross != nullptr;
+    if (m_split && m_opt.backend != "gmres_fft") {
+        amrex::Abort("ablsteady: FaceCoeffs::z_cross needs solver.poisson_backend = gmres_fft "
+                     "(MLTerrainPoisson has no split coefficient)");
+    }
+    if (m_split && bc.face[amrex::Orientation(2, amrex::Orientation::low)] == PoissonFace::dirichlet) {
+        amrex::Abort("ablsteady: FaceCoeffs::z_cross with a Dirichlet ground is not supported");
+    }
     if (m_split) {
         if (!m_dcross.ok() || new_layout) { m_dcross.define(m_mesh.az.boxArray(), m_mesh.az.DistributionMap(), 1, 0); }
         if (coeffs.z != nullptr) {
@@ -319,6 +485,7 @@ void PoissonSolver::prepare (const FaceCoeffs& coeffs, const PoissonBC& bc)
         fill_beta_cell(m_beta_cell, coeffs.x, coeffs.y);
     }
 
+    if (m_opt.backend != "gmres_fft") { return; }   // back end B builds its own operator
     if (m_op && m_op_bc == bc && m_op_ratio == coeffs.precond_ratio) { return; }
 
     // ERF's boundary names: Outflow/Open map to a Dirichlet (odd) face, any
@@ -350,9 +517,21 @@ void PoissonSolver::apply (amrex::MultiFab& Aphi, amrex::MultiFab& phi, const Fa
     if (phi.nGrowVect().min() < 1) { amrex::Abort("ablsteady: PoissonSolver::apply needs phi with a ghost cell"); }
     check_layout(phi, "phi");
     check_layout(Aphi, "Aphi");
+    if (m_opt.backend != "gmres_fft") {
+        amrex::Abort("ablsteady: PoissonSolver::apply is back end A's operator (solver.poisson_backend = gmres_fft)");
+    }
     prepare(coeffs, bc);
-    Op op(*m_op, m_geom, m_mesh, m_z, m_split ? &m_dcross : nullptr, nullptr, bc);
+    Op op(*m_op, m_geom, m_mesh, m_z, m_split ? &m_dcross : nullptr, nullptr, bc, m_ax, m_ay, m_az);
     op.apply(Aphi, phi);
+}
+
+void PoissonSolver::fill_ghosts (amrex::MultiFab& phi, const PoissonBC& bc)
+{
+    if (phi.nGrowVect().min() < 1) { amrex::Abort("ablsteady: PoissonSolver::fill_ghosts needs phi with a ghost cell"); }
+    check_layout(phi, "phi");
+    auto err = check_poisson_bc(bc, m_geom);
+    if (!err.empty()) { abort_all(err); }
+    fill_bc_ghosts(phi, m_geom, bc);
 }
 
 PoissonResult PoissonSolver::solve (amrex::MultiFab& rhs, amrex::MultiFab& phi, const FaceCoeffs& coeffs,
@@ -374,8 +553,6 @@ PoissonResult PoissonSolver::solve (amrex::MultiFab& rhs, amrex::MultiFab& phi, 
         }
     }
     prepare(coeffs, bc);
-    Op op(*m_op, m_geom, m_mesh, m_z, m_split ? &m_dcross : nullptr, m_scaled_precond ? &m_beta_cell : nullptr,
-          bc);
 
     PoissonResult res;
     res.singular = !is_dirichlet_anywhere(bc);
@@ -385,6 +562,10 @@ PoissonResult PoissonSolver::solve (amrex::MultiFab& rhs, amrex::MultiFab& phi, 
         res.removed_mean = weighted_mean(rhs, m_mesh.detJ);
         rhs.plus(-res.removed_mean, 0, 1, 0);
     }
+    if (m_opt.backend != "gmres_fft") { return solve_mlmg(rhs, phi, coeffs, bc, fluxes, res); }
+
+    Op op(*m_op, m_geom, m_mesh, m_z, m_split ? &m_dcross : nullptr, m_scaled_precond ? &m_beta_cell : nullptr,
+          bc, m_ax, m_ay, m_az);
 
     amrex::GMRES<amrex::MultiFab, Op> gmres;
     gmres.define(op);
@@ -416,9 +597,13 @@ PoissonResult PoissonSolver::solve (amrex::MultiFab& rhs, amrex::MultiFab& phi, 
         amrex::Abort(os.str());
     }
 
-    m_op->apply_bcs(phi);
+    fill_bc_ghosts(phi, m_geom, bc);
     if (fluxes != nullptr) {
-        m_op->getFluxes(phi, *fluxes);
+        if (op_dir_ground(bc)) {
+            op.fluxes_dirichlet_ground(phi, *fluxes);
+        } else {
+            m_op->getFluxes(phi, *fluxes);
+        }
         const amrex::MultiFab* b[3] = {coeffs.x, coeffs.y, coeffs.z};
         for (int d = 0; d < 3; ++d) {
             if (b[d] != nullptr) { amrex::MultiFab::Multiply((*fluxes)[d], *b[d], 0, 0, 1, 0); }
@@ -430,6 +615,114 @@ PoissonResult PoissonSolver::solve (amrex::MultiFab& rhs, amrex::MultiFab& phi, 
                        << res.final_residual << " of " << res.initial_residual;
         if (res.singular) { amrex::Print() << ", removed mean " << res.removed_mean; }
         amrex::Print() << "\n";
+    }
+    return res;
+}
+
+PoissonResult PoissonSolver::solve_mlmg (amrex::MultiFab& rhs, amrex::MultiFab& phi, const FaceCoeffs& coeffs,
+                                         const PoissonBC& bc,
+                                         amrex::Array<amrex::MultiFab, AMREX_SPACEDIM>* fluxes, PoissonResult res)
+{
+    const amrex::BoxArray& ba = m_mesh.detJ.boxArray();
+    const amrex::DistributionMapping& dm = m_mesh.detJ.DistributionMap();
+    if (!m_ml || !(m_ml_bc == bc) || m_ml_ba != ba || m_ml_dm != dm) {
+        amrex::LPInfo info;
+        // A periodic one-cell direction (a 2-D case) is hidden: nothing can
+        // vary along it. (A non-periodic one-cell direction keeps its
+        // terrain slopes, as back end A does.)
+        for (int d = 0; d < 2; ++d) {
+            if (m_geom.Domain().length(d) == 1 && m_geom.isPeriodic(d)) { info.setHiddenDirection(d); }
+        }
+        m_ml = std::make_unique<amrex::MLTerrainPoisson>(amrex::Vector<amrex::Geometry>{m_geom},
+                                                         amrex::Vector<amrex::BoxArray>{ba},
+                                                         amrex::Vector<amrex::DistributionMapping>{dm}, info);
+        amrex::Array<amrex::LinOpBCType, AMREX_SPACEDIM> lo{}, hi{};
+        auto type = [] (PoissonFace f) {
+            return f == PoissonFace::periodic  ? amrex::LinOpBCType::Periodic
+                 : f == PoissonFace::dirichlet ? amrex::LinOpBCType::Dirichlet : amrex::LinOpBCType::Neumann;
+        };
+        for (int d = 0; d < AMREX_SPACEDIM; ++d) {
+            lo[d] = type(bc.face[amrex::Orientation(d, amrex::Orientation::low)]);
+            hi[d] = type(bc.face[amrex::Orientation(d, amrex::Orientation::high)]);
+        }
+        m_ml->setDomainBC(lo, hi);
+        m_ml->setLevelBC(0, nullptr);
+        m_ml->setZPhys(0, m_z);
+        m_ml->setDetJ(0, m_mesh.detJ);
+        m_ml_bc = bc;
+        m_ml_ba = ba;
+        m_ml_dm = dm;
+    }
+    m_ml->setAreas(0, {&m_ax, &m_ay, &m_az});   // premultiplied a beta
+
+    amrex::MLMG mlmg(*m_ml);
+    mlmg.setMaxIter(m_opt.max_iter);
+    mlmg.setVerbose(m_opt.verbose);
+    mlmg.setThrowException(true);
+    res.initial_residual = rhs.norm2();
+    phi.setVal(0.0);
+    bool converged = true;
+    std::string why;
+    // MLTerrainPoisson's CPU red-black smoother (AMReX
+    // AMReX_MLTerrainPoisson.cpp, the fused loop's sa += ta) adds whole vector
+    // registers and stores only the active colour; the inactive lanes are
+    // uninitialized and can raise FE_INVALID with no effect on the result.
+    // The invalid trap is off during the solve; the result is checked for
+    // finite values below instead.
+    const auto prev_fpe = amrex::disableFPExcept(amrex::FPExcept::invalid);
+    try {
+        if (m_opt.backend == "mlmg") {
+            mlmg.solve({&phi}, {&rhs}, m_opt.reltol, m_opt.abstol);
+            res.iterations = mlmg.getNumIters();
+        } else {
+            amrex::GMRESMLMG gmres(mlmg);
+            gmres.setMaxIters(m_opt.max_iter);
+            gmres.setVerbose(m_opt.verbose);
+            gmres.getGMRES().setRestartLength(m_opt.restart);
+            gmres.solve(phi, rhs, m_opt.reltol, m_opt.abstol);
+            res.iterations = gmres.getNumIters();
+            converged = gmres.getGMRES().getStatus() == 0;
+        }
+    } catch (const std::exception& e) {
+        converged = false;
+        why = e.what();
+        res.iterations = m_opt.max_iter;
+    }
+    std::feclearexcept(FE_ALL_EXCEPT);
+    amrex::setFPExcept(prev_fpe);
+    if (phi.contains_nan(0, 1, 0) || phi.contains_inf(0, 1, 0)) {
+        amrex::Abort("ablsteady: the Poisson solve (solver.poisson_backend = " + m_opt.backend
+                     + ") returned non-finite values");
+    }
+    if (res.singular) { phi.plus(-weighted_mean(phi, m_mesh.detJ), 0, 1, 0); }
+
+    // The true residual: MLTerrainPoisson applies J A phi.
+    amrex::MultiFab r(ba, dm, 1, 0);
+    mlmg.apply({&r}, {&phi});
+    amrex::MultiFab::Divide(r, m_mesh.detJ, 0, 0, 1, 0);
+    amrex::MultiFab::Xpay(r, amrex::Real(-1), rhs, 0, 0, 1, 0);
+    res.final_residual = r.norm2();
+    if (!converged) {
+        std::ostringstream os;
+        os << "ablsteady: the Poisson solve (solver.poisson_backend = " << m_opt.backend
+           << ") did not converge in solver.poisson_max_iter = " << m_opt.max_iter << " iterations (residual "
+           << res.final_residual << " of " << res.initial_residual << "; solver.poisson_reltol = " << m_opt.reltol
+           << ", solver.poisson_abstol = " << m_opt.abstol << ")";
+        if (!why.empty()) { os << ": " << why; }
+        amrex::Abort(os.str());
+    }
+
+    fill_bc_ghosts(phi, m_geom, bc);
+    if (fluxes != nullptr) {
+        m_ml->getFluxes({{&(*fluxes)[0], &(*fluxes)[1], &(*fluxes)[2]}}, {&phi}, amrex::MLLinOp::Location::FaceCenter);
+        const amrex::MultiFab* b[3] = {coeffs.x, coeffs.y, coeffs.z};
+        for (int d = 0; d < 3; ++d) {
+            if (b[d] != nullptr) { amrex::MultiFab::Multiply((*fluxes)[d], *b[d], 0, 0, 1, 0); }
+        }
+    }
+    if (m_opt.verbose > 0) {
+        amrex::Print() << "ablsteady: Poisson solve (" << m_opt.backend << "): " << res.iterations
+                       << " iterations, residual " << res.final_residual << " of " << res.initial_residual << "\n";
     }
     return res;
 }

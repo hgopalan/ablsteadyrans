@@ -459,18 +459,24 @@
      }
  
      // Number of ghost cells
-@@ -706,6 +329,10 @@
-             //
-             ParallelFor(gbx, [=] AMREX_GPU_DEVICE (int i, int j, int k)
+@@ -708,6 +331,16 @@
              {
-+                // ablsteady: the ground layer k0 is not rewritten. ERF writes
-+                // z_sfc z_top / z_top there while other threads read z_arr(ii,jj,k0),
-+                // a race on GPU; the value differs from z_sfc by at most 1 ulp.
-+                if (k == k0) { return; }
                  int ii = amrex::max(amrex::min(i,imax),imin);
                  int jj = amrex::max(amrex::min(j,jmax),jmin);
++                // ablsteady: the ground layer k0 inside the domain is not rewritten.
++                // ERF writes z_sfc z_top / z_top there while other threads read
++                // z_arr(ii,jj,k0), a race on GPU; the value differs from z_sfc by at
++                // most 1 ulp. Ghost columns outside a non-periodic side were set to
++                // bogus_large_value above and take the clamped domain node's height,
++                // read from a node no thread writes.
++                if (k == k0) {
++                    if (ii != i || jj != j) { z_arr(i,j,k) = z_arr(ii,jj,k0); }
++                    return;
++                }
  
-@@ -805,8 +432,7 @@
+                 //
+                 // Start with flat z_lev set either with uniform cell size or specified z_levels
+@@ -805,8 +438,7 @@
          MultiFab::Copy(h_mf_old, h_mf,0,0,1,h_mf_old.nGrow());
  
          // Minimum allowed fractional grid spacing
@@ -480,7 +486,7 @@
          Real z_H     = Real(2.44)*h_m/(1-gamma_m); // Klemp2011 Eqn. 11
  
          // Levels at which the minimum-thickness criterion forced us to stop smoothing
-@@ -948,13 +574,14 @@
+@@ -948,13 +580,14 @@
  
              if (n_capped > 0) {
                  amrex::Print() << "NOTE: the smoothed terrain-following grid at level " << lev
