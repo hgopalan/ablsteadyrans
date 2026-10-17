@@ -119,6 +119,10 @@ void columns (const State& q, const SurfaceLayerOptions& opt, const BuoyancyOpti
         const auto ar = s.area.array(mfi);
         amrex::ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i, int j, int) noexcept
         {
+            // Captured here, outside the constexpr-if blocks below: nvcc refuses
+            // an extended device lambda whose first capture of a variable is
+            // inside an if constexpr.
+            const amrex::Real gq_c = gq, hrel_c = hrel, tol_c = tol;
             const Column h{z, i, j, klo};
             const amrex::Real zx = stencil::deriv<stencil::NODE, stencil::ZF, 0>(z, i, j, klo) * dxinv[0];
             const amrex::Real zy = stencil::deriv<stencil::NODE, stencil::ZF, 1>(z, i, j, klo) * dxinv[1];
@@ -144,15 +148,15 @@ void columns (const State& q, const SurfaceLayerOptions& opt, const BuoyancyOpti
             amrex::Real ustar = kappa * U / amrex::max(lz, amrex::Real(1));
             amrex::Real invL = 0;
             if constexpr (HEAT) {
-                const MostRelation F{kappa, U, d, lz, gq};
+                const MostRelation F{kappa, U, d, lz, gq_c};
                 bool converged = false;
                 for (int it = 0; it < kMaxNewton && !converged; ++it) {
                     const amrex::Real fu = F(ustar);
-                    const amrex::Real du = hrel * ustar;
+                    const amrex::Real du = hrel_c * ustar;
                     const amrex::Real fp = (F(ustar + du) - fu) / du;
                     amrex::Real next = (fp > 0) ? ustar - fu / fp : ustar - amrex::Real(0.5) * fu;
                     next = amrex::max(amrex::Real(0.5) * ustar, amrex::min(amrex::Real(2) * ustar, next));
-                    converged = std::abs(next - ustar) <= tol * next;
+                    converged = std::abs(next - ustar) <= tol_c * next;
                     ustar = next;
                 }
                 if (!converged) { ustar = std::numeric_limits<amrex::Real>::quiet_NaN(); }
@@ -172,7 +176,7 @@ void columns (const State& q, const SurfaceLayerOptions& opt, const BuoyancyOpti
             if constexpr (HEAT) {
                 // Axell and Liungman 2001, Eq. 16, as ERF: only an upward
                 // (destabilising) flux raises k_w.
-                kwall = inv_cmu2 * std::pow(ustar * ustar * ustar + kappa * amrex::max(gq, amrex::Real(0)) * d0,
+                kwall = inv_cmu2 * std::pow(ustar * ustar * ustar + kappa * amrex::max(gq_c, amrex::Real(0)) * d0,
                                             amrex::Real(2) / amrex::Real(3));
             }
             kw(i, j, 0) = kwall;
