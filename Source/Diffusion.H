@@ -22,8 +22,7 @@
 // Boundaries: interior operators. They read the ghost cells of every field
 // (one for scalars and the diffusivity, two for the velocities, whose control
 // volumes reach a cell outside their valid boxes), filled by the caller; the
-// wall stress and heat flux enter later through the ground fluxes (sub-phase
-// 1.7).
+// wall model (SurfaceLayer.H) sets the ground faces' fluxes in the residual.
 
 #include "CVFluxes.H"
 

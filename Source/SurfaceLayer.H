@@ -1,0 +1,167 @@
+#ifndef ABLSTEADY_SURFACELAYER_H_
+#define ABLSTEADY_SURFACELAYER_H_
+
+// Surface layer and wall treatment (sub-phase 1.7).
+//
+// Each ground column gets a friction velocity u* from Monin-Obukhov
+// similarity (MOST) at a reference height above the ground:
+//
+//   u* = kappa U / max(ln((d + z0) / z0) - psi_m(d / L), 1),   1/L = -kappa g q / (u*^3 theta_0),
+//
+// - U = max(|U_t|, 0.1 m/s), U_t the wind parallel to the ground at the
+//   reference height (ERF's 0.1 m/s floor);
+// - d = h / |A| the distance normal to the ground of a point at vertical
+//   height h above it, |A| = sqrt(1 + z_x^2 + z_y^2) from the column's ground
+//   slopes; the log law in d + z0 matches the closure's l_g = kappa (d + z0)
+//   (plan 1.9) and ERF's neutral check, u = (u*/kappa) ln((z + z0)/z0);
+// - z0 the roughness, q the kinematic surface heat flux (K m/s, upward > 0),
+//   g and theta_0 the buoyancy options' (Forcing.H), psi_m the Businger-Dyer
+//   function of ERF (extern_erf/ERF_MOSTUtils.H, unchanged), z/L clamped to
+//   [-100, 100] and the denominator kept >= 1 (strong convection at low wind
+//   would otherwise give u* < 0);
+// - neutral: the log law; heat_flux: solved by Newton's method to round-off
+//   (so the residual is a smooth function of the state, as jvp needs), from
+//   the neutral value, u* >= 0.001 m/s in L.
+// A column whose solve fails, or gives u* <= 0, stops the run.
+//
+// The reference height: the default is each column's first cell centre.
+// Otherwise the wind is found on the column at the given vertical height, in
+// the interval [h_k, h_{k+1}) of the cell-centre heights above the ground
+// (half-open: a height on a centre belongs to the interval above it, as in
+// ERF#3982), interpolated linearly in ln(d + z0): exact for the neutral log
+// law, within 0.7 % unstable and 0.5-7 % stable (L = 100-20 m, dz = 2-20 m) for
+// MOST profiles. The ground under a column is the mean of its four nodes.
+//
+// What crosses the ground then:
+//  * momentum: the kinematic wall stress u*^2 U_t / U per unit ground area,
+//    along the ground wind, times |A| per unit horizontal area, as the ground
+//    flux of the u and v control volumes (the mean of the two columns that
+//    share the edge). Its component across the ground is zero; its vertical
+//    component acts on the half control volume of w at the ground, a
+//    boundary row, and is dropped (as in ERF, whose MOST stress enters only
+//    the u and v rows; ERF leaves out |A| unless most.terrain_rotate is set);
+//  * theta: the flux -q |A| (zero for neutral);
+//  * k: no flux through the ground, and in the first cell the wall value
+//      k_w = (u*^3 + kappa B d_0)^(2/3) / Cmu0^2,  B = g q / theta_0 if q > 0, else 0
+//    (Axell and Liungman 2001, Eq. 16, as ERF, with d_0 the first centre's
+//    normal distance), held as a Dirichlet row R_k = a (k - k_w) or added as
+//    a relaxation source a (k - k_w), a = max(u*, 0.01) / d_0. The source is
+//    weak (a is close to the natural production rate); Dirichlet is the
+//    default, as ERF's dirichlet_k.
+// The wall eddy viscosity consistent with this log law is kappa u* (d + z0).
+//
+// The wall model replaces only the ground faces' diffusive fluxes. MUSCL
+// convection and the cross-metric and transposed-stress terms of the first
+// cells still read the ghost cells below the ground, which the boundary
+// conditions (sub-phase 1.8) fill. The state's z-column must be whole in
+// every box (the mesh's BoxArray), with the ground at the domain's low z.
+
+#include "CVFluxes.H"
+#include "Forcing.H"
+#include "Mesh.H"
+#include "State.H"
+
+#include <AMReX_Geometry.H>
+#include <AMReX_MultiFab.H>
+
+#include <string>
+#include <vector>
+
+namespace ablsteady {
+
+struct SurfaceLayerOptions
+{
+    enum class Stability { neutral, heat_flux };
+    enum class WallK { dirichlet, source };
+
+    //! Roughness length z0 (m, > 0).
+    amrex::Real z0{amrex::Real(0.1)};
+    //! Reference height above the ground, vertical (m); <= 0 means each
+    //! column's first cell centre. Otherwise it must lie between the first
+    //! and last cell-centre heights of every column.
+    amrex::Real zref{0};
+    Stability stability{Stability::neutral};
+    //! Kinematic surface heat flux q (K m/s, positive upward), heat_flux only.
+    amrex::Real heat_flux{0};
+    WallK wall_k{WallK::dirichlet};
+    //! Axell's Cmu0 (> 0), ERF's default.
+    amrex::Real Cmu0{amrex::Real(0.5562)};
+    //! von Karman constant (> 0), ERF's KAPPA.
+    amrex::Real kappa{amrex::Real(0.41)};
+};
+
+//! Problems with the options, one message per problem, naming the option.
+std::vector<std::string> check_surface_layer_options (const SurfaceLayerOptions& opt);
+
+//! The surface layer of every ground column, on a one-cell-thick BoxArray
+//! (the ground slab of the mesh's boxes) with one ghost cell in x and y.
+//! It is computed from the state each time (nothing to checkpoint).
+struct SurfaceState
+{
+    amrex::MultiFab ustar;   //!< u* (m/s)
+    amrex::MultiFab speed;   //!< U = max(|U_t|, 0.1) at the reference height (m/s)
+    amrex::MultiFab zref;    //!< reference height above the ground, vertical (m)
+    amrex::MultiFab d0;      //!< normal distance of the first cell centre (m)
+    amrex::MultiFab inv_L;   //!< 1/L (1/m)
+    amrex::MultiFab tau;     //!< 3 comps: ground momentum flux per unit horizontal area, u*^2 U_t/U |A|
+    amrex::MultiFab drag;    //!< u*^2 |A| / U (m/s): tau = drag U_t
+    amrex::MultiFab kwall;   //!< k_w (m^2/s^2)
+    amrex::MultiFab area;    //!< |A| = sqrt(1 + z_x^2 + z_y^2)
+};
+
+//! Compute the surface layer from the state's velocity (two ghost cells
+//! filled; the ghost cells in x and y give the state's ghost columns).
+//! Aborts, naming the option, on invalid options, a z_ref outside a column,
+//! or a column whose u* is not positive and finite.
+void compute_surface_state (const State& q, const SurfaceLayerOptions& opt, const BuoyancyOptions& buoyancy,
+                            const Mesh& mesh, const amrex::Geometry& geom, SurfaceState& s);
+
+//! The interval [h_k, h_{k+1}) of the increasing heights h[0..n-1] that holds
+//! z (k in [0, n-2]; z == h[n-1] gives n-2; z below h[0] gives -1 and above
+//! h[n-1] gives n-1, both refused by the callers).
+template <class H>
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+int reference_interval (const H& h, int n, amrex::Real z) noexcept
+{
+    if (z < h(0)) { return -1; }
+    if (z > h(n - 1)) { return n - 1; }
+    int k = 0;
+    while (k < n - 2 && !(z < h(k + 1))) { ++k; }
+    return k;
+}
+
+//! The wall eddy viscosity of this log law, kappa u* (d + z0) (m^2/s).
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+amrex::Real wall_eddy_viscosity (amrex::Real kappa, amrex::Real ustar, amrex::Real d, amrex::Real z0) noexcept
+{
+    return kappa * ustar * (d + z0);
+}
+
+//! The ground fluxes of the wall model into the flux MultiFabs of the
+//! diffusion operators (Diffusion.H), on their ground faces: Gu, Gv the
+//! z-fluxes of the u and v control volumes (xz- and yz-edges; the mean of the
+//! two columns that share the edge), Gtheta and Gtke the z-fluxes of the
+//! cells.
+void set_ground_fluxes (const SurfaceState& s, const SurfaceLayerOptions& opt, amrex::MultiFab& Gu,
+                        amrex::MultiFab& Gv, amrex::MultiFab& Gtheta, amrex::MultiFab& Gtke);
+
+//! The wall-k rows of R_k on the first cells: replaced by a (k - k_w)
+//! (dirichlet) or that added (source).
+void apply_wall_k (const SurfaceState& s, const SurfaceLayerOptions& opt, const amrex::MultiFab& tke,
+                   amrex::MultiFab& Rk);
+
+//! The first cells' rows of the implicit-side coefficients A (ImplicitOperator.H)
+//! of a field at loc (u, v or a cell field) with the wall model: the ground
+//! neighbour's weight is removed from the row (the ground flux no longer
+//! depends on the ghost cell), and for u and v the wall stress's Picard
+//! coefficient drag dzeta^-1 / J is added to the diagonal.
+void apply_wall_to_implicit (const SurfaceState& s, Loc loc, const Mesh& mesh, const amrex::Geometry& geom,
+                             amrex::MultiFab& A);
+
+//! line_jacobian's k rows (lower, diag, upper) on the first cells: for
+//! dirichlet the row is (0, a, 0); for source a is added to diag.
+void apply_wall_k_line (const SurfaceState& s, const SurfaceLayerOptions& opt, amrex::MultiFab& tri);
+
+} // namespace ablsteady
+
+#endif

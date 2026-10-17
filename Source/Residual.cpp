@@ -61,6 +61,9 @@ void check_inputs (const char* op, const ResidualInputs& in)
     for (const auto& e : check_convection_options(in.theta)) { all.push_back("theta " + e); }
     for (const auto& e : check_buoyancy_options(in.buoyancy)) { all.push_back(e); }
     for (const auto& e : check_coriolis_options(in.coriolis)) { all.push_back(e); }
+    if (in.surface != nullptr) {
+        for (const auto& e : check_surface_layer_options(*in.surface)) { all.push_back(e); }
+    }
     if (err.empty() && !all.empty()) { err = all.front(); }
     if (!err.empty()) { amrex::Abort(std::string("ablsteady: ") + op + ": ResidualInputs: " + err); }
 }
@@ -119,8 +122,21 @@ void residual (const State& q, const ResidualInputs& in, const Mesh& mesh, const
         convection(velocity_loc(c), *vel[c], Fp, in.momentum, mesh, geom, *Rm[c]);
         tmp[c].define(Rm[c]->boxArray(), Rm[c]->DistributionMap(), 1, 0);
     }
-    momentum_diffusion(vel, *in.nu, z, mesh, geom, {&tmp[0], &tmp[1], &tmp[2]});
-    for (int c = 0; c < 3; ++c) { amrex::MultiFab::Subtract(*Rm[c], tmp[c], 0, 0, 1, 0); }
+    // Diffusion as fluxes, so the wall model can set the ground fluxes.
+    amrex::Array<amrex::Array<amrex::MultiFab, 3>, 3> Gm;
+    amrex::Array<amrex::MultiFab, 3> Gt, Gk;
+    momentum_diffusive_fluxes(vel, *in.nu, z, mesh, geom, Gm);
+    scalar_diffusive_fluxes(q.theta, *in.gamma_theta, z, mesh, geom, Gt);
+    scalar_diffusive_fluxes(q.tke, *in.gamma_tke, z, mesh, geom, Gk);
+    SurfaceState ss;
+    if (in.surface != nullptr) {
+        compute_surface_state(q, *in.surface, in.buoyancy, mesh, geom, ss);
+        set_ground_fluxes(ss, *in.surface, Gm[0][2], Gm[1][2], Gt[2], Gk[2]);
+    }
+    for (int c = 0; c < 3; ++c) {
+        flux_divergence(velocity_loc(c), Gm[c], mesh, geom, tmp[c]);
+        amrex::MultiFab::Subtract(*Rm[c], tmp[c], 0, 0, 1, 0);
+    }
     pressure_gradient(q.p, z, mesh, geom, {&tmp[0], &tmp[1], &tmp[2]});
     for (int c = 0; c < 3; ++c) { amrex::MultiFab::Add(*Rm[c], tmp[c], 0, 0, 1, 0); }
     amrex::MultiFab theta_ref(q.p.boxArray(), q.p.DistributionMap(), 1, 1);
@@ -134,14 +150,15 @@ void residual (const State& q, const ResidualInputs& in, const Mesh& mesh, const
     // Scalars: C - D.
     amrex::MultiFab d(q.p.boxArray(), q.p.DistributionMap(), 1, 0);
     convection(Loc::cell, q.theta, Fp, in.theta, mesh, geom, R.theta);
-    scalar_diffusion(q.theta, *in.gamma_theta, z, mesh, geom, d);
+    flux_divergence(Loc::cell, Gt, mesh, geom, d);
     amrex::MultiFab::Subtract(R.theta, d, 0, 0, 1, 0);
     ConvectionOptions kopt;
     kopt.limiter = Limiter::upwind;
     kopt.bounded = true;
     convection(Loc::cell, q.tke, Fp, kopt, mesh, geom, R.tke);
-    scalar_diffusion(q.tke, *in.gamma_tke, z, mesh, geom, d);
+    flux_divergence(Loc::cell, Gk, mesh, geom, d);
     amrex::MultiFab::Subtract(R.tke, d, 0, 0, 1, 0);
+    if (in.surface != nullptr) { apply_wall_k(ss, *in.surface, q.tke, R.tke); }
 
     // A face shared by two boxes (or a periodic image) gets one value: the two
     // copies can differ in the last bits where a compiler contracts
@@ -155,12 +172,15 @@ void line_jacobian (const State& q, const ResidualInputs& in, Equation eq, int d
 {
     amrex::Array<amrex::MultiFab, AMREX_SPACEDIM> F;
     transport_fluxes(q.u, q.v, q.w, q.z_phys_nd, mesh, geom, F);
-    line_jacobian({&F[0], &F[1], &F[2]}, q.z_phys_nd, in, eq, dir, mesh, geom, tri);
+    SurfaceState ss;
+    const bool wall = (in.surface != nullptr && eq != Equation::w);
+    if (wall) { compute_surface_state(q, *in.surface, in.buoyancy, mesh, geom, ss); }
+    line_jacobian({&F[0], &F[1], &F[2]}, q.z_phys_nd, in, eq, dir, mesh, geom, tri, wall ? &ss : nullptr);
 }
 
 void line_jacobian (const amrex::Array<const amrex::MultiFab*, AMREX_SPACEDIM>& F, const amrex::MultiFab& z_nd,
                     const ResidualInputs& in, Equation eq, int dir, const Mesh& mesh, const amrex::Geometry& geom,
-                    amrex::MultiFab& tri)
+                    amrex::MultiFab& tri, const SurfaceState* surface)
 {
     check_diffusivities("line_jacobian", in);
     if (dir < 0 || dir > 2) { amrex::Abort("ablsteady: line_jacobian: dir must be 0, 1 or 2"); }
@@ -175,6 +195,13 @@ void line_jacobian (const amrex::Array<const amrex::MultiFab*, AMREX_SPACEDIM>& 
     }
     amrex::MultiFab A;
     implicit_coefficients(loc, F, *g, z_nd, mesh, geom, A);
+    const bool wall = (in.surface != nullptr && eq != Equation::w);
+    if (wall) {
+        if (surface == nullptr) {
+            amrex::Abort("ablsteady: line_jacobian: with a wall model the first cells' rows need the surface state");
+        }
+        apply_wall_to_implicit(*surface, loc, mesh, geom, A);
+    }
     if (tri.empty()) { tri.define(A.boxArray(), A.DistributionMap(), n_line_coefs, 0); }
     check_operator_field("line_jacobian", "tri", tri, loc, mesh, 0);
     if (tri.nComp() != n_line_coefs) { amrex::Abort("ablsteady: line_jacobian: tri needs 3 components"); }
@@ -183,6 +210,7 @@ void line_jacobian (const amrex::Array<const amrex::MultiFab*, AMREX_SPACEDIM>& 
     amrex::MultiFab::Copy(tri, A, coef_XP + 2 * dir, line_upper, 1, 0);
     tri.mult(amrex::Real(-1), line_lower, 1, 0);
     tri.mult(amrex::Real(-1), line_upper, 1, 0);
+    if (wall && eq == Equation::tke) { apply_wall_k_line(*surface, *in.surface, tri); }
 }
 
 amrex::Real jvp (const State& q, const State& v, const ResidualInputs& in, const Mesh& mesh,

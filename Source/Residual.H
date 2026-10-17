@@ -14,12 +14,16 @@
 // geostrophic forcing on u and v. The transport fluxes of C come from the
 // state's velocity (transport_fluxes). p is the kinematic perturbation
 // pressure. Every residual is per unit volume (m/s^2 for momentum, 1/s for
-// continuity, K/s for theta, m^2/s^3 for k). The closure sources of k
-// (production, buoyancy, dissipation), the wall model and the boundary
-// conditions come in sub-phases 1.9, 1.7 and 1.8; here the residual is an
-// interior operator on a state whose ghost cells (two layers) the caller has
-// filled, and the boundary rows (the ground and top faces of w, faces on
-// non-periodic sides) are left for the boundary-condition code.
+// continuity, K/s for theta, m^2/s^3 for k). Diffusion is assembled from its
+// face fluxes, so that with a wall model (ResidualInputs::surface,
+// SurfaceLayer.H) the ground faces carry the wall stress, the surface heat
+// flux and no k flux, and the first cells' k rows are the wall-k rows; the
+// surface layer is computed from q on every call. The closure sources of k
+// (production, buoyancy, dissipation) and the boundary conditions come in
+// sub-phases 1.9 and 1.8; the residual reads the state's ghost cells (two
+// layers), which the caller fills, and leaves the boundary rows (the ground
+// and top faces of w, faces on non-periodic sides) to the boundary-condition
+// code.
 //
 // Contract for the later terms: everything that belongs to R enters inside
 // residual() (through ResidualInputs), so that jvp, which differentiates
@@ -39,6 +43,7 @@
 #include "Forcing.H"
 #include "Mesh.H"
 #include "State.H"
+#include "SurfaceLayer.H"
 
 #include <AMReX_Geometry.H>
 #include <AMReX_MultiFab.H>
@@ -77,6 +82,9 @@ struct ResidualInputs
     BuoyancyOptions buoyancy;
     CoriolisOptions coriolis;
     JvpScales jvp_scales;
+    //! The wall model (sub-phase 1.7) on the ground; null: none, and the
+    //! ground fluxes come from the ghost cells like any interior face.
+    const SurfaceLayerOptions* surface{nullptr};
 };
 
 //! R(q). q's ghost cells must be filled (two layers: MUSCL). Aborts, naming
@@ -101,9 +109,13 @@ void line_jacobian (const State& q, const ResidualInputs& in, Equation eq, int d
 
 //! The same from transport fluxes F already computed (transport_fluxes), for
 //! line solvers that sweep every direction with one state.
+//! With a wall model (and eq not w), surface must be the state's surface
+//! layer (compute_surface_state): the first cells' rows lose the ground
+//! neighbour, u and v gain the wall stress's Picard coefficient, and k's
+//! rows are the wall-k rows.
 void line_jacobian (const amrex::Array<const amrex::MultiFab*, AMREX_SPACEDIM>& F, const amrex::MultiFab& z_nd,
                     const ResidualInputs& in, Equation eq, int dir, const Mesh& mesh, const amrex::Geometry& geom,
-                    amrex::MultiFab& tri);
+                    amrex::MultiFab& tri, const SurfaceState* surface = nullptr);
 
 //! Jv = (R(q + eps v) - R(q)) / eps, with
 //!   eps = sqrt(machine epsilon) (1 + mean |q~|) / rms(v~)
