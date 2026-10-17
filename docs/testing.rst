@@ -75,6 +75,16 @@ Current tests
      - RT-1.11.2: ``wall_distance`` on ERF's Neutral_Hill_2D mesh: ERF's wall-distance checks (``Tests/check_walldist.py``:
        max relative ≤ 0.15, mean ≤ 0.03, ≤ 0.2 cells below 100 m, all finite), and the field against
        ``Tests/Gold/walldist_hill2d_plt00000`` at relative 1e-8 (a gold written by ablsteady). Double precision only.
+   * - ``rt_bc_neutral_flat``, ``rt_bc_neutral_flat_matches``
+     - RT-1.8.1: ``boundary_fluxes`` on ERF's Neutral_ABL_Flat mesh (8 × 8 × 64, 1000 m) with a fixed log-law state
+       (u* = 0.35 m/s, z₀ = 0.1 m, 15°), the surface layer on the ground and a slip top: u* recovered at every ground
+       cell to 1e-10, the ground stress :math:`u_*^2(\cos, \sin)` to 1e-10, :math:`k_w = u_*^2/C_{\mu 0}^2`; the
+       residual of every cell equals its closed form (``Tests/check_bc.py``: arithmetic face ν times the log law's
+       differences, the wall flux below, no stress through the slip top) to 1e-6 of :math:`u_*^2/\Delta z` for u and
+       v (1e-13 measured) and 1e-9 K/s for θ (the sounding's diffusion with the top gradient), with the first cell's
+       truncation −0.0971 and the top cell's lost flux +1.000 of :math:`u_*^2\cos/\Delta z` pinned; R_k and R_w zero;
+       every field finite. The plotfile against ``Tests/Gold/bc_neutral_flat_plt00000`` at relative 1e-10 (a gold
+       written by ablsteady). Double precision only.
    * - ``drift_check_selftest``
      - The ``extern_erf`` drift check on a throw-away ERF repository (:doc:`extraction`).
    * - ``refavg_snapshots``, ``refavg_build``, ``refavg_verify``, ``refavg_matches``
@@ -235,6 +245,28 @@ GoogleTest suite
        wall flux minus the interior flux over the cell volume; the k rows are the wall-k rows (both modes). The
        ``line_jacobian`` rows lose the ground neighbour and gain the wall terms. At low wind the wall-k row uses
        u* ≥ 0.01 m/s. Invalid options and a reference height outside the columns stop with a message.
+   * - UT-1.8.1
+     - The Poisson boundary types of every face type on every face it may take, periodic directions included, equal
+       ERF's ``get_fft_bc`` (the copied ``ERF_SolverUtils.H``).
+   * - UT-1.8.2
+     - On a ridge whose height varies along the inflow face: every inflow ghost point (both layers, u, v, θ, k) takes the
+       profile at its own height above the ground, the inlet wind varies along the face by more than 0.05 m/s, and the
+       outflow face points of u are not Dirichlet rows. *Beyond the plan:* the ghost values of every rule for every
+       face type (even, odd, value, profile, gradient, the Dirichlet face points, the top's θ gradient); the analytic
+       profiles and their equilibrium k and :math:`\nu_t`, and a file table with and without a k column.
+   * - UT-1.8.2b
+     - *Beyond the plan.* Over a 120 m hill with a stable heat flux, the ground ghosts of u, v and θ give MOST's
+       gradient at the first centre (u* φ_m/(κ(d₀ + z₀)) along the stress, −q φ_h/(κ u* (d₀ + z₀))) in both layers,
+       on the two lateral ghost columns too (the periodic images of the neighbouring boxes; this catches a gradient
+       slab with too few ghost columns under ``init_snan``); k is even; the homogeneous fill gives zero gradients
+       and keeps even rules. The implicit folds: :math:`A_1` on the interior values with the folds equals the unfolded
+       :math:`A_1` on the homogeneously filled state, for u, v, w, θ and k, every lateral type and a geostrophic top
+       (1e-13; single 1e-5); Dirichlet face points carry identity rows. The residual's Dirichlet rows are
+       :math:`q - V`; ``line_jacobian`` gives the identity there. The Rayleigh and sponge coefficients have their
+       shapes (the :math:`\sin^2` ramp, zero below :math:`z_d`; the quadratic sponge, zero at its inner edge and on
+       faces that are not inflow or outflow) in the residual and on the implicit diagonal. Every ``bc`` key is read
+       into its field, and each out-of-range, ineffective (the other kinds' inflow keys, surface keys without a
+       surface-layer ground, a layer without a coefficient) or inconsistent key is named.
    * - UT-1.10.1
      - Manufactured :math:`\phi` on a stretched STF mesh over a 60 m hill: every lateral BC (periodic, Neumann,
        Dirichlet) with a Dirichlet or Neumann top, 2-D (y periodic) at three resolutions, and a 3-D case (Neumann in x,

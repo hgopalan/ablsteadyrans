@@ -27,9 +27,10 @@ Equations
 
 - Every residual is per unit volume: m/s² for momentum, 1/s for continuity, K/s for θ, m²/s³ for k. A steady state
   has :math:`R = 0`; the solvers solve for :math:`\delta q` against :math:`-R`.
-- The residual is an interior operator. The state's ghost cells (two layers) must be filled by the caller. The
-  boundary rows (the ground and top faces of w, the faces on non-periodic sides) are left for the boundary-condition
-  code (sub-phase 1.8). The closure sources of k come with sub-phase 1.9. The wall model (:doc:`surface`) sets the
+- The residual is an interior operator. The state's ghost cells (two layers) must be filled by the caller
+  (``BoundaryConditions::fill_ghosts``, :doc:`boundary`). With ``ResidualInputs::bc`` set, the boundary rows (the
+  ground and top faces of w, the normal velocities on inflow and wall faces) and the damping layers are applied
+  inside ``residual()`` and ``line_jacobian``. The closure sources of k come with sub-phase 1.9. The wall model (:doc:`surface`) sets the
   ground faces' fluxes and the first cells' k rows.
 - The faces shared by two boxes, or periodic images, get one value (``OverrideSync``), so per-box updates cannot let
   the copies drift apart.

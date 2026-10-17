@@ -193,4 +193,11 @@ in ``Source/Poisson.cpp``.
      - ≥ 0. 1 prints each solve's iterations, residuals and (singular problems) removed mean, and AMReX GMRES's solve
        time; 2 also GMRES's residual at each restart cycle.
 
-The other namespaces (``init``, ``turb``, ``bc``) have no inputs yet.
+``bc``
+------
+
+The boundary conditions (:doc:`boundary`) read ``bc.*`` through ``read_boundary_inputs()`` and
+``read_surface_layer_options()``; their table is in :doc:`boundary`. In this version only the regression tool
+``boundary_fluxes`` reads them: the application has no solver yet, so setting them in an ablsteady deck stops the run.
+
+The other namespaces (``init``, ``turb``) have no inputs yet.

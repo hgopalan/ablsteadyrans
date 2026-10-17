@@ -22,6 +22,8 @@ set(ABLSTEADY_SOURCES
     Forcing.cpp
     Residual.cpp
     SurfaceLayer.cpp
+    InflowProfile.cpp
+    BoundaryConditions.cpp
     App.cpp
     # Copied from ERF (extern_erf/EXTRACTED.md)
     ${PROJECT_SOURCE_DIR}/extern_erf/ERF_TerrainMetrics.cpp

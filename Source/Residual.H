@@ -50,6 +50,8 @@
 
 namespace ablsteady {
 
+class BoundaryConditions;
+
 //! The residual of each equation, on the state's locations, without ghosts.
 struct ResidualFields
 {
@@ -85,6 +87,15 @@ struct ResidualInputs
     //! The wall model (sub-phase 1.7) on the ground; null: none, and the
     //! ground fluxes come from the ghost cells like any interior face.
     const SurfaceLayerOptions* surface{nullptr};
+    //! The domain boundary conditions (sub-phase 1.8, BoundaryConditions.H);
+    //! null: none. With them the residual sets the Dirichlet rows of the
+    //! normal velocities and adds the damping layers, and line_jacobian
+    //! gives those rows the identity and folds the ghost couplings. The
+    //! caller still fills the state's ghosts (BoundaryConditions::fill_ghosts)
+    //! before calling: the ghost fill is a function of q, so a perturbation
+    //! vector gets the homogeneous fill. With bc set, surface must match
+    //! bc.zlo = surface_layer (set) or not (null).
+    const BoundaryConditions* bc{nullptr};
 };
 
 //! R(q). q's ghost cells must be filled (two layers: MUSCL). Aborts, naming

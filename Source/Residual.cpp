@@ -2,6 +2,7 @@
 
 #include "Diffusion.H"
 #include "ImplicitOperator.H"
+#include "BoundaryConditions.H"
 #include "MassFlux.H"
 
 #include <AMReX_iMultiFab.H>
@@ -63,6 +64,12 @@ void check_inputs (const char* op, const ResidualInputs& in)
     for (const auto& e : check_coriolis_options(in.coriolis)) { all.push_back(e); }
     if (in.surface != nullptr) {
         for (const auto& e : check_surface_layer_options(*in.surface)) { all.push_back(e); }
+    }
+    if (in.bc != nullptr) {
+        const bool ground_wall = (in.bc->inputs().face[2] == FaceType::surface_layer);
+        if (ground_wall != (in.surface != nullptr)) {
+            all.emplace_back("bc.zlo = surface_layer needs ResidualInputs::surface, and other ground types must not have it");
+        }
     }
     if (err.empty() && !all.empty()) { err = all.front(); }
     if (!err.empty()) { amrex::Abort(std::string("ablsteady: ") + op + ": ResidualInputs: " + err); }
@@ -159,6 +166,10 @@ void residual (const State& q, const ResidualInputs& in, const Mesh& mesh, const
     flux_divergence(Loc::cell, Gk, mesh, geom, d);
     amrex::MultiFab::Subtract(R.tke, d, 0, 0, 1, 0);
     if (in.surface != nullptr) { apply_wall_k(ss, *in.surface, q.tke, R.tke); }
+    if (in.bc != nullptr) {
+        in.bc->add_damping(q, R);
+        in.bc->apply_rows(q, R);
+    }
 
     // A face shared by two boxes (or a periodic image) gets one value: the two
     // copies can differ in the last bits where a compiler contracts
@@ -205,6 +216,7 @@ void line_jacobian (const amrex::Array<const amrex::MultiFab*, AMREX_SPACEDIM>& 
     if (tri.empty()) { tri.define(A.boxArray(), A.DistributionMap(), n_line_coefs, 0); }
     check_operator_field("line_jacobian", "tri", tri, loc, mesh, 0);
     if (tri.nComp() != n_line_coefs) { amrex::Abort("ablsteady: line_jacobian: tri needs 3 components"); }
+    if (in.bc != nullptr) { in.bc->apply_to_implicit(eq, loc, z_nd, A); }
     amrex::MultiFab::Copy(tri, A, coef_XM + 2 * dir, line_lower, 1, 0);
     amrex::MultiFab::Copy(tri, A, coef_P, line_diag, 1, 0);
     amrex::MultiFab::Copy(tri, A, coef_XP + 2 * dir, line_upper, 1, 0);
