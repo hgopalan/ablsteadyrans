@@ -165,6 +165,36 @@ TEST (IO, CheckpointRestartIsBitIdenticalOnANewLayout)
     }
 }
 
+// A checkpoint written before the solution fields had two ghost cells (one,
+// up to sub-phase 1.11) restarts bit for bit: only valid data is restored.
+TEST (IO, CheckpointWithOneGhostCellRestarts)
+{
+    const auto mesh = test_mesh();
+    const auto ba = ablsteady::make_box_array(mesh);
+    const amrex::DistributionMapping dm(ba);
+
+    ablsteady::State s;
+    s.define(ba, dm);
+    for (auto& f : s.fields()) {
+        if (f.mf == &s.z_phys_nd) { continue; }
+        const amrex::BoxArray fba = f.mf->boxArray();
+        f.mf->clear();
+        f.mf->define(fba, dm, 1, 1);
+    }
+    fill_state(s);
+    const ScopedDir dir{ablsteady::write_checkpoint("ut_io_chk1g", s, mesh)};
+
+    ablsteady::State r;
+    r.define(ba, dm);
+    ASSERT_EQ(r.u.nGrow(), 2);
+    ablsteady::read_checkpoint(dir.name, r, mesh);
+    auto rf = r.fields();
+    auto sf = s.fields();
+    for (std::size_t n = 0; n < sf.size(); ++n) {
+        EXPECT_EQ(count_bit_differences(*rf[n].mf, *sf[n].mf, 0), 0) << sf[n].name;
+    }
+}
+
 TEST (IO, CheckpointRestartRestoresNodalGhostsOnTheSameLayout)
 {
     const auto mesh = test_mesh();

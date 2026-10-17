@@ -25,6 +25,9 @@ add_executable(unit_tests
     Unit/test_Poisson.cpp
     Unit/test_PoissonB.cpp
     Unit/test_WallDistance.cpp
+    Unit/test_Convection.cpp
+    Unit/test_Diffusion.cpp
+    Unit/test_ImplicitOperator.cpp
 )
 target_include_directories(unit_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Unit)
 target_link_libraries(unit_tests PRIVATE ablsteady_core GTest::gtest)
