@@ -46,6 +46,26 @@ bool all_positive (const amrex::MultiFab& mf)
     return ok;
 }
 
+// The cell's horizontal coefficient: the mean of its four x- and y-face
+// values (1 where a coefficient is not given). A free function: CUDA does not
+// allow device lambdas in private member functions such as prepare().
+void fill_beta_cell (amrex::MultiFab& cell, const amrex::MultiFab* bx_face, const amrex::MultiFab* by_face)
+{
+    for (amrex::MFIter mfi(cell, amrex::TilingIfNotGPU()); mfi.isValid(); ++mfi) {
+        const amrex::Box bx = mfi.tilebox();
+        const auto c = cell.array(mfi);
+        const bool hx = bx_face != nullptr, hy = by_face != nullptr;
+        const auto bxa = hx ? bx_face->const_array(mfi) : amrex::Array4<amrex::Real const>{};
+        const auto bya = hy ? by_face->const_array(mfi) : amrex::Array4<amrex::Real const>{};
+        amrex::ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
+        {
+            const amrex::Real sx = hx ? bxa(i, j, k) + bxa(i + 1, j, k) : amrex::Real(2);
+            const amrex::Real sy = hy ? bya(i, j, k) + bya(i, j + 1, k) : amrex::Real(2);
+            c(i, j, k) = amrex::Real(0.25) * (sx + sy);
+        });
+    }
+}
+
 } // namespace
 
 // The linear operator for amrex::GMRES: ERF's TerrainPoisson, with
@@ -296,19 +316,7 @@ void PoissonSolver::prepare (const FaceCoeffs& coeffs, const PoissonBC& bc)
         if (!m_beta_cell.ok() || new_layout) {
             m_beta_cell.define(m_mesh.detJ.boxArray(), m_mesh.detJ.DistributionMap(), 1, 0);
         }
-        for (amrex::MFIter mfi(m_beta_cell, amrex::TilingIfNotGPU()); mfi.isValid(); ++mfi) {
-            const amrex::Box bx = mfi.tilebox();
-            const auto c = m_beta_cell.array(mfi);
-            const bool hx = coeffs.x != nullptr, hy = coeffs.y != nullptr;
-            const auto bxa = hx ? coeffs.x->const_array(mfi) : amrex::Array4<amrex::Real const>{};
-            const auto bya = hy ? coeffs.y->const_array(mfi) : amrex::Array4<amrex::Real const>{};
-            amrex::ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
-            {
-                const amrex::Real sx = hx ? bxa(i, j, k) + bxa(i + 1, j, k) : amrex::Real(2);
-                const amrex::Real sy = hy ? bya(i, j, k) + bya(i, j + 1, k) : amrex::Real(2);
-                c(i, j, k) = amrex::Real(0.25) * (sx + sy);
-            });
-        }
+        fill_beta_cell(m_beta_cell, coeffs.x, coeffs.y);
     }
 
     if (m_op && m_op_bc == bc && m_op_ratio == coeffs.precond_ratio) { return; }
