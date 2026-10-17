@@ -39,11 +39,11 @@ const amrex::Vector<std::string>& plot_var_names ()
 }
 
 std::string write_plotfile (const std::string& prefix, const State& state,
-                            const amrex::Geometry& geom)
+                            const amrex::Geometry& geom, const amrex::MultiFab* detJ)
 {
     const std::string name = amrex::Concatenate(prefix, state.step, 5);
     const amrex::BoxArray& ba = state.p.boxArray();
-    amrex::MultiFab plt(ba, state.p.DistributionMap(), 7, 0);
+    amrex::MultiFab plt(ba, state.p.DistributionMap(), detJ ? 8 : 7, 0);
 
     for (amrex::MFIter mfi(plt, amrex::TilingIfNotGPU()); mfi.isValid(); ++mfi) {
         const amrex::Box bx = mfi.tilebox();
@@ -72,7 +72,12 @@ std::string write_plotfile (const std::string& prefix, const State& state,
         });
     }
 
-    amrex::WriteSingleLevelPlotfile(name, plt, plot_var_names(), geom, 0.0, state.step);
+    amrex::Vector<std::string> names = plot_var_names();
+    if (detJ != nullptr) {
+        amrex::MultiFab::Copy(plt, *detJ, 0, 7, 1, 0);
+        names.emplace_back("detJ");
+    }
+    amrex::WriteSingleLevelPlotfile(name, plt, names, geom, 0.0, state.step);
     amrex::VisMF::Write(state.z_phys_nd, name + "/Level_0/z_phys_nd");
     return name;
 }

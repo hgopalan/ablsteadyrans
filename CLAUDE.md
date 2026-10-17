@@ -48,6 +48,8 @@ and every finding is resolved.
   `build-<something>` (never plain `build` on a case-insensitive filesystem).
 
 ### Design and coding
+- Files stay within 1000-1500 lines: when a file passes 1000 lines, consider splitting it by responsibility.
+  Files copied from ERF into `extern_erf/` keep upstream's layout (the drift check needs it) and are exempt.
 - New capabilities live in their own class or module, which owns its diagnostics and checkpoint I/O.
 - Reuse existing selectors; never add a parallel input for something an input already controls.
 - Keep old behavior reachable behind a named option when a default changes; ship an old-vs-new regression test.
@@ -79,7 +81,8 @@ and every finding is resolved.
 - Detail goes in the Sphinx documentation (`docs/`); `README.md` stays short and points there.
 - An input-table row in `docs/inputs.rst` for every new key, matching its range check.
 - `make -C docs html` builds without warnings (`-W`) before pushing.
-- `codespell`, no trailing whitespace, `git diff --check` clean.
+- `codespell`, no trailing whitespace, `git diff --check` clean (`extern_erf/` and `Tests/Gold/` are exempt in
+  `.gitattributes`: they stay byte-identical to their source).
 - Never commit `docs/notes/`, plotfiles or checkpoints.
 
 ## Build

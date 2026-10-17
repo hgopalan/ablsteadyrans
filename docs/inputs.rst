@@ -29,7 +29,8 @@ All errors are reported together. Each row below matches the range check in ``So
      - Three integers ≥ 1: cells in x, y and z.
    * - ``mesh.prob_lo``
      - ``0 0 0``
-     - Three finite values: the domain's low corner (m).
+     - Three finite values: the domain's low corner (m). The z value must be 0: node heights start at the flat
+       ground.
    * - ``mesh.prob_hi``
      - required
      - Three finite values, each greater than ``prob_lo``: the domain's high corner (m).
@@ -40,6 +41,57 @@ All errors are reported together. Each row below matches the range check in ``So
      - ``64``
      - One or two integers ≥ 1: the largest box size in x and y. Boxes are never split in z, so the z-line solves
        stay inside one box.
+   * - ``mesh.dz0``
+     - ``0``
+     - Finite, ≥ 0. First layer thickness of a stretched vertical grid; 0 means uniform layers. Without
+       ``stretch_ratio`` it must not exceed prob_hi z / n_cell z (:doc:`mesh`).
+   * - ``mesh.stretch_ratio``
+     - ``0`` (none)
+     - Finite, ≥ 1 (an explicit 0 is refused), needs ``mesh.dz0`` > 0. A fixed ratio between successive layers;
+       the physical top is then wherever the layers end, and prob_hi z only sets the computational spacing.
+   * - ``mesh.zlevels_file``
+     - empty
+     - A file of n_cell z + 1 increasing heights starting at 0. Not together with ``mesh.dz0``.
+
+``terrain``
+-----------
+
+A key that has no effect for the chosen ``terrain.type`` or ``terrain.smoothing`` stops the run.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 26 12 62
+
+   * - Input
+     - Default
+     - Range and meaning
+   * - ``terrain.type``
+     - ``flat``
+     - ``flat``, ``agnesi``, ``xyz`` or ``erf_grid`` (:doc:`mesh`).
+   * - ``terrain.file``
+     - required for ``xyz``, ``erf_grid``
+     - The point file (``x y z`` per line) or ERF's structured terrain file.
+   * - ``terrain.smoothing``
+     - ``1``
+     - 0 (BTF), 1 (STF, Klemp 2011) or 2 (Sullivan).
+   * - ``terrain.gamma_m``
+     - ``0.5``
+     - > 0 and < 1; STF only. Smallest layer thickness as a fraction of the flat layer.
+   * - ``terrain.hill_height``
+     - required for ``agnesi``
+     - Finite, > 0 (m); ``agnesi`` only.
+   * - ``terrain.hill_half_width``
+     - required for ``agnesi``
+     - Finite, > 0 (m); ``agnesi`` only. The hill is at half height this far from its crest.
+   * - ``terrain.hill_shape``
+     - ``ridge_x``
+     - ``ridge_x``, ``ridge_y`` or ``round``; ``agnesi`` only.
+   * - ``terrain.idw_neighbors``
+     - ``6``
+     - ≥ 1; ``xyz`` only. Points used for each height.
+   * - ``terrain.idw_power``
+     - ``2``
+     - Finite, > 0; ``xyz`` only. Weight exponent, :math:`d^{-p}`.
 
 ``io``
 ------
@@ -99,4 +151,4 @@ and setting these keys stops the run, like any other key this version does not r
      - ``50``
      - ≥ 2. The window, in iterations.
 
-The other namespaces (``terrain``, ``init``, ``turb``, ``bc``, ``solver``) have no inputs yet.
+The other namespaces (``init``, ``turb``, ``bc``, ``solver``) have no inputs yet.
