@@ -180,8 +180,8 @@ GoogleTest suite
        scalar and :math:`-D_c(u) = A_1 u_c` for each velocity component with random :math:`\nu`. Over the hill, every weight
        equals the explicit face flux of a field that varies along one index direction only (this pins the
        :math:`1 + \delta_{cd}` and :math:`|\mathbf{n}|^2 + n_c^2` factors on sloping faces). MUSCL convection,
-       both diffusions and :math:`A_1` give the same bits on 16² and 8² column boxes, and boxes that share a face point
-       compute the same bits there.
+       both diffusions and :math:`A_1` agree to round-off (1e-13) on 16² and 8² column boxes, and boxes that share a
+       face point agree there (not bit for bit: GCC on arm64 contracts multiply-adds inside vectorised loops only).
    * - UT-1.10.1
      - Manufactured :math:`\phi` on a stretched STF mesh over a 60 m hill: every lateral BC (periodic, Neumann,
        Dirichlet) with a Dirichlet or Neumann top, 2-D (y periodic) at three resolutions, and a 3-D case (Neumann in x,

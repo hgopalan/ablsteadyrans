@@ -297,9 +297,12 @@ TEST(ImplicitOperator, WeightsAreOneDimensionalFluxes)
     }
 }
 
-// The operators give the same bits on any box layout: 16^2-column boxes and
-// 8^2-column boxes (4x as many box faces) for MUSCL convection, momentum and
-// scalar diffusion and A1, all on the manufactured fields.
+// The operators give the same answer on any box layout: 16^2-column boxes
+// and 8^2-column boxes (4x as many box faces) for MUSCL convection, momentum
+// and scalar diffusion and A1, all on the manufactured fields. Agreement is
+// to round-off, not bit for bit: where a compiler contracts multiply-adds
+// (GCC on arm64), a point inside a vectorised loop and the same point in a
+// loop remainder round differently, and box edges move the remainders.
 TEST(ImplicitOperator, IndependentOfBoxLayout)
 {
     auto run = [] (int max_grid, amrex::Vector<amrex::MultiFab>& res) {
@@ -339,10 +342,11 @@ TEST(ImplicitOperator, IndependentOfBoxLayout)
         bb.ParallelCopy(b[n], 0, 0, a[n].nComp());
         amrex::MultiFab::Subtract(bb, a[n], 0, 0, a[n].nComp(), 0);
         for (int comp = 0; comp < a[n].nComp(); ++comp) {
-            EXPECT_EQ(static_cast<double>(bb.norm0(comp)), 0.0) << "result " << n << " comp " << comp;
+            EXPECT_LE(static_cast<double>(bb.norm0(comp)), tol(1e-13, 1e-5) * static_cast<double>(a[n].norm0(comp)))
+                << "result " << n << " comp " << comp;
         }
         // Within one layout, the two boxes that share a face point (or its
-        // periodic image) computed the same bits.
+        // periodic image) agree there.
         for (auto* r : {&a[n], &b[n]}) {
             if (r->ixType().cellCentered()) { continue; }
             amrex::MultiFab synced(r->boxArray(), r->DistributionMap(), r->nComp(), 0);
@@ -350,7 +354,8 @@ TEST(ImplicitOperator, IndependentOfBoxLayout)
             synced.OverrideSync(amrex::Periodicity(amrex::IntVect(32, 24, 0)));
             amrex::MultiFab::Subtract(synced, *r, 0, 0, r->nComp(), 0);
             for (int comp = 0; comp < r->nComp(); ++comp) {
-                EXPECT_EQ(static_cast<double>(synced.norm0(comp)), 0.0) << "shared points, result " << n;
+                EXPECT_LE(static_cast<double>(synced.norm0(comp)), tol(1e-13, 1e-5) * static_cast<double>(r->norm0(comp)))
+                    << "shared points, result " << n;
             }
         }
     }

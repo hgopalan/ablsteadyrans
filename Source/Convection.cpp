@@ -100,11 +100,12 @@ std::vector<std::string> check_convection_options (const ConvectionOptions& opt)
 {
     std::vector<std::string> err;
     // The limiter uses eps^2: it must neither underflow (0/0 on uniform q)
-    // nor overflow (inf/inf). Compared without squaring, so the check itself
-    // cannot raise a floating-point trap.
+    // nor overflow (inf/inf). The check itself raises no floating-point trap:
+    // eps is not squared, and NaN is caught with isnan before any ordered
+    // comparison (GCC's >= signals invalid on a NaN, clang's does not).
     using Lim = std::numeric_limits<amrex::Real>;
     const amrex::Real e = opt.smooth_eps;
-    if (!(e >= std::sqrt(Lim::min()) && e <= std::sqrt(Lim::max()))) {
+    if (std::isnan(e) || !(e >= std::sqrt(Lim::min()) && e <= std::sqrt(Lim::max()))) {
         err.emplace_back("convection smooth_eps = " + std::to_string(opt.smooth_eps)
                          + ": must be > 0 with smooth_eps^2 a finite, normal number");
     }

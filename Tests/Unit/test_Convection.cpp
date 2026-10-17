@@ -349,7 +349,10 @@ TEST(SmoothLimiter, CloseToVanLeerOnSmoothData)
         conv_error(2, loc, va, &ca);
         amrex::MultiFab d(cl.boxArray(), cl.DistributionMap(), 1, 0);
         amrex::MultiFab::LinComb(d, 1.0, ca, 0, -1.0, cl, 0, 0, 1, 0);
-        const double rel = static_cast<double>(d.norm2()) / static_cast<double>(cl.norm2());
+        // norm2 with the periodicity: face fields share points between boxes
+        // (the plain norm2 is for cell-centred data only).
+        const amrex::Periodicity per(amrex::IntVect(64, 48, 0));
+        const double rel = static_cast<double>(d.norm2(0, per)) / static_cast<double>(cl.norm2(0, per));
         EXPECT_LT(rel, 0.01) << loc_name(loc);
         EXPECT_GT(rel, 0.0) << loc_name(loc) << ": the limiters should differ";
     }
