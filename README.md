@@ -6,7 +6,8 @@ k–L closure, terrain-following mesh, terrain Poisson solver, MOST surface laye
 initializer that builds on [FastWindTerrain](https://github.com/hgopalan/FastWindTerrain).
 
 **Status:** phase 1 of 4 under way. Inputs, the terrain-following mesh (ERF's BTF, STF and Sullivan mappings),
-I/O, restart, ERF reference archives and the definition of a steady solution are in place; there is no solver yet.
+I/O, restart, ERF reference archives, the definition of a steady solution and the Poisson layer (ERF's terrain
+Poisson operator with GMRES and an FFT preconditioner) are in place; there is no flow solver yet.
 
 ## Quick start
 

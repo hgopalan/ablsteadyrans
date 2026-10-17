@@ -22,13 +22,20 @@ add_executable(unit_tests
     Unit/test_Sha256.cpp
     Unit/test_Reference.cpp
     Unit/test_Mesh.cpp
+    Unit/test_Poisson.cpp
 )
 target_include_directories(unit_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Unit)
 target_link_libraries(unit_tests PRIVATE ablsteady_core GTest::gtest)
 # Gold files (Tests/Gold) are read from the source tree.
 target_compile_definitions(unit_tests PRIVATE ABLSTEADY_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+
+# RT-1.10.1 projects a fixed wind with the Poisson layer: a test-only tool,
+# since the application has no Poisson solve yet.
+add_executable(poisson_projection Tools/poisson_projection.cpp)
+target_link_libraries(poisson_projection PRIVATE ablsteady_core)
 if(ABLSTEADY_GPU_BACKEND STREQUAL "CUDA")
     setup_target_for_cuda_compilation(unit_tests)
+    setup_target_for_cuda_compilation(poisson_projection)
 endif()
 
 # --- How to launch on N ranks -------------------------------------------------
@@ -139,7 +146,8 @@ ablsteady_add_test(NAME abort_unknown_key NP 1 LABELS "regression;smoke"
                           "mesh\\.max_grid_sise.*not an input of namespace 'mesh'"
                           "turb\\.Cmu0.*not an input of namespace 'turb'"
                           "mehs\\.n_cell.*unknown namespace 'mehs'"
-                          "steady\\.residual_tol.*not an input of namespace 'steady'" --
+                          "steady\\.residual_tol.*not an input of namespace 'steady'"
+                          "solver\\.poisson_reltol.*not an input of namespace 'solver'" --
                    COMMAND $<TARGET_FILE:ablsteady> ${DECKS}/inputs_abort_unknown_key
                            ${ABLSTEADY_TEST_AMREX_FLAGS})
 ablsteady_add_test(NAME abort_range NP 1 LABELS "regression;smoke"
@@ -204,6 +212,37 @@ ablsteady_add_test(NAME rt_hill2d_run NP 2 LABELS "regression;smoke" RUN_DIR ${H
 ablsteady_add_test(NAME rt_hill2d_matches NP 1 LABELS "regression;smoke" RUN_DIR ${HILL2D_DIR}
                    FIXTURES_REQUIRED hill2d
                    COMMAND ${FCOMPARE} --rel_tol ${FCOMPARE_RTOL} hill2d_plt00000 ${GOLD}/hill2d_plt00000)
+
+# --- Poisson layer (sub-phase 1.10) ---------------------------------------------
+# RT-1.10.1: a fixed wind projected on the Askervein mesh; iterations and
+# divergence against Gold/poisson_askervein.json, the potential against
+# Gold/poisson_askervein_plt00000. The golds are double-precision runs, so a
+# single-precision build skips both (its unit tests cover the layer).
+# The reader of solver.poisson_* stops on a repeated key and on a value out
+# of range (the deck sets poisson_reltol; the command line repeats it).
+ablsteady_add_test(NAME abort_poisson_options NP 1 LABELS "regression;smoke"
+                   PREFIX ${EXPECT_ABORT}
+                          "solver\\.poisson_reltol is given more than once"
+                          "solver\\.poisson_reltol must be >=" --
+                   COMMAND $<TARGET_FILE:poisson_projection> ${DECKS}/inputs_poisson_askervein
+                           terrain.file=${PROJECT_SOURCE_DIR}/extern_erf/askervein.txt
+                           solver.poisson_reltol=0 ${ABLSTEADY_TEST_AMREX_FLAGS})
+if(ABLSTEADY_PRECISION STREQUAL "DOUBLE")
+    set(POISSON_DIR ${CMAKE_CURRENT_BINARY_DIR}/run/rt_poisson_askervein)
+    ablsteady_add_test(NAME rt_poisson_askervein NP 2 LABELS "regression;smoke" RUN_DIR ${POISSON_DIR}
+                       FIXTURES_SETUP poisson_askervein
+                       PREFIX ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/check_poisson.py
+                              ${GOLD}/poisson_askervein.json --
+                       COMMAND $<TARGET_FILE:poisson_projection> ${DECKS}/inputs_poisson_askervein
+                               terrain.file=${PROJECT_SOURCE_DIR}/extern_erf/askervein.txt
+                               ${ABLSTEADY_TEST_AMREX_FLAGS})
+    # The potential converges to solver.poisson_reltol = 1e-10; 1e-8 allows
+    # for compilers that round differently (fused multiply-adds).
+    ablsteady_add_test(NAME rt_poisson_askervein_matches NP 1 LABELS "regression;smoke" RUN_DIR ${POISSON_DIR}
+                       FIXTURES_REQUIRED poisson_askervein
+                       COMMAND ${FCOMPARE} --rel_tol 1e-8 poisson_askervein_plt00000
+                               ${GOLD}/poisson_askervein_plt00000)
+endif()
 
 # --- Reference archives (sub-phase 1.1): ablsteady_refavg end to end --------
 # Three copies of the smoke plotfile at t = 0, 5 and 10 s: their trapezoid

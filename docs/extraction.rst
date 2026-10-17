@@ -20,7 +20,14 @@ the Askervein terrain file. ``ERF_TerrainMetrics.{H,cpp}`` are modified: the coo
 choice and :math:`\gamma_m` as arguments instead of reading ERF's inputs, return the number of STF levels capped,
 and lose the refined-level (AMR) paths, which ablsteady does not use. BTF no longer rewrites the ground layer: ERF
 writes :math:`h\,z_\mathrm{top}/z_\mathrm{top}` there (within 1 ulp of :math:`h`) while other GPU threads read the
-same nodes, so the result depended on thread order. Two shim headers in ``Source/erf_shims/`` stand
+same nodes, so the result depended on thread order.
+
+Copied in sub-phase 1.10, unchanged: ERF's terrain Poisson operator (``ERF_TerrainPoisson.{H,cpp}``,
+``ERF_TerrainPoisson_3D_K.H``) and ``ERF_SolverUtils.H``, whose ``get_fft_bc`` maps the domain boundary names to
+the FFT preconditioner's boundaries (``Outflow``/``Open``: odd, periodic: periodic, any other name: even). The copy
+includes the zero total flux through Neumann faces, terrain cross term included (ERF#4272, merged as ERF#4279).
+``ERF_SolveWithGMRES.cpp`` is an ERF member function and is not copied; ``Source/Poisson.cpp`` drives GMRES the same
+way (:doc:`poisson`). Two shim headers in ``Source/erf_shims/`` stand
 in for ERF headers the copies include.
 
 The drift check

@@ -11,3 +11,6 @@ steady.residual_tol = 1e-6
 mehs.n_cell        = 4 4 4
 io.write_plotfile   = 0
 io.write_checkpoint = 0
+# The Poisson options belong to the Poisson layer; the application has no
+# Poisson solve yet, so it refuses them (sub-phase 1.10).
+solver.poisson_reltol = 1.e-8

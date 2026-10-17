@@ -57,6 +57,15 @@ Current tests
        The golds of the three mesh tests above were written by ablsteady itself (``Tests/check_mesh.py --write``):
        they detect changes, they do not show correctness. Correctness of the same code paths comes from UT-1.4.7
        (ERF's own output) and the closed-form unit tests.
+   * - ``abort_poisson_options``
+     - ``poisson_projection`` with ``solver.poisson_reltol`` repeated and out of range: both named.
+       (``abort_unknown_key`` checks that the application refuses ``solver.poisson_reltol``.)
+   * - ``rt_poisson_askervein``, ``rt_poisson_askervein_matches``
+     - RT-1.10.1: ``poisson_projection`` projects a fixed wind on the Askervein mesh (30 × 30 × 18). Iterations at
+       most 10 % above ``Tests/Gold/poisson_askervein.json``, divergence after below 10 × the printed tolerance of
+       before, and
+       :math:`\phi` against ``Tests/Gold/poisson_askervein_plt00000`` at relative 1e-8. Double precision only (the
+       golds are double-precision runs); the gold was written by ablsteady, so it detects changes.
    * - ``drift_check_selftest``
      - The ``extern_erf`` drift check on a throw-away ERF repository (:doc:`extraction`).
    * - ``refavg_snapshots``, ``refavg_build``, ``refavg_verify``, ``refavg_matches``
@@ -131,6 +140,44 @@ GoogleTest suite
        seam height; every mapping keeps the ground layer as given; ground at the top and inverted cells stop the
        run; the slope of a diagonal ridge is reported in full; a restart with changed terrain is refused; the report
        of a steep ridge carries both warnings.
+   * - UT-1.10.1
+     - Manufactured :math:`\phi` on a stretched STF mesh over a 60 m hill: every lateral BC (periodic, Neumann,
+       Dirichlet) with a Dirichlet or Neumann top, 2-D (y periodic) at three resolutions, and a 3-D case (Neumann in x,
+       Dirichlet in y, two resolutions): order ≥ 1.9 (single precision: 1.8 coarse, 1.6 fine), residual below 10 ×
+       tolerance. The solution has zero gradient at the ground and level side faces, where ERF's operator is exact
+       for the mirror ghost cells (next row).
+   * - UT-1.10.1b
+     - *Beyond the plan.* With a tangential gradient at sloped ground: order 2 on flat ground (≥ 1.95), between 0.8 and
+       1.2 over a 120 m hill (64 → 128 → 256 cells), and a fine-mesh error 3 to 6 times that over a 60 m hill (slope²).
+       Double precision only. Pins ERF's ground treatment (:doc:`poisson`).
+   * - UT-1.10.2
+     - The anisotropic operator with :math:`\beta_v/\beta_h` = 1, 0.5, 0.1 (``z_cross`` set) on flat ground and over
+       the hill, and a spatially varying :math:`\beta` over the hill: order ≥ 1.9 (single: 1.8, 1.6). Without
+       ``z_cross`` the hill error is more than 5 times larger.
+   * - UT-1.10.3
+     - :math:`\beta = 1` gives the no-coefficient path bit for bit (iterations, solution, fluxes); :math:`\beta = 2.5`
+       on every face gives :math:`\phi/2.5` and the same fluxes (to 1e-9; single 1e-4). Both paths are this layer's;
+       there is no separate plain projection to compare with.
+   * - UT-1.10.4
+     - On a ramp (slope 0.15) crossing the Neumann faces, their fluxes and the ground's are exactly zero, and
+       :math:`\sum J\,A\phi` equals the flux out of the Dirichlet top (1e-12; single 1e-4).
+   * - UT-1.10.4b
+     - *Beyond the plan.* Operator and fluxes agree cell by cell, :math:`A\phi = -\nabla_h\cdot F` (1e-12 of
+       :math:`\max|A\phi|`; single 1e-4), with varying coefficients and ``z_cross`` on the ramp, Dirichlet and Neumann
+       top.
+   * - UT-1.10.5
+     - Projection: the divergence of :math:`u + F` is below 10 × tolerance of the divergence of :math:`u`, and equals
+       the residual of the solve.
+   * - UT-1.10.6
+     - Symmetric hill and right-hand side: :math:`\phi` mirror-symmetric to 1e-12 of :math:`\max|\phi|` (single 1e-5),
+       Neumann and Dirichlet sides.
+   * - UT-1.10.7
+     - *Beyond the plan.* Preconditioner, with bounds 10 % above the counts measured: 19 iterations isotropic (more than
+       10 times as many without it); 16 for :math:`\beta_v/\beta_h = 0.1` told the ratio (at most 3 more than
+       isotropic; not told, more than 1.5 times as many); 29 for :math:`\beta` varying over 100 times. A singular
+       problem reports and removes the mean. Option and BC checks, coefficients that are not positive, MultiFabs on
+       another layout and a solve that does not converge each stop with the input named.
+       ``tools/poisson_ms_check.py`` (sympy, not run by CI) checks the manufactured solutions' boundary conditions.
    * - UT-1.2.1
      - Steady-criterion verdicts on converging, stalling (including a residual stuck exactly at the tolerance) and
        oscillating histories. The converging history becomes
