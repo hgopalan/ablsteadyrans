@@ -33,6 +33,11 @@ includes the zero total flux through Neumann faces, terrain cross term included 
 way (:doc:`poisson`). Two shim headers in ``Source/erf_shims/`` stand
 in for ERF headers the copies include.
 
+Copied in sub-phase 1.7, unchanged: ``ERF_MOSTUtils.H``, whose ``similarity_funs`` give the surface layer's
+stability functions (:doc:`surface`). ERF's MOST kernels (``ERF_MOSTStress.H``, ``ERF_MOSTAverage.cpp``) are not
+copied: they are tied to ERF's state layout and plane averaging, and ``Source/SurfaceLayer.cpp`` follows their
+formulas per column. The reference-height lookup fix the plan names (ERF#3982) is already in the pinned ERF.
+
 The drift check
 ---------------
 

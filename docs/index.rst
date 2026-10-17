@@ -29,7 +29,7 @@ The target machine is NLR Kestrel: CPU nodes with 104 Sapphire Rapids cores, and
 
 **Status.** Phase 1 is under way. The application reads and checks its inputs, builds the stretched
 terrain-following mesh and the solution fields, and writes and restarts from plotfiles and checkpoints. The definition
-of a steady solution, the Poisson layer, the convection and diffusion operators and the residual are in place. There is no flow
+of a steady solution, the Poisson layer, the convection and diffusion operators, the residual and the surface layer are in place. There is no flow
 solver yet.
 
 .. toctree::
@@ -50,6 +50,7 @@ solver yet.
    walldistance
    transport
    residual
+   surface
    steady
    cases
    references

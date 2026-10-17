@@ -214,6 +214,27 @@ GoogleTest suite
    * - UT-1.4.9
      - *Beyond the plan.* Node heights shared by two boxes (or periodic images) are equal, for BTF, STF and Sullivan,
        periodic and not (under gcc each box's copy differed by up to 1e-13 m before ``Mesh`` synchronised them).
+   * - UT-1.7.1
+     - ERF's similarity functions (the copied ``ERF_MOSTUtils.H``, byte-identical by the drift check): Businger–Dyer
+       ψ and φ and Jimenez ψ against a Python table of the same formulas, z/L from −5 to 5, to 1e-14 (single 1e-6);
+       :math:`d\psi/d\zeta = (1-\phi)/\zeta`.
+   * - UT-1.7.2
+     - Reference-height lookup on the ERF#3982 column (dz₀ = 10 m, ratio 1.1, 40 layers): centres belong to the interval
+       above, faces (10 m included) to the interval that holds them, the last centre to the last interval; heights below
+       the first or above the last centre are refused.
+   * - UT-1.7.3
+     - u* from a log-law state (u* = 0.45, z₀ = 0.1 m) on that column: within 2e-5 at the first centre, at 10 m, at 55.3 m
+       and on a centre. *Beyond the plan:* with a heat flux, u* matches an independent bisection to 1e-10 for unstable,
+       stable and low-wind convective cases, and is positive.
+   * - UT-1.7.4
+     - :math:`k_w = u_*^2/C_{\mu0}^2` exactly (neutral); Axell's buoyant form with a heat flux; the wall eddy viscosity
+       equals :math:`C_{\mu0}\sqrt{k_w}\,\kappa(d+z_0)`.
+   * - UT-1.7.5
+     - *Beyond the plan.* Over the hill: the columns' distances and areas from their nodes; the wall stress along the
+       ground with magnitude :math:`u_*^2|A|`. In the residual, R_u, R_v and R_θ change only in the first cells, by the
+       wall flux minus the interior flux over the cell volume; the k rows are the wall-k rows (both modes). The
+       ``line_jacobian`` rows lose the ground neighbour and gain the wall terms. At low wind the wall-k row uses
+       u* ≥ 0.01 m/s. Invalid options and a reference height outside the columns stop with a message.
    * - UT-1.10.1
      - Manufactured :math:`\phi` on a stretched STF mesh over a 60 m hill: every lateral BC (periodic, Neumann,
        Dirichlet) with a Dirichlet or Neumann top, 2-D (y periodic) at three resolutions, and a 3-D case (Neumann in x,

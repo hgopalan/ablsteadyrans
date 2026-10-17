@@ -29,7 +29,8 @@ Equations
   has :math:`R = 0`; the solvers solve for :math:`\delta q` against :math:`-R`.
 - The residual is an interior operator. The state's ghost cells (two layers) must be filled by the caller. The
   boundary rows (the ground and top faces of w, the faces on non-periodic sides) are left for the boundary-condition
-  code (sub-phase 1.8). The closure sources of k come with sub-phase 1.9, the wall model with 1.7.
+  code (sub-phase 1.8). The closure sources of k come with sub-phase 1.9. The wall model (:doc:`surface`) sets the
+  ground faces' fluxes and the first cells' k rows.
 - The faces shared by two boxes, or periodic images, get one value (``OverrideSync``), so per-box updates cannot let
   the copies drift apart.
 - **Everything that belongs to R enters inside** ``residual()`` (through ``ResidualInputs``), so that ``jvp``, which
