@@ -155,7 +155,7 @@ TEST (IO, CheckpointRestartIsBitIdenticalOnANewLayout)
     // Compare on the original layout, valid region.
     auto rf = r.fields();
     auto sf = s.fields();
-    for (std::size_t n = 0; n < sf.size(); ++n) {
+    for (int n = 0; n < static_cast<int>(sf.size()); ++n) {
         const amrex::MultiFab& orig = *sf[n].mf;
         amrex::MultiFab back(orig.boxArray(), dm, 1, 0);
         back.ParallelCopy(*rf[n].mf, 0, 0, 1);
@@ -190,7 +190,7 @@ TEST (IO, CheckpointWithOneGhostCellRestarts)
     ablsteady::read_checkpoint(dir.name, r, mesh);
     auto rf = r.fields();
     auto sf = s.fields();
-    for (std::size_t n = 0; n < sf.size(); ++n) {
+    for (int n = 0; n < static_cast<int>(sf.size()); ++n) {
         EXPECT_EQ(count_bit_differences(*rf[n].mf, *sf[n].mf, 0), 0) << sf[n].name;
     }
 }

@@ -18,6 +18,9 @@ set(ABLSTEADY_SOURCES
     Convection.cpp
     Diffusion.cpp
     ImplicitOperator.cpp
+    MassFlux.cpp
+    Forcing.cpp
+    Residual.cpp
     App.cpp
     # Copied from ERF (extern_erf/EXTRACTED.md)
     ${PROJECT_SOURCE_DIR}/extern_erf/ERF_TerrainMetrics.cpp

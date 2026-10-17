@@ -182,6 +182,38 @@ GoogleTest suite
        :math:`1 + \delta_{cd}` and :math:`|\mathbf{n}|^2 + n_c^2` factors on sloping faces). MUSCL convection,
        both diffusions and :math:`A_1` agree to round-off (1e-13) on 16² and 8² column boxes, and boxes that share a
        face point agree there (not bit for bit: GCC on arm64 contracts multiply-adds inside vectorised loops only).
+   * - UT-1.6.1
+     - The divergence (through :math:`\Omega`) and the three components of :math:`G p` over the 120 m hill (BTF,
+       geometric layers, 16 × 12 × 8 to 64 × 48 × 32 cells): L2 order ≥ 1.9 on both pairs, max-norm order ≥ 1.9 on
+       the finest (single precision 1.8). :math:`\langle Gp, U\rangle = -\langle p, DU\rangle` with control-volume
+       weights to 1e-12 of either side (7e-12 against 3.3e4), for random p and a random velocity that vanishes near
+       the ground and top. *Beyond the plan:* :math:`G` does not read the ghost cells below the ground.
+   * - UT-1.6.2
+     - The continuity residual is bit for bit ``face_divergence`` of :math:`(u, v, \Omega)`; after a projection
+       (Poisson fluxes added to :math:`u, v, \Omega`, w from ``w_from_omega``) the divergence falls from 1.19 to
+       2.4e-11, the solve's residual. *Beyond the plan:* ``omega_from_w`` and ``w_from_omega`` are inverses.
+   * - UT-1.6.3
+     - ``line_jacobian`` for u, v, w, θ and k in x, y and z against a finite-difference Jacobian of the first-order
+       operator (transport frozen), per coefficient: relative difference < 1e-6 (1e-13 measured; single 1e-3), over
+       the hill with convection, and on a flat mesh with convection and a random diffusivity.
+   * - UT-1.6.4
+     - Rest over a 300 m hill (slopes up to 0.94), θ = θ_ref(z) stratified, Coriolis on: the momentum, continuity and
+       k residuals are below 1e-14. With a constant reference the hydrostatic :math:`p(z)` balances only to
+       truncation (R_u 1.6e-3 m/s², 0.5 % of the buoyancy; R_w exact on interior faces).
+   * - UT-1.6.5
+     - ``jvp`` on a laterally uniform column (affine residual) equals :math:`R(q+v) - R(q)` to 1e-5 (single 1e-2).
+       *Beyond the plan:* on the hill with MUSCL convection, against a central difference, L1 error below 1e-5
+       (2.7e-6) while a step 1e5 times larger misses (1.8e-4); the result is the same without ``R0``; the step is the
+       same on 16² and 8² column boxes and scales with each field (k and its scale times 100 leave it unchanged).
+   * - UT-1.6.6
+     - *Beyond the plan.* Sources in closed form: Coriolis with the :math:`\cos\varphi` terms and geostrophic forcing
+       on a uniform wind (:math:`f = 7.27221\times10^{-5}` 1/s at 30°, T = 86400 s), buoyancy of a uniform excess;
+       the geostrophic wind is balanced. The residual equals its operators applied one by one (momentum, continuity,
+       θ, k) on the hill with a general state. Invalid options (latitude, period, geostrophic forcing at latitude 0 or with
+       the forcing off, θ₀, gravity, profiles that do not increase) and missing inputs stop with a message.
+   * - UT-1.4.9
+     - *Beyond the plan.* Node heights shared by two boxes (or periodic images) are equal, for BTF, STF and Sullivan,
+       periodic and not (under gcc each box's copy differed by up to 1e-13 m before ``Mesh`` synchronised them).
    * - UT-1.10.1
      - Manufactured :math:`\phi` on a stretched STF mesh over a 60 m hill: every lateral BC (periodic, Neumann,
        Dirichlet) with a Dirichlet or Neumann top, 2-D (y periodic) at three resolutions, and a 3-D case (Neumann in x,

@@ -2,7 +2,9 @@
 #define ABLSTEADY_IMPLICIT_OPERATOR_H_
 
 // The first-order implicit-side operator A1 (sub-phase 1.5), the left-hand
-// side of the defect-correction iteration (V/dtau + A1) dq = -R(q):
+// side of the defect-correction iteration (1/dtau + A1) dq = -R(q) (A1 and R
+// per unit volume; the plan writes V/dtau for the same term integrated over
+// a cell of volume V):
 //
 //   A1 q = a_P q_P - sum over the six neighbours nb of a_nb q_nb,
 //
@@ -21,7 +23,7 @@
 //  * a_P = sum of the six a_nb.
 // The cross-metric diffusion terms and the transposed stress across components
 // stay on the right-hand side. Every a_nb >= 0 and a_P = sum a_nb for any
-// transport and diffusivity, so V/dtau + A1 is an M-matrix (diagonally
+// transport and diffusivity, so 1/dtau + A1 is an M-matrix (diagonally
 // dominant with non-positive off-diagonals), split by direction for the
 // line solvers: line d is tridiagonal in (-a_dm, a_P, -a_dp).
 //
