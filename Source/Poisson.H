@@ -13,6 +13,7 @@
 #include <vector>
 
 class TerrainPoisson;
+namespace amrex { class MLTerrainPoisson; }
 
 namespace ablsteady {
 
@@ -22,8 +23,9 @@ namespace ablsteady {
 enum class PoissonFace { periodic, neumann, dirichlet };
 
 //! One PoissonFace per domain face, indexed by amrex::Orientation (xlo, ylo,
-//! zlo, xhi, yhi, zhi). The ground (zlo) is always Neumann; periodic faces
-//! are exactly the periodic directions of the geometry.
+//! zlo, xhi, yhi, zhi). The ground (zlo) is Neumann (a wall: the projection
+//! and the initializer) or Dirichlet (the Tucker wall distance); periodic
+//! faces are exactly the periodic directions of the geometry.
 struct PoissonBC
 {
     std::array<PoissonFace, 6> face{PoissonFace::neumann, PoissonFace::neumann, PoissonFace::neumann,
@@ -49,9 +51,18 @@ struct PoissonOptions
     int max_iter{200};
     //! GMRES restart length (ERF uses 50).
     int restart{50};
-    //! "fft" (ERF's FFT preconditioner on the flat stretched grid) or "none".
+    //! "fft" (ERF's FFT preconditioner on the flat stretched grid) or "none";
+    //! back end A only.
     std::string precond{"fft"};
     int verbose{0};
+    //! "gmres_fft" (back end A: ERF's TerrainPoisson, GMRES, FFT
+    //! preconditioner), "mlmg" (back end B: AMReX's MLTerrainPoisson with
+    //! geometric multigrid) or "gmres_mlmg" (back end B under GMRES, one
+    //! multigrid cycle as the preconditioner).
+    std::string backend{"gmres_fft"};
+    //! The solver.poisson_* keys given in the inputs (read_poisson_options
+    //! fills it): a key the chosen back end does not use is an error.
+    std::vector<std::string> given;
 };
 
 //! Read and range-check solver.poisson_* (abort naming the key). Keys not
@@ -135,8 +146,14 @@ public:
     PoissonResult solve (amrex::MultiFab& rhs, amrex::MultiFab& phi, const FaceCoeffs& coeffs,
                          const PoissonBC& bc, amrex::Array<amrex::MultiFab, AMREX_SPACEDIM>* fluxes = nullptr);
 
-    //! A phi (phi's ghosts are filled for the boundary conditions).
+    //! A phi with back end A's operator (phi's ghosts are filled for the
+    //! boundary conditions).
     void apply (amrex::MultiFab& Aphi, amrex::MultiFab& phi, const FaceCoeffs& coeffs, const PoissonBC& bc);
+
+    //! Fill phi's ghost cells for the boundary conditions: periodic images,
+    //! even copies at Neumann faces, odd copies (phi = 0 on the face) at
+    //! Dirichlet faces, the ground included.
+    void fill_ghosts (amrex::MultiFab& phi, const PoissonBC& bc);
 
     //! The operator GMRES sees (defined in Poisson.cpp): ERF's TerrainPoisson
     //! plus the z_cross correction and the coefficient-scaled preconditioner.
@@ -144,6 +161,9 @@ public:
 
 private:
     void prepare (const FaceCoeffs& coeffs, const PoissonBC& bc);
+    PoissonResult solve_mlmg (amrex::MultiFab& rhs, amrex::MultiFab& phi, const FaceCoeffs& coeffs,
+                              const PoissonBC& bc, amrex::Array<amrex::MultiFab, AMREX_SPACEDIM>* fluxes,
+                              PoissonResult res);
     void check_layout (const amrex::MultiFab& mf, const char* what) const;
 
     const Mesh& m_mesh;
@@ -164,6 +184,17 @@ private:
     PoissonBC m_op_bc;
     amrex::Real m_op_ratio{-1};
     amrex::BoxArray m_op_ba;
+    // The layout the cached areas were built for (both back ends).
+    amrex::BoxArray m_layout_ba;
+    amrex::DistributionMapping m_layout_dm;
+    // Back end B, cached per boundary condition and layout. MLTerrainPoisson
+    // copies z_phys_nd, detJ and the areas when they are set; the mesh must
+    // not change in place while a solver is in use (back end A keeps
+    // references), so build a new PoissonSolver for a new mesh.
+    std::unique_ptr<amrex::MLTerrainPoisson> m_ml;
+    PoissonBC m_ml_bc;
+    amrex::BoxArray m_ml_ba;
+    amrex::DistributionMapping m_ml_dm;
 };
 
 //! (1/J) [ d_xi (a_x F_x) + d_eta (a_y F_y) + d_zeta (a_z F_z) ] for face

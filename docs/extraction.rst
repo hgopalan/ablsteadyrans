@@ -20,7 +20,10 @@ the Askervein terrain file. ``ERF_TerrainMetrics.{H,cpp}`` are modified: the coo
 choice and :math:`\gamma_m` as arguments instead of reading ERF's inputs, return the number of STF levels capped,
 and lose the refined-level (AMR) paths, which ablsteady does not use. BTF no longer rewrites the ground layer: ERF
 writes :math:`h\,z_\mathrm{top}/z_\mathrm{top}` there (within 1 ulp of :math:`h`) while other GPU threads read the
-same nodes, so the result depended on thread order.
+same nodes, so the result depended on thread order. Its ghost columns outside non-periodic sides take the clamped
+domain node's height there instead (ERF's builder first sets every node outside the domain to
+``bogus_large_value``; skipping the whole ground layer, as the first version of this change did, left those nodes at
+1e150 and the extrapolation below the ground at 2e150, which a Dirichlet-ground solve read, sub-phase 1.11).
 
 Copied in sub-phase 1.10, unchanged: ERF's terrain Poisson operator (``ERF_TerrainPoisson.{H,cpp}``,
 ``ERF_TerrainPoisson_3D_K.H``) and ``ERF_SolverUtils.H``, whose ``get_fft_bc`` maps the domain boundary names to

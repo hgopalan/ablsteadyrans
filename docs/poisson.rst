@@ -2,20 +2,51 @@ Poisson layer
 =============
 
 Three parts of ablsteady solve a Poisson problem on the terrain-following mesh: the mass-consistent initializer, the
-SIMPLEC pressure correction and the Tucker wall distance. They are to share one layer, ``Source/Poisson.{H,cpp}``:
+SIMPLEC pressure correction and the Tucker wall distance. They share one layer, ``Source/Poisson.{H,cpp}``:
 
 .. code-block:: c++
 
    PoissonSolver solver(mesh, geom, z_phys_nd, read_poisson_options());
    PoissonResult r = solver.solve(rhs, phi, face_coeffs, bc, &fluxes);
 
-Back end A (sub-phase 1.10) is ERF's own operator, ``TerrainPoisson``, copied unchanged into ``extern_erf/``
-(:doc:`extraction`), solved by ``amrex::GMRES`` with ERF's FFT preconditioner. Back end B (``MLTerrainPoisson``)
-follows in sub-phase 1.11.
+Two back ends solve the same discrete operator (``solver.poisson_backend``):
 
-This version serves the initializer and SIMPLEC. The Tucker distance needs :math:`\phi = 0` on the ground, and here the
-ground is always a zero-flux wall and every boundary condition is homogeneous; sub-phase 1.11 adds a Dirichlet
-ground (ERF's ``terrpoisson_flux_zlo_dir`` is in the copied kernel file, unused so far).
+.. list-table::
+   :header-rows: 1
+   :widths: 20 80
+
+   * - Back end
+     - What it is
+   * - ``gmres_fft`` (A, default)
+     - ERF's own operator, ``TerrainPoisson``, copied unchanged into ``extern_erf/`` (:doc:`extraction`), solved by
+       ``amrex::GMRES`` with ERF's FFT preconditioner (sub-phase 1.10).
+   * - ``mlmg``, ``gmres_mlmg`` (B)
+     - AMReX's ``MLTerrainPoisson`` with geometric multigrid, alone or as GMRES's preconditioner (one V-cycle per
+       iteration), sub-phase 1.11. Its stencil is ERF's term by term: with the same coefficients the two back ends
+       give the same :math:`\phi` to 1e-9 relative when both are solved to 1e-12 (UT-1.11.2). It takes no
+       ``z_cross`` (no split kernel) and ignores ``FaceCoeffs::precond_ratio``; ``solver.poisson_precond`` with
+       back end B, and ``solver.poisson_restart`` with ``mlmg``, stop the run as keys with no effect. Its convergence
+       test is MLMG's (maximum norm of the residual against that of the right-hand side; ``max_iter`` counts
+       V-cycles), or GMRES's under ``gmres_mlmg``. A one-cell periodic direction is MLMG's hidden direction. It
+       copies the mesh metrics when built, so a mesh changed in place needs a new ``PoissonSolver``.
+
+On the Askervein projection test (30 × 30 × 18) back end A takes 10 GMRES iterations and back end B 6 MLMG
+iterations.
+
+**Single precision.** Rounding the solution to float leaves a residual floor of about
+:math:`\varepsilon N_z^2/2` relative to the right-hand side (independent of the problem's scale): 2e-4 on 64 layers,
+1e-3 on 128. The default ``solver.poisson_reltol`` in single precision (1e-5) is below that floor on fine meshes;
+pick about :math:`4\varepsilon N_z^2`.
+
+**AMReX finding (not fixed here).** ``MLTerrainPoisson``'s fused CPU red-black smoother (AMReX
+``AMReX_MLTerrainPoisson.cpp``, the loop ``sa(i,j,k) += ta(i,j,k)`` and its neighbours) is vectorized over a stride-2
+loop: it adds whole vector registers and stores only the active colour. The inactive lanes of its scratch array are
+never written, so they can raise FE_INVALID (with ``amrex.fpe_trap_invalid = 1`` the run traps, for boxes wide
+enough to vectorize: 32+ cells in double precision, fewer in single), while the discarded lanes never reach the
+result. Back end B therefore switches the invalid trap off around the MLMG solve (``amrex::disableFPExcept``, then
+``std::feclearexcept`` and ``amrex::setFPExcept``) and checks the solution for non-finite values afterwards. The
+back end B tests run under CI's full flags on 64-cell boxes. Zeroing the scratch array (or not vectorizing the
+stride-2 loops) in AMReX would remove the need.
 
 Operator
 --------
@@ -66,10 +97,17 @@ All boundary conditions are homogeneous (``PoissonBC``, one entry per domain fac
    * - ``periodic``
      - Exactly the periodic directions of the mesh.
    * - ``neumann``
-     - Zero total flux through the face, the terrain cross term included (ERF#4272, merged as ERF#4279). The ground
-       is always Neumann.
+     - Zero total flux through the face, the terrain cross term included (ERF#4272, merged as ERF#4279).
    * - ``dirichlet``
-     - :math:`\phi = 0` on the face (an outflow or open face).
+     - :math:`\phi = 0` on the face (an outflow or open face; the ground for the wall distance).
+
+**Dirichlet ground.** ERF's kernel has no ground flux (its ground is a wall). With a Dirichlet ground, back end A
+fills the ghost cells below the ground with :math:`-\phi` (so the bottom row's cross terms see :math:`\phi = 0` on the
+ground), applies ERF's kernel, and adds the ground-face flux from ERF's own one-sided Dirichlet formula,
+``terrpoisson_flux_zlo_dir`` (in the copied kernel file). The FFT preconditioner takes the ground as odd. The result
+is second order for every lateral BC and top, and agrees with back end B's independent implementation to 1e-9
+relative (UT-1.11.2).
+``z_cross`` is not available with a Dirichlet ground.
 
 With no Dirichlet face the problem is singular. The J-weighted mean of the right-hand side is then removed first
 (and reported as ``removed_mean``), and :math:`\phi` comes back with zero J-weighted mean.
@@ -111,5 +149,8 @@ Inputs
 ------
 
 The options are read by ``read_poisson_options()`` from ``solver.poisson_*`` (:doc:`inputs`). In this version only
-the regression tool ``poisson_projection`` reads them; the application has no Poisson solve yet, and these keys stop
-an ablsteady run like any other key it does not read.
+the regression tools (``poisson_projection``, ``wall_distance``) read them; the application has no Poisson solve yet,
+and these keys stop an ablsteady run like any other key it does not read.
+
+``PoissonSolver::fill_ghosts(phi, bc)`` fills :math:`\phi`'s ghost cells for the boundary conditions (periodic images,
+even copies at Neumann faces, odd copies at Dirichlet faces), as a caller that differentiates :math:`\phi` needs.

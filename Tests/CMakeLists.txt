@@ -23,6 +23,8 @@ add_executable(unit_tests
     Unit/test_Reference.cpp
     Unit/test_Mesh.cpp
     Unit/test_Poisson.cpp
+    Unit/test_PoissonB.cpp
+    Unit/test_WallDistance.cpp
 )
 target_include_directories(unit_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Unit)
 target_link_libraries(unit_tests PRIVATE ablsteady_core GTest::gtest)
@@ -33,9 +35,13 @@ target_compile_definitions(unit_tests PRIVATE ABLSTEADY_SOURCE_DIR="${PROJECT_SO
 # since the application has no Poisson solve yet.
 add_executable(poisson_projection Tools/poisson_projection.cpp)
 target_link_libraries(poisson_projection PRIVATE ablsteady_core)
+# RT-1.11.2 computes the Tucker wall distance: another test-only tool.
+add_executable(wall_distance Tools/wall_distance.cpp)
+target_link_libraries(wall_distance PRIVATE ablsteady_core)
 if(ABLSTEADY_GPU_BACKEND STREQUAL "CUDA")
     setup_target_for_cuda_compilation(unit_tests)
     setup_target_for_cuda_compilation(poisson_projection)
+    setup_target_for_cuda_compilation(wall_distance)
 endif()
 
 # --- How to launch on N ranks -------------------------------------------------
@@ -242,6 +248,35 @@ if(ABLSTEADY_PRECISION STREQUAL "DOUBLE")
                        FIXTURES_REQUIRED poisson_askervein
                        COMMAND ${FCOMPARE} --rel_tol 1e-8 poisson_askervein_plt00000
                                ${GOLD}/poisson_askervein_plt00000)
+    # RT-1.11.1: the same projection with back end B (MLMG). It solves the same
+    # discrete operator, so its potential matches back end A's gold.
+    set(POISSON_B_DIR ${CMAKE_CURRENT_BINARY_DIR}/run/rt_poisson_askervein_mlmg)
+    ablsteady_add_test(NAME rt_poisson_askervein_mlmg NP 2 LABELS "regression;smoke" RUN_DIR ${POISSON_B_DIR}
+                       FIXTURES_SETUP poisson_askervein_mlmg
+                       PREFIX ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/check_poisson.py
+                              ${GOLD}/poisson_askervein_mlmg.json --
+                       COMMAND $<TARGET_FILE:poisson_projection> ${DECKS}/inputs_poisson_askervein_mlmg
+                               terrain.file=${PROJECT_SOURCE_DIR}/extern_erf/askervein.txt
+                               ${ABLSTEADY_TEST_AMREX_FLAGS})
+    ablsteady_add_test(NAME rt_poisson_askervein_mlmg_matches NP 1 LABELS "regression;smoke"
+                       RUN_DIR ${POISSON_B_DIR} FIXTURES_REQUIRED poisson_askervein_mlmg
+                       COMMAND ${FCOMPARE} --rel_tol 1e-8 poisson_askervein_mlmg_plt00000
+                               ${GOLD}/poisson_askervein_plt00000)
+    # RT-1.11.2: the Tucker wall distance on ERF's Neutral_Hill_2D mesh: ERF's
+    # wall-distance checks (Tests/check_walldist.py), and the field against
+    # Gold/walldist_hill2d_plt00000. ERF's reader takes double-precision
+    # plotfiles only.
+    set(WALLDIST_DIR ${CMAKE_CURRENT_BINARY_DIR}/run/rt_walldist_hill2d)
+    ablsteady_add_test(NAME rt_walldist_hill2d NP 2 LABELS "regression;smoke" RUN_DIR ${WALLDIST_DIR}
+                       FIXTURES_SETUP walldist_hill2d
+                       PREFIX ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/check_walldist.py
+                              --hmax 100 --half-width 500 --
+                       COMMAND $<TARGET_FILE:wall_distance> ${DECKS}/inputs_walldist_hill2d
+                               ${ABLSTEADY_TEST_AMREX_FLAGS})
+    ablsteady_add_test(NAME rt_walldist_hill2d_matches NP 1 LABELS "regression;smoke"
+                       RUN_DIR ${WALLDIST_DIR} FIXTURES_REQUIRED walldist_hill2d
+                       COMMAND ${FCOMPARE} --rel_tol 1e-8 walldist_hill2d_plt00000
+                               ${GOLD}/walldist_hill2d_plt00000)
 endif()
 
 # --- Reference archives (sub-phase 1.1): ablsteady_refavg end to end --------

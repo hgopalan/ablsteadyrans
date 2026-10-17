@@ -66,6 +66,15 @@ Current tests
        before, and
        :math:`\phi` against ``Tests/Gold/poisson_askervein_plt00000`` at relative 1e-8. Double precision only (the
        golds are double-precision runs); the gold was written by ablsteady, so it detects changes.
+   * - ``rt_poisson_askervein_mlmg``, ``rt_poisson_askervein_mlmg_matches``
+     - RT-1.11.1: the same projection with back end B (MLMG, 6 iterations): iterations at most 10 % above
+       ``Tests/Gold/poisson_askervein_mlmg.json`` (written by ablsteady's first run) and the divergence check, and
+       :math:`\phi` against back end A's gold
+       ``Tests/Gold/poisson_askervein_plt00000`` at relative 1e-8, since both solve the same operator.
+   * - ``rt_walldist_hill2d``, ``rt_walldist_hill2d_matches``
+     - RT-1.11.2: ``wall_distance`` on ERF's Neutral_Hill_2D mesh: ERF's wall-distance checks (``Tests/check_walldist.py``:
+       max relative ≤ 0.15, mean ≤ 0.03, ≤ 0.2 cells below 100 m, all finite), and the field against
+       ``Tests/Gold/walldist_hill2d_plt00000`` at relative 1e-8 (a gold written by ablsteady). Double precision only.
    * - ``drift_check_selftest``
      - The ``extern_erf`` drift check on a throw-away ERF repository (:doc:`extraction`).
    * - ``refavg_snapshots``, ``refavg_build``, ``refavg_verify``, ``refavg_matches``
@@ -178,6 +187,30 @@ GoogleTest suite
        problem reports and removes the mean. Option and BC checks, coefficients that are not positive, MultiFabs on
        another layout and a solve that does not converge each stop with the input named.
        ``tools/poisson_ms_check.py`` (sympy, not run by CI) checks the manufactured solutions' boundary conditions.
+   * - UT-1.11.1
+     - Back end B (``mlmg`` and ``gmres_mlmg``): every lateral BC × Dirichlet/Neumann top × Neumann (zero-gradient
+       solution) / Dirichlet ground, 2-D (y hidden) at three resolutions (two in single precision), and a 3-D case:
+       order ≥ 1.9 (single: 1.8, 1.6).
+   * - UT-1.11.1b
+     - *Beyond the plan.* Back end A with a Dirichlet ground: order ≥ 1.9 for every lateral BC and top.
+   * - UT-1.11.2
+     - Spatially varying coefficients, Neumann and Dirichlet ground, 3-D with non-periodic sides (Neumann x,
+       Dirichlet y and top): both back ends solved to 1e-12 give :math:`\phi` within 1e-9 of max :math:`|\phi|` (single:
+       1e-5 and 1e-4), and the fluxes satisfy :math:`\nabla_h\cdot F = -\mathrm{rhs}` to the residual.
+   * - UT-1.11.2b
+     - *Beyond the plan.* ``z_cross`` with back end B, ``z_cross`` with a Dirichlet ground, ``apply`` with back end B,
+       an unknown back end, ``solver.poisson_precond`` with back end B, ``solver.poisson_restart`` with ``mlmg`` and a
+       non-converging MLMG solve each stop with the input named.
+   * - UT-1.11.3
+     - Tucker distance against the exact distance with ERF's tolerances on ERF's decks: flat ground (max relative
+       ≤ 3e-3, ≤ 0.1 m below 100 m; single 1e-2 and 0.5 m), 2-D ridge and 3-D hill (max relative ≤ 0.15, mean ≤ 0.03,
+       ≤ 0.2 cells below 100 m); the 3-D hill with periodic and Neumann sides; both back ends (back end B on 64-cell
+       boxes, under CI's trap). Single precision solves to 1e-4. *Beyond the plan:* on flat ground the error
+       converges at second order (32, 64, 128 layers; double precision).
+   * - UT-1.11.4
+     - *Beyond the plan.* No node of ``z_phys_nd`` (ghosts included) holds ERF's ``bogus_large_value``, for BTF, STF and
+       Sullivan with periodic and non-periodic sides; ``fill_ghosts`` fills every ghost cell, corners and between-box
+       ghosts included, with odd copies below a Dirichlet ground and even copies at Neumann faces.
    * - UT-1.2.1
      - Steady-criterion verdicts on converging, stalling (including a residual stuck exactly at the tolerance) and
        oscillating histories. The converging history becomes

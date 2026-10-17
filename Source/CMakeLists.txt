@@ -13,6 +13,7 @@ set(ABLSTEADY_SOURCES
     SmoothSurface.cpp
     Mesh.cpp
     Poisson.cpp
+    WallDistance.cpp
     App.cpp
     # Copied from ERF (extern_erf/EXTRACTED.md)
     ${PROJECT_SOURCE_DIR}/extern_erf/ERF_TerrainMetrics.cpp

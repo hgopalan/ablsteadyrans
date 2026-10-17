@@ -329,12 +329,18 @@ init_which_terrain_grid (int lev,
             //
             ParallelFor(gbx, [=] AMREX_GPU_DEVICE (int i, int j, int k)
             {
-                // ablsteady: the ground layer k0 is not rewritten. ERF writes
-                // z_sfc z_top / z_top there while other threads read z_arr(ii,jj,k0),
-                // a race on GPU; the value differs from z_sfc by at most 1 ulp.
-                if (k == k0) { return; }
                 int ii = amrex::max(amrex::min(i,imax),imin);
                 int jj = amrex::max(amrex::min(j,jmax),jmin);
+                // ablsteady: the ground layer k0 inside the domain is not rewritten.
+                // ERF writes z_sfc z_top / z_top there while other threads read
+                // z_arr(ii,jj,k0), a race on GPU; the value differs from z_sfc by at
+                // most 1 ulp. Ghost columns outside a non-periodic side were set to
+                // bogus_large_value above and take the clamped domain node's height,
+                // read from a node no thread writes.
+                if (k == k0) {
+                    if (ii != i || jj != j) { z_arr(i,j,k) = z_arr(ii,jj,k0); }
+                    return;
+                }
 
                 //
                 // Start with flat z_lev set either with uniform cell size or specified z_levels
