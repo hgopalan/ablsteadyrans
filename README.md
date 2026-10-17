@@ -22,8 +22,9 @@ mpirun -n 2 build-rel/ablsteady Tests/Decks/inputs_smoke
 ## Documentation
 
 Building, inputs, output, the definition of steady, the case ladder, numerics, testing and CI are documented in
-[`docs/`](docs/) (reStructuredText; each CI run also keeps the built HTML as the `docs-html` artifact). To build
-the HTML:
+[`docs/`](docs/) (reStructuredText). The documentation of `main` is published at
+<https://hgopalan.github.io/ablsteadyrans/>, and each CI run keeps the built HTML as the `docs-html` artifact. To
+build the HTML:
 
 ```bash
 python3 -m pip install -r docs/requirements.txt

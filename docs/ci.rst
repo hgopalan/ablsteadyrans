@@ -40,6 +40,12 @@ Every pull request runs two workflows.
      - ``make -C docs linkcheck``. It reaches third-party sites, so a failure can come from outside this
        repository.
 
+``.github/workflows/static.yml``
+--------------------------------
+
+On every push to ``main`` (or by hand), the ``deploy`` job builds the documentation as above, with warnings as
+errors, and publishes ``docs/_build/html`` to GitHub Pages. Only the built HTML is uploaded, not the repository.
+
 Kestrel
 -------
 
