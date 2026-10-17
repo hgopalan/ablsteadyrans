@@ -12,10 +12,12 @@ set(ABLSTEADY_SOURCES
     TerrainSurface.cpp
     SmoothSurface.cpp
     Mesh.cpp
+    Poisson.cpp
     App.cpp
     # Copied from ERF (extern_erf/EXTRACTED.md)
     ${PROJECT_SOURCE_DIR}/extern_erf/ERF_TerrainMetrics.cpp
     ${PROJECT_SOURCE_DIR}/extern_erf/ERF_ChopGrids.cpp
+    ${PROJECT_SOURCE_DIR}/extern_erf/ERF_TerrainPoisson.cpp
 )
 
 add_library(ablsteady_core STATIC ${ABLSTEADY_SOURCES})
@@ -24,6 +26,8 @@ add_library(ablsteady_core STATIC ${ABLSTEADY_SOURCES})
 target_include_directories(ablsteady_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}
                            ${PROJECT_SOURCE_DIR}/extern_erf ${CMAKE_CURRENT_SOURCE_DIR}/erf_shims)
 target_link_libraries(ablsteady_core PUBLIC AMReX::amrex)
+# The copied TerrainPoisson files compile only under ERF_USE_FFT.
+target_compile_definitions(ablsteady_core PUBLIC ERF_USE_FFT)
 
 # Intel's compilers default to a fast floating-point model that may reorder
 # sums; the deterministic reductions need the source order kept.

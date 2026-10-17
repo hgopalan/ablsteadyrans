@@ -31,11 +31,17 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
 option(ABLSTEADY_MPI                "Build with MPI"                                   ON)
 option(ABLSTEADY_OMP                "Build with OpenMP"                                OFF)
-option(ABLSTEADY_FFT                "Build AMReX FFT (needed by the Poisson layer)"     ON)
+option(ABLSTEADY_FFT                "Build AMReX FFT (required by the Poisson layer)"   ON)
 option(ABLSTEADY_HYPRE              "Build AMReX with hypre (optional preconditioner)" OFF)
 option(ABLSTEADY_TESTING            "AMReX_TESTING + assertions (SNaN fills, as GPU CI)" OFF)
 option(ABLSTEADY_USE_INTERNAL_AMREX "Use the AMReX git submodule"                      ON)
 option(ABLSTEADY_ENABLE_TESTS       "Build the unit tests and register all tests"      ON)
+
+# The Poisson layer (sub-phase 1.10) uses AMReX's FFT module for its
+# preconditioner; stop before AMReX is configured without it.
+if(NOT ABLSTEADY_FFT)
+    message(FATAL_ERROR "ablsteady needs ABLSTEADY_FFT=ON: the Poisson layer uses AMReX's FFT module")
+endif()
 
 set(ABLSTEADY_PRECISION DOUBLE CACHE STRING "Floating-point precision: DOUBLE or SINGLE")
 set_property(CACHE ABLSTEADY_PRECISION PROPERTY STRINGS DOUBLE SINGLE)
@@ -91,7 +97,7 @@ if(ABLSTEADY_USE_INTERNAL_AMREX)
     # For AMReXTargetHelpers (setup_target_for_cuda_compilation).
     list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/external/amrex/Tools/CMake)
 else()
-    find_package(AMReX REQUIRED 3D ${ABLSTEADY_PRECISION})
+    find_package(AMReX REQUIRED 3D ${ABLSTEADY_PRECISION} FFT)
 endif()
 
 add_subdirectory(Source)

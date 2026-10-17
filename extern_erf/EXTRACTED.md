@@ -28,6 +28,10 @@ ERF's `LICENSE.md` goes into `extern_erf/` with the first copied file. Copied fi
 | `extern_erf/ERF_ChopGrids.cpp` | `Source/Utils/ERF_ChopGrids.cpp` | 92410d578f612ab9e844c450bf8e900194becfb5 | unchanged | ChopGrids2D, referenced by make_terrain_fitted_coords |
 | `extern_erf/erf_plotfile.py` | `Exec/CanonicalTests/Canonical_RANS/erf_plotfile.py` | 92410d578f612ab9e844c450bf8e900194becfb5 | unchanged | Plotfile reader for the regression check scripts |
 | `extern_erf/askervein.txt` | `Exec/CanonicalTests/Real_Terrain/Askervein/askervein.txt` | 92410d578f612ab9e844c450bf8e900194becfb5 | unchanged | Askervein terrain (ERF's structured terrain format) |
+| `extern_erf/ERF_TerrainPoisson.H` | `Source/LinearSolvers/ERF_TerrainPoisson.H` | 92410d578f612ab9e844c450bf8e900194becfb5 | unchanged | Terrain Poisson operator for amrex::GMRES with the FFT preconditioner (sub-phase 1.10) |
+| `extern_erf/ERF_TerrainPoisson.cpp` | `Source/LinearSolvers/ERF_TerrainPoisson.cpp` | 92410d578f612ab9e844c450bf8e900194becfb5 | unchanged | Includes the zero-flux Neumann faces with the terrain cross term (ERF#4272, merged as ERF#4279) |
+| `extern_erf/ERF_TerrainPoisson_3D_K.H` | `Source/LinearSolvers/ERF_TerrainPoisson_3D_K.H` | 92410d578f612ab9e844c450bf8e900194becfb5 | unchanged | Operator and face-flux kernels |
+| `extern_erf/ERF_SolverUtils.H` | `Source/LinearSolvers/ERF_SolverUtils.H` | 92410d578f612ab9e844c450bf8e900194becfb5 | unchanged | get_fft_bc: maps the domain boundary names to FFT::Boundary (Outflow/Open: odd, periodic: periodic, others: even) |
 <!-- manifest:end -->
 
 The shims in `Source/erf_shims/` stand in for two ERF headers the copied files include (`ERF_IndexDefines.H`: only

@@ -151,4 +151,39 @@ and setting these keys stops the run, like any other key this version does not r
      - ``50``
      - ≥ 2. The window, in iterations.
 
-The other namespaces (``init``, ``turb``, ``bc``, ``solver``) have no inputs yet.
+``solver``
+----------
+
+The Poisson layer (:doc:`poisson`) reads ``solver.poisson_*`` through ``read_poisson_options()``. In this version only
+the regression tool ``poisson_projection`` calls it: the application has no Poisson solve yet, so setting these keys
+in an ablsteady deck stops the run, like any other key this version does not read. Each row matches the range check
+in ``Source/Poisson.cpp``.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 14 56
+
+   * - Input
+     - Default
+     - Range and meaning
+   * - ``solver.poisson_reltol``
+     - ``1e-10`` (``1e-5`` single)
+     - ≥ 10 machine epsilon and < 1. Converged when the residual 2-norm is below this fraction of the initial one.
+   * - ``solver.poisson_abstol``
+     - ``0``
+     - Finite, ≥ 0. Or when the residual 2-norm is below this value.
+   * - ``solver.poisson_max_iter``
+     - ``200``
+     - ≥ 1. GMRES iterations; reaching it stops the run.
+   * - ``solver.poisson_restart``
+     - ``50``
+     - ≥ 1. GMRES restart length (ERF's value).
+   * - ``solver.poisson_precond``
+     - ``fft``
+     - ``fft`` (ERF's FFT preconditioner on the flat stretched grid) or ``none``.
+   * - ``solver.poisson_verbose``
+     - ``0``
+     - ≥ 0. 1 prints each solve's iterations, residuals and (singular problems) removed mean, and AMReX GMRES's solve
+       time; 2 also GMRES's residual at each restart cycle.
+
+The other namespaces (``init``, ``turb``, ``bc``) have no inputs yet.

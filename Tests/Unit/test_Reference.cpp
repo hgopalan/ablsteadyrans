@@ -331,17 +331,18 @@ TEST (Reference, DamagedArchivesAreRefused)
     EXPECT_TRUE(mentions(err, "au does not equal nodes x wall hours"));
 
     // Data changed and its checksum updated to match: the file check passes,
-    // the field values do not.
+    // the field values do not. The last value of the data file (native Real)
+    // becomes 2^30, above every value of the pattern (|v| < 2^20), so the
+    // maximum changes whatever the layout. (Flipping one bit of the last byte
+    // could hit a value too small to move the sum in single precision.)
     fresh("ut_ref_dmg_data");
     on_io_rank([&] {
         const std::string data = "ut_ref_dmg_data/average/Level_0/Cell_D_00000";
         {
             std::fstream f(data, std::ios::in | std::ios::out | std::ios::binary);
-            f.seekg(-1, std::ios::end);
-            char c = 0;
-            f.get(c);
-            f.seekp(-1, std::ios::end);
-            f.put(static_cast<char>(c ^ 0x01));
+            const auto big = static_cast<amrex::Real>(1 << 30);
+            f.seekp(-static_cast<std::streamoff>(sizeof(amrex::Real)), std::ios::end);
+            f.write(reinterpret_cast<const char*>(&big), sizeof(big));
         }
         std::ifstream in("ut_ref_dmg_data/MANIFEST");
         std::stringstream ss;
