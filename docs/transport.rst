@@ -135,7 +135,9 @@ Both operators include every metric cross term.
 Implicit side
 -------------
 
-The defect-correction iteration of sub-phase 1.14 solves :math:`(V/\Delta\tau + A_1)\,\delta q = -R(q)`. The
+The defect-correction iteration of sub-phase 1.14 solves :math:`(1/\Delta\tau + A_1)\,\delta q = -R(q)`, with
+:math:`A_1` and :math:`R` per unit volume (the plan writes :math:`V/\Delta\tau` for the same term integrated over a
+cell of volume :math:`V`). The
 first-order operator :math:`A_1` is
 
 .. math::
@@ -164,7 +166,7 @@ over the six neighbours, with the weights split by direction:
 - The metric cross terms and the transposed stress across components stay on the right-hand side.
 
 Every :math:`a_{nb} \ge 0` and :math:`a_P = \sum a_{nb}` for any transport and diffusivity. So
-:math:`V/\Delta\tau + A_1` is an M-matrix (diagonally dominant, off-diagonals not positive). Line d of a line solver
+:math:`1/\Delta\tau + A_1` is an M-matrix (diagonally dominant, off-diagonals not positive). Line d of a line solver
 is tridiagonal in :math:`(-a_{d-},\, a_P,\, -a_{d+})`. The coefficients are stored as seven components
 (``coef_P``, ``coef_XM`` … ``coef_ZP``). Weights that reach outside the domain are kept; the boundary-condition code
 folds them in, and replaces the rows of boundary points (the ground face of w, whose control volume is half a cell

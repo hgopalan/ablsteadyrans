@@ -62,6 +62,13 @@ void Mesh::build_from_ground (const Inputs& in, const amrex::Geometry& geom, amr
     make_terrain_fitted_coords(0, geom, z_phys_nd, m_zlevels, bc, in.terrain.smoothing,
                                in.terrain.gamma_m, &n_capped);
     m_quality.stf_capped_levels = n_capped;
+    // A node shared by two boxes (or a periodic image) gets one value. Each
+    // box computes its own copy, and where a compiler contracts multiply-adds
+    // (gcc) the copies differ in the last bits (1e-13 m on a BTF hill); the
+    // operators read each box's copy, so the boxes that share a face would
+    // compute different values there. The ghost nodes are refilled to match.
+    z_phys_nd.OverrideSync(geom.periodicity());
+    z_phys_nd.FillBoundary(geom.periodicity());
 
     make_metrics(geom, z_phys_nd);
     make_quality(geom, z_phys_nd);

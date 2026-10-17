@@ -28,6 +28,8 @@ add_executable(unit_tests
     Unit/test_Convection.cpp
     Unit/test_Diffusion.cpp
     Unit/test_ImplicitOperator.cpp
+    Unit/test_MassFlux.cpp
+    Unit/test_Residual.cpp
 )
 target_include_directories(unit_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Unit)
 target_link_libraries(unit_tests PRIVATE ablsteady_core GTest::gtest)

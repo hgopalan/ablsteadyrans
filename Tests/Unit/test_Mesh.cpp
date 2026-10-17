@@ -786,4 +786,26 @@ TEST (Mesh, NoSentinelNodesLeft)
     }
 }
 
+// Node heights shared by two boxes (or periodic images) are equal: the
+// operators read each box's copy, and a seam difference would make the two
+// boxes that share a face compute different residuals there. Every mapping,
+// periodic and not, on several boxes.
+TEST (Mesh, SharedNodesAgree)
+{
+    for (const int sm : {0, 1, 2}) {
+        for (const int per : {0, 1}) {
+            MeshCase s = hill3d(sm);
+            s.in.mesh.is_periodic = {per, per, 0};
+            s.make();
+            s.mesh.build(s.in, s.geom, s.z);
+            ASSERT_GT(s.z.boxArray().size(), 1);
+            amrex::MultiFab synced(s.z.boxArray(), s.z.DistributionMap(), 1, 0);
+            amrex::MultiFab::Copy(synced, s.z, 0, 0, 1, 0);
+            synced.OverrideSync(s.geom.periodicity());
+            amrex::MultiFab::Subtract(synced, s.z, 0, 0, 1, 0);
+            EXPECT_EQ(static_cast<double>(synced.norm0()), 0.0) << "smoothing " << sm << " periodic " << per;
+        }
+    }
+}
+
 } // namespace
