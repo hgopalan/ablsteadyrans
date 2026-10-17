@@ -8,8 +8,9 @@
 
 namespace ablsteady {
 
-//! Ghost cells on the solution fields and on the nodal heights.
-inline constexpr int ngrow_state = 1;
+//! Ghost cells on the solution fields (the MUSCL reconstruction of
+//! Convection.H reads two cells upwind of a face) and on the nodal heights.
+inline constexpr int ngrow_state = 2;
 inline constexpr int ngrow_nodal = 1;
 
 //! The solution on ERF's Arakawa C-grid: normal velocities on faces, p', theta

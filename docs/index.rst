@@ -29,7 +29,8 @@ The target machine is NLR Kestrel: CPU nodes with 104 Sapphire Rapids cores, and
 
 **Status.** Phase 1 is under way. The application reads and checks its inputs, builds the stretched
 terrain-following mesh and the solution fields, and writes and restarts from plotfiles and checkpoints. The definition
-of a steady solution and the Poisson layer are in place. There is no flow solver yet.
+of a steady solution, the Poisson layer and the convection and diffusion operators are in place. There is no flow
+solver yet.
 
 .. toctree::
    :maxdepth: 2
@@ -47,6 +48,7 @@ of a steady solution and the Poisson layer are in place. There is no flow solver
    mesh
    poisson
    walldistance
+   transport
    steady
    cases
    references

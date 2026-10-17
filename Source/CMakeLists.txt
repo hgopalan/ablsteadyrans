@@ -14,6 +14,10 @@ set(ABLSTEADY_SOURCES
     Mesh.cpp
     Poisson.cpp
     WallDistance.cpp
+    CVFluxes.cpp
+    Convection.cpp
+    Diffusion.cpp
+    ImplicitOperator.cpp
     App.cpp
     # Copied from ERF (extern_erf/EXTRACTED.md)
     ${PROJECT_SOURCE_DIR}/extern_erf/ERF_TerrainMetrics.cpp

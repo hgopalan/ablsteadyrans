@@ -30,7 +30,10 @@ VisMF MultiFab.
 Checkpoint
 ----------
 
-``<io.chk_file>NNNNN`` holds a text ``Header`` and every field with its ghost cells.
+``<io.chk_file>NNNNN`` holds a text ``Header`` and every field with its ghost cells: two for the solution fields,
+one for the node heights. (Up to sub-phase 1.11 the solution fields had one ghost cell; those checkpoints restart
+unchanged, since only valid values are read back. The second ghost layer makes a checkpoint of 8³-cell boxes
+about 1.5 times larger; larger boxes grow less.)
 
 The ``Header`` lists the format version, the bytes per real (8 or 4), the step, the mesh (``n_cell``, and
 ``prob_lo`` and ``prob_hi`` in hexadecimal floating point so they read back exactly), ``is_periodic`` and the

@@ -149,6 +149,39 @@ GoogleTest suite
        seam height; every mapping keeps the ground layer as given; ground at the top and inverted cells stop the
        run; the slope of a diagonal ridge is reported in full; a restart with changed terrain is refused; the report
        of a steep ridge carries both warnings.
+   * - UT-1.5.1
+     - Convection on a manufactured flow over a 120 m cosine hill (BTF, geometric layers, 16 × 12 × 8 to 64 × 48 × 32
+       cells), ghost nodes continuing the layers: the unlimited MUSCL reconstruction (van Albada slope with
+       :math:`\epsilon` above every difference) is second order for q (conservative and bounded forms) and for the u, v
+       and w control volumes, L2 order ≥ 1.9 on both pairs and max-norm order ≥ 1.9 on the finest. With ``van_leer``
+       and ``van_albada``: L1 order ≥ 1.5 on the finest pair and an L1 error at most a quarter of first-order upwind's
+       (a limiter is first order at smooth extrema). First-order upwind converges at order 1.0 ± 0.1.
+   * - UT-1.5.2
+     - Scalar diffusion with a variable :math:`\gamma`, and momentum diffusion with the full stress tensor and a
+       variable :math:`\nu`, on the same meshes: L2 order ≥ 1.9 on both pairs, max-norm order ≥ 1.9 on the finest,
+       for q, u, v and w.
+   * - UT-1.5.3
+     - Random :math:`k \ge 0` (a third of the points zero) and random transport fluxes of ±50 m/s: the step
+       :math:`k - C(k)/a_P` with the bounded upwind form leaves every :math:`k \ge 0`; the conservative upwind form
+       goes below −0.1 in the same step. *Beyond the plan:* the bounded form of a constant is zero for every limiter
+       and location.
+   * - UT-1.5.4
+     - Random transport (±20 m/s) and diffusivity (0 to 50 m²/s, a fifth zero) over the hill: every neighbour
+       weight of :math:`A_1` is ≥ 0 and :math:`a_P` equals their sum (1e-14; single 1e-6), for cells and the three
+       velocity components.
+   * - UT-1.5.5
+     - The van Albada slope's derivative changes by less than 0.1 across every point where van Leer switches
+       (:math:`a = 0`, :math:`b = 0`, :math:`a = -b`, the origin), in three directions; van Leer's jumps by more than 1.
+       On the manufactured flow (64 × 48 × 32) the two limiters differ by less than 1 % (L2) for q, u, v and w.
+       Invalid ``smooth_eps`` (0, negative, NaN, infinite) is refused.
+   * - UT-1.5.6
+     - *Beyond the plan.* :math:`A_1` is the explicit operators' first-order part: bounded upwind convection equals
+       :math:`A_1 q` for random q and transport (1e-12; single 1e-5), and on a flat mesh :math:`-D(q) = A_1 q` for the
+       scalar and :math:`-D_c(u) = A_1 u_c` for each velocity component with random :math:`\nu`. Over the hill, every weight
+       equals the explicit face flux of a field that varies along one index direction only (this pins the
+       :math:`1 + \delta_{cd}` and :math:`|\mathbf{n}|^2 + n_c^2` factors on sloping faces). MUSCL convection,
+       both diffusions and :math:`A_1` give the same bits on 16² and 8² column boxes, and boxes that share a face point
+       compute the same bits there.
    * - UT-1.10.1
      - Manufactured :math:`\phi` on a stretched STF mesh over a 60 m hill: every lateral BC (periodic, Neumann,
        Dirichlet) with a Dirichlet or Neumann top, 2-D (y periodic) at three resolutions, and a 3-D case (Neumann in x,
@@ -247,7 +280,8 @@ GoogleTest suite
      - Plotfile round trip, bit-identical, including the nodal heights and their ghost nodes.
    * - UT-1.3.3
      - Checkpoint and restart onto another box layout, bit-identical; ghost nodes restored without overwriting
-       valid nodes.
+       valid nodes; a checkpoint written with one ghost cell on the solution fields (before sub-phase 1.5)
+       restarts bit-identical.
    * - UT-1.3.4
      - The sum gives the same bits on 1, 2 and 4 ranks and within 16 ε Σ\|x\| of the exact sum; the maximum
        handles NaN and −0.
