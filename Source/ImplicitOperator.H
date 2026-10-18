@@ -44,6 +44,7 @@
 //    flat mesh the latter are the full diffusion operators (the tests use both).
 
 #include "CVFluxes.H"
+#include "Diffusion_K.H"
 
 #include <AMReX_Array.H>
 #include <AMReX_Geometry.H>
@@ -59,9 +60,10 @@ enum ImplicitCoef : int { coef_P = 0, coef_XM, coef_XP, coef_YM, coef_YP, coef_Z
 //! g is the cell-centred diffusivity (gamma for a scalar, nu for momentum)
 //! with one ghost cell filled, F the transport fluxes with one ghost cell,
 //! z_nd the node heights.
+//! mean: the face average of g (Diffusion_K.H), the explicit operators'.
 void implicit_coefficients (Loc loc, const amrex::Array<const amrex::MultiFab*, AMREX_SPACEDIM>& F,
                             const amrex::MultiFab& g, const amrex::MultiFab& z_nd, const Mesh& mesh,
-                            const amrex::Geometry& geom, amrex::MultiFab& A);
+                            const amrex::Geometry& geom, amrex::MultiFab& A, FaceMean mean = FaceMean::arithmetic);
 
 //! out = A1 q on the valid points of a field at loc (q needs one ghost cell
 //! filled).

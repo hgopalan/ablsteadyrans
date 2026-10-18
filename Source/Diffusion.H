@@ -25,6 +25,7 @@
 // wall model (SurfaceLayer.H) sets the ground faces' fluxes in the residual.
 
 #include "CVFluxes.H"
+#include "Diffusion_K.H"
 
 #include <AMReX_Array.H>
 #include <AMReX_Geometry.H>
@@ -32,16 +33,17 @@
 
 namespace ablsteady {
 
+//! mean: how the cell diffusivity is averaged to the faces (Diffusion_K.H).
 //! Diffusive fluxes gamma (grad q . A) of a cell-centred q on the cell faces,
 //! into G (defined here if it is not defined yet). q and gamma need one ghost
 //! cell filled; z_nd is the mesh's node heights with one ghost node.
 void scalar_diffusive_fluxes (const amrex::MultiFab& q, const amrex::MultiFab& gamma, const amrex::MultiFab& z_nd,
                               const Mesh& mesh, const amrex::Geometry& geom,
-                              amrex::Array<amrex::MultiFab, AMREX_SPACEDIM>& G);
+                              amrex::Array<amrex::MultiFab, AMREX_SPACEDIM>& G, FaceMean mean = FaceMean::arithmetic);
 
 //! out = D(q) on the cells.
 void scalar_diffusion (const amrex::MultiFab& q, const amrex::MultiFab& gamma, const amrex::MultiFab& z_nd,
-                       const Mesh& mesh, const amrex::Geometry& geom, amrex::MultiFab& out);
+                       const Mesh& mesh, const amrex::Geometry& geom, amrex::MultiFab& out, FaceMean mean = FaceMean::arithmetic);
 
 //! Fluxes tau_c . A of c-momentum through the control-volume faces of
 //! velocity component c (G[c][d] on the d-faces), defined here if needed.
@@ -49,12 +51,12 @@ void scalar_diffusion (const amrex::MultiFab& q, const amrex::MultiFab& gamma, c
 void momentum_diffusive_fluxes (const amrex::Array<const amrex::MultiFab*, AMREX_SPACEDIM>& vel,
                                 const amrex::MultiFab& nu, const amrex::MultiFab& z_nd, const Mesh& mesh,
                                 const amrex::Geometry& geom,
-                                amrex::Array<amrex::Array<amrex::MultiFab, AMREX_SPACEDIM>, AMREX_SPACEDIM>& G);
+                                amrex::Array<amrex::Array<amrex::MultiFab, AMREX_SPACEDIM>, AMREX_SPACEDIM>& G, FaceMean mean = FaceMean::arithmetic);
 
 //! out[c] = D_c(u) on the c-faces, for c = 0, 1, 2.
 void momentum_diffusion (const amrex::Array<const amrex::MultiFab*, AMREX_SPACEDIM>& vel, const amrex::MultiFab& nu,
                          const amrex::MultiFab& z_nd, const Mesh& mesh, const amrex::Geometry& geom,
-                         const amrex::Array<amrex::MultiFab*, AMREX_SPACEDIM>& out);
+                         const amrex::Array<amrex::MultiFab*, AMREX_SPACEDIM>& out, FaceMean mean = FaceMean::arithmetic);
 
 } // namespace ablsteady
 

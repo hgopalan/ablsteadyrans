@@ -6,6 +6,8 @@
 | `askervein_mesh.json` | Statistics and quality report for RT-1.4.1 / RT-1.4.2 | `Tests/check_mesh.py Tests/Gold/askervein_mesh.json --write -- ablsteady Tests/Decks/inputs_mesh_askervein terrain.file=extern_erf/askervein.txt` |
 | `steep_ridge_mesh.json` | Quality report for RT-1.4.2 | `Tests/check_mesh.py Tests/Gold/steep_ridge_mesh.json --write -- ablsteady Tests/Decks/inputs_mesh_steep_ridge` |
 | `hill2d_plt00000/` | Plotfile for RT-1.4.3 | `ablsteady Tests/Decks/inputs_mesh_hill2d` |
+| `bc_neutral_flat_plt00000/` | Boundary fluxes and residual of the fixed log-law state, RT-1.8.1 | `boundary_fluxes Tests/Decks/inputs_bc_neutral_flat` |
+| `closure_column_plt00000/` | Full residual of the equilibrium log-law column with the k-L closure, RT-1.9.1 | `closure_column Tests/Decks/inputs_closure_column` |
 
 The ERF golds are a cross-code check: they come from ERF, not from ablsteady. The others are change detectors made
 by ablsteady itself. A gold changes only in a reviewed commit that says why.

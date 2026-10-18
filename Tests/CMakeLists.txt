@@ -32,6 +32,7 @@ add_executable(unit_tests
     Unit/test_Residual.cpp
     Unit/test_SurfaceLayer.cpp
     Unit/test_BoundaryConditions.cpp
+    Unit/test_Closure.cpp
 )
 target_include_directories(unit_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Unit)
 target_link_libraries(unit_tests PRIVATE ablsteady_core GTest::gtest)
@@ -47,11 +48,15 @@ add_executable(wall_distance Tools/wall_distance.cpp)
 target_link_libraries(wall_distance PRIVATE ablsteady_core)
 add_executable(boundary_fluxes Tools/boundary_fluxes.cpp)
 target_link_libraries(boundary_fluxes PRIVATE ablsteady_core)
+# RT-1.9.1: the full residual of the equilibrium log-law column with the closure.
+add_executable(closure_column Tools/closure_column.cpp)
+target_link_libraries(closure_column PRIVATE ablsteady_core)
 if(ABLSTEADY_GPU_BACKEND STREQUAL "CUDA")
     setup_target_for_cuda_compilation(unit_tests)
     setup_target_for_cuda_compilation(poisson_projection)
     setup_target_for_cuda_compilation(wall_distance)
     setup_target_for_cuda_compilation(boundary_fluxes)
+    setup_target_for_cuda_compilation(closure_column)
 endif()
 
 # --- How to launch on N ranks -------------------------------------------------
@@ -303,6 +308,22 @@ if(ABLSTEADY_PRECISION STREQUAL "DOUBLE")
                        RUN_DIR ${BC_DIR} FIXTURES_REQUIRED bc_neutral_flat
                        COMMAND ${FCOMPARE} --rel_tol 1e-10 bc_neutral_flat_plt00000
                                ${GOLD}/bc_neutral_flat_plt00000)
+endif()
+
+# --- RT-1.9.1: the neutral log-law column with the k-L closure (sub-phase 1.9)
+# Double precision only (the gold is double).
+if(ABLSTEADY_PRECISION STREQUAL "DOUBLE")
+    set(CL_DIR ${CMAKE_CURRENT_BINARY_DIR}/run/rt_closure_column)
+    ablsteady_add_test(NAME rt_closure_column NP 2 LABELS "regression;smoke" RUN_DIR ${CL_DIR}
+                       FIXTURES_SETUP closure_column
+                       PREFIX ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/check_closure.py
+                              --ustar 0.35 --z0 0.1 --direction 15 --dz 15.625 --
+                       COMMAND $<TARGET_FILE:closure_column> ${DECKS}/inputs_closure_column
+                               ${ABLSTEADY_TEST_AMREX_FLAGS})
+    ablsteady_add_test(NAME rt_closure_column_matches NP 1 LABELS "regression;smoke"
+                       RUN_DIR ${CL_DIR} FIXTURES_REQUIRED closure_column
+                       COMMAND ${FCOMPARE} --rel_tol 1e-10 closure_column_plt00000
+                               ${GOLD}/closure_column_plt00000)
 endif()
 
 # --- Reference archives (sub-phase 1.1): ablsteady_refavg end to end --------

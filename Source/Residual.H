@@ -39,6 +39,7 @@
 // a cell of volume V).
 // jvp gives J v by a forward difference of the full residual.
 
+#include "Closure.H"
 #include "Convection.H"
 #include "Forcing.H"
 #include "Mesh.H"
@@ -72,12 +73,24 @@ struct JvpScales
 };
 
 //! What the residual needs besides the state. Diffusivities are cell-centred
-//! with one ghost cell filled.
+//! with one ghost cell filled. Either the three diffusivity fields are given
+//! (held fixed), or a closure computes them from the state (sub-phase 1.9,
+//! Closure.H): then nu, gamma_theta and gamma_tke must be null, wall_distance
+//! must be set, and the residual of k gains the closure's sources.
 struct ResidualInputs
 {
     const amrex::MultiFab* nu{nullptr};           //!< momentum viscosity nu + nu_t (m^2/s)
     const amrex::MultiFab* gamma_theta{nullptr};  //!< theta diffusivity, kappa + nu_t / Pr_t (m^2/s)
     const amrex::MultiFab* gamma_tke{nullptr};    //!< k diffusivity, nu + nu_t / sigma_k (m^2/s)
+    //! The face average of the diffusivities (Diffusion_K.H); with a closure,
+    //! the closure's option is used instead.
+    FaceMean face_mean{FaceMean::arithmetic};
+    //! The k–L closure (null: the diffusivities above). Its roughness is the
+    //! surface layer's z0 (0 without one, as ERF).
+    const Closure* closure{nullptr};
+    //! The wall distance the closure reads (cell-centred, one ghost cell):
+    //! height_above_ground() or the Tucker distance.
+    const amrex::MultiFab* wall_distance{nullptr};
     ReferenceProfile theta_ref;                   //!< hydrostatic reference theta_ref(z), a 1-D profile
     ConvectionOptions momentum;                   //!< momentum convection (k is always bounded upwind)
     ConvectionOptions theta;                      //!< theta convection
@@ -99,9 +112,10 @@ struct ResidualInputs
 };
 
 //! R(q). q's ghost cells must be filled (two layers: MUSCL). Aborts, naming
-//! the input, on missing fields or invalid options.
+//! the input, on missing fields or invalid options. With a closure, fields
+//! (when given) receives what it evaluated at q.
 void residual (const State& q, const ResidualInputs& in, const Mesh& mesh, const amrex::Geometry& geom,
-               ResidualFields& R);
+               ResidualFields& R, ClosureFields* fields = nullptr);
 
 //! The fields with an implicit-side operator.
 enum class Equation { u, v, w, theta, tke };
@@ -123,10 +137,12 @@ void line_jacobian (const State& q, const ResidualInputs& in, Equation eq, int d
 //! With a wall model (and eq not w), surface must be the state's surface
 //! layer (compute_surface_state): the first cells' rows lose the ground
 //! neighbour, u and v gain the wall stress's Picard coefficient, and k's
-//! rows are the wall-k rows.
+//! rows are the wall-k rows. With a closure, fields must be its evaluation
+//! at the state (Closure::evaluate): the diffusivities come from it and k's
+//! diagonal gains the point-implicit source term dSdk.
 void line_jacobian (const amrex::Array<const amrex::MultiFab*, AMREX_SPACEDIM>& F, const amrex::MultiFab& z_nd,
                     const ResidualInputs& in, Equation eq, int dir, const Mesh& mesh, const amrex::Geometry& geom,
-                    amrex::MultiFab& tri, const SurfaceState* surface = nullptr);
+                    amrex::MultiFab& tri, const SurfaceState* surface = nullptr, const ClosureFields* fields = nullptr);
 
 //! Jv = (R(q + eps v) - R(q)) / eps, with
 //!   eps = sqrt(machine epsilon) (1 + mean |q~|) / rms(v~)

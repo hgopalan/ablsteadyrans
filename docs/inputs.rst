@@ -200,4 +200,11 @@ The boundary conditions (:doc:`boundary`) read ``bc.*`` through ``read_boundary_
 ``read_surface_layer_options()``; their table is in :doc:`boundary`. In this version only the regression tool
 ``boundary_fluxes`` reads them: the application has no solver yet, so setting them in an ablsteady deck stops the run.
 
-The other namespaces (``init``, ``turb``) have no inputs yet.
+``turb``
+--------
+
+The k–L closure (:doc:`closure`) reads ``turb.*`` through ``read_closure_options()``; its table is in :doc:`closure`.
+In this version only the regression tool ``closure_column`` reads them: the application has no solver yet, so
+setting them in an ablsteady deck stops the run.
+
+The ``init`` namespace has no inputs yet.

@@ -9,7 +9,7 @@ namespace {
 
 template <int D>
 void scalar_kernel (const amrex::MultiFab& q, const amrex::MultiFab& gamma, const amrex::MultiFab& z_nd,
-                    const amrex::GpuArray<amrex::Real, 3>& dxinv, amrex::Array<amrex::MultiFab, AMREX_SPACEDIM>& G)
+                    const amrex::GpuArray<amrex::Real, 3>& dxinv, bool logz, amrex::Array<amrex::MultiFab, AMREX_SPACEDIM>& G)
 {
     using namespace stencil;
     constexpr int S = 1 << D;
@@ -23,14 +23,14 @@ void scalar_kernel (const amrex::MultiFab& q, const amrex::MultiFab& gamma, cons
         {
             const Metric m = metric_at<S>(z, i, j, k, dxinv);
             const auto gr = grad_at<CC, S>(a, i, j, k, m, dxinv);
-            g(i, j, k) = interp<CC, S>(gm, i, j, k) * area_dot<D>(m, gr);
+            g(i, j, k) = face_gamma<S>(gm, i, j, k, logz) * area_dot<D>(m, gr);
         });
     }
 }
 
 template <int C, int D>
 void momentum_kernel (const amrex::Array<const amrex::MultiFab*, AMREX_SPACEDIM>& vel, const amrex::MultiFab& nu,
-                      const amrex::MultiFab& z_nd, const amrex::GpuArray<amrex::Real, 3>& dxinv,
+                      const amrex::MultiFab& z_nd, const amrex::GpuArray<amrex::Real, 3>& dxinv, bool logz,
                       amrex::Array<amrex::MultiFab, AMREX_SPACEDIM>& G)
 {
     using namespace stencil;
@@ -51,26 +51,26 @@ void momentum_kernel (const amrex::Array<const amrex::MultiFab*, AMREX_SPACEDIM>
             const auto gv = grad_at<YF, S>(v, i, j, k, m, dxinv);
             const auto gw = grad_at<ZF, S>(w, i, j, k, m, dxinv);
             const auto tau = stress_row<C>(gu, gv, gw);
-            g(i, j, k) = interp<CC, S>(n, i, j, k) * area_dot<D>(m, tau);
+            g(i, j, k) = face_gamma<S>(n, i, j, k, logz) * area_dot<D>(m, tau);
         });
     }
 }
 
 template <int C>
 void momentum_component (const amrex::Array<const amrex::MultiFab*, AMREX_SPACEDIM>& vel, const amrex::MultiFab& nu,
-                         const amrex::MultiFab& z_nd, const amrex::GpuArray<amrex::Real, 3>& dxinv,
+                         const amrex::MultiFab& z_nd, const amrex::GpuArray<amrex::Real, 3>& dxinv, bool logz,
                          amrex::Array<amrex::MultiFab, AMREX_SPACEDIM>& G)
 {
-    momentum_kernel<C, 0>(vel, nu, z_nd, dxinv, G);
-    momentum_kernel<C, 1>(vel, nu, z_nd, dxinv, G);
-    momentum_kernel<C, 2>(vel, nu, z_nd, dxinv, G);
+    momentum_kernel<C, 0>(vel, nu, z_nd, dxinv, logz, G);
+    momentum_kernel<C, 1>(vel, nu, z_nd, dxinv, logz, G);
+    momentum_kernel<C, 2>(vel, nu, z_nd, dxinv, logz, G);
 }
 
 } // namespace
 
 void scalar_diffusive_fluxes (const amrex::MultiFab& q, const amrex::MultiFab& gamma, const amrex::MultiFab& z_nd,
                               const Mesh& mesh, const amrex::Geometry& geom,
-                              amrex::Array<amrex::MultiFab, AMREX_SPACEDIM>& G)
+                              amrex::Array<amrex::MultiFab, AMREX_SPACEDIM>& G, FaceMean mean)
 {
     const char* op = "scalar_diffusive_fluxes";
     check_operator_field(op, "q", q, Loc::cell, mesh, 1);
@@ -79,23 +79,24 @@ void scalar_diffusive_fluxes (const amrex::MultiFab& q, const amrex::MultiFab& g
     if (G[0].empty()) { define_cv_fluxes(Loc::cell, mesh.detJ.boxArray(), mesh.detJ.DistributionMap(), G); }
     check_cv_fluxes(op, Loc::cell, G, mesh);
     const auto dxinv = geom.InvCellSizeArray();
-    scalar_kernel<0>(q, gamma, z_nd, dxinv, G);
-    scalar_kernel<1>(q, gamma, z_nd, dxinv, G);
-    scalar_kernel<2>(q, gamma, z_nd, dxinv, G);
+    const bool logz = (mean == FaceMean::logarithmic);
+    scalar_kernel<0>(q, gamma, z_nd, dxinv, logz, G);
+    scalar_kernel<1>(q, gamma, z_nd, dxinv, logz, G);
+    scalar_kernel<2>(q, gamma, z_nd, dxinv, logz, G);
 }
 
 void scalar_diffusion (const amrex::MultiFab& q, const amrex::MultiFab& gamma, const amrex::MultiFab& z_nd,
-                       const Mesh& mesh, const amrex::Geometry& geom, amrex::MultiFab& out)
+                       const Mesh& mesh, const amrex::Geometry& geom, amrex::MultiFab& out, FaceMean mean)
 {
     amrex::Array<amrex::MultiFab, AMREX_SPACEDIM> G;
-    scalar_diffusive_fluxes(q, gamma, z_nd, mesh, geom, G);
+    scalar_diffusive_fluxes(q, gamma, z_nd, mesh, geom, G, mean);
     flux_divergence(Loc::cell, G, mesh, geom, out);
 }
 
 void momentum_diffusive_fluxes (const amrex::Array<const amrex::MultiFab*, AMREX_SPACEDIM>& vel,
                                 const amrex::MultiFab& nu, const amrex::MultiFab& z_nd, const Mesh& mesh,
                                 const amrex::Geometry& geom,
-                                amrex::Array<amrex::Array<amrex::MultiFab, AMREX_SPACEDIM>, AMREX_SPACEDIM>& G)
+                                amrex::Array<amrex::Array<amrex::MultiFab, AMREX_SPACEDIM>, AMREX_SPACEDIM>& G, FaceMean mean)
 {
     const char* op = "momentum_diffusive_fluxes";
     const char* names[3] = {"vel[0]", "vel[1]", "vel[2]"};
@@ -109,17 +110,18 @@ void momentum_diffusive_fluxes (const amrex::Array<const amrex::MultiFab*, AMREX
         check_cv_fluxes(op, velocity_loc(c), G[c], mesh);
     }
     const auto dxinv = geom.InvCellSizeArray();
-    momentum_component<0>(vel, nu, z_nd, dxinv, G[0]);
-    momentum_component<1>(vel, nu, z_nd, dxinv, G[1]);
-    momentum_component<2>(vel, nu, z_nd, dxinv, G[2]);
+    const bool logz = (mean == FaceMean::logarithmic);
+    momentum_component<0>(vel, nu, z_nd, dxinv, logz, G[0]);
+    momentum_component<1>(vel, nu, z_nd, dxinv, logz, G[1]);
+    momentum_component<2>(vel, nu, z_nd, dxinv, logz, G[2]);
 }
 
 void momentum_diffusion (const amrex::Array<const amrex::MultiFab*, AMREX_SPACEDIM>& vel, const amrex::MultiFab& nu,
                          const amrex::MultiFab& z_nd, const Mesh& mesh, const amrex::Geometry& geom,
-                         const amrex::Array<amrex::MultiFab*, AMREX_SPACEDIM>& out)
+                         const amrex::Array<amrex::MultiFab*, AMREX_SPACEDIM>& out, FaceMean mean)
 {
     amrex::Array<amrex::Array<amrex::MultiFab, AMREX_SPACEDIM>, AMREX_SPACEDIM> G;
-    momentum_diffusive_fluxes(vel, nu, z_nd, mesh, geom, G);
+    momentum_diffusive_fluxes(vel, nu, z_nd, mesh, geom, G, mean);
     for (int c = 0; c < 3; ++c) { flux_divergence(velocity_loc(c), G[c], mesh, geom, *out[c]); }
 }
 

@@ -75,3 +75,4 @@ Testing/
 docs/_build/
 # The docs Makefile is source, not CMake output.
 !docs/Makefile
+__pycache__/
