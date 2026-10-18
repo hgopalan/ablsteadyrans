@@ -3,6 +3,7 @@
 // inlet), and the ghost fills, Dirichlet rows, implicit-side folds, damping
 // layers, inflow profiles and input checks.
 #include "BoundaryConditions.H"
+#include "MassFlux_K.H"
 #include "ImplicitOperator.H"
 #include "InflowProfile.H"
 #include "MassFlux.H"
@@ -544,15 +545,19 @@ TEST(BoundaryFill, GroundGradientIsTheWallLaw)
     }
     std::feclearexcept(FE_ALL_EXCEPT);
     amrex::setFPExcept(prev_fpe);
-    // Homogeneous: gradient and value rules give zero, k stays even.
+    // Homogeneous: gradient and value rules give zero, k stays even; the
+    // ground w is the no-flux value of the (perturbation) u, v (1.16).
     bc.fill_ghosts(q, nullptr, kBuoy, true);
+    const auto dxinv = c.geom.InvCellSizeArray();
     for (amrex::MFIter mfi(q.p, false); mfi.isValid(); ++mfi) {
-        const auto u = host_copy(q.u, mfi), w = host_copy(q.w, mfi), k = host_copy(q.tke, mfi);
+        const auto u = host_copy(q.u, mfi), v = host_copy(q.v, mfi), w = host_copy(q.w, mfi), k = host_copy(q.tke, mfi),
+                   zn = host_copy(q.z_phys_nd, mfi);
         amrex::Box gb = mfi.validbox();
         gb.setBig(2, 0);
         amrex::LoopOnCpu(gb, [&] (int i, int j, int) {
             EXPECT_EQ(u(amrex::IntVect(i, j, -1)), u(amrex::IntVect(i, j, 1)));   // G = 0: g1 = c1
-            EXPECT_EQ(w(amrex::IntVect(i, j, 0)), 0);
+            const amrex::Real wn = ablsteady::massflux::no_flux_w(zn.const_array(), u.const_array(), v.const_array(), i, j, 0, dxinv[0], dxinv[1]);
+            EXPECT_NEAR(w(amrex::IntVect(i, j, 0)), wn, tol(1e-14, 1e-6) * (1 + std::abs(wn)));
             EXPECT_EQ(k(amrex::IntVect(i, j, -1)), k(amrex::IntVect(i, j, 0)));
         });
     }

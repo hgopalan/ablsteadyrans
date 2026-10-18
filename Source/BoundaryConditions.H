@@ -21,6 +21,9 @@
 //                                  centre; k and p' zero gradient
 //   geostrophic    (SlipWall)      the top held at the geostrophic wind (u_g, v_g of
 //                                  the Coriolis options), w = 0; theta as slip_wall
+// On the ground and the top the normal velocity's value is the one with no
+// flux through the face, Omega = 0: w = z_x u_f + z_y v_f (MassFlux_K.H), 0
+// over flat ground; the initializer's first guess uses the same (1.12).
 //
 // Ghost fills (two layers, the state's ngrow_state). Along the face normal
 // with interior values c0, c1 (first and second inside) and ghosts g1, g2:
@@ -103,6 +106,16 @@ struct BoundaryInputs
     //! Rayleigh layer: start height (m, > 0 enables) and coefficient (1/s, >= 0).
     amrex::Real rayleigh_zdamp{0};
     amrex::Real rayleigh_dampcoef{0};
+    //! The fields the Rayleigh layer damps (bc.rayleigh_fields, names among
+    //! u v w theta tke; default all; ERF's hill decks damp w alone). The
+    //! sponge damps every field.
+    std::array<bool, 5> rayleigh_fields{true, true, true, true, true};
+    //! bc.rayleigh_height: the height the layer's coefficient and theta
+    //! reference use (u, v and k relax towards the inflow profile at the
+    //! height above the ground, as the inflow itself),
+    //! absolute (ERF) or above the local ground (a layer that follows a
+    //! tall ridge).
+    bool rayleigh_above_ground{false};
     //! Sponge: width (m, > 0 enables) and strength (1/s, >= 0).
     amrex::Real sponge_width{0};
     amrex::Real sponge_strength{0};
@@ -167,7 +180,7 @@ public:
     //! apply_rows, which overwrites the Dirichlet face points it touches.
     void add_damping (const State& q, ResidualFields& R) const;
     //! Its diagonal, c(x, y, z), added to the implicit side (apply_to_implicit calls it).
-    void add_damping_to_implicit (Loc loc, const amrex::MultiFab& z_nd, amrex::MultiFab& A) const;
+    void add_damping_to_implicit (Equation eq, Loc loc, const amrex::MultiFab& z_nd, amrex::MultiFab& A) const;
 
     [[nodiscard]] const BoundaryInputs& inputs () const { return m_in; }
     [[nodiscard]] const InflowProfile& profile () const { return m_profile; }

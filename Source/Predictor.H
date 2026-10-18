@@ -64,11 +64,19 @@
 // (0, 1] (simplec.rotation_relax, 0.3) and a_P - sum a_nb the row's net
 // implicit diagonal (the wall drag, the damping and the value folds; the
 // transport weights cancel against their neighbours), the u and v rows gain
-// f^2 tau_c on the diagonal (and d) and the Coriolis force
+// f^2 max(tau_c, tau_own) on the diagonal (and d) and the Coriolis force
 // of the change the other component's residual predicts on the right-hand
-// side, -f tau_c R_v on u and +f tau_c R_u on v (the other component's
-// residual at this face: the mean of the four faces around it, as the force
-// itself). Both vanish at a fixed point. Why this tau_c: the backward Euler
+// side, -f tau_c <R_v> - f tau R_v' on u and +f tau_c <R_u> + f tau R_u' on
+// v: <R> the horizontal mean of the other component's residual per level
+// (the inertial oscillation is horizontally uniform, so the inertial time
+// applies to the mean alone), R' = R - <R> its fluctuation at this face
+// (the mean of the four faces around it, as the force itself) with the
+// row's own step tau = 1/(1/dtau + the net diagonal). Both vanish at a
+// fixed point. Why the split: a horizontally varying residual (an internal
+// gravity wave of an inviscid inversion, the flow over a ridge) injected
+// with tau_c grew by 1.4 per iteration until the SER ramp collapsed (the
+// Neutral_ABL_Flat and Neutral_Hill_2D bursts of the review); the mean
+// carries no such mode. Why this tau_c: the backward Euler
 // step of the rotation alone (tau_c = dtau) damps the mode by
 // (1 + f^2 dtau^2)^(-1/2), i.e. (f dtau)^2 / 2 per iteration, and the
 // horizontal CFL keeps f dtau at 0.01, so the inertial oscillation of
@@ -154,7 +162,8 @@ struct MomentumPredictorResult
 //! before the next residual). Aborts, naming the argument, on a wrong layout
 //! or sweeps < 1.
 //! rotation_relax (in (0, 1]): the rotation's step tau_c = 1 / max(|f| /
-//! rotation_relax, a_P - sum a_nb) (the header).
+//! rotation_relax, a_P - sum a_nb), applied to the horizontal mean of the
+//! other component's residual (the header).
 MomentumPredictorResult momentum_predictor (State& q, const ResidualFields& R,
                                             const amrex::Array<const amrex::MultiFab*, AMREX_SPACEDIM>& F,
                                             const ResidualInputs& in,

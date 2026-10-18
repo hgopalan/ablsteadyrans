@@ -183,6 +183,98 @@ iteration 450, and with the default every path tried (two compilers, one to thre
 iterations (0.2: 5600–5900). The deck keeps the k floor of 1e-6 so that round-off at the machine-epsilon floor does
 not pick the path.
 
+Terrain cases (sub-phase 1.16)
+------------------------------
+
+**The lagged sweeps over terrain.** ERF's 2-D hill (``Tests/Decks/inputs_steady_hill2d``) with the flat deck's
+settings (four sweeps, CFL cap 2) brings the residual down to 0.1–0.2 of its reference in 2000–4000 iterations and
+then grows slowly (an e-folding of about 400 iterations, in the :math:`w` residual first, a tilted pattern of three
+wavelengths across the periodic domain). The growth is there with gravity off, with zero lapse rate, with Coriolis
+off, at CFL 1 (slower), with ``rotation_relax`` 0.3, with a stronger or deeper Rayleigh layer, with all five fields
+damped, with :math:`\alpha_p = 0.5`, with ``turb.nut_relax`` 0.3, and on one rank as on two (bit for bit); a 1 m and
+a 1 cm hill grow the same way, so any horizontal variation seeds it (the flat deck never does: nothing varies
+horizontally). It is gone with first-order upwind convection (no defect correction) and gone with 8, 16 or 64
+sweeps at the same second-order residual: the lagged x neighbours of the z-line Jacobi sweeps are the carrier, with
+the thresholds of :doc:`predictor` (CFL 2.4 at four sweeps, 3.7 at eight, 6.1 at sixteen), passed locally near the
+crest at a nominal cap of 2. ERF's anelastic solver never splits the operator (an explicit RK3 at Courant 0.375
+with fifth-order upwind, inside its stability region), which is why it never sees this. OpenFOAM's SIMPLEC converges
+the predictor's linear system before the pressure step, which the lagged sweeps approximate; 16 sweeps and 64 give
+the same path here. The terrain decks run 16 sweeps with a cap of 4 (the fastest of the converged variants) and ``simplec.rotation_relax``
+= 1: with the planar-mean split (:doc:`predictor`) the default 0.3 converges too, in twice the iterations (table).
+
+**ERF's 2-D hill (RT-1.16.1).** 128 × 1 × 64 cells, the Witch of Agnesi (100 m, half-width 500 m), the flat
+deck's sounding and forcing, Rayleigh damping of :math:`w` and :math:`\theta` from 700 m (0.2 1/s). The verdict and
+ERF's ``check_hill.py --physics``, every check passing: crest speed-up 0.59, 0.50 and 0.43 in the three lowest cells
+(Jackson and Hunt's :math:`2h/L` = 0.4, the window 0.2–0.8), upstream :math:`u_*` 0.354 m/s, the upstream log law
+within 0.1, 1.7 and 4.2 % in the three lowest cells. Against ERF 92410d57's own run of the deck on the same
+machine: at 6 h (ERF's physics run) the crest speed-up profiles agree within 0.03 and :math:`w` within 0.05 m/s, and
+:math:`u` differs by up to 1.2 m/s in the 400–700 m band, where ERF is a third of an inertial period into its spin-up
+(its :math:`u` still changes by 0.65 m/s between 8 and 12 h); at 24 h ERF is within 0.33 m/s (RMS 0.12) of the steady
+state while still changing by 0.28 m/s per 6 h.
+
+.. list-table:: Sweeps and CFL cap on the 2-D hill (two ranks, M-series Mac, ``rotation_relax`` 1 unless noted; the
+   machine shared with other runs except where marked idle)
+   :header-rows: 1
+   :widths: 22 18 18 18
+
+   * - sweeps / cap
+     - iterations
+     - wall (s)
+     - verdict
+   * - 4 / 2
+     - 20 000
+     - 119
+     - not steady (grows from 2400)
+   * - 8 / 2
+     - 8124
+     - 97
+     - steady
+   * - 16 / 2
+     - 7847
+     - 112
+     - steady
+   * - 8 / 4
+     - 5173
+     - 71
+     - steady
+   * - **16 / 4**
+     - **4590**
+     - **77 (49 idle)**
+     - **steady** (the deck)
+   * - 16 / 4, ``rotation_relax`` 0.3
+     - 8577
+     - 93 (idle)
+     - steady
+
+**ERF's 3-D hill (RT-1.16.2).** 64 × 64 × 20 cells, the hill of revolution (100 m, 500 m), Rayleigh damping of
+:math:`w` and :math:`\theta` from 550 m; 16 sweeps, cap 4, ``rotation_relax`` 1: the verdict after 2092 iterations
+(148 s on four ranks, idle machine; 4538 iterations at ``rotation_relax`` 0.3, 8475 at a cap of 2) and ERF's
+``check_hill3d.py --physics`` passing
+every check (crest speed-up 0.39, 0.27, 0.21 against :math:`1.6h/L` = 0.32 within a factor of two, upstream
+:math:`u_*` 0.367 m/s, the log law within 0.0, 6.6 and 12 %). ERF's 4 h run of its deck (9600 steps, 590 s on four
+ranks) passes the same checks and differs from the steady state by up to 1.6 m/s in :math:`u` (RMS 1.2) and 0.1 m/s
+in :math:`w`: four hours is a quarter of an inertial period.
+
+**A smooth plateau (beyond the plan).** The same settings on a periodic plateau with tanh ramps
+(``Tests/Decks/inputs_steady_ramp2d``, the terrain file from ``tools/make_ramp_terrain.py``: 100 m high, ramps of 250
+m at ±750 m, the maximum slope 0.2 of the Witch of Agnesi, both codes reading the same file to 1e-10 m): the verdict
+after 8635 iterations (95 s on two ranks, ``rotation_relax`` 0.3), ERF's 24 h run within 0.37 m/s of the steady
+state in :math:`u` (RMS 0.14) and 0.13 m/s in :math:`w`, the crest speed-up profiles within 0.04 (0.52 against 0.51
+in the first cell), as on the hill.
+
+**Askervein (RT-1.16.3, the convergence half).** The coarse mesh of RT-1.12.1 (30 × 30 × 18) with the log-law
+inflow, the outflow and slip sides, no Coriolis, four sweeps, cap 2: the verdict after 156 iterations (2 s on two
+ranks). The residual is largest in the two columns next to the outflow (100 times the interior, a checkerboard in
+:math:`R_w`); with ``steady.residual_tol`` 1e-10 it keeps falling there (1e-9 after 706 iterations, the interior at
+1e-13), so the outflow needs neither a sponge nor an outlet drag. The 5 % comparison with ERF's URANS on lines A
+and AA needs the full mesh and the reference run (Kestrel) and is not in this version.
+
+**Time per step** (idle machine). On the 2-D hill one SIMPLEC iteration with 16 sweeps costs 1.3 ERF steps (10.8
+against 8.1 ms on two ranks); the steady state takes 4590 iterations against the 57 600 steps of ERF's 24 h (3.1
+against ERF's 6 h physics run, which is not steady aloft): 49 s against 116 s (6 h) and about 460 s (24 h). On the
+3-D hill one iteration costs 2.8 ERF steps (71 against 25 ms on four ranks) and the steady state 2092 iterations
+against ERF's 9600 steps of 4 h: 148 s against 242 s, with ERF still a quarter of an inertial period from steady.
+
 Variations from the plan
 ------------------------
 
@@ -195,3 +287,8 @@ Variations from the plan
   profile serves as the first guess on periodic domains (``init.first_guess = profile`` without an inflow face).
 - The constant pressure-gradient force ``forcing.pressure_gradient`` (ERF's ``abl_pressure_grad``) drives the 1-D
   column; the plan's column had no forcing specified.
+- Sub-phase 1.16: the terrain decks run 16 z-line sweeps at a CFL cap of 4 (the plan's four sweeps grow over
+  terrain, above); the ground and top Dirichlet value of :math:`w` is the no-flux value; the Rayleigh layer selects
+  its fields and relaxes :math:`\theta` to the sounding at the absolute height; the rotation's point-implicit term
+  splits the other residual into its horizontal mean and the fluctuation (:doc:`predictor`). The H100-against-CPU
+  comparison (RT-1.16.4) and the Askervein line comparison are deferred to Kestrel.

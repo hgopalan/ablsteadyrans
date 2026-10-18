@@ -31,8 +31,8 @@ for it is in parentheses; the Poisson types follow ERF's ``get_fft_bc`` for that
      - Zero gradient for every field; p' = 0 on the face.
    * - ``slip_wall`` (SlipWall)
      - x, y, ground, top
-     - Normal velocity 0; the tangential velocities, θ and k even. At the top θ's gradient is ``bc.zhi_theta_grad``
-       instead (a slip-wall ground keeps θ even).
+     - Normal velocity 0 (on the ground and the top: the no-flux value, below); the tangential velocities, θ and k
+       even. At the top θ's gradient is ``bc.zhi_theta_grad`` instead (a slip-wall ground keeps θ even).
    * - ``no_slip_wall`` (NoSlipWall)
      - x, y, ground, top
      - Velocity equal to the wall's on the face: 0, or the tangential velocity ``bc.<face>_wall_velocity = u v w``
@@ -41,12 +41,28 @@ for it is in parentheses; the Poisson types follow ERF's ``get_fft_bc`` for that
        top).
    * - ``surface_layer`` (surface_layer)
      - ground
-     - The wall model (:doc:`surface`): w = 0; u, v and θ continued below the ground with the wall law's gradient at
-       the first cell centre; k and p' even.
+     - The wall model (:doc:`surface`): w the no-flux value (below); u, v and θ continued below the ground with the
+       wall law's gradient at the first cell centre; k and p' even.
    * - ``geostrophic`` (SlipWall)
      - top
-     - u and v held at the geostrophic wind of the Coriolis options, w = 0; θ as ``slip_wall``. Needs Coriolis with
-       geostrophic forcing.
+     - u and v held at the geostrophic wind of the Coriolis options, w the no-flux value (below); θ as
+       ``slip_wall``. Needs Coriolis with geostrophic forcing.
+
+**The no-flux ground and top (sub-phase 1.16).** On a terrain-following mesh the face-normal velocity through the
+ground and the top is the contravariant flux :math:`\Omega = w - z_x u - z_y v` (:doc:`transport`), not w. The
+Dirichlet value of w on those faces is therefore the no-flux value
+
+.. math::
+
+   w_{\mathrm{face}} = z_x\,\bar u + z_y\,\bar v ,
+
+with :math:`z_x, z_y` the slopes of the face (``massflux::slope_x/y`` on the nodal heights) and :math:`\bar u,
+\bar v` the face-centre means of the two neighbouring u (v) faces, exactly the interpolation ``omega_from_w`` uses, so
+:math:`\Omega = 0` on the face to round-off after a fill (``fill_no_flux_w``; UT in ``test_Terrain.cpp``). The ghosts
+mirror about that value and the Dirichlet rows of the residual are :math:`w - w_{\mathrm{face}}`. Over flat ground
+the value is 0 (the earlier convention). The relation is linear, so the homogeneous fill of a perturbation gives the
+same value of its own u, v. Up to sub-phase 1.15 the face held w = 0, a flux :math:`-z_x u` through the ground
+over a slope that the pressure correction then had to carry; over ERF's 2-D hill it fed the residual every iteration.
 
 The defaults are periodic sides, a ``surface_layer`` ground and a ``slip_wall`` top: ERF's canonical ABL cases.
 Lateral faces take ``periodic``, ``inflow``, ``outflow``, ``slip_wall`` or ``no_slip_wall`` (the two walls since
@@ -177,14 +193,28 @@ Both layers are off by default. With :math:`q_{\mathrm{ref}}` the inflow profile
    \text{sponge:}\quad R \mathrel{+}= c(s)\,(q - q_{\mathrm{ref}}),\quad
    c = c_s\left(1 - \frac{s}{w}\right)^2\ \text{for}\ s < w ,
 
-with :math:`s` the distance to an inflow or outflow face and :math:`w` the width. Both relax u, v, θ and k; the
-reference is the inflow profile at the point's height above the local ground, so over a hill the Rayleigh layer
-relaxes towards a profile lifted by the terrain height (ERF relaxes to its level-indexed sounding; the difference
-is of order :math:`h/z` of the profile's gradient). Without an inflow face the reference is still ``bc.inflow_*``
-(the log law with its defaults unless set). ERF's Rayleigh layer
+with :math:`s` the distance to an inflow or outflow face and :math:`w` the width. The sponge relaxes u, v, w, θ and
+k towards the inflow profile at the point's height above the local ground (and w to 0). The Rayleigh layer relaxes
+the fields of ``bc.rayleigh_fields`` (all five by default; ERF's ``rayleigh_damp_U/V/W/T`` select the same way):
+u, v and k towards the inflow profile at the height above the local ground (as the inflow itself), w towards 0, and
+θ towards the inflow profile's θ (``bc.theta_profile`` for the analytic kinds, the file's θ column for ``file``) at
+the *absolute* height :math:`z` by default: the sounding is a function of height, not of the distance to the ground,
+and a reference lifted by the terrain would impose a cold anomaly of :math:`\gamma h` (3 K over the 2-D hill's
+crest, with its 0.03 K/m above 700 m) on the undisturbed stratification. ``bc.rayleigh_height = above_ground``
+switches the coefficient's height and θ's reference to the height above the local ground (a terrain-following
+layer, for a ridge that reaches into the layer; the ramp keeps the domain top as its end, so over a crest of height
+:math:`h_g` the coefficient reaches :math:`c_r\sin^2(\tfrac{\pi}{2}(z_{\mathrm{top}} - h_g - z_d)/(z_{\mathrm{top}}
+- z_d))` at the top, not :math:`c_r`). Without an inflow face
+the wind reference is still ``bc.inflow_*`` (the log law with its defaults unless set). ERF's Rayleigh layer
 (``rayleigh_zdamp``, ``rayleigh_dampcoef``) has the same :math:`\sin^2` shape, and ERF's sponge zones
 (``ERF_ApplySpongeZoneBCs.cpp``) the same quadratic ramp, 1 on the face and 0 at the inner edge. Both are sources
-inside ``residual()``, so ``jvp`` sees them.
+inside ``residual()``, so ``jvp`` sees them; the implicit rows carry the same coefficient on the diagonal
+(``add_damping_to_implicit``).
+
+Why damp θ as well as w over a hill: a stratified layer over terrain carries internal gravity waves; damping w alone
+leaves θ's half of the oscillator free, and on ERF's 2-D hill the w-only layer let the residual grow where the w and
+θ layer did not (:doc:`simplec`). ERF's hill deck damps w alone (``rayleigh_damp_W``) in a time-accurate run; the
+pseudo-time iteration needs both.
 
 Inputs
 ------
@@ -247,6 +277,14 @@ here too (``bc.surface_*``, :doc:`surface`).
    * - ``bc.rayleigh_dampcoef``
      - 0
      - Finite, ≥ 0 (1/s); needs ``bc.rayleigh_zdamp`` > 0.
+   * - ``bc.rayleigh_fields``
+     - ``u v w theta tke``
+     - One or more of ``u v w theta tke`` (any other name is refused): the fields the Rayleigh layer damps; needs
+       ``bc.rayleigh_zdamp`` > 0.
+   * - ``bc.rayleigh_height``
+     - ``absolute``
+     - ``absolute`` or ``above_ground``: the height the layer's coefficient and θ's reference use (u, v and k
+       always use the height above the ground); needs ``bc.rayleigh_zdamp`` > 0.
    * - ``bc.sponge_width``
      - 0 (off)
      - Finite, ≥ 0 (m); > 0 needs an inflow or outflow face and ``bc.sponge_strength`` > 0.

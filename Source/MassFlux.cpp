@@ -1,6 +1,7 @@
 #include "MassFlux.H"
 
 #include "CVFluxes.H"
+#include "MassFlux_K.H"
 #include "Poisson.H"
 #include "Stencil_K.H"
 
@@ -14,17 +15,9 @@ using stencil::XF;
 using stencil::YF;
 using stencil::ZF;
 
-// The slopes z_x, z_y of the z-face (i, j, k), as in ERF's TerrainPoisson.
-AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
-amrex::Real slope_x (amrex::Array4<amrex::Real const> const& z, int i, int j, int k, amrex::Real dxinv) noexcept
-{
-    return stencil::deriv<NODE, ZF, 0>(z, i, j, k) * dxinv;
-}
-AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
-amrex::Real slope_y (amrex::Array4<amrex::Real const> const& z, int i, int j, int k, amrex::Real dyinv) noexcept
-{
-    return stencil::deriv<NODE, ZF, 1>(z, i, j, k) * dyinv;
-}
+// The slopes z_x, z_y of the z-face (i, j, k) (MassFlux_K.H, as in ERF's TerrainPoisson).
+using massflux::slope_x;
+using massflux::slope_y;
 
 // d_zeta p on the z-face (i, j, k) times the face's slope in x (D = 0) or y
 // (D = 1). On the ground face (k = klo) d_zeta p is the second-order one-sided

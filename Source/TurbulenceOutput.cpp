@@ -23,7 +23,7 @@ std::string write_turbulence_plotfile (const std::string& prefix, const State& q
         amrex::Abort("ablsteady: write_turbulence_plotfile: dist and the fields must be on the state's layout");
     }
     amrex::Vector<std::string> names{"x_velocity", "y_velocity", "z_velocity", "theta", "KE", "Kmv", "Khv", "Lturb",
-                                     "walldist", "diss", "density", "Rt", "cmu", "cmu_prime", "ustar", "z"};
+                                     "walldist", "diss", "density", "Rt", "cmu", "cmu_prime", "ustar", "z_phys"};
     const int nbase = static_cast<int>(names.size());
     if (R != nullptr) {
         if (R->u.empty()) { amrex::Abort("ablsteady: write_turbulence_plotfile: the residual fields are empty"); }

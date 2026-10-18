@@ -187,7 +187,10 @@ definition of a steady solution (:doc:`steady`) and its own. The application run
    * - ``steady.zline_sweeps``
      - ``2``
      - ≥ 2 and ≤ 100. z-line Jacobi sweeps per momentum predictor step (:doc:`predictor`); one sweep is the
-       configuration the sub-phase 1.5 analysis found unstable at large horizontal CFL, so it is not an input.
+       configuration the sub-phase 1.5 analysis found unstable at large horizontal CFL, so it is not an input. With
+       the second-order residual the lagged sweeps are stable up to a horizontal CFL of 2.4 with 4 sweeps, 3.7 with 8
+       and 6.1 with 16 (:doc:`predictor`, sub-phase 1.16); the terrain decks run 16 with ``steady.cfl_max = 4``. A
+       horizontally uniform column has exact lagged neighbours and takes any count.
    * - ``steady.machine``
      - ``local``
      - ``local``, ``kestrel-cpu`` or ``kestrel-gpu``: the allocation-unit rate of the accounting (0, 10, 100 AU per
@@ -346,8 +349,9 @@ simplec`` only. The sweep count is ``steady.zline_sweeps``.
    * - ``simplec.rotation_relax``
      - ``0.3``
      - > 0 and ≤ 1: the step of the predictor's point-implicit rotation in inertial times, :math:`\tau_c =
-       1/\max(|f|/r, a_P - \sum a_{nb})` (:doc:`predictor`); 1 injects the other component's whole residual and
-       bursts in an inviscid stratified layer, 0.1–0.5 converge (0.3 in half the iterations of 0.2).
+       1/\max(|f|/r, a_P - \sum a_{nb})`, applied to the horizontal mean of the other component's residual
+       (:doc:`predictor`). Since sub-phase 1.16 the fluctuation about the mean takes the row's own step, and 1 converges
+       as well as 0.3 (Neutral_ABL_Flat: 2507 against 2613 iterations); the default stays 0.3.
 
 ``init``
 --------

@@ -3,6 +3,11 @@
 #include "Forcing.H"
 #include "Stencil_K.H"
 
+#include <AMReX_GpuContainers.H>
+#include <AMReX_ParallelDescriptor.H>
+
+#include <vector>
+
 #include "BoundaryConditions.H"
 #include "CVFluxes.H"
 #include "ImplicitOperator.H"
@@ -227,20 +232,56 @@ MomentumPredictorResult momentum_predictor (State& q, const ResidualFields& R,
         amrex::MultiFab::Copy(rhs, *res[c], 0, 0, 1, 0);
         rhs.mult(amrex::Real(-1), 0, 1, 0);
         if (c < 2 && in.coriolis.enabled && coriolis_parameter(in.coriolis) != 0) {
-            // Point-implicit rotation (the header): with tau = 1 / (1/dtau +
-            // a_P) the component's own effective step, the diagonal gains
-            // f^2 tau (into d as well) and the right-hand side the Coriolis
-            // force of the change the other component's own residual
-            // predicts: -f tau R_v (face mean) on u, +f tau R_u on v.
+            // Point-implicit rotation (the header): the diagonal gains
+            // f^2 max(tau_c, tau_own) and the right-hand side the Coriolis
+            // force of the change the other component's residual predicts,
+            // its horizontal mean per level at the inertial step tau_c and
+            // the fluctuation at the row's own step tau_own: -f (...) on u,
+            // +f (...) on v.
             const amrex::Real fs = coriolis_parameter(in.coriolis);
             const amrex::MultiFab& other = (c == 0) ? R.v : R.u;
             amrex::MultiFab og(other.boxArray(), other.DistributionMap(), 1, 1);
             amrex::MultiFab::Copy(og, other, 0, 0, 1, 0);
             og.FillBoundary(geom.periodicity());
+            // The horizontal mean of the other residual per level: the
+            // inertial oscillation is horizontally uniform, so the inertial
+            // time step applies to the mean alone and the fluctuation gets
+            // the row's own step (the header).
+            const amrex::Box& dom = geom.Domain();
+            const int klo = dom.smallEnd(2), nz = dom.length(2);   // other is cell-centred in z
+            amrex::Gpu::DeviceVector<amrex::Real> dsum(static_cast<std::size_t>(nz), amrex::Real(0));
+            amrex::Real* sum_ptr = dsum.data();
+            // Every face once: a box's high face plane in its nodal direction
+            // is the next box's low plane (or, on a periodic domain, the
+            // image of the domain's low plane), kept only on a non-periodic
+            // domain edge; the count per level follows the same rule.
+            const int d_o = 1 - c;
+            const bool periodic_o = geom.isPeriodic(d_o);
+            for (amrex::MFIter mfi(other, amrex::TilingIfNotGPU()); mfi.isValid(); ++mfi) {
+                amrex::Box bx = mfi.tilebox();
+                const amrex::Box& vb = mfi.validbox();
+                if (bx.bigEnd(d_o) == vb.bigEnd(d_o) && (periodic_o || vb.bigEnd(d_o) != dom.bigEnd(d_o) + 1)) {
+                    bx.growHi(d_o, -1);
+                }
+                const auto ro = other.const_array(mfi);
+                amrex::ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
+                {
+                    amrex::Gpu::Atomic::AddNoRet(sum_ptr + (k - klo), ro(i, j, k));
+                });
+            }
+            amrex::Gpu::streamSynchronize();
+            std::vector<amrex::Real> hsum(static_cast<std::size_t>(nz));
+            amrex::Gpu::copy(amrex::Gpu::deviceToHost, dsum.begin(), dsum.end(), hsum.begin());
+            amrex::ParallelDescriptor::ReduceRealSum(hsum.data(), nz);
+            const amrex::Real npts_level = static_cast<amrex::Real>(dom.length(d_o) + (periodic_o ? 0 : 1))
+                                           * static_cast<amrex::Real>(dom.length(c));
+            for (amrex::Real& v : hsum) { v /= npts_level; }
+            amrex::Gpu::DeviceVector<amrex::Real> dmean(static_cast<std::size_t>(nz));
+            amrex::Gpu::copy(amrex::Gpu::hostToDevice, hsum.begin(), hsum.end(), dmean.begin());
+            const amrex::Real* mean_ptr = dmean.data();
             // The four faces around a row are inside the domain except for a
             // row on a non-periodic domain face that is not Dirichlet (an
             // outflow's even mirror): those rows get no coupling.
-            const amrex::Box& dom = geom.Domain();
             const int d = c, lo_edge = dom.smallEnd(d), hi_edge = dom.bigEnd(d) + 1;
             const bool periodic = geom.isPeriodic(d);
             for (amrex::MFIter mfi(*aps[c], amrex::TilingIfNotGPU()); mfi.isValid(); ++mfi) {
@@ -264,15 +305,24 @@ MomentumPredictorResult momentum_predictor (State& q, const ResidualFields& R,
                     // (the header).
                     const amrex::Real nb = a(i, j, k, coef_XM) + a(i, j, k, coef_XP) + a(i, j, k, coef_YM) + a(i, j, k, coef_YP)
                                            + a(i, j, k, coef_ZM) + a(i, j, k, coef_ZP);
-                    const amrex::Real tau = amrex::Real(1) / amrex::max(std::abs(fs) / relax, a(i, j, k, coef_P) - nb);
-                    const amrex::Real stiff = fs * fs * tau;
+                    const amrex::Real net = amrex::max(a(i, j, k, coef_P) - nb, amrex::Real(0));
+                    const amrex::Real tau_c = amrex::Real(1) / amrex::max(std::abs(fs) / relax, net);
+                    const amrex::Real tau_own = amrex::Real(1) / (amrex::Real(1) / dt(i, j, k) + net);
+                    // The diagonal carries the larger of the two steps so that
+                    // both the mean (tau_c) and the fluctuation (tau_own) are
+                    // backward Euler steps of the rotation: contractions for
+                    // every f dtau (the review of 1.16). In practice tau_c =
+                    // r/|f| >> dtau >= tau_own and the max is tau_c.
+                    const amrex::Real stiff = fs * fs * amrex::max(tau_c, tau_own);
                     p(i, j, k) += stiff;
                     dd(i, j, k) += stiff;
                     const amrex::Real avg = is_u ? stencil::interp<stencil::YF, stencil::XF>(ro, i, j, k)
                                                  : stencil::interp<stencil::XF, stencil::YF>(ro, i, j, k);
-                    r(i, j, k) += (is_u ? -fs : fs) * tau * avg;
+                    const amrex::Real mean = mean_ptr[k - klo];
+                    r(i, j, k) += (is_u ? -fs : fs) * (tau_c * mean + tau_own * (avg - mean));
                 });
             }
+            amrex::Gpu::streamSynchronize();   // dmean is read by the kernels above
         }
         if (c == 2 && in.buoyancy.gravity > 0) {
             // Point-implicit buoyancy (the header): the w rows gain the

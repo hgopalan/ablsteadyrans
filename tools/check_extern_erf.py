@@ -77,7 +77,7 @@ def check(root, erf, report_ref=None, out=print):
 
     listed = {r["local"] for r in rows}
     ext = root / "extern_erf"
-    for f in sorted(p for p in ext.rglob("*") if p.is_file()):
+    for f in sorted(p for p in ext.rglob("*") if p.is_file() and "__pycache__" not in p.parts and p.suffix != ".pyc"):
         rel = f.relative_to(root).as_posix()
         if f.name in EXEMPT and f.parent == ext:
             continue
