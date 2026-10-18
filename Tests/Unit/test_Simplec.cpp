@@ -845,7 +845,8 @@ TEST (Simplec, PointImplicitCouplingsArePinned)
         amrex::MultiFab dq(row.A->boxArray(), c.dm, 1, 0);
         amrex::MultiFab::Copy(dq, *row.q1, 0, 0, 1, 0);
         amrex::MultiFab::Subtract(dq, *row.q0, 0, 0, 1, 0);
-        EXPECT_LT(max_abs_diff(dq, delta), tol(1e-13, 1e-4) * max_abs(*row.q0)) << row.name << " relax " << relax;
+        // single: the large-step rows (dt_scale 400) lose another digit in the z-line solve
+        EXPECT_LT(max_abs_diff(dq, delta), tol(1e-13, dt_scale > 1 ? 4e-4 : 1e-4) * max_abs(*row.q0)) << row.name << " relax " << relax;
     }
     }   // relax
     }   // dt_scale
@@ -956,6 +957,33 @@ TEST (Simplec, WallKRowsAreFolded)
             amrex::MultiFab::Subtract(dk, q.tke, 0, 0, 1, 0);
             EXPECT_GT(res.max_dq, 0);
             EXPECT_LT(max_abs_diff(dk, delta), tol(1e-13, 1e-4) * max_abs(q.tke));
+            // UT-2.1.4 (sub-phase 2.1): the same sweep with the line LU-SGS
+            // solver is the zline_lusgs solve of the same rows, differs from
+            // the Jacobi one, and with a floor above the smallest result the
+            // clip holds k >= floor everywhere.
+            {
+                amrex::MultiFab dl;
+                ablsteady::zline_lusgs(Loc::cell, A, ap, rhs, 2, c.mesh, c.geom, dl);
+                amrex::MultiFab k2(c.ba, c.dm, 1, 2);
+                amrex::MultiFab::Copy(k2, q.tke, 0, 0, 1, 2);
+                ablsteady::SimplecWorkspace w2;
+                const auto rl = ablsteady::scalar_sweep(Equation::tke, k2, R.tke, {&F[0], &F[1], &F[2]}, q.z_phys_nd, in, dtau,
+                                                        c.mesh, c.geom, 2, 0, &ss, &cf, w2, ablsteady::SweepKind::lusgs);
+                amrex::MultiFab dk2(c.ba, c.dm, 1, 0);
+                amrex::MultiFab::Copy(dk2, k2, 0, 0, 1, 0);
+                amrex::MultiFab::Subtract(dk2, q.tke, 0, 0, 1, 0);
+                EXPECT_GT(rl.max_dq, 0);
+                EXPECT_LT(max_abs_diff(dk2, dl), tol(1e-13, 1e-4) * max_abs(q.tke));
+                EXPECT_GT(max_abs_diff(dl, delta), tol(1e-12, 1e-5) * max_abs(q.tke));   // not the Jacobi solve
+                const amrex::Real floor_v = amrex::Real(0.5) * (k2.min(0) + k2.max(0));   // a floor above the smallest result
+                amrex::MultiFab k3(c.ba, c.dm, 1, 2);
+                amrex::MultiFab::Copy(k3, q.tke, 0, 0, 1, 2);
+                ablsteady::SimplecWorkspace w3;
+                const auto rf = ablsteady::scalar_sweep(Equation::tke, k3, R.tke, {&F[0], &F[1], &F[2]}, q.z_phys_nd, in, dtau,
+                                                        c.mesh, c.geom, 2, floor_v, &ss, &cf, w3, ablsteady::SweepKind::lusgs);
+                EXPECT_GT(rf.clipped, 0);
+                EXPECT_GE(k3.min(0), floor_v);
+            }
         }
     }
 }

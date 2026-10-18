@@ -186,11 +186,21 @@ definition of a steady solution (:doc:`steady`) and its own. The application run
      - Finite, > 1. Growth of the relative residual over a window that sends the run back a stage.
    * - ``steady.zline_sweeps``
      - ``2``
-     - ≥ 2 and ≤ 100. z-line Jacobi sweeps per momentum predictor step (:doc:`predictor`); one sweep is the
-       configuration the sub-phase 1.5 analysis found unstable at large horizontal CFL, so it is not an input. With
-       the second-order residual the lagged sweeps are stable up to a horizontal CFL of 2.4 with 4 sweeps, 3.7 with 8
-       and 6.1 with 16 (:doc:`predictor`, sub-phase 1.16); the terrain decks run 16 with ``steady.cfl_max = 4``. A
+     - Line sweeps per momentum predictor step (:doc:`predictor`): ≥ 2 and ≤ 100 with ``steady.sweep = zjacobi``
+       (one lagged Jacobi sweep is the configuration the sub-phase 1.5 analysis found unstable at large horizontal
+       CFL), ≥ 1 and ≤ 100 with ``lusgs`` (each sweep is a forward and a backward pass). With the second-order
+       residual the lagged Jacobi sweeps are stable up to a horizontal CFL of 2.4 with 4 sweeps, 3.7 with 8 and 6.1
+       with 16 (:doc:`predictor`, sub-phase 1.16); the terrain decks run 16 with ``steady.cfl_max = 4``. A
        horizontally uniform column has exact lagged neighbours and takes any count.
+   * - ``steady.sweep``
+     - ``zjacobi``
+     - ``zjacobi`` or ``lusgs`` (sub-phase 2.1): the line solver of the sweeps, z-line Jacobi (independent columns,
+       the x/y neighbours lagged) or line LU-SGS (a symmetric Gauss–Seidel over the columns of each box with the
+       exact z-line solve, exact along a wind whose u and v share a sign and stable at every CFL there; with
+       u and v of opposite sign one sweep is stable only to a CFL of about 2.5 and two to about 33; a sequential
+       thread per box on a GPU until sub-phase 2.2). The sweep's path depends on the box layout
+       (``mesh.max_grid_size``); the converged state does not. The LU-SGS hill deck runs two sweeps at
+       ``steady.cfl_max = 16`` (two boxes of 64 × 1 columns).
    * - ``steady.machine``
      - ``local``
      - ``local``, ``kestrel-cpu`` or ``kestrel-gpu``: the allocation-unit rate of the accounting (0, 10, 100 AU per

@@ -224,7 +224,7 @@ void run ()
         res_in.surface = surface_layer ? &surf : nullptr;
         res_in.bc = &bc;
         auto stage = std::make_unique<SimplecStage>(simplec, sopt.zline_sweeps, res_in, &closure, popt, mesh, geom,
-                                                    state.z_phys_nd, copt.tke_floor, ba, dm);
+                                                    state.z_phys_nd, copt.tke_floor, ba, dm, sopt.sweep);
         const SimplecStage& simplec_stage = *stage;
         std::vector<std::unique_ptr<Stage>> stages;
         stages.push_back(std::move(stage));
@@ -237,7 +237,7 @@ void run ()
             amrex::Print() << "ablsteady: driver history restored: " << driver.history().records.size()
                            << " iterations, cfl " << driver.cfl() << "\n";
         }
-        amrex::Print() << "ablsteady: SIMPLEC stage: " << sopt.zline_sweeps << " z-line sweeps, pressure reltol "
+        amrex::Print() << "ablsteady: SIMPLEC stage: " << sopt.zline_sweeps << " " << sweep_name(sopt.sweep) << " sweeps, pressure reltol "
                        << simplec.pressure_reltol << ", alpha_p " << simplec.alpha_p << ", cfl0 " << sopt.cfl0
                        << ", cfl_max " << sopt.cfl_max << "\n";
         SteadyVerdict v = driver.verdict();

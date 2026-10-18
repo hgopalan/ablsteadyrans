@@ -48,6 +48,37 @@ not bounded by the stiff vertical terms. The sweeps converge to the solution of 
 :math:`\Delta\tau` (the system is an M-matrix), and the error falls with every sweep; the number per predictor step
 is ``steady.zline_sweeps`` (default 2).
 
+Line LU-SGS sweeps
+------------------
+
+``steady.sweep = lusgs`` (sub-phase 2.1; ``zjacobi`` is the default) keeps the exact z-line solve but visits the
+columns of a box in order: a forward pass over :math:`(i, j)` in which the :math:`x` and :math:`y` neighbours below
+the column in the ordering are the pass's own updated values, then a backward pass over the columns in reverse
+with the updated upper neighbours; a symmetric line Gauss–Seidel in delta form, in place (``zline_lusgs``). One
+"sweep" of ``steady.zline_sweeps`` is the pair of passes, and one is allowed (the lag of a single Jacobi sweep is
+the reason that solver needs two). For a wind whose :math:`u` and :math:`v` have the same sign in the ordering a
+pass resolves the first-order upwind coupling of :math:`A_1` exactly: in 1-D the system is triangular and one pass
+solves it, so the defect correction becomes :math:`1 - A_1^{-1}A_2`, whose scalar pure-advection factor the scan
+``tools/sweeps_cfl_scan.py --thresholds`` finds below 1 at every CFL (the odd–even mode's factor is
+:math:`(2c - 1)/(2c + 1)`, tending to 1 as the CFL :math:`c` grows, so the gain per iteration flattens instead of
+turning into growth). For :math:`u` and :math:`v` of opposite sign each pass leaves one upwind neighbour lagged
+and the per-sweep factor is :math:`c_u c_v / ((1 + c_u)(1 + c_v))`: one sweep is then unstable beyond a CFL of about
+2.5 and two sweeps beyond about 33 (the review's derivation), so the decks keep two sweeps and a cap of 16;
+alternating the ordering between sweeps is for sub-phase 2.2. The iteration path depends on the box layout
+(``mesh.max_grid_size``: the couplings across box faces are lagged, and the seam error decays downstream over
+about :math:`c` cells, so boxes shorter than the CFL limit the solve), unlike Jacobi's; the converged state does
+not. What the sweeps leave otherwise is the horizontal diffusion (at a cell Péclet number of 2 the per-sweep
+factor is 0.57 at CFL 4 and 0.85 at 16; the outer iteration stays stable). Sub-phase 2.2 adds the box-local
+handling, the overlap and the GPU diagonal ordering; here a box is one sequential thread on a GPU, so ``lusgs``
+is a CPU solver until then. The stage reports the change of the last sweep's backward pass as ``last_sweep``,
+which is not comparable with Jacobi's last-sweep change. The tests (UT-2.1.1–5): one and two symmetric sweeps equal a dense
+block-triangular reference to 1e-12, and on two boxes the sweeps reach the dense solution with a rank-independent
+path; one symmetric sweep is exact for pure upwind convection along the wind (either sign);
+the sweeps converge to the dense solution of the real :math:`A_1` for a wind of either sign, faster than Jacobi;
+:math:`k` stays at or above its floor; a zero right-hand side gives a zero correction. On ERF's 2-D hill two
+symmetric sweeps at a CFL cap of 16 reach the same steady state as sixteen Jacobi sweeps at a cap of 4 in a third
+fewer iterations and half the time (:doc:`simplec`).
+
 **The flag from sub-phase 1.5.** The Fourier analysis of that review found that *one* lagged z-line sweep per outer
 iteration is unstable with the second-order right-hand side at large horizontal CFL (an amplification factor of 1.09
 at CFL 1, growing with the CFL), while symmetric Gauss–Seidel in :math:`x, y` is stable. That is why the default is

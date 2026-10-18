@@ -1,0 +1,56 @@
+# RT-2.1.1 (sub-phase 2.1): ERF's Neutral_Hill_2D with the line LU-SGS
+# sweeps (steady.sweep = lusgs, two symmetric sweeps, CFL cap 16): the same
+# steady state as inputs_steady_hill2d (16 z-line Jacobi sweeps at a cap of
+# 4) in fewer iterations and less time; ERF's check_hill.py --physics on the
+# turbulence plotfile as for the Jacobi deck. See docs/simplec.rst.
+mesh.n_cell        = 128 1 64
+mesh.prob_lo       = -2560. 0. 0.
+mesh.prob_hi       =  2560. 40. 1000.
+mesh.is_periodic   = 1 1 0
+mesh.max_grid_size = 64 1
+
+terrain.type            = agnesi
+terrain.hill_shape      = ridge_x
+terrain.hill_height     = 100.
+terrain.hill_half_width = 500.
+terrain.smoothing       = 0
+
+bc.zlo = surface_layer
+bc.zhi = slip_wall
+bc.surface_z0 = 0.1
+bc.theta_profile_z = 0. 700. 1000.
+bc.theta_profile   = 300. 300. 309.
+bc.zhi_theta_grad  = 0.03
+bc.inflow_profile   = log_law
+bc.inflow_ustar     = 0.35
+bc.inflow_z0        = 0.1
+bc.inflow_direction = 0.
+bc.rayleigh_zdamp    = 700.
+bc.rayleigh_dampcoef = 0.2
+bc.rayleigh_fields   = w theta
+
+init.first_guess = profile
+
+forcing.coriolis        = 1
+forcing.coriolis_3d     = 0
+forcing.latitude        = 90.
+forcing.rotation_period = 125663.7061435917
+forcing.geostrophic     = 1
+forcing.ug              = 10.
+forcing.vg              = 0.
+
+turb.tke_floor = 1.e-6
+
+steady.stage                   = simplec
+steady.cfl0                    = 1.
+steady.cfl_max                 = 16.
+steady.zline_sweeps            = 2
+steady.sweep                   = lusgs
+simplec.rotation_relax         = 1.   # with the planar-mean split 1 converges in half the iterations of 0.3 (docs/simplec.rst)
+steady.residual_ref_iterations = 100
+steady.residual_drop_orders    = 2
+steady.max_iterations          = 20000
+
+io.plot_file      = steady_hill2d_lusgs_plt
+io.turb_plot_file = steady_hill2d_lusgs_turb
+io.chk_file       = steady_hill2d_lusgs_chk

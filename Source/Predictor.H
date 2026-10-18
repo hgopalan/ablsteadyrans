@@ -27,8 +27,27 @@
 // outer defect-correction iteration with few sweeps per step is a different
 // matter: one lagged sweep with the second-order residual is unstable at
 // large horizontal CFL (the Fourier analysis of sub-phase 1.5), so the
-// default is 2 (steady.zline_sweeps) and phase 2 adds the x/y Gauss-Seidel
-// (line LU-SGS) ordering.
+// default is 2 (steady.zline_sweeps).
+//
+// Line LU-SGS (sub-phase 2.1, steady.sweep = lusgs): the same exact z-line
+// solve, but the columns of a box are visited in order, forward over (i, j)
+// with the already-updated lower x/y neighbours and then backward with the
+// updated upper ones (a symmetric line Gauss-Seidel in delta form, in
+// place); one "sweep" is the forward and backward pass. For a wind whose
+// u and v have the same sign (the (+,+) or (-,-) quadrant of the ordering)
+// a pass resolves the first-order upwind coupling exactly, so the solve of
+// (1/dtau + A1) is exact up to the horizontal diffusion and the box faces,
+// and the defect correction with the second-order residual is stable at
+// every CFL in 1-D (tools/sweeps_cfl_scan.py --thresholds). For u and v of
+// opposite sign each pass has one upwind neighbour lagged: the per-sweep
+// factor is cu cv / ((1 + cu)(1 + cv)), so one sweep is unstable beyond a
+// CFL of about 2.5 and two sweeps beyond about 33 (the review of 2.1;
+// alternating the ordering is sub-phase 2.2). Across box faces and the
+// periodic seams the neighbours are the previous pass's (a block Jacobi
+// across boxes, whose seam error decays downstream over about CFL cells, so
+// boxes shorter than the CFL limit the solve; sub-phase 2.2 adds the
+// box-local handling, the overlap and the GPU diagonal ordering: here a
+// box is one sequential thread on a GPU).
 //
 // Dirichlet rows (the normal velocities on inflow and outflow faces: R = q
 // - V, identity in A1; BoundaryConditions::dirichlet_rows) get no 1/dtau:
@@ -130,6 +149,12 @@ namespace ablsteady {
 void face_dtau (const amrex::MultiFab& dtau_cc, const Mesh& mesh, const amrex::Geometry& geom,
                 amrex::Array<amrex::MultiFab, AMREX_SPACEDIM>& dtau_faces);
 
+//! The line solver of the sweeps (steady.sweep).
+enum class SweepKind : int { zjacobi = 0, lusgs = 1 };
+
+//! The name of a sweep kind ("zjacobi", "lusgs").
+const char* sweep_name (SweepKind kind) noexcept;
+
 //! Per momentum equation on its faces (per unit volume), for the pressure
 //! correction of 1.15: a_P = 1/dtau + diag(A1), and the SIMPLEC denominator
 //! d = a_P - sum of the neighbour coefficients (= 1/dtau plus what the folds
@@ -170,7 +195,22 @@ MomentumPredictorResult momentum_predictor (State& q, const ResidualFields& R,
                                             const amrex::Array<amrex::MultiFab, AMREX_SPACEDIM>& dtau_faces,
                                             const Mesh& mesh, const amrex::Geometry& geom, int sweeps,
                                             PredictorFields& ap, const SurfaceState* surface = nullptr,
-                                            const ClosureFields* fields = nullptr, amrex::Real rotation_relax = 1);
+                                            const ClosureFields* fields = nullptr, amrex::Real rotation_relax = 1,
+                                            SweepKind sweep = SweepKind::zjacobi);
+
+//! The line LU-SGS solve (sub-phase 2.1): sweeps symmetric line
+//! Gauss-Seidel passes (forward then backward over the columns of each box,
+//! an exact z-line solve per column, the x/y neighbours already updated in
+//! the pass's direction, in place) of the same system as zline_jacobi, with
+//! the same arguments and the same return value (max |change over the last
+//! sweep|). sweeps >= 1.
+amrex::Real zline_lusgs (Loc loc, const amrex::MultiFab& A, const amrex::MultiFab& ap, const amrex::MultiFab& rhs,
+                         int sweeps, const Mesh& mesh, const amrex::Geometry& geom, amrex::MultiFab& delta);
+
+//! zline_jacobi or zline_lusgs by kind.
+amrex::Real line_sweeps (SweepKind kind, Loc loc, const amrex::MultiFab& A, const amrex::MultiFab& ap,
+                         const amrex::MultiFab& rhs, int sweeps, const Mesh& mesh, const amrex::Geometry& geom,
+                         amrex::MultiFab& delta);
 
 //! The z-line Jacobi solve alone (for its tests and the scalar sweeps of
 //! sub-phase 1.15): sweeps of the system with the off-diagonal coefficients

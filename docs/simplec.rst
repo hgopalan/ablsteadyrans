@@ -262,6 +262,70 @@ after 8635 iterations (95 s on two ranks, ``rotation_relax`` 0.3), ERF's 24 h ru
 state in :math:`u` (RMS 0.14) and 0.13 m/s in :math:`w`, the crest speed-up profiles within 0.04 (0.52 against 0.51
 in the first cell), as on the hill.
 
+**Line LU-SGS (sub-phase 2.1).** With ``steady.sweep = lusgs`` the same 2-D hill (``inputs_steady_hill2d_lusgs``:
+two symmetric sweeps, CFL cap 16, ``rotation_relax`` 1) reaches the verdict in 3062 iterations (23 s on two ranks,
+idle machine) against 4590 and 49 s for sixteen Jacobi sweeps at a cap of 4, with every ERF check passing and the
+steady state within the verdict's tolerance of the Jacobi one (:math:`u` within 0.017 m/s, 1.5e-3 of its scale;
+:math:`w` within 2e-4 m/s). The verdict's tolerance (5e-5 on the scaled residuals with a two-order drop, the
+usual 1e-4 of ABL practice) is the comparison standard; a diagnostic run at a 9-order drop showed why nothing
+tighter is meaningful here: the capped layer entrains the inversion without end (1.4e-7 K/s, the Neutral_ABL_Flat
+finding above), so two runs with different pseudo-time steps sit at different points of that drift (0.2 K in θ
+after 40 000 iterations). The plan's 1e-8 comparison (RT-2.2.1) needs a case with a true fixed point (gravity
+off, or the inversion out of the domain). On the 3-D hill (16 sweeps and a cap of 4 for
+Jacobi, two and 16 for LU-SGS) the verdict comes after 823 iterations (51 s on four ranks) against 2092 (148 s),
+every ERF check passing, :math:`u` within 0.23 m/s of the Jacobi state (2 %, the same drift). The sweeps on the
+2-D hill:
+
+.. list-table:: Line LU-SGS on the 2-D hill (two ranks; the machine shared with other runs)
+   :header-rows: 1
+   :widths: 22 18 18
+
+   * - sweeps / cap
+     - iterations
+     - wall (s)
+   * - 1 / 4
+     - 6306
+     - 41
+   * - 2 / 4
+     - 4937
+     - 35
+   * - 1 / 8
+     - 4962
+     - 34
+   * - 2 / 8
+     - 3619
+     - 27
+   * - 1 / 16
+     - 4369
+     - 31
+   * - **2 / 16**
+     - **3062**
+     - **23**
+   * - 2 / 32
+     - 2886
+     - 22
+   * - 4 / 32
+     - 5278
+     - 84
+   * - 2 / 64
+     - 8431
+     - 106
+   * - 4 / 64
+     - 20 000
+     - 481 (not steady)
+   * - 2 / 128
+     - 20 000
+     - 405 (not steady)
+
+The iteration count flattens beyond a cap of 16 and rises again at 64: with :math:`d = 1/\Delta\tau` the
+pressure correction is the projection and a pressure error is reduced by :math:`O(1/c)` per iteration (the
+review's u–w–p analysis: the worst mode is the pressure checkerboard with :math:`(1 - \rho)\,c \approx 0.33` for
+:math:`c \ge 16`), the θ and k steps are a Picard coupling whose rate does not improve with the step, and the
+lagged box faces of the two 64-column boxes contract the seam error by only 0.37 per sweep at a cap of 64 (the
+error decays downstream over about :math:`c` cells). The stage reached the verdict at every cap tried up to 64;
+at 128 with two sweeps it was still converging after 20 000 iterations. The cost per iteration of two LU-SGS
+sweeps is below that of sixteen Jacobi sweeps, so the time per iteration falls as well.
+
 **Askervein (RT-1.16.3, the convergence half).** The coarse mesh of RT-1.12.1 (30 × 30 × 18) with the log-law
 inflow, the outflow and slip sides, no Coriolis, four sweeps, cap 2: the verdict after 156 iterations (2 s on two
 ranks). The residual is largest in the two columns next to the outflow (100 times the interior, a checkerboard in

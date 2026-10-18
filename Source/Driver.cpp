@@ -21,7 +21,7 @@ namespace {
 
 const char* const kKeys[] = {"residual_tol", "residual_drop_orders", "residual_ref_iterations", "monitor_rel_tol",
                              "monitor_window", "max_iterations", "cfl0", "cfl_max", "ser_exponent", "ser_max_growth",
-                             "switch_window", "switch_residual", "switch_back_growth", "zline_sweeps", "machine", "nodes", "stage"};
+                             "switch_window", "switch_residual", "switch_back_growth", "zline_sweeps", "sweep", "machine", "nodes", "stage"};
 
 constexpr int kDriverVersion = 1;
 const char* const kDriverMagic = "ablsteady-driver";
@@ -70,7 +70,11 @@ std::vector<std::string> check_steady_options (const SteadyOptions& opt)
     bad(opt.switch_back_growth, "switch_back_growth", "finite and > 1",
         [&] { return std::isfinite(opt.switch_back_growth) && opt.switch_back_growth > 1; });
     if (opt.nodes < 1) { err.emplace_back("steady.nodes must be >= 1"); }
-    if (opt.zline_sweeps < 2 || opt.zline_sweeps > 100) {
+    if (opt.sweep == SweepKind::lusgs) {
+        if (opt.zline_sweeps < 1 || opt.zline_sweeps > 100) {
+            err.emplace_back("steady.zline_sweeps must be >= 1 and <= 100 with steady.sweep = lusgs");
+        }
+    } else if (opt.zline_sweeps < 2 || opt.zline_sweeps > 100) {
         err.emplace_back("steady.zline_sweeps must be >= 2 and <= 100 (one lagged sweep is unstable at large horizontal CFL)");
     }
     return err;
@@ -107,6 +111,12 @@ SteadyOptions read_steady_options ()
     pp.query("switch_back_growth", opt.switch_back_growth);
     pp.query("nodes", opt.nodes);
     pp.query("zline_sweeps", opt.zline_sweeps);
+    std::string sweep;
+    if (pp.query("sweep", sweep)) {
+        if (sweep == "zjacobi") { opt.sweep = SweepKind::zjacobi; }
+        else if (sweep == "lusgs") { opt.sweep = SweepKind::lusgs; }
+        else { amrex::Abort("ablsteady: steady.sweep = " + sweep + ": must be zjacobi or lusgs"); }
+    }
     std::string stage;
     if (pp.query("stage", stage)) {
         if (stage == "none") { opt.stage = StageKind::none; }

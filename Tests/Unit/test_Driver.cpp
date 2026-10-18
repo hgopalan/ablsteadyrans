@@ -712,6 +712,8 @@ TEST (Driver, DivergenceStopsAndTheChecksNameTheirInput)
         {"steady.nodes", [] (SteadyOptions& b) { b.nodes = 0; }},
         {"steady.zline_sweeps", [] (SteadyOptions& b) { b.zline_sweeps = 1; }},
         {"steady.zline_sweeps", [] (SteadyOptions& b) { b.zline_sweeps = 101; }},
+        {"steady.zline_sweeps", [] (SteadyOptions& b) { b.sweep = ablsteady::SweepKind::lusgs; b.zline_sweeps = 0; }},
+        {"steady.zline_sweeps", [] (SteadyOptions& b) { b.sweep = ablsteady::SweepKind::lusgs; b.zline_sweeps = 101; }},
         {"steady.residual_tol", [] (SteadyOptions& b) { b.criterion.residual_tol = 0; }},
         {"steady.monitor_window", [] (SteadyOptions& b) { b.criterion.monitor_window = 1; }},
     };
@@ -727,12 +729,20 @@ TEST (Driver, DivergenceStopsAndTheChecksNameTheirInput)
                      std::runtime_error);
     }
     EXPECT_TRUE(ablsteady::check_steady_options(o).empty());
+    {   // one sweep is allowed with lusgs (sub-phase 2.1), not with zjacobi
+        SteadyOptions x = o;
+        x.sweep = ablsteady::SweepKind::lusgs;
+        x.zline_sweeps = 1;
+        EXPECT_TRUE(ablsteady::check_steady_options(x).empty());
+        x.sweep = ablsteady::SweepKind::zjacobi;
+        EXPECT_FALSE(ablsteady::check_steady_options(x).empty());
+    }
     // the reader
     {
         amrex::ParmParse pp("steady");
         const char* keys[] = {"residual_tol", "residual_drop_orders", "residual_ref_iterations", "monitor_rel_tol", "monitor_window",
                               "max_iterations", "cfl0", "cfl_max", "ser_exponent", "ser_max_growth", "switch_window",
-                              "switch_residual", "switch_back_growth", "zline_sweeps", "machine", "nodes"};
+                              "switch_residual", "switch_back_growth", "zline_sweeps", "sweep", "machine", "nodes"};
         auto clear = [&] { for (const char* k : keys) { while (pp.remove(k) > 0) {} } };
         clear();
         pp.add("residual_tol", amrex::Real(1e-4));
@@ -751,7 +761,9 @@ TEST (Driver, DivergenceStopsAndTheChecksNameTheirInput)
         pp.add("machine", std::string("kestrel-gpu"));
         pp.add("nodes", 3);
         pp.add("zline_sweeps", 4);
+        pp.add("sweep", std::string("lusgs"));
         const SteadyOptions r = ablsteady::read_steady_options();
+        EXPECT_EQ(r.sweep, ablsteady::SweepKind::lusgs);
         EXPECT_EQ(r.criterion.residual_tol, amrex::Real(1e-4));
         EXPECT_EQ(r.criterion.residual_drop_orders, 3);
         EXPECT_EQ(r.criterion.residual_ref_iterations, 7);
@@ -768,14 +780,23 @@ TEST (Driver, DivergenceStopsAndTheChecksNameTheirInput)
         EXPECT_EQ(r.machine, ablsteady::Machine::KestrelGpu);
         EXPECT_EQ(r.nodes, 3);
         EXPECT_EQ(r.zline_sweeps, 4);
-        EXPECT_EQ(r.given.size(), 16u);
+        EXPECT_EQ(r.given.size(), 17u);
         clear();
         const SteadyOptions d = ablsteady::read_steady_options();
         EXPECT_EQ(d.cfl0, 1);
         EXPECT_EQ(d.cfl_max, 10);
         EXPECT_EQ(d.machine, ablsteady::Machine::Local);
         EXPECT_EQ(d.zline_sweeps, 2);
+        EXPECT_EQ(d.sweep, ablsteady::SweepKind::zjacobi);
         EXPECT_TRUE(d.given.empty());
+        pp.add("sweep", std::string("gauss"));
+        EXPECT_THROW(ablsteady::read_steady_options(), std::runtime_error);
+        clear();
+        pp.add("sweep", std::string("zjacobi"));
+        EXPECT_EQ(ablsteady::read_steady_options().sweep, ablsteady::SweepKind::zjacobi);
+        pp.add("sweep", std::string("lusgs"));   // repeated key
+        EXPECT_THROW(ablsteady::read_steady_options(), std::runtime_error);
+        clear();
         pp.add("cfl0", amrex::Real(1));
         pp.add("cfl0", amrex::Real(2));
         EXPECT_THROW(ablsteady::read_steady_options(), std::runtime_error);

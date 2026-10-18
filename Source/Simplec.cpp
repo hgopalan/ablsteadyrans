@@ -203,7 +203,7 @@ ScalarSweepResult scalar_sweep (Equation eq, amrex::MultiFab& field, const amrex
                                 const amrex::Array<const amrex::MultiFab*, AMREX_SPACEDIM>& F, const amrex::MultiFab& z_nd,
                                 const ResidualInputs& in, const amrex::MultiFab& dtau, const Mesh& mesh,
                                 const amrex::Geometry& geom, int sweeps, amrex::Real floor, const SurfaceState* surface,
-                                const ClosureFields* fields, SimplecWorkspace& w)
+                                const ClosureFields* fields, SimplecWorkspace& w, SweepKind sweep)
 {
     const char* op = "scalar_sweep";
     if (eq != Equation::theta && eq != Equation::tke) { amrex::Abort("ablsteady: scalar_sweep: eq must be theta or tke"); }
@@ -238,7 +238,7 @@ ScalarSweepResult scalar_sweep (Equation eq, amrex::MultiFab& field, const amrex
             p(i, j, k) = amrex::Real(1) / dt(i, j, k) + a(i, j, k, coef_P);
         });
     }
-    res.last_sweep = zline_jacobi(Loc::cell, w.A, w.ap, rhs, sweeps, mesh, geom, w.delta);
+    res.last_sweep = line_sweeps(sweep, Loc::cell, w.A, w.ap, rhs, sweeps, mesh, geom, w.delta);
     res.max_dq = w.delta.norm0();
     amrex::MultiFab::Add(field, w.delta, 0, 0, 1, 0);
     if (eq == Equation::tke) {
@@ -273,8 +273,8 @@ PoissonOptions with_reltol (PoissonOptions popt, amrex::Real reltol)
 SimplecStage::SimplecStage (const SimplecOptions& opt, int sweeps, const ResidualInputs& in, Closure* closure,
                             const PoissonOptions& popt, const Mesh& mesh, const amrex::Geometry& geom,
                             const amrex::MultiFab& z_nd, amrex::Real tke_floor, const amrex::BoxArray& ba,
-                            const amrex::DistributionMapping& dm)
-    : m_opt(opt), m_sweeps(sweeps), m_in(in), m_closure(closure), m_mesh(mesh), m_geom(geom), m_z(z_nd),
+                            const amrex::DistributionMapping& dm, SweepKind sweep)
+    : m_opt(opt), m_sweeps(sweeps), m_sweep(sweep), m_in(in), m_closure(closure), m_mesh(mesh), m_geom(geom), m_z(z_nd),
       m_tke_floor(tke_floor), m_popt(with_reltol(popt, opt.pressure_reltol)),
       m_pbc(in.bc != nullptr ? poisson_bc_from_faces(in.bc->inputs(), geom) : PoissonBC{}),
       m_solver(mesh, geom, z_nd, m_popt)
@@ -360,7 +360,8 @@ void SimplecStage::iterate (State& q, const amrex::MultiFab& dtau)
     face_dtau(dtau, m_mesh, m_geom, m_w.dtau_faces);
     const SurfaceState* ss = (m_in.surface != nullptr) ? &m_ss : nullptr;
     const ClosureFields* cf = (m_in.closure != nullptr) ? &m_cf : nullptr;
-    m_info.predictor = momentum_predictor(q, m_R, F, m_in, m_w.dtau_faces, m_mesh, m_geom, m_sweeps, m_pf, ss, cf, m_opt.rotation_relax);
+    m_info.predictor = momentum_predictor(q, m_R, F, m_in, m_w.dtau_faces, m_mesh, m_geom, m_sweeps, m_pf, ss, cf, m_opt.rotation_relax,
+                                          m_sweep);
     // 4. The pressure correction on u* (its ghosts refilled first).
     m_in.bc->fill_ghosts(q, m_in.surface, m_in.buoyancy, false, nullptr);
     m_info.pressure = pressure_correction(q, m_pf, m_solver, m_pbc, m_opt.alpha_p, m_mesh, m_geom, m_w);
@@ -379,8 +380,10 @@ void SimplecStage::iterate (State& q, const amrex::MultiFab& dtau)
     convection(Loc::cell, q.theta, F, m_in.theta, m_mesh, m_geom, m_w.conv1);
     amrex::MultiFab::Subtract(m_w.conv1, m_w.conv0, 0, 0, 1, 0);
     amrex::MultiFab::Add(m_R.theta, m_w.conv1, 0, 0, 1, 0);
-    m_info.theta = scalar_sweep(Equation::theta, q.theta, m_R.theta, F, m_z, m_in, dtau, m_mesh, m_geom, m_sweeps, 0, ss, cf, m_w);
-    m_info.tke = scalar_sweep(Equation::tke, q.tke, m_R.tke, F, m_z, m_in, dtau, m_mesh, m_geom, m_sweeps, m_tke_floor, ss, cf, m_w);
+    m_info.theta = scalar_sweep(Equation::theta, q.theta, m_R.theta, F, m_z, m_in, dtau, m_mesh, m_geom, m_sweeps, 0, ss, cf, m_w,
+                                m_sweep);
+    m_info.tke = scalar_sweep(Equation::tke, q.tke, m_R.tke, F, m_z, m_in, dtau, m_mesh, m_geom, m_sweeps, m_tke_floor, ss, cf, m_w,
+                              m_sweep);
     // 6. The nu_t history.
     if (m_closure != nullptr) { m_closure->accept(m_cf); }
 }

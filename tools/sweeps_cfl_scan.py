@@ -131,6 +131,18 @@ def thresholds(schemes=('LUD', 'central'), ms=(2, 4, 8, 16), step=0.05):
     docs/predictor.rst (sub-phase 1.16)."""
     th = np.linspace(0.0, np.pi, 721)[1:]
     print("first CFL with an amplification above 1 (scalar factor, pure advection)")
+    # The line LU-SGS of sub-phase 2.1 solves the first-order upwind coupling
+    # exactly along the wind (a lower-triangular system in 1-D), so its
+    # factor is 1 - A1^-1 A2 whatever the sweep count: printed first.
+    th = np.linspace(0.0, np.pi, 721)[1:]
+    for scheme in schemes:
+        worst, odd = 0.0, []
+        for c in np.arange(0.05, 100.0, 0.05):
+            g = 1.0 - c * adv_symbol(scheme, th) / (1.0 + c * adv_symbol('upwind1', th))
+            worst = max(worst, float(np.abs(g).max()))
+            if abs(c - round(c)) < 1e-9 and int(round(c)) in (2, 4, 16, 64): odd.append((int(round(c)), float(np.abs(g[-1]))))
+        print(f"  lusgs, {scheme} (exact A1 along the wind, 1-D): max |G| over CFL in (0, 100] = {worst:.6f}; "
+              "the odd-even mode's |G| at CFL " + ", ".join(f"{c}: {v:.3f}" for c, v in odd))
     print("  m    " + "  ".join(f"{s:>8s}" for s in schemes))
     for m in ms:
         row = []
