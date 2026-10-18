@@ -33,6 +33,7 @@ ERF's `LICENSE.md` goes into `extern_erf/` with the first copied file. Copied fi
 | `extern_erf/ERF_TerrainPoisson_3D_K.H` | `Source/LinearSolvers/ERF_TerrainPoisson_3D_K.H` | 92410d578f612ab9e844c450bf8e900194becfb5 | unchanged | Operator and face-flux kernels |
 | `extern_erf/ERF_SolverUtils.H` | `Source/LinearSolvers/ERF_SolverUtils.H` | 92410d578f612ab9e844c450bf8e900194becfb5 | unchanged | get_fft_bc: maps the domain boundary names to FFT::Boundary (Outflow/Open: odd, periodic: periodic, others: even) |
 | `extern_erf/ERF_MOSTUtils.H` | `Source/BoundaryConditions/ERF_MOSTUtils.H` | 92410d578f612ab9e844c450bf8e900194becfb5 | unchanged | similarity_funs (Businger-Dyer and Jimenez stability functions) for the surface layer (sub-phase 1.7); ERF#3982 (reference-height lookup) is already in this ERF |
+| `extern_erf/ERF_RANSClosure.H` | `Source/Diffusion/ERF_RANSClosure.H` | 92410d578f612ab9e844c450bf8e900194becfb5 | unchanged | AL01 k-L closure relations (geom_length, smooth_Rt, turb_length, cmu, cmu_prime): the reference of UT-1.9.1 |
 <!-- manifest:end -->
 
 The shims in `Source/erf_shims/` stand in for two ERF headers the copied files include (`ERF_IndexDefines.H`: only

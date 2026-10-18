@@ -30,13 +30,16 @@ Equations
 - The residual is an interior operator. The state's ghost cells (two layers) must be filled by the caller
   (``BoundaryConditions::fill_ghosts``, :doc:`boundary`). With ``ResidualInputs::bc`` set, the boundary rows (the
   ground and top faces of w, the normal velocities on inflow and wall faces) and the damping layers are applied
-  inside ``residual()`` and ``line_jacobian``. The closure sources of k come with sub-phase 1.9. The wall model (:doc:`surface`) sets the
+  inside ``residual()`` and ``line_jacobian``. With ``ResidualInputs::closure`` set (:doc:`closure`), the
+  diffusivities are computed from the state inside ``residual()``, :math:`R_k` gains the closure's sources
+  :math:`-(P_s + P_b - \varepsilon)`, and ``line_jacobian`` adds the point-implicit source term to k's diagonal. The wall model (:doc:`surface`) sets the
   ground faces' fluxes and the first cells' k rows.
 - The faces shared by two boxes, or periodic images, get one value (``OverrideSync``), so per-box updates cannot let
   the copies drift apart.
 - **Everything that belongs to R enters inside** ``residual()`` (through ``ResidualInputs``), so that ``jvp``, which
   differentiates ``residual()``, sees it. The diffusivities are inputs held fixed: until the closure computes
-  :math:`\nu_t` from the state inside ``residual()``, ``jvp`` is the Jacobian with :math:`\nu_t` frozen.
+  :math:`\nu_t` from the state inside ``residual()``, ``jvp`` is the Jacobian with :math:`\nu_t` frozen; with the
+  closure set it is the full Jacobian.
 
 Divergence and pressure gradient
 --------------------------------

@@ -85,6 +85,15 @@ Current tests
        truncation −0.0971 and the top cell's lost flux +1.000 of :math:`u_*^2\cos/\Delta z` pinned; R_k and R_w zero;
        every field finite. The plotfile against ``Tests/Gold/bc_neutral_flat_plt00000`` at relative 1e-10 (a gold
        written by ablsteady). Double precision only.
+   * - ``rt_closure_column``, ``rt_closure_column_matches``
+     - RT-1.9.1: ``closure_column`` on ERF's Neutral_ABL_Flat mesh (8 × 8 × 64, neutral) with the wall law's
+       equilibrium state (u* = 0.35 m/s, z₀ = 0.1 m, k = u*²/C_μ0²), the uncapped geometric length and the
+       logarithmic face mean (``Tests/check_closure.py``): ν_t = κ u* (z + z₀) and L = κ (z + z₀) at every cell
+       (1e-9), u* recovered (1e-10), R_u and R_v zero below the top cell (1e-10 of u*²/Δz; the top cell loses
+       u*²/Δz through the slip top, 1e-8), P_s, ε and R_k = −(P_s − ε) equal to their closed forms from the discrete
+       strain (1e-9 of ε; the second cell's P_s/ε = 1.45 is the centred difference of ln over 2Δz), R_θ and R_w zero.
+       The plotfile against ``Tests/Gold/closure_column_plt00000`` at relative 1e-10 (a gold written by ablsteady).
+       Double precision only.
    * - ``drift_check_selftest``
      - The ``extern_erf`` drift check on a throw-away ERF repository (:doc:`extraction`).
    * - ``refavg_snapshots``, ``refavg_build``, ``refavg_verify``, ``refavg_matches``
@@ -267,6 +276,37 @@ GoogleTest suite
        faces that are not inflow or outflow) in the residual and on the implicit diagonal. Every ``bc`` key is read
        into its field, and each out-of-range, ineffective (the other kinds' inflow keys, surface keys without a
        surface-layer ground, a layer without a coefficient) or inconsistent key is named.
+   * - UT-1.9.1
+     - ``closure_point`` equals ERF's composition of the copied AL01 relations (``ComputeTurbulentViscosityRANS``,
+       ρ = 1) bit for bit on 20 000 random (k, N², d): L, ε, R_t, c_μ, c_μ', ν_t, ν_t', across the neutral, stable,
+       unstable, smoothed and floored cases (each exercised).
+   * - UT-1.9.2
+     - Kynema's ``KLAxell`` (transcribed) where the formulations coincide (neutral, z = d, λ = 30 m, no z₀, ρ = 1):
+       L, ν_t, ε and P_s to 1e-12.
+   * - UT-1.9.3
+     - ``smooth_Rt``: identity above R_t^crit, continuous at it, within (R_t^min, R_t^crit] and monotone down to
+       R_t = −1e30; the unstable length finite and below its bound for k down to 1e-16 under N² to −1e3; the same
+       decision as ERF's.
+   * - UT-1.9.4
+     - The point-implicit update k + S_k/(1/Δτ + ∂S_k/∂k) with the Patankar diagonal stays ≥ 0 (> 0 with production)
+       for 1/Δτ = 1, 1e-3 and 0 on 5000 random states; without the diagonal a decaying state goes negative.
+   * - UT-1.9.5
+     - The dual-number dS_k/dk and dν_t/dk against central finite differences on 3000 random states (branches held):
+       relative 1e-6 (single 1e-2); the dual value part equals the Real evaluation to a few ulp.
+   * - UT-1.9.6
+     - Every ``turb`` key is read into its field and the constants follow (the floor, C_μ0³); each invalid value is
+       refused with its key named, and the constructor refuses it before forming the constants.
+   * - UT-1.9.6b
+     - *Beyond the plan.* The logarithmic mean against (a − b)/ln(a/b) on random pairs (1e-14), equal values, zero,
+       continuity across its series switch; on a log-law column the logarithmic face mean gives the wall flux u*² at
+       every interior u face (1e-12) where the arithmetic mean misses the first by 2–12 %; the implicit operator with
+       the same mean satisfies A₁u = −D(u). Over a 120 m hill the residual with the closure equals the residual with
+       the closure's own fields given minus the sources bit for bit, the k line Jacobian's diagonal differs by dSdk
+       exactly, every field is finite with positive diffusivities, misuse (fields given with a closure, no wall
+       distance) is refused, and ``height_above_ground`` is the node-mean height above the column's ground.
+       Relaxation: ν_t = 0.6 new + 0.4 stored exactly, unrelaxed without history, and the history survives a
+       checkpoint round trip onto other boxes (identical relaxed evaluation); frozen switches hold the floor decision
+       after k drops below it.
    * - UT-1.10.1
      - Manufactured :math:`\phi` on a stretched STF mesh over a 60 m hill: every lateral BC (periodic, Neumann,
        Dirichlet) with a Dirichlet or Neumann top, 2-D (y periodic) at three resolutions, and a 3-D case (Neumann in x,

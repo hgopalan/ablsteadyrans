@@ -91,7 +91,8 @@ centre, :math:`u_*\,\phi_m(d_0/L)/(\kappa (d_0 + z_0))` along the wall stress fo
 :math:`-q\,\phi_h(d_0/L)/(\kappa u_* (d_0 + z_0))` for θ (0 when neutral), with :math:`d_0` the normal distance of the
 first cell centre, :math:`L` the wall model's Obukhov length and :math:`\phi_m, \phi_h` ERF's Businger–Dyer gradient
 functions (1 when neutral). The closure's turbulent Prandtl number does not enter here: the ghost continues the
-profile the wall model solved; the ground face flux itself is the wall model's. The face points of u and v average the two columns beside them. The gradient
+profile the wall model solved, and the closure's :math:`\mathrm{Pr}_t(R_t) = c_\mu/c_\mu'` is 1 in neutral air
+(:doc:`closure`); the ground face flux itself is the wall model's. The face points of u and v average the two columns beside them. The gradient
 slab carries two ghost columns like the state: the first from the surface state's own ghost column, the rest from
 the neighbouring boxes and the periodic images, and outside a non-periodic face beyond that, the nearest column
 inside the domain, so every ghost is finite without depending on the wall model outside the domain.

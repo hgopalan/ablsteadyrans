@@ -1,5 +1,6 @@
 #include "ImplicitOperator.H"
 
+#include "Diffusion_K.H"
 #include "Stencil_K.H"
 
 namespace ablsteady {
@@ -13,12 +14,12 @@ template <int T, int C, int D>
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
 amrex::Real face_weight (int side, int i, int j, int k, amrex::Array4<amrex::Real const> const& f,
                          amrex::Array4<amrex::Real const> const& g, amrex::Array4<amrex::Real const> const& z,
-                         amrex::GpuArray<amrex::Real, 3> const& dxinv) noexcept
+                         amrex::GpuArray<amrex::Real, 3> const& dxinv, bool logz) noexcept
 {
     using namespace stencil;
     constexpr int S = T ^ (1 << D);
     const Metric m = metric_at<S>(z, i, j, k, dxinv);
-    const amrex::Real gs = interp<CC, S>(g, i, j, k);
+    const amrex::Real gs = face_gamma<S>(g, i, j, k, logz);
     const amrex::Real tr = interp<face(D), S>(f, i, j, k);
     amrex::Real dif;
     if constexpr (D < 2) {
@@ -38,7 +39,7 @@ amrex::Real face_weight (int side, int i, int j, int k, amrex::Array4<amrex::Rea
 template <int C>
 void coefficients (const amrex::Array<const amrex::MultiFab*, AMREX_SPACEDIM>& F, const amrex::MultiFab& g,
                    const amrex::MultiFab& z_nd, const amrex::MultiFab& detJ,
-                   const amrex::GpuArray<amrex::Real, 3>& dxinv, amrex::MultiFab& A)
+                   const amrex::GpuArray<amrex::Real, 3>& dxinv, bool logz, amrex::MultiFab& A)
 {
     using namespace stencil;
     constexpr int T = (C < 0) ? CC : face(C);
@@ -55,12 +56,12 @@ void coefficients (const amrex::Array<const amrex::MultiFab*, AMREX_SPACEDIM>& F
         amrex::ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
         {
             const amrex::Real Jinv = amrex::Real(1) / interp<CC, T>(J, i, j, k);
-            const amrex::Real xm = face_weight<T, C, 0>(0, i + lx, j, k, fx, gm, z, dxinv) * Jinv;
-            const amrex::Real xp = face_weight<T, C, 0>(1, i + lx + 1, j, k, fx, gm, z, dxinv) * Jinv;
-            const amrex::Real ym = face_weight<T, C, 1>(0, i, j + ly, k, fy, gm, z, dxinv) * Jinv;
-            const amrex::Real yp = face_weight<T, C, 1>(1, i, j + ly + 1, k, fy, gm, z, dxinv) * Jinv;
-            const amrex::Real zm = face_weight<T, C, 2>(0, i, j, k + lz, fz, gm, z, dxinv) * Jinv;
-            const amrex::Real zp = face_weight<T, C, 2>(1, i, j, k + lz + 1, fz, gm, z, dxinv) * Jinv;
+            const amrex::Real xm = face_weight<T, C, 0>(0, i + lx, j, k, fx, gm, z, dxinv, logz) * Jinv;
+            const amrex::Real xp = face_weight<T, C, 0>(1, i + lx + 1, j, k, fx, gm, z, dxinv, logz) * Jinv;
+            const amrex::Real ym = face_weight<T, C, 1>(0, i, j + ly, k, fy, gm, z, dxinv, logz) * Jinv;
+            const amrex::Real yp = face_weight<T, C, 1>(1, i, j + ly + 1, k, fy, gm, z, dxinv, logz) * Jinv;
+            const amrex::Real zm = face_weight<T, C, 2>(0, i, j, k + lz, fz, gm, z, dxinv, logz) * Jinv;
+            const amrex::Real zp = face_weight<T, C, 2>(1, i, j, k + lz + 1, fz, gm, z, dxinv, logz) * Jinv;
             a(i, j, k, coef_XM) = xm;
             a(i, j, k, coef_XP) = xp;
             a(i, j, k, coef_YM) = ym;
@@ -94,7 +95,7 @@ void apply (const amrex::MultiFab& A, const amrex::MultiFab& q, amrex::MultiFab&
 
 void implicit_coefficients (Loc loc, const amrex::Array<const amrex::MultiFab*, AMREX_SPACEDIM>& F,
                             const amrex::MultiFab& g, const amrex::MultiFab& z_nd, const Mesh& mesh,
-                            const amrex::Geometry& geom, amrex::MultiFab& A)
+                            const amrex::Geometry& geom, amrex::MultiFab& A, FaceMean mean)
 {
     const char* op = "implicit_coefficients";
     check_operator_field(op, "F[0]", *F[0], Loc::xface, mesh, 1);
@@ -110,11 +111,12 @@ void implicit_coefficients (Loc loc, const amrex::Array<const amrex::MultiFab*, 
     check_operator_field(op, "A", A, loc, mesh, 0);
     if (A.nComp() != n_implicit_coefs) { amrex::Abort("ablsteady: implicit_coefficients: A needs 7 components"); }
     const auto dxinv = geom.InvCellSizeArray();
+    const bool logz = (mean == FaceMean::logarithmic);
     switch (loc) {
-    case Loc::cell:  coefficients<-1>(F, g, z_nd, mesh.detJ, dxinv, A); break;
-    case Loc::xface: coefficients<0>(F, g, z_nd, mesh.detJ, dxinv, A); break;
-    case Loc::yface: coefficients<1>(F, g, z_nd, mesh.detJ, dxinv, A); break;
-    case Loc::zface: coefficients<2>(F, g, z_nd, mesh.detJ, dxinv, A); break;
+    case Loc::cell:  coefficients<-1>(F, g, z_nd, mesh.detJ, dxinv, logz, A); break;
+    case Loc::xface: coefficients<0>(F, g, z_nd, mesh.detJ, dxinv, logz, A); break;
+    case Loc::yface: coefficients<1>(F, g, z_nd, mesh.detJ, dxinv, logz, A); break;
+    case Loc::zface: coefficients<2>(F, g, z_nd, mesh.detJ, dxinv, logz, A); break;
     }
 }
 

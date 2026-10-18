@@ -39,10 +39,30 @@ namespace {
 void check_diffusivities (const char* op, const ResidualInputs& in)
 {
     std::string err;
-    if (in.nu == nullptr) { err = "nu is not set"; }
+    if (in.closure != nullptr) {
+        if (in.nu != nullptr || in.gamma_theta != nullptr || in.gamma_tke != nullptr) {
+            err = "with a closure, nu, gamma_theta and gamma_tke must be null (the closure computes them)";
+        } else if (in.wall_distance == nullptr) {
+            err = "a closure needs wall_distance";
+        }
+    } else if (in.nu == nullptr) { err = "nu is not set"; }
     else if (in.gamma_theta == nullptr) { err = "gamma_theta is not set"; }
     else if (in.gamma_tke == nullptr) { err = "gamma_tke is not set"; }
     if (!err.empty()) { amrex::Abort(std::string("ablsteady: ") + op + ": ResidualInputs: " + err); }
+}
+
+//! The face average in use.
+FaceMean face_mean_of (const ResidualInputs& in)
+{
+    return (in.closure != nullptr) ? in.closure->options().face_mean : in.face_mean;
+}
+
+//! Evaluate the closure at q into f (the surface layer's z0, or 0).
+void evaluate_closure (const State& q, const ResidualInputs& in, const Mesh& mesh, const amrex::Geometry& geom,
+                       ClosureFields& f)
+{
+    const amrex::Real z0 = (in.surface != nullptr) ? in.surface->z0 : amrex::Real(0);
+    in.closure->evaluate(q, *in.wall_distance, z0, in.buoyancy, mesh, geom, f);
 }
 
 void check_inputs (const char* op, const ResidualInputs& in)
@@ -112,11 +132,24 @@ amrex::Vector<const amrex::MultiFab*> solution_fields (const State& q)
 } // namespace
 
 void residual (const State& q, const ResidualInputs& in, const Mesh& mesh, const amrex::Geometry& geom,
-               ResidualFields& R)
+               ResidualFields& R, ClosureFields* fields)
 {
     check_inputs("residual", in);
     if (R.u.empty()) { R.define(q.p.boxArray(), q.p.DistributionMap()); }
     const amrex::MultiFab& z = q.z_phys_nd;
+    // The diffusivities: given, or the closure's at q.
+    ClosureFields local_fields;
+    ClosureFields* cf = (fields != nullptr) ? fields : &local_fields;
+    const amrex::MultiFab* nu = in.nu;
+    const amrex::MultiFab* gamma_theta = in.gamma_theta;
+    const amrex::MultiFab* gamma_tke = in.gamma_tke;
+    if (in.closure != nullptr) {
+        evaluate_closure(q, in, mesh, geom, *cf);
+        nu = &cf->nu;
+        gamma_theta = &cf->gamma_theta;
+        gamma_tke = &cf->gamma_tke;
+    }
+    const FaceMean mean = face_mean_of(in);
     amrex::Array<amrex::MultiFab, AMREX_SPACEDIM> F;
     transport_fluxes(q.u, q.v, q.w, z, mesh, geom, F);
     const amrex::Array<const amrex::MultiFab*, 3> Fp{&F[0], &F[1], &F[2]};
@@ -132,9 +165,9 @@ void residual (const State& q, const ResidualInputs& in, const Mesh& mesh, const
     // Diffusion as fluxes, so the wall model can set the ground fluxes.
     amrex::Array<amrex::Array<amrex::MultiFab, 3>, 3> Gm;
     amrex::Array<amrex::MultiFab, 3> Gt, Gk;
-    momentum_diffusive_fluxes(vel, *in.nu, z, mesh, geom, Gm);
-    scalar_diffusive_fluxes(q.theta, *in.gamma_theta, z, mesh, geom, Gt);
-    scalar_diffusive_fluxes(q.tke, *in.gamma_tke, z, mesh, geom, Gk);
+    momentum_diffusive_fluxes(vel, *nu, z, mesh, geom, Gm, mean);
+    scalar_diffusive_fluxes(q.theta, *gamma_theta, z, mesh, geom, Gt, mean);
+    scalar_diffusive_fluxes(q.tke, *gamma_tke, z, mesh, geom, Gk, mean);
     SurfaceState ss;
     if (in.surface != nullptr) {
         compute_surface_state(q, *in.surface, in.buoyancy, mesh, geom, ss);
@@ -165,6 +198,12 @@ void residual (const State& q, const ResidualInputs& in, const Mesh& mesh, const
     convection(Loc::cell, q.tke, Fp, kopt, mesh, geom, R.tke);
     flux_divergence(Loc::cell, Gk, mesh, geom, d);
     amrex::MultiFab::Subtract(R.tke, d, 0, 0, 1, 0);
+    if (in.closure != nullptr) {
+        // R_k -= S_k = P_s + P_b - eps (the wall-k rows below replace the first cell's).
+        amrex::MultiFab::Subtract(R.tke, cf->Ps, 0, 0, 1, 0);
+        amrex::MultiFab::Subtract(R.tke, cf->Pb, 0, 0, 1, 0);
+        amrex::MultiFab::Add(R.tke, cf->eps, 0, 0, 1, 0);
+    }
     if (in.surface != nullptr) { apply_wall_k(ss, *in.surface, q.tke, R.tke); }
     if (in.bc != nullptr) {
         in.bc->add_damping(q, R);
@@ -186,26 +225,37 @@ void line_jacobian (const State& q, const ResidualInputs& in, Equation eq, int d
     SurfaceState ss;
     const bool wall = (in.surface != nullptr && eq != Equation::w);
     if (wall) { compute_surface_state(q, *in.surface, in.buoyancy, mesh, geom, ss); }
-    line_jacobian({&F[0], &F[1], &F[2]}, q.z_phys_nd, in, eq, dir, mesh, geom, tri, wall ? &ss : nullptr);
+    ClosureFields cf;
+    if (in.closure != nullptr) { evaluate_closure(q, in, mesh, geom, cf); }
+    line_jacobian({&F[0], &F[1], &F[2]}, q.z_phys_nd, in, eq, dir, mesh, geom, tri, wall ? &ss : nullptr,
+                  in.closure != nullptr ? &cf : nullptr);
 }
 
 void line_jacobian (const amrex::Array<const amrex::MultiFab*, AMREX_SPACEDIM>& F, const amrex::MultiFab& z_nd,
                     const ResidualInputs& in, Equation eq, int dir, const Mesh& mesh, const amrex::Geometry& geom,
-                    amrex::MultiFab& tri, const SurfaceState* surface)
+                    amrex::MultiFab& tri, const SurfaceState* surface, const ClosureFields* fields)
 {
     check_diffusivities("line_jacobian", in);
     if (dir < 0 || dir > 2) { amrex::Abort("ablsteady: line_jacobian: dir must be 0, 1 or 2"); }
+    const bool closure = (in.closure != nullptr);
+    if (closure && (fields == nullptr || fields->empty())) {
+        amrex::Abort("ablsteady: line_jacobian: with a closure the rows need its fields at the state (Closure::evaluate)");
+    }
     Loc loc = Loc::cell;
-    const amrex::MultiFab* g = in.nu;
+    const amrex::MultiFab* g = closure ? &fields->nu : in.nu;
     switch (eq) {
     case Equation::u: loc = Loc::xface; break;
     case Equation::v: loc = Loc::yface; break;
     case Equation::w: loc = Loc::zface; break;
-    case Equation::theta: g = in.gamma_theta; break;
-    case Equation::tke: g = in.gamma_tke; break;
+    case Equation::theta: g = closure ? &fields->gamma_theta : in.gamma_theta; break;
+    case Equation::tke: g = closure ? &fields->gamma_tke : in.gamma_tke; break;
     }
     amrex::MultiFab A;
-    implicit_coefficients(loc, F, *g, z_nd, mesh, geom, A);
+    implicit_coefficients(loc, F, *g, z_nd, mesh, geom, A, face_mean_of(in));
+    if (closure && eq == Equation::tke) {
+        // Point-implicit sources: the Patankar diagonal (eps + max(-P_b, 0))/k.
+        amrex::MultiFab::Add(A, fields->dSdk, 0, coef_P, 1, 0);
+    }
     const bool wall = (in.surface != nullptr && eq != Equation::w);
     if (wall) {
         if (surface == nullptr) {

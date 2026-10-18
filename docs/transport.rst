@@ -116,8 +116,9 @@ Scalars (θ, k):
 
    D(q) = \nabla\cdot(\gamma\nabla q), \qquad G_d = \gamma\,(\nabla q\cdot\mathbf{A}_d).
 
-- :math:`\gamma` is a cell-centred diffusivity, averaged to each face. The closure (sub-phase 1.9) supplies it:
-  :math:`\nu_t/\mathrm{Pr}_t(R_t)` for θ and :math:`\nu_t/\sigma_k` for k.
+- :math:`\gamma` is a cell-centred diffusivity, averaged to each face: arithmetically, or with the logarithmic mean
+  across vertical cell pairs (``FaceMean``, :doc:`closure`). The closure supplies it: :math:`\nu_t/\mathrm{Pr}_t(R_t)`
+  for θ and :math:`\nu_t/\sigma_k` for k.
 
 Momentum, with the full stress tensor:
 
