@@ -26,6 +26,8 @@ set(ABLSTEADY_SOURCES
     BoundaryConditions.cpp
     Closure.cpp
     Initializer.cpp
+    PseudoTime.cpp
+    Driver.cpp
     App.cpp
     # Copied from ERF (extern_erf/EXTRACTED.md)
     ${PROJECT_SOURCE_DIR}/extern_erf/ERF_TerrainMetrics.cpp

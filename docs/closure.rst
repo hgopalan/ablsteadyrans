@@ -122,7 +122,7 @@ Wall distance
 ``height_above_ground()`` gives the vertical height of each cell centre above its column's ground (the node-mean
 height minus the node-mean ground; ERF's ``terrain_height``), with one ghost cell. ``turb.wall_distance = tucker``
 names the Tucker distance of :doc:`walldistance` instead; ``closure_column`` honours it (the Tucker solve with the
-Poisson defaults), as the driver (sub-phase 1.13) will. Likewise ``turb.frozen_switch = 1`` makes the tool record
+Poisson defaults), as the SIMPLEC stage (sub-phase 1.14) will. Likewise ``turb.frozen_switch = 1`` makes the tool record
 the branch decisions at the state before the residual. The
 surface layer's normal distance :math:`d_0` and this vertical height agree on flat ground and differ by the slope
 factor :math:`|A|` over terrain.
@@ -131,7 +131,7 @@ Inputs
 ------
 
 Every key is in ``turb``. In this version only the regression tool ``closure_column`` reads them; the driver of
-sub-phase 1.13 adds them to the application, where setting them still stops the run. Each row matches the check in
+sub-phase 1.14 adds them to the application, where setting them still stops the run. Each row matches the check in
 ``check_closure_options()``, which names the key.
 
 .. list-table::

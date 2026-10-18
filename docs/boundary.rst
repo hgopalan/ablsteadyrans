@@ -251,5 +251,5 @@ here too (``bc.surface_*``, :doc:`surface`).
 The application reads the ``bc`` keys with the mass-consistent initializer (:doc:`initializer`, which checks the face
 types against the mesh and takes the inflow profile and the sounding from them), and so does the regression tool
 ``boundary_fluxes`` (its deck also has the tool's own ``fixed_state.ustar``, ``fixed_state.z0`` and
-``fixed_state.direction``); the driver of sub-phase 1.13 applies them in the solver. Without the initializer, setting
+``fixed_state.direction``); the SIMPLEC stage of sub-phase 1.14 applies them in the solver. Without the initializer, setting
 them in an ablsteady deck still stops the run.
