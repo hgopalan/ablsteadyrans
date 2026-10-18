@@ -477,6 +477,47 @@ GoogleTest suite
        iteration count that does not fit the records, and brings the CFL within changed bounds; every ``steady.*``
        range check names its key; the reader takes every key,
        its defaults, and refuses a repeated key, an unknown machine and a bad value.
+   * - UT-1.14.1
+     - :math:`a_P` on every x-, y- and z-face equals :math:`1/\Delta\tau` plus the diagonal of ``line_jacobian``
+       exactly, with a random :math:`\Delta\tau` field over a 60 m hill with random diffusivities (both diagonals
+       come from ``implicit_rows``, whose coefficients UT-1.6.x pin: the statement is the :math:`1/\Delta\tau`
+       addition and the face step); the diagonal exceeds :math:`1/\Delta\tau`; the two copies of the periodic seam
+       face have identical rows and identical corrections; the pressure and scalars are untouched and :math:`u`
+       changes by exactly the z-line solve's correction.
+   * - UT-1.14.2
+     - The z-line solve (the vertical upwind weights of :math:`A_1` included) against a dense direct solve of the same
+       system,
+       assembled independently from the coefficient fields: on a single column (1 × 1 × 12, periodic sides, the
+       lagged neighbours are the column itself) to 1e-12 after 60 sweeps (single 1e-4); the ghosts outside the domain
+       stay 0.
+   * - UT-1.14.3
+     - :math:`\alpha_u` relaxation equals pseudo-time relaxation: with :math:`\Delta\tau = \alpha_u/(1-\alpha_u)/
+       \mathrm{diag}(A_1)` on every face, :math:`a_P = \mathrm{diag}(A_1)/\alpha_u` to 1e-12 (single 1e-5) and the
+       converged correction of u, v and w equals the dense solve of the relaxed system to 1e-12 (single 1e-4).
+   * - UT-1.14.4
+     - z-line Jacobi on a 3-D linear advection-diffusion problem (4 × 4 × 6, periodic, :math:`\Delta\tau` = 20 s)
+       converges to the dense direct solution: the error falls at every doubling of the sweeps (1, 2, 4, 8, 16) and
+       is below 1e-10 after 400 sweeps, with the last sweep's change below 1e-10.
+   * - UT-1.14.5
+     - Fixed point: a uniform wind over flat ground with uniform pressure has a residual of exactly zero and the
+       predictor changes nothing (:math:`|\Delta q| = 0`; with a zero right-hand side the solve is zero for any
+       coefficients, so this follows from the residual); a perturbation of :math:`u` at one face is pulled back: one
+       predictor step with :math:`\Delta\tau` = 10⁴ s and 50 sweeps lowers max :math:`|R_u|` below 0.75 of its value
+       (0.56 measured; the pressure and the transport are frozen in the step).
+   * - UT-1.14.6
+     - *Beyond the plan.* ``face_dtau`` is the mean of the two cells, the one cell at a wall, the ground and the top,
+       and the periodic image across the seam; one sweep's change is the whole correction; ``sweeps < 1``, a
+       non-positive step and wrong layouts are refused.
+   * - UT-1.14.7
+     - *Beyond the plan.* With boundary conditions (inflow at xlo, outflow at xhi, slip ground and top), the Dirichlet
+       rows (the inflow face of u, the ground and top faces of w) have :math:`a_P = 1`, :math:`d = 0`, and one
+       predictor step sets them to the boundary value exactly for any :math:`\Delta\tau` (the inflow faces then have
+       a zero residual row); every other row has :math:`a_P = 1/\Delta\tau + \mathrm{diag}(A_1)` and :math:`d = a_P -
+       \sum a_{nb} > 0`.
+   * - UT-1.14.8
+     - *Beyond the plan.* The same state on one box and on 2 × 2 boxes (the lagged neighbours cross the box seams
+       through the ghost exchange) gives the same corrected u, v, w, :math:`a_P`, :math:`d` and face step to 1e-12
+       (single 1e-5).
    * - UT-1.2.1
      - Steady-criterion verdicts on converging, stalling (including a residual stuck exactly at the tolerance) and
        oscillating histories. The converging history becomes

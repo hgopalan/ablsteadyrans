@@ -57,6 +57,7 @@ solver yet.
    closure
    steady
    driver
+   predictor
    cases
    references
    numerics

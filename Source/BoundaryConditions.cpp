@@ -595,6 +595,37 @@ void BoundaryConditions::apply_rows (const State& q, ResidualFields& R, bool hom
     }
 }
 
+void BoundaryConditions::dirichlet_rows (Equation eq, Loc loc, const Mesh& mesh, amrex::MultiFab& mask) const
+{
+    if (mask.empty()) {
+        const amrex::MultiFab* like = (loc == Loc::xface) ? &mesh.ax : (loc == Loc::yface) ? &mesh.ay : (loc == Loc::zface) ? &mesh.az : &mesh.detJ;
+        mask.define(like->boxArray(), mesh.detJ.DistributionMap(), 1, 0);
+    }
+    check_operator_field("dirichlet_rows", "mask", mask, loc, mesh, 0);
+    mask.setVal(0.0);
+    const amrex::Box& dom = m_geom.Domain();
+    const int f = (eq == Equation::u) ? f_u : (eq == Equation::v) ? f_v : (eq == Equation::w) ? f_w
+                : (eq == Equation::theta) ? f_theta : f_tke;
+    const int t = static_cast<int>(loc);
+    for (int d = 0; d < AMREX_SPACEDIM; ++d) {
+        if (m_geom.isPeriodic(d)) { continue; }
+        for (const bool lo : {true, false}) {
+            const FaceType ft = m_in.face[amrex::Orientation(d, lo ? amrex::Orientation::low : amrex::Orientation::high)];
+            const Rule rule = rule_for(static_cast<Field>(f), ft, d, lo);
+            const bool nodal_d = stencil::nodal(t, d);
+            if (!(nodal_d && (rule == Rule::value || rule == Rule::profile))) { continue; }
+            const int edge = lo ? dom.smallEnd(d) : dom.bigEnd(d) + 1;
+            for (amrex::MFIter mfi(mask, false); mfi.isValid(); ++mfi) {
+                amrex::Box fb = mfi.validbox();
+                if (fb.smallEnd(d) > edge || fb.bigEnd(d) < edge) { continue; }
+                fb.setSmall(d, edge);
+                fb.setBig(d, edge);
+                mask[mfi].template setVal<amrex::RunOn::Device>(amrex::Real(1), fb, 0, 1);
+            }
+        }
+    }
+}
+
 void BoundaryConditions::apply_to_implicit (Equation eq, Loc loc, const amrex::MultiFab& z_nd, amrex::MultiFab& A) const
 {
     // The damping first: the Dirichlet face points below become identity rows.

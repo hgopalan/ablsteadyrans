@@ -28,6 +28,7 @@ set(ABLSTEADY_SOURCES
     Initializer.cpp
     PseudoTime.cpp
     Driver.cpp
+    Predictor.cpp
     App.cpp
     # Copied from ERF (extern_erf/EXTRACTED.md)
     ${PROJECT_SOURCE_DIR}/extern_erf/ERF_TerrainMetrics.cpp

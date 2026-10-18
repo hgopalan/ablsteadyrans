@@ -149,6 +149,11 @@ public:
     //! model's rows are folded first; Residual.cpp keeps the order).
     void apply_to_implicit (Equation eq, Loc loc, const amrex::MultiFab& z_nd, amrex::MultiFab& A) const;
 
+    //! The Dirichlet face points of equation eq at loc (the identity rows of
+    //! apply_to_implicit): mask = 1 there, 0 elsewhere. mask: one component at
+    //! loc on the mesh's layout, no ghosts needed (defined here if empty).
+    void dirichlet_rows (Equation eq, Loc loc, const Mesh& mesh, amrex::MultiFab& mask) const;
+
     //! The damping sources (nothing when both layers are off). Before
     //! apply_rows, which overwrites the Dirichlet face points it touches.
     void add_damping (const State& q, ResidualFields& R) const;

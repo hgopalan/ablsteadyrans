@@ -710,6 +710,8 @@ TEST (Driver, DivergenceStopsAndTheChecksNameTheirInput)
         {"steady.switch_residual", [] (SteadyOptions& b) { b.switch_residual = 2; }},
         {"steady.switch_back_growth", [] (SteadyOptions& b) { b.switch_back_growth = 1; }},
         {"steady.nodes", [] (SteadyOptions& b) { b.nodes = 0; }},
+        {"steady.zline_sweeps", [] (SteadyOptions& b) { b.zline_sweeps = 1; }},
+        {"steady.zline_sweeps", [] (SteadyOptions& b) { b.zline_sweeps = 101; }},
         {"steady.residual_tol", [] (SteadyOptions& b) { b.criterion.residual_tol = 0; }},
         {"steady.monitor_window", [] (SteadyOptions& b) { b.criterion.monitor_window = 1; }},
     };
@@ -730,7 +732,7 @@ TEST (Driver, DivergenceStopsAndTheChecksNameTheirInput)
         amrex::ParmParse pp("steady");
         const char* keys[] = {"residual_tol", "residual_drop_orders", "residual_ref_iterations", "monitor_rel_tol", "monitor_window",
                               "max_iterations", "cfl0", "cfl_max", "ser_exponent", "ser_max_growth", "switch_window",
-                              "switch_residual", "switch_back_growth", "machine", "nodes"};
+                              "switch_residual", "switch_back_growth", "zline_sweeps", "machine", "nodes"};
         auto clear = [&] { for (const char* k : keys) { while (pp.remove(k) > 0) {} } };
         clear();
         pp.add("residual_tol", amrex::Real(1e-4));
@@ -748,6 +750,7 @@ TEST (Driver, DivergenceStopsAndTheChecksNameTheirInput)
         pp.add("switch_back_growth", amrex::Real(4));
         pp.add("machine", std::string("kestrel-gpu"));
         pp.add("nodes", 3);
+        pp.add("zline_sweeps", 4);
         const SteadyOptions r = ablsteady::read_steady_options();
         EXPECT_EQ(r.criterion.residual_tol, amrex::Real(1e-4));
         EXPECT_EQ(r.criterion.residual_drop_orders, 3);
@@ -764,12 +767,14 @@ TEST (Driver, DivergenceStopsAndTheChecksNameTheirInput)
         EXPECT_EQ(r.switch_back_growth, 4);
         EXPECT_EQ(r.machine, ablsteady::Machine::KestrelGpu);
         EXPECT_EQ(r.nodes, 3);
-        EXPECT_EQ(r.given.size(), 15u);
+        EXPECT_EQ(r.zline_sweeps, 4);
+        EXPECT_EQ(r.given.size(), 16u);
         clear();
         const SteadyOptions d = ablsteady::read_steady_options();
         EXPECT_EQ(d.cfl0, 1);
         EXPECT_EQ(d.cfl_max, 10);
         EXPECT_EQ(d.machine, ablsteady::Machine::Local);
+        EXPECT_EQ(d.zline_sweeps, 2);
         EXPECT_TRUE(d.given.empty());
         pp.add("cfl0", amrex::Real(1));
         pp.add("cfl0", amrex::Real(2));

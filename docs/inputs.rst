@@ -123,7 +123,7 @@ A key that has no effect for the chosen ``terrain.type`` or ``terrain.smoothing`
 ----------
 
 The steady driver (:doc:`driver`) reads ``steady.*`` through ``read_steady_options()``: the five parameters of the
-definition of a steady solution (:doc:`steady`) and its own. The application reads them from sub-phase 1.14, when it
+definition of a steady solution (:doc:`steady`) and its own. The application reads them from sub-phase 1.15, when it
 has a stage to run; until then setting these keys stops the run, like any other key the application does not read.
 Each row matches the check in ``Source/SteadyCriterion.cpp`` or ``Source/Driver.cpp``; a repeated key is refused.
 
@@ -176,6 +176,10 @@ Each row matches the check in ``Source/SteadyCriterion.cpp`` or ``Source/Driver.
    * - ``steady.switch_back_growth``
      - ``10``
      - Finite, > 1. Growth of the relative residual over a window that sends the run back a stage.
+   * - ``steady.zline_sweeps``
+     - ``2``
+     - ≥ 2 and ≤ 100. z-line Jacobi sweeps per momentum predictor step (:doc:`predictor`); one sweep is the
+       configuration the sub-phase 1.5 analysis found unstable at large horizontal CFL, so it is not an input.
    * - ``steady.machine``
      - ``local``
      - ``local``, ``kestrel-cpu`` or ``kestrel-gpu``: the allocation-unit rate of the accounting (0, 10, 100 AU per
