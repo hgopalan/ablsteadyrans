@@ -29,6 +29,8 @@ set(ABLSTEADY_SOURCES
     PseudoTime.cpp
     Driver.cpp
     Predictor.cpp
+    Simplec.cpp
+    TurbulenceOutput.cpp
     App.cpp
     # Copied from ERF (extern_erf/EXTRACTED.md)
     ${PROJECT_SOURCE_DIR}/extern_erf/ERF_TerrainMetrics.cpp

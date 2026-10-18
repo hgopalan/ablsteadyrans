@@ -19,7 +19,7 @@ Equations
 - :math:`C`, :math:`D_c` and the scalar diffusion are the operators of :doc:`transport`; :math:`C_b` is the bounded
   first-order upwind form, which k always uses.
 - :math:`p` is the kinematic perturbation pressure :math:`(p - p_\mathrm{ref})/\rho_0`.
-- :math:`S` is the source: buoyancy on w, Coriolis and geostrophic forcing.
+- :math:`S` is the source: buoyancy on w, Coriolis and geostrophic forcing, the constant pressure-gradient force.
 - :math:`\gamma_\theta = \kappa + \nu_t/\mathrm{Pr}_t` and :math:`\gamma_k = \nu + \nu_t/\sigma_k` are cell-centred
   inputs, like :math:`\nu + \nu_t` for momentum; the closure supplies them (sub-phase 1.9).
 
@@ -132,8 +132,12 @@ from the two cells of the w-face.
 - Over terrain the u and v control volumes differ, so the discrete Coriolis force does a little work; it is second
   order (:math:`10^{-5}` of the Coriolis magnitude at 64 cells, review estimate) and harmless for a steady solve.
 
-``CoriolisOptions``, ``BuoyancyOptions`` and the profile are range-checked; there are no input keys yet (the driver
-adds them).
+**Pressure-gradient force** (sub-phase 1.15): a constant kinematic acceleration :math:`F` (m/s²) on every momentum
+equation, :math:`R_c \mathrel{-}= F_c` (ERF's ``abl_pressure_grad``), the force of a large-scale pressure gradient
+without rotation; it drives the 1-D column of RT-1.15.1 (:math:`F = u_*^2/H`).
+
+``CoriolisOptions``, ``BuoyancyOptions``, the force and the profile are range-checked; the application reads them
+from ``forcing.*`` with the SIMPLEC stage (:doc:`inputs`).
 
 Linearisations
 --------------

@@ -35,6 +35,71 @@
 // the step sets the boundary value exactly. a_P is 1 there, which the
 // pressure correction of 1.15 must treat as "no correction on this face".
 //
+// Point-implicit buoyancy (with gravity on): the w and theta equations are
+// the oscillator dw/dtau = (g/theta_0) theta', dtheta'/dtau = -w dtheta/dz
+// with the frequency N; explicit pseudo-time steps amplify it by
+// (1 + N^2 dtau^2)^(1/2) per step whatever the CFL, and nothing damps it
+// where nu_t vanishes (an inversion). The w rows therefore carry the
+// linearised coupling of the backward Euler step, with tau_theta = 1 /
+// (1/dtau + a_P,theta) the step theta's own implicit rows allow (the face
+// mean of theta's diagonal: with dtau alone the coupling loses its damping
+// where theta's operator is stiff, the diffusion of a kink; the review's
+// 2 x 2 analysis gives |G| = 0.32 at N tau = 3 against 0.91, and with that
+// loss the first iterations of Neutral_ABL_Flat diverged): the diagonal
+// gains (g/theta_0) max(dtheta/dz, 0) tau_theta (the stiffness; into the
+// SIMPLEC denominator d as well, so the pressure correction of w is reduced
+// where the stratification is stable) and the right-hand side the buoyancy
+// of the theta change the theta equation predicts, -(g/theta_0) tau_theta
+// R_theta (face mean of the two cells). Both vanish at a fixed point
+// (R_theta = 0 and the delta form), so the steady solution is unchanged. The
+// theta sweep of the SIMPLEC stage then uses the corrected velocity's
+// transport, which closes the backward Euler pair (|G| = (1 + N^2
+// tau^2)^(-1/2) for the oscillator alone).
+//
+// Point-implicit rotation (with Coriolis on): the u and v equations are the
+// rotation du/dtau = f (v - v_g), dv/dtau = -f (u - u_g), undamped where
+// nu_t vanishes (above the boundary layer), and an explicit pseudo-time step
+// amplifies it by (1 + f^2 dtau^2)^(1/2). In the same way as the buoyancy,
+// with tau_c = 1 / max(|f| / r, a_P - sum a_nb), r = rotation_relax in
+// (0, 1] (simplec.rotation_relax, 0.3) and a_P - sum a_nb the row's net
+// implicit diagonal (the wall drag, the damping and the value folds; the
+// transport weights cancel against their neighbours), the u and v rows gain
+// f^2 tau_c on the diagonal (and d) and the Coriolis force
+// of the change the other component's residual predicts on the right-hand
+// side, -f tau_c R_v on u and +f tau_c R_u on v (the other component's
+// residual at this face: the mean of the four faces around it, as the force
+// itself). Both vanish at a fixed point. Why this tau_c: the backward Euler
+// step of the rotation alone (tau_c = dtau) damps the mode by
+// (1 + f^2 dtau^2)^(-1/2), i.e. (f dtau)^2 / 2 per iteration, and the
+// horizontal CFL keeps f dtau at 0.01, so the inertial oscillation of
+// Neutral_ABL_Flat persisted for 10^4 iterations. With tau_c = r/|f| where
+// the drag is weak (the free atmosphere) the amplification of the pure
+// rotation is (1 + f^2 dtau^2)^(1/2) / (1 + r f dtau), about 1 - r f dtau:
+// a damping of r f dtau per iteration. r < 1 because the right-hand-side
+// term carries the whole residual of the other component, f tau_c R_v, not
+// its rotation part alone: in an inviscid stratified layer (k at its floor
+// in an inversion) that is a fraction r of a residual that holds internal
+// gravity waves and pressure, and at r = 1 the injection makes a
+// horizontally varying wave grow by 1.4 per iteration until the SER ramp
+// collapses (the Neutral_ABL_Flat bursts of the review); r = 0.1 to 0.5
+// converge on every path tried and r = 1 bursts; 0.3 converges in half the
+// iterations of 0.2 on every path, so it is the default. Where a drag
+// dominates
+// (the net diagonal above |f|/r:
+// the wall-drag fold of the first cell, a damping layer) tau_c = 1/(net
+// diagonal) keeps the cross term from carrying the other component's drag
+// residual at many times its strength, which would slow that relaxation
+// from 1/(1 + a dtau) to about 0.9 per iteration (the review's 2 x 2
+// analysis); with the net diagonal the step is a pure contraction. The full
+// a_P would not do: its upwind advection weights (|u|/dx, 300 f aloft) are
+// transport, not drag, and with them tau_c fell back to dtau and the
+// inertial oscillation returned. The terms are a preconditioner of the
+// pseudo-time path; the
+// fixed point is unchanged. The cos(phi) terms of the 3-D Coriolis force
+// (on u and w) stay explicit. The buoyancy's diagonal keeps only a stable
+// stratification (max(dtheta/dz, 0)); the convectively unstable part of the
+// coupling stays explicit through the right-hand side.
+//
 // Invariant: the two copies of a periodic seam face are the same unknown;
 // the sweeps update them independently from identical inputs (A, R and the
 // lagged reads are periodic images) and delta is OverrideSync'd afterwards.
@@ -80,19 +145,23 @@ struct MomentumPredictorResult
 //! One predictor step on q's u, v, w: R the residual at q (its momentum
 //! parts are used), F the transport fluxes at q (transport_fluxes), in the
 //! residual's inputs (its diffusivities or closure, wall model and boundary
-//! conditions give A1), dtau_faces from face_dtau, sweeps >= 1. surface and
+//! conditions give A1; with gravity on, R.theta, q.theta and the buoyancy
+//! options give the point-implicit buoyancy of the w rows), dtau_faces from
+//! face_dtau, sweeps >= 1. surface and
 //! fields as for line_jacobian (the wall model's state and the closure's
 //! evaluation at q). ap receives a_P (defined here if empty). q's ghost cells
 //! are not refilled (the caller's BoundaryConditions::fill_ghosts does that
 //! before the next residual). Aborts, naming the argument, on a wrong layout
 //! or sweeps < 1.
+//! rotation_relax (in (0, 1]): the rotation's step tau_c = 1 / max(|f| /
+//! rotation_relax, a_P - sum a_nb) (the header).
 MomentumPredictorResult momentum_predictor (State& q, const ResidualFields& R,
                                             const amrex::Array<const amrex::MultiFab*, AMREX_SPACEDIM>& F,
                                             const ResidualInputs& in,
                                             const amrex::Array<amrex::MultiFab, AMREX_SPACEDIM>& dtau_faces,
                                             const Mesh& mesh, const amrex::Geometry& geom, int sweeps,
                                             PredictorFields& ap, const SurfaceState* surface = nullptr,
-                                            const ClosureFields* fields = nullptr);
+                                            const ClosureFields* fields = nullptr, amrex::Real rotation_relax = 1);
 
 //! The z-line Jacobi solve alone (for its tests and the scalar sweeps of
 //! sub-phase 1.15): sweeps of the system with the off-diagonal coefficients

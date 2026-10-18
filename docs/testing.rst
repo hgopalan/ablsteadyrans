@@ -112,6 +112,35 @@ Current tests
        strain (1e-9 of ε; the second cell's P_s/ε = 1.45 is the centred difference of ln over 2Δz), R_θ and R_w zero.
        The plotfile against ``Tests/Gold/closure_column_plt00000`` at relative 1e-10 (a gold written by ablsteady).
        Double precision only.
+   * - ``rt_steady_column``
+     - RT-1.15.1: the application on the 1-D neutral column (``Tests/Decks/inputs_steady_column``: 4 × 4 × 64,
+       1000 m, surface layer z₀ = 0.1 m, slip top, uniform θ, the force F = u*²/H with u* = 0.35 m/s, the log law with
+       u* = 0.25 m/s as the first guess, CFL cap 50) to the steady verdict (6 orders, 1e-8).
+       ``Tests/check_steady_column.py``: the verdict; the residual of u down 6 orders from its reference (the
+       ``Driver`` history of the checkpoint); mean u* = √(FH) to 1e-4 (the force balance); the first cell's speed the
+       wall law's (1e-6); the second cell within 1 % of the log law and the lowest eight within 2 % (the stress of the
+       force-driven column is u*²(1 − z/H) and the discrete strain overshoots, RT-1.9.1); the wall k = u*²/C_μ0²
+       (1e-6); ν_t of the second cell within 6 % of κ u* (z + z₀); every column identical (1e-10); every field finite.
+       Measured: 2231 iterations, u* = 0.3499999, second cell 0.9 % low, cells 2–7 1.3–1.9 % low. Double precision
+       only (six orders and 1e-8 are below single's floor); the restart chain below runs in both.
+   * - ``rt_steady_column_restart_first``, ``…_continued``, ``…_straight``, ``…_matches``
+     - *Beyond the plan.* 40 iterations of the column (``inputs_steady_column_restart``, the first guess on the
+       command line), continued to 80 from the checkpoint (the driver and closure histories restored, the inflow keys
+       of the deck accepted on the restart) against 80 straight on the same two ranks: the plotfiles identical under
+       ``amrex_fcompare`` at relative 1e-14.
+   * - ``rt_steady_neutral_flat``
+     - RT-1.15.2: the application on ERF's Neutral_ABL_Flat (``Tests/Decks/inputs_steady_neutral_flat``: 8 × 8 × 64,
+       geostrophic wind 10 m/s at latitude 90°, f = 1e-4 1/s, the sounding's inversion from 700 m, slip top with
+       0.03 K/m, z₀ = 0.1 m, ERF's closure defaults; four sweeps, CFL cap 2, the log law with u* = 0.35 m/s as the
+       first guess) to the steady verdict. ``Tests/check_steady_neutral.py``: the verdict, then ERF's own
+       ``check_neutral.py --physics`` (``extern_erf/``) on the turbulence plotfile: every field finite, k ≥ 0, the
+       capped κ(z + z₀) length (1e-3), the AL01 stability functions of R_t (1e-6), K_mv = c_μ √k L (5 %), ε =
+       C_μ0³ k^1.5/L (5 %), the wall cell's k balance (1 %), u* within 0.35 ± 0.15 m/s, the wall k within 5 % of
+       u*²/C_μ0², the log law in the lowest four cells within 10 %, K_mv of the second cell within 30 % of κ u* z.
+       Measured: the verdict after about 2850 iterations (13 s on two ranks), u* = 0.377 m/s, every ERF check
+       passing, on one to three ranks with both compilers (the bursts of an earlier version of the predictor's
+       rotation step are explained and removed in :doc:`simplec`). Label ``regression`` (the run time); double only.
+       The 1 % comparison with an ERF reference run is not in this version.
    * - ``drift_check_selftest``
      - The ``extern_erf`` drift check on a throw-away ERF repository (:doc:`extraction`).
    * - ``refavg_snapshots``, ``refavg_build``, ``refavg_verify``, ``refavg_matches``
@@ -518,6 +547,55 @@ GoogleTest suite
      - *Beyond the plan.* The same state on one box and on 2 × 2 boxes (the lagged neighbours cross the box seams
        through the ghost exchange) gives the same corrected u, v, w, :math:`a_P`, :math:`d` and face step to 1e-12
        (single 1e-5).
+   * - UT-1.15.1
+     - One pressure correction of a predicted velocity (random wind, slip ground and top, periodic sides) leaves a
+       divergence below the Poisson tolerance of the predicted one (0.1 and 1e-10, 2-norms), the ground and top faces
+       of w untouched (:math:`d = 0`), :math:`p` changed from a random start by :math:`\alpha_p` times the potential
+       (:math:`\alpha_p` = 1 and 0.7); the stage's iterate reports the same divergences and six residual norms.
+   * - UT-1.15.2
+     - Poiseuille flow between no-slip walls (uniform mesh, 16 layers, :math:`\nu` = 10 m²/s, F = 1e-4 m/s²): the stage
+       at CFL 10 reaches the discrete closed form :math:`u_k = (F/2\nu)(z_k(H - z_k) + \Delta z^2/4)` (the odd mirror of
+       the walls) to 1e-13 of :math:`u_{\max}` (single 1e-5) in under 400 iterations; w, v exactly 0, :math:`p'` at
+       round-off, θ and k untouched; one more iteration changes u by less than 1e-14 (UT-1.15.6 b).
+   * - UT-1.15.3
+     - The lid-driven cavity at Re 100 (64 × 64 in x–z, two periodic cells in y, no-slip walls, the lid at U = 1,
+       :math:`\nu` = 0.01) run by the driver (four sweeps, CFL 1 → 4) to its verdict: u on the vertical centreline and
+       w on the horizontal one within 0.01 U of Ghia, Ghia and Shin (1982) at their tabulated points (measured 0.0045
+       and 0.0083; 1760 iterations, 14 s); nothing varies in y.
+   * - UT-1.15.4
+     - With :math:`d = 1/\Delta\tau` on every interior face and :math:`\Delta\tau` = 1e3, 1e6, 1e9, the corrected
+       velocity equals the plain projection's to 1e-9 of U (single 1e-4), :math:`\Delta\tau\,p'` equals the
+       projection's potential to 1e-8, and the divergence falls to the solver tolerance: no breakdown as
+       :math:`\Delta\tau \to \infty`.
+   * - UT-1.15.5
+     - With the closure and a strong random wind, k stays at or above the floor after each of five iterations: a floor
+       of 1.5 above most of the initial k (the clip acts and its count is reported) and a floor of 1e-6 below every
+       value (the natural case: no cell is clipped), every field finite.
+   * - UT-1.15.6
+     - A uniform wind with slip walls has a residual at round-off and a full iteration changes every field by less
+       than 1e-14 of its scale (the Poisson solve of a zero right-hand side returns round-off); the monitors are the
+       speed and the mean k.
+   * - UT-1.15.7
+     - *Beyond the plan.* The point-implicit buoyancy and rotation of the predictor pinned against their formulas on a
+       random stratified rotating state, with ``rotation_relax`` 1 and 0.3: :math:`a_P` and :math:`d` of u, v, w,
+       the stiffness rows, and the corrections equal to the z-line solves of the modified rows (1e-13; single
+       1e-4).
+   * - UT-1.15.8
+     - *Beyond the plan.* The moving lid and lateral walls: the ghost of u above a moving top is 2U − u, the ghost of
+       w beyond an x wall is −w, u is 0 on the x walls (2 n_y n_z Dirichlet rows), and the checks refuse a wall
+       velocity on another face type, a normal component and a non-finite value, and a lateral surface layer.
+   * - UT-1.15.9
+     - *Beyond the plan.* The readers of ``simplec.*``, ``forcing.*`` and ``convection.*``: values, defaults, range
+       checks naming the key (``rotation_relax`` in (0, 1] included), repeated keys, keys with no effect (``ug``
+       without Coriolis and without geostrophic forcing, ``theta0`` without gravity, ``smooth_eps`` without the van
+       Albada limiter), the value counts; the
+       stage's refusals (sweeps < 1,
+       no boundary conditions, a closure not the inputs', :math:`\alpha_p` out of range, a negative or non-finite
+       SIMPLEC denominator, a non-positive step, a scalar sweep of a velocity, a negative floor).
+   * - UT-1.15.10
+     - *Beyond the plan.* The wall-k rows folded into the implicit rows: with a surface layer the first cells' k
+       rows are, for ``bc.surface_wall_k = dirichlet``, the diagonal :math:`\max(u_*, u_{*,\min})/d_0` alone with
+       every neighbour zero, and for ``source`` the plain rows without the ground neighbour plus that diagonal.
    * - UT-1.2.1
      - Steady-criterion verdicts on converging, stalling (including a residual stuck exactly at the tolerance) and
        oscillating histories. The converging history becomes

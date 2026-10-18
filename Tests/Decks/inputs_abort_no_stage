@@ -1,0 +1,14 @@
+# Must abort: keys of the SIMPLEC stage without steady.stage = simplec, and
+# a stage without a first guess (the second deck error is in the same run:
+# every check is reported together).
+mesh.n_cell        = 8 8 8
+mesh.prob_hi       = 800. 800. 800.
+mesh.is_periodic   = 1 1 0
+forcing.gravity    = 0.
+convection.limiter = upwind
+simplec.alpha_p    = 0.9
+turb.Cmu0          = 0.55
+steady.cfl0        = 2.
+io.turb_plot_file  = turb
+io.write_plotfile   = 0
+io.write_checkpoint = 0

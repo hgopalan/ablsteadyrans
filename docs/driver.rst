@@ -4,9 +4,9 @@ Steady driver
 The steady driver (sub-phase 1.13, ``Source/Driver.H``) runs the pseudo-time iteration to the steady state defined in
 :doc:`steady`: it hands each iteration to a *stage*, sets the local pseudo-time step, records the residual and
 monitor histories with the wall time and allocation units of every stage, switches between stages by rules with
-hysteresis, and stops on the verdict of ``SteadyCriterion``. Phase 1 has one stage, SIMPLEC (sub-phase 1.14); the
+hysteresis, and stops on the verdict of ``SteadyCriterion``. Phase 1 has one stage, SIMPLEC (:doc:`simplec`); the
 Newton finish (phase 3) and the FAS multigrid (phase 4) plug into the same interface. The application runs the driver
-from sub-phase 1.15, when it has a stage; this version builds and tests the framework.
+with ``steady.stage = simplec``.
 
 Stages
 ------
@@ -111,5 +111,6 @@ inconsistent file stops the run, naming it (text after a complete history is ign
 Inputs
 ------
 
-Every key is in ``steady`` (:doc:`inputs` has the table with the ranges). The application does not read them yet: the
-driver needs a stage (sub-phase 1.15). The reader ``read_steady_options()`` and the checks are tested.
+Every key is in ``steady`` (:doc:`inputs` has the table with the ranges). The application reads them with
+``steady.stage = simplec``; without a stage every other ``steady.*`` key is refused. The reader
+``read_steady_options()`` and the checks are tested.

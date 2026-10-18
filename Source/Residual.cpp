@@ -183,6 +183,7 @@ void residual (const State& q, const ResidualInputs& in, const Mesh& mesh, const
     fill_theta_ref(in.theta_ref, z, theta_ref);
     subtract_buoyancy(q.theta, theta_ref, in.buoyancy, mesh, R.w);
     subtract_coriolis(q.u, q.v, q.w, in.coriolis, mesh, R.u, R.v, R.w);
+    subtract_pressure_gradient(in.pressure_gradient, mesh, R.u, R.v, R.w);
 
     // Continuity.
     velocity_divergence(q.u, q.v, q.w, z, mesh, geom, R.p);
@@ -260,6 +261,7 @@ void implicit_rows (const amrex::Array<const amrex::MultiFab*, AMREX_SPACEDIM>& 
             amrex::Abort("ablsteady: implicit_rows: with a wall model the first cells' rows need the surface state");
         }
         apply_wall_to_implicit(*surface, loc, mesh, geom, A);
+        if (eq == Equation::tke) { apply_wall_k_to_implicit(*surface, *in.surface, A); }
     }
     if (in.bc != nullptr) { in.bc->apply_to_implicit(eq, loc, z_nd, A); }
 }
@@ -272,7 +274,6 @@ void line_jacobian (const amrex::Array<const amrex::MultiFab*, AMREX_SPACEDIM>& 
     amrex::MultiFab A;
     implicit_rows(F, z_nd, in, eq, mesh, geom, A, surface, fields);
     const Loc loc = (eq == Equation::u) ? Loc::xface : (eq == Equation::v) ? Loc::yface : (eq == Equation::w) ? Loc::zface : Loc::cell;
-    const bool wall = (in.surface != nullptr && eq != Equation::w);
     if (tri.empty()) { tri.define(A.boxArray(), A.DistributionMap(), n_line_coefs, 0); }
     check_operator_field("line_jacobian", "tri", tri, loc, mesh, 0);
     if (tri.nComp() != n_line_coefs) { amrex::Abort("ablsteady: line_jacobian: tri needs 3 components"); }
@@ -281,7 +282,6 @@ void line_jacobian (const amrex::Array<const amrex::MultiFab*, AMREX_SPACEDIM>& 
     amrex::MultiFab::Copy(tri, A, coef_XP + 2 * dir, line_upper, 1, 0);
     tri.mult(amrex::Real(-1), line_lower, 1, 0);
     tri.mult(amrex::Real(-1), line_upper, 1, 0);
-    if (wall && eq == Equation::tke) { apply_wall_k_line(*surface, *in.surface, tri); }
 }
 
 amrex::Real jvp (const State& q, const State& v, const ResidualInputs& in, const Mesh& mesh,

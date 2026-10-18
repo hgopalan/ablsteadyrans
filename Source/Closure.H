@@ -118,6 +118,9 @@ public:
     //! Store f.nut as the relaxation history (nut_relax < 1 blends with it).
     void accept (const ClosureFields& f);
     [[nodiscard]] bool has_history () const { return !m_nut_prev.empty(); }
+    //! The stored history (the relaxed nu_t of the last accepted fields;
+    //! empty without one).
+    [[nodiscard]] const amrex::MultiFab& history () const { return m_nut_prev; }
     //! The stored history to and from a checkpoint directory
     //! (<dir>/Level_0/closure_nut, with its ghost ring); read defines it on
     //! the given layout. Nothing is written or read when there is no history.

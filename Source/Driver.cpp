@@ -21,7 +21,7 @@ namespace {
 
 const char* const kKeys[] = {"residual_tol", "residual_drop_orders", "residual_ref_iterations", "monitor_rel_tol",
                              "monitor_window", "max_iterations", "cfl0", "cfl_max", "ser_exponent", "ser_max_growth",
-                             "switch_window", "switch_residual", "switch_back_growth", "zline_sweeps", "machine", "nodes"};
+                             "switch_window", "switch_residual", "switch_back_growth", "zline_sweeps", "machine", "nodes", "stage"};
 
 constexpr int kDriverVersion = 1;
 const char* const kDriverMagic = "ablsteady-driver";
@@ -107,6 +107,12 @@ SteadyOptions read_steady_options ()
     pp.query("switch_back_growth", opt.switch_back_growth);
     pp.query("nodes", opt.nodes);
     pp.query("zline_sweeps", opt.zline_sweeps);
+    std::string stage;
+    if (pp.query("stage", stage)) {
+        if (stage == "none") { opt.stage = StageKind::none; }
+        else if (stage == "simplec") { opt.stage = StageKind::simplec; }
+        else { amrex::Abort("ablsteady: steady.stage = " + stage + ": must be none or simplec"); }
+    }
     std::string machine;
     if (pp.query("machine", machine) && !parse_machine(machine, opt.machine)) {
         amrex::Abort("ablsteady: steady.machine = " + machine + ": must be local, kestrel-cpu or kestrel-gpu");

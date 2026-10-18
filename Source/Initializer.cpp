@@ -193,7 +193,7 @@ amrex::Real obrien_omega (const amrex::MultiFab& u, const amrex::MultiFab& v, co
 }
 
 amrex::Real first_guess_state (const InitOptions& opt, const BoundaryInputs& bc, const Mesh& mesh,
-                               const amrex::Geometry& geom, State& q)
+                               const amrex::Geometry& geom, State& q, const CoriolisOptions& coriolis)
 {
     {
         const auto err = check_init_options(opt);
@@ -204,8 +204,7 @@ amrex::Real first_guess_state (const InitOptions& opt, const BoundaryInputs& bc,
     check_operator_field(op, "u", q.u, Loc::xface, mesh, 2);
     check_operator_field(op, "theta", q.theta, Loc::cell, mesh, 2);
     check_nodal_heights(op, q.z_phys_nd, mesh);
-    const CoriolisOptions coriolis;
-    const BoundaryConditions bcs(bc, geom, mesh, coriolis);   // checks bc for this geometry
+    const BoundaryConditions bcs(bc, geom, mesh, coriolis);   // checks bc for this geometry (a geostrophic top needs the run's Coriolis)
     const InflowProfile::View prof = bcs.profile().view();
     const int klo = geom.Domain().smallEnd(2);
     const amrex::MultiFab& z = q.z_phys_nd;
@@ -254,10 +253,10 @@ amrex::Real first_guess_state (const InitOptions& opt, const BoundaryInputs& bc,
 }
 
 InitResult initialize_state (const InitOptions& opt, const BoundaryInputs& bc, const PoissonOptions& popt, const Mesh& mesh,
-                             const amrex::Geometry& geom, State& q, amrex::MultiFab* lambda)
+                             const amrex::Geometry& geom, State& q, amrex::MultiFab* lambda, const CoriolisOptions& coriolis)
 {
     InitResult res;
-    res.obrien_top_residual = first_guess_state(opt, bc, mesh, geom, q);
+    res.obrien_top_residual = first_guess_state(opt, bc, mesh, geom, q, coriolis);
     if (opt.first_guess == InitOptions::FirstGuess::none) { return res; }
     const amrex::MultiFab& z = q.z_phys_nd;
 

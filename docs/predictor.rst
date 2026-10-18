@@ -14,7 +14,8 @@ convection and the principal diffusion, folded rows from the wall model, the dam
 rows of the open faces and the ghost couplings), :math:`R` the full second-order residual at the state (:doc:`residual`)
 and :math:`\Delta\tau` the local pseudo-time step on the component's faces. Everything is per unit volume (the plan's
 :math:`V/\Delta\tau` and :math:`a_P` are these times the cell volume). The pressure gradient stays in :math:`R`: the
-pressure correction that makes the predicted velocity divergence-free is sub-phase 1.15. For it the predictor stores
+pressure correction that makes the predicted velocity divergence-free is the SIMPLEC stage's (:doc:`simplec`). For it
+the predictor stores
 on the faces both :math:`a_P` and the SIMPLEC denominator :math:`d = a_P - \sum a_{nb}`, which is :math:`1/\Delta\tau`
 plus whatever the folds added to the diagonal (the wall drag, the damping, a value fold) and cannot be recovered from
 :math:`a_P` alone; :math:`d = 0` on the Dirichlet rows of the open faces, where the velocity is not corrected.
@@ -56,8 +57,32 @@ than assumed. A Fourier scan of the outer iteration made for this review (first-
 second-order right-hand side, pure advection, the vertical direction solved exactly) gives the worst-mode amplification
 per outer iteration: with 2 sweeps 1.000 at CFL 0.8, 1.003 at 1, 1.05 at 2, 1.22 at 5; with 4 sweeps 1.000 up to CFL
 4 and 1.001 at 5. Horizontal diffusion helps (at a cell Péclet number of 20, 2 sweeps hold to CFL 1.2 and 4 sweeps to
-5). So for the regression runs of 1.15 with the default two sweeps ``steady.cfl_max`` should stay at about 1, and four
-sweeps allow about 4; the driver's default cap of 10 is for phase 2.
+5). So for 3-D runs with the default two sweeps ``steady.cfl_max`` should stay at about 1, and four sweeps allow about
+4 (Neutral_ABL_Flat runs with four sweeps and a cap of 2: at 4 the stratified k–:math:`\theta`–:math:`w` system and
+the SER ramp fall into bursts); the driver's default cap of 10 is for phase 2. A column
+with nothing varying horizontally has exact lagged neighbours and takes any cap (the 1-D column runs at 50).
+
+Point-implicit buoyancy and rotation
+------------------------------------
+
+Two couplings of the residual are conservative in pseudo-time and undamped where :math:`\nu_t` vanishes: the
+buoyancy–:math:`w` oscillator of a stable stratification (frequency :math:`N`) and the Coriolis rotation of
+:math:`u, v` (frequency :math:`f`). An explicit pseudo-time step amplifies each by :math:`(1 + \omega^2\Delta\tau^2)^{1/2}`
+per iteration whatever the CFL. With gravity on, the :math:`w` rows gain on the diagonal the stiffness
+:math:`(g/\theta_0)\max(\partial_z\theta, 0)\,\tau_\theta` and on the right-hand side the buoyancy of the change the
+:math:`\theta` equation predicts, :math:`-(g/\theta_0)\,\tau_\theta R_\theta` (the face mean of the two cells), with
+:math:`\tau_\theta = 1/(1/\Delta\tau + a_{P,\theta})` the step :math:`\theta`'s own implicit rows allow (the face mean of
+its diagonal). With Coriolis on, the :math:`u` and :math:`v` rows gain :math:`f^2\tau_c` on the diagonal and
+:math:`-f\tau_c R_v`, :math:`+f\tau_c R_u` (the four-face means) on the right-hand side, with :math:`\tau_c =
+1/\max(|f|/r, a_P - \sum a_{nb})`, :math:`r` = ``simplec.rotation_relax`` (0.3): a fraction of an inertial time
+where the drag folds are weak (a backward Euler step of the rotation alone damps it by only
+:math:`(f\Delta\tau)^2/2` per iteration; with :math:`r/|f|` by about :math:`r f\Delta\tau`), the inverse of the net
+diagonal where a drag dominates. :math:`r < 1` because the right-hand-side term carries the whole residual of the
+other component: at :math:`r = 1` it feeds an internal gravity wave of an inviscid inversion layer, which then grows
+by 1.4 per iteration (:doc:`simplec`). Both additions enter the
+SIMPLEC denominator :math:`d` too,
+vanish at a fixed point (the delta form and :math:`R = 0`), and are pinned by UT-1.15.7; why each is needed is in
+:doc:`simplec`. The :math:`\cos\varphi` terms of the 3-D Coriolis force stay explicit.
 
 What the predictor does with the boundaries
 -------------------------------------------
@@ -83,5 +108,5 @@ state is a fixed point. The dense reference is assembled independently in the te
 Inputs
 ------
 
-``steady.zline_sweeps`` (:doc:`inputs`). The application does not run the predictor yet: the SIMPLEC stage that
-combines it with the pressure correction and the scalar sweeps is sub-phase 1.15.
+``steady.zline_sweeps`` (:doc:`inputs`). The SIMPLEC stage (:doc:`simplec`) combines it with the pressure correction
+and the scalar sweeps.

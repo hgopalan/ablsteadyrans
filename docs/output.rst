@@ -27,6 +27,19 @@ It can be read with yt, ParaView, VisIt or AMReX's ``amrex_fcompare``.
 The node heights themselves, ghost nodes included, are written to ``Level_0/z_phys_nd`` inside the plotfile as a
 VisMF MultiFab.
 
+Turbulence diagnostics plotfile
+-------------------------------
+
+With ``io.turb_plot_file`` set and the SIMPLEC stage on, ``<io.turb_plot_file>NNNNN`` holds the closure's fields at
+the final state under ERF's variable names, so ERF's Canonical_RANS check scripts read it unchanged
+(``Source/TurbulenceOutput.H``): ``x_velocity``, ``y_velocity``, ``z_velocity`` (cell means of the face velocities),
+``theta``, ``KE`` (k), ``Kmv`` (:math:`\nu_t`; the density is 1), ``Khv`` (:math:`\gamma_\theta` less the molecular
+diffusivity), ``Lturb``, ``walldist``, ``diss`` (:math:`\varepsilon`), ``density`` (1), ``Rt``, ``cmu`` and
+``cmu_prime`` (the stability functions of :math:`R_t`, AL01 Eqs. 31–32, as ERF writes them), ``ustar`` (the ground
+cells; 0 above), ``z``, and the residual at the final state, ``R_u``, ``R_v``, ``R_w`` (cell means of the face
+residuals), ``R_p``, ``R_theta``, ``R_tke``: where the iteration has not converged. Beside it ``surf_hist.dat`` holds ``t u_star`` and one row with the iteration count and the
+mean :math:`u_*` over the ground, the file ERF's ``--physics`` checks read.
+
 Checkpoint
 ----------
 
@@ -40,4 +53,5 @@ The ``Header`` lists the format version, the bytes per real (8 or 4), the step, 
 BoxArray. The fields are ``u v w`` (faces), ``p theta tke`` (cell centres) and ``z_phys_nd`` (nodes).
 
 A restart restores every valid value exactly, and the ghost nodes of ``z_phys_nd``, which come from the terrain.
-Other ghost cells are refilled by the solver.
+Other ghost cells are refilled by the solver. With the SIMPLEC stage the checkpoint also holds the driver history
+(``Driver``, :doc:`driver`) and the closure's :math:`\nu_t` history (``Level_0/closure_nut``, :doc:`closure`).

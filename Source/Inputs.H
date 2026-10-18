@@ -15,7 +15,7 @@ namespace ablsteady {
 inline const std::vector<std::string>& owned_namespaces ()
 {
     static const std::vector<std::string> ns{
-        "mesh", "terrain", "init", "turb", "bc", "steady", "solver", "io"};
+        "mesh", "terrain", "init", "turb", "bc", "steady", "solver", "io", "forcing", "convection", "simplec"};
     return ns;
 }
 
@@ -88,6 +88,9 @@ struct IOInputs
     std::string restart;
     int write_plotfile{1};
     int write_checkpoint{1};
+    //! Prefix of the turbulence diagnostics plotfile with ERF's variable
+    //! names (TurbulenceOutput.H); empty: none. Needs steady.stage = simplec.
+    std::string turb_plot_file;
 };
 
 struct Inputs

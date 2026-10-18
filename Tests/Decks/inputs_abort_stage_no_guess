@@ -1,0 +1,11 @@
+# Must abort: the SIMPLEC stage without a first guess (neither
+# init.first_guess = profile nor io.restart: the state would start at rest
+# with theta = 0).
+mesh.n_cell        = 8 8 8
+mesh.prob_hi       = 800. 800. 800.
+mesh.is_periodic   = 1 1 0
+bc.zlo = surface_layer
+bc.zhi = slip_wall
+steady.stage = simplec
+io.write_plotfile   = 0
+io.write_checkpoint = 0
