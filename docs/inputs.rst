@@ -122,15 +122,16 @@ A key that has no effect for the chosen ``terrain.type`` or ``terrain.smoothing`
 ``steady``
 ----------
 
-The definition of a steady solution (:doc:`steady`) has five parameters. They will be read as ``steady.*`` inputs
-from sub-phase 1.13, when the steady driver exists to use them. Until then the defaults below are the definition,
-and setting these keys stops the run, like any other key this version does not read.
+The steady driver (:doc:`driver`) reads ``steady.*`` through ``read_steady_options()``: the five parameters of the
+definition of a steady solution (:doc:`steady`) and its own. The application reads them from sub-phase 1.14, when it
+has a stage to run; until then setting these keys stops the run, like any other key the application does not read.
+Each row matches the check in ``Source/SteadyCriterion.cpp`` or ``Source/Driver.cpp``; a repeated key is refused.
 
 .. list-table::
    :header-rows: 1
    :widths: 34 12 54
 
-   * - Input (from sub-phase 1.13)
+   * - Input
      - Default
      - Range and meaning
    * - ``steady.residual_tol``
@@ -150,6 +151,38 @@ and setting these keys stops the run, like any other key this version does not r
    * - ``steady.monitor_window``
      - ``50``
      - ≥ 2. The window, in iterations.
+   * - ``steady.max_iterations``
+     - ``10000``
+     - ≥ 1. Iterations over the whole run (restarts included) after which the driver stops.
+   * - ``steady.cfl0``
+     - ``1``
+     - Finite, > 0. The CFL of the first iterations (while the residual reference is taken).
+   * - ``steady.cfl_max``
+     - ``10``
+     - Finite, ≥ ``steady.cfl0``. The cap of the SER ramp.
+   * - ``steady.ser_exponent``
+     - ``1``
+     - Finite, ≥ 0. :math:`p` in :math:`\mathrm{CFL} = \mathrm{CFL}_0\, r^{-p}`; 0 holds the CFL at ``cfl0``.
+   * - ``steady.ser_max_growth``
+     - ``2``
+     - Finite, ≥ 1. The CFL may grow by at most this factor per iteration.
+   * - ``steady.switch_window``
+     - ``20``
+     - ≥ 1. Iterations below ``switch_residual`` before a forward switch, the window of the back rule, and the
+       hysteresis after any switch.
+   * - ``steady.switch_residual``
+     - ``1e-2``
+     - > 0 and ≤ 1. The relative residual at or below which the next stage is entered.
+   * - ``steady.switch_back_growth``
+     - ``10``
+     - Finite, > 1. Growth of the relative residual over a window that sends the run back a stage.
+   * - ``steady.machine``
+     - ``local``
+     - ``local``, ``kestrel-cpu`` or ``kestrel-gpu``: the allocation-unit rate of the accounting (0, 10, 100 AU per
+       node-hour).
+   * - ``steady.nodes``
+     - ``1``
+     - ≥ 1. Nodes of the run, for the allocation units.
 
 ``solver``
 ----------

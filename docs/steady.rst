@@ -3,8 +3,8 @@ Definition of steady
 
 A run is steady when two things hold at the same iteration: every residual is small and has dropped far enough,
 and every monitored quantity has stopped moving and is close to its limit. ``Source/SteadyCriterion.H`` implements
-this definition. The steady driver (sub-phase 1.13) will use it to stop, and grid sequencing (sub-phase 2.5) will
-use it for the strict stop on the finest level.
+this definition. The steady driver (:doc:`driver`) uses it to stop, and grid sequencing (sub-phase 2.5) will use it
+for the strict stop on the finest level.
 
 Residuals
 ---------
@@ -116,7 +116,7 @@ Restart and MPI
 
 The recorded history (iteration count, residual references, the monitor window, the ``Diverged`` state) is
 available as ``SteadyHistory``, and ``restore()`` continues from it. The steady driver writes it to its checkpoint
-(sub-phase 1.13), so a restarted run reaches the same verdict at the same iteration as a run without the restart.
+(:doc:`driver`), so a restarted run reaches the same verdict at the same iteration as a run without the restart.
 
 Every rank must pass bit-identical residuals and monitors (all-reduced, for example with ``deterministic_sum``).
 Then every rank reaches the same verdict, and a steady loop exits on all ranks at the same iteration.

@@ -56,6 +56,7 @@ solver yet.
    boundary
    closure
    steady
+   driver
    cases
    references
    numerics

@@ -442,6 +442,41 @@ GoogleTest suite
        (``z_cross`` set, :math:`\beta_v = 0.36`) on a Gaussian hill varying in x and y keeps the mesh's x and y mirror
        symmetries within 1e-12 of max :math:`|\phi|`; the cross kernel's first transcription broke the y symmetry at
        the 1e-4 level.
+   * - UT-1.13.1
+     - The local pseudo-time step on known fields: uniform :math:`(u, v, w)` and :math:`\nu` on a flat uniform mesh
+       give :math:`\mathrm{CFL} / (|u|/\Delta x + |v|/\Delta y + |w|/\Delta z + 2\nu(1/\Delta x^2 + 1/\Delta y^2))` in
+       every cell to 1e-14 (single 1e-6; the hill cases 1e-12 and 1e-5), without :math:`\nu` the diffusive term is gone, a field at rest without
+       diffusion gets the floored step, :math:`u` varying in :math:`x` gives the face mean per cell, a
+       terrain-following field (:math:`\Omega = 0`) over a 120 m hill has no vertical term and a plain :math:`w` over
+       it the term :math:`|w| / (J \Delta\zeta)` cell by cell; a non-positive or NaN CFL and a face layout are
+       refused.
+   * - UT-1.13.2
+     - The SER ramp on a geometric residual (rate 1/4): CFL 1, 1, 1, 4, 16, 64, 64, 64 (``cfl0`` through the two
+       reference iterations, then the law capped by the growth 4 and ``cfl_max`` 64), :math:`p = 2` without caps
+       256, 4096, 65536, a growth cap of 1.5 binding every iteration, :math:`p = 0` holding the CFL, a residual of
+       exactly 0 reaching the cap through the growth cap; the stage's :math:`\Delta\tau` follows the CFL.
+   * - UT-1.13.3
+     - Switch rules on scripted residuals (:math:`W` = 5, threshold 0.01, back growth 10): a residual alternating
+       about the threshold never switches; five iterations below switch forward at iteration 5 with the reason
+       naming ``steady.switch_residual``, the residuals and the stage's ``init`` recorded; a 20× growth of the
+       second stage's residual switches back at iteration 11 (the window compared must lie within the second stage,
+       entered at 6); every pair of switches is at
+       least :math:`W` apart; the records carry each iteration's stage; one stage never switches.
+   * - UT-1.13.4
+     - The history written to ``<dir>/Driver`` and read back is equal field by field (records, switches with their
+       reasons, accounts, the criterion's history); a two-stage run interrupted after 6 iterations and continued by a
+       new driver from the file on the saved state gives the same records (stage, CFL, relative residual, residuals,
+       monitors), switches and verdict iteration as the uninterrupted run; the AU of Kestrel CPU on 2 nodes equal
+       20 × wall hours; the history is identical on every rank; a truncated file, a missing file and a history for
+       another number of stages are refused.
+   * - UT-1.13.5
+     - *Beyond the plan.* A residual that becomes infinite or NaN stops the run as ``Diverged`` with no arithmetic on
+       it (the traps); ``max_iterations`` bounds
+       a run that never settles and a second ``run`` does nothing; no stages, a null stage and stages that disagree
+       on residual names are refused (a null first stage too); ``restore`` refuses a NaN CFL, a switch state or
+       iteration count that does not fit the records, and brings the CFL within changed bounds; every ``steady.*``
+       range check names its key; the reader takes every key,
+       its defaults, and refuses a repeated key, an unknown machine and a bad value.
    * - UT-1.2.1
      - Steady-criterion verdicts on converging, stalling (including a residual stuck exactly at the tolerance) and
        oscillating histories. The converging history becomes

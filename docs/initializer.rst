@@ -154,7 +154,7 @@ Every key is in ``init`` (:doc:`inputs` has the table). The keys other than ``fi
 ``solver.poisson_*``. Of the ``bc`` keys the initial field uses the face types (which must fit the mesh's periodicity),
 the inflow profile and the sounding; the top gradient, the Rayleigh and sponge damping and the surface layer's options
 (``bc.zhi_theta_grad``, ``bc.rayleigh_*``, ``bc.sponge_*``, ``bc.surface_*``) are range-checked but have no effect on
-the initial field: the solver of sub-phase 1.13 applies them. The ``init``, ``bc`` and ``solver`` readers each stop at
+the initial field: the SIMPLEC stage of sub-phase 1.14 applies them. The ``init``, ``bc`` and ``solver`` readers each stop at
 their first error, after the mesh, terrain and io inputs have been reported together. A restart (``io.restart``) with
 the initializer on is refused: the checkpoint holds the state.
 
