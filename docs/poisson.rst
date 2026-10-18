@@ -68,7 +68,9 @@ copied stencil is unchanged, and :math:`\beta = 1` gives ERF's operator bit for 
 :math:`\alpha_v^2\partial_z\phi - \alpha_h^2(h_x\partial_x\phi + h_y\partial_y\phi)` on the z-faces, which a single
 z-face multiplier cannot give. ``FaceCoeffs::z_cross`` is the coefficient of that cross part: the z-face then carries
 :math:`\beta_z\,\partial_z\phi - \beta_{zc}(h_x\partial_x\phi + h_y\partial_y\phi)`, added to ERF's operator as
-:math:`(\beta_z - \beta_{zc})` times the cross part by a separate kernel (``Source/PoissonCross_K.H``, ERF's formula).
+:math:`(\beta_z - \beta_{zc})` times the cross part by a separate kernel (``Source/PoissonCross_K.H``, ERF's formula;
+sub-phase 1.12 corrected one node index of its low x-edge metric, which the first transcription read off a y-edge, so
+the split operator now has the mirror symmetries of the mesh).
 Without it, the anisotropic test over a 60 m hill does not converge (order 0); with it, it is second order. Scalar
 coefficients (SIMPLEC's :math:`1/a_P`) leave it unset.
 
@@ -148,9 +150,9 @@ right-preconditioned GMRES; a varying one is captured to first order: with :math
 Inputs
 ------
 
-The options are read by ``read_poisson_options()`` from ``solver.poisson_*`` (:doc:`inputs`). In this version only
-the regression tools (``poisson_projection``, ``wall_distance``) read them; the application has no Poisson solve yet,
-and these keys stop an ablsteady run like any other key it does not read.
+The options are read by ``read_poisson_options()`` from ``solver.poisson_*`` (:doc:`inputs`). The application reads
+them with the mass-consistent initializer (:doc:`initializer`), as do the regression tools (``poisson_projection``,
+``wall_distance``); without the initializer the application has no Poisson solve yet, so setting them stops the run.
 
 ``PoissonSolver::fill_ghosts(phi, bc)`` fills :math:`\phi`'s ghost cells for the boundary conditions (periodic images,
 even copies at Neumann faces, odd copies at Dirichlet faces), as a caller that differentiates :math:`\phi` needs.

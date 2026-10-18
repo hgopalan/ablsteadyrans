@@ -1,6 +1,7 @@
 #include "BoundaryConditions.H"
 
 #include "CVFluxes.H"
+#include "Heights_K.H"
 #include "ImplicitOperator.H"
 #include "Stencil_K.H"
 
@@ -55,57 +56,6 @@ Rule rule_for (Field f, FaceType t, int d, bool lo)
     default:
         return Rule::even;
     }
-}
-
-//! Node heights with the lateral indices clamped to the stored nodes and the
-//! vertical ones extrapolated linearly beyond them (the second ghost layer).
-struct NodeZ
-{
-    amrex::Array4<amrex::Real const> z;
-    amrex::Dim3 lo, hi;
-    AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
-    amrex::Real operator() (int i, int j, int k) const noexcept
-    {
-        i = amrex::max(lo.x, amrex::min(hi.x, i));
-        j = amrex::max(lo.y, amrex::min(hi.y, j));
-        if (k < lo.z) { return z(i, j, lo.z) + (lo.z - k) * (z(i, j, lo.z) - z(i, j, lo.z + 1)); }
-        if (k > hi.z) { return z(i, j, hi.z) + (k - hi.z) * (z(i, j, hi.z) - z(i, j, hi.z - 1)); }
-        return z(i, j, k);
-    }
-};
-
-//! Height of the point (i, j, k) of type T: its node-mean height minus the
-//! node-mean ground under its footprint (the ground layer klo).
-template <int T>
-AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
-amrex::Real height_above_ground (const NodeZ& z, int i, int j, int k, int klo) noexcept
-{
-    using namespace stencil;
-    constexpr int nx = nodal(T, 0) ? 1 : 2, ny = nodal(T, 1) ? 1 : 2, nz = nodal(T, 2) ? 1 : 2;
-    amrex::Real zp = 0, zg = 0;
-    for (int a = 0; a < nx; ++a) {
-        for (int b = 0; b < ny; ++b) {
-            zg += z(i + a, j + b, klo);
-            for (int c = 0; c < nz; ++c) { zp += z(i + a, j + b, k + c); }
-        }
-    }
-    return zp / (nx * ny * nz) - zg / (nx * ny);
-}
-
-//! Vertical height of the point (its node mean), for the gradient fills.
-template <int T>
-AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
-amrex::Real point_z (const NodeZ& z, int i, int j, int k) noexcept
-{
-    using namespace stencil;
-    constexpr int nx = nodal(T, 0) ? 1 : 2, ny = nodal(T, 1) ? 1 : 2, nz = nodal(T, 2) ? 1 : 2;
-    amrex::Real zp = 0;
-    for (int a = 0; a < nx; ++a) {
-        for (int b = 0; b < ny; ++b) {
-            for (int c = 0; c < nz; ++c) { zp += z(i + a, j + b, k + c); }
-        }
-    }
-    return zp / (nx * ny * nz);
 }
 
 //! The inflow profile's value for field f at height h (0 when homogeneous).
@@ -185,6 +135,7 @@ BoundaryInputs read_boundary_inputs ()
     for (const char* key : keys) {
         if (!pp.contains(key)) { continue; }
         in.given.emplace_back(key);
+        if (pp.countname(key) > 1) { errs.emplace_back(std::string("bc.") + key + " is given more than once"); }
         const bool array = std::string(key).rfind("theta_profile", 0) == 0;
         if (!array && pp.countval(key) != 1) { errs.emplace_back(std::string("bc.") + key + " takes exactly one value"); }
     }

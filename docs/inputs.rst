@@ -154,10 +154,11 @@ and setting these keys stops the run, like any other key this version does not r
 ``solver``
 ----------
 
-The Poisson layer (:doc:`poisson`) reads ``solver.poisson_*`` through ``read_poisson_options()``. In this version only
-the regression tool ``poisson_projection`` calls it: the application has no Poisson solve yet, so setting these keys
-in an ablsteady deck stops the run, like any other key this version does not read. Each row matches the range check
-in ``Source/Poisson.cpp``.
+The Poisson layer (:doc:`poisson`) reads ``solver.poisson_*`` through ``read_poisson_options()``. The application
+reads them with the initializer (``init.first_guess = profile``, :doc:`initializer`), as do the regression tools
+``poisson_projection`` and ``wall_distance``; without the initializer the application has no Poisson solve yet, so
+setting these keys stops the run, like any other key it does not read. Each row matches the range check in
+``Source/Poisson.cpp``.
 
 .. list-table::
    :header-rows: 1
@@ -197,8 +198,11 @@ in ``Source/Poisson.cpp``.
 ------
 
 The boundary conditions (:doc:`boundary`) read ``bc.*`` through ``read_boundary_inputs()`` and
-``read_surface_layer_options()``; their table is in :doc:`boundary`. In this version only the regression tool
-``boundary_fluxes`` reads them: the application has no solver yet, so setting them in an ablsteady deck stops the run.
+``read_surface_layer_options()``; their table is in :doc:`boundary`. The application reads ``bc.*`` with the
+initializer (``init.first_guess = profile``: the face types, the inflow profile and the sounding act on the initial
+field; the damping, top-gradient and surface-layer keys are range-checked only, see :doc:`initializer`), as does the
+regression tool ``boundary_fluxes``; without the initializer the application has no solver yet, so setting them stops
+the run.
 
 ``turb``
 --------
@@ -207,4 +211,37 @@ The k–L closure (:doc:`closure`) reads ``turb.*`` through ``read_closure_optio
 In this version only the regression tool ``closure_column`` reads them: the application has no solver yet, so
 setting them in an ablsteady deck stops the run.
 
-The ``init`` namespace has no inputs yet.
+``init``
+--------
+
+The mass-consistent initializer (:doc:`initializer`) reads ``init.*`` through ``read_init_options()``. Each row matches
+the range check in ``Source/Initializer.cpp``; the keys other than ``first_guess`` are refused without
+``first_guess = profile`` (they would have no effect). A restart with the initializer on is refused.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 14 56
+
+   * - Input
+     - Default
+     - Range and meaning
+   * - ``init.first_guess``
+     - ``none``
+     - ``none`` (the state starts at rest) or ``profile`` (the inflow profile by height above the ground, corrected
+       to a divergence-free field).
+   * - ``init.z_agl_min``
+     - ``0``
+     - Finite, ≥ 0 m. Floor on the height above the ground the profile is evaluated at.
+   * - ``init.alpha_h``
+     - ``1``
+     - Finite, > 0. Horizontal transmissivity :math:`\alpha_h` of the correction.
+   * - ``init.alpha_v``
+     - ``1``
+     - Finite, > 0. Vertical transmissivity :math:`\alpha_v`; only :math:`\alpha_v/\alpha_h` matters for the velocity.
+       Ratios below 0.1 need more than the default ``solver.poisson_max_iter`` (:doc:`initializer`).
+   * - ``init.k_decay_height``
+     - ``0``
+     - Finite, ≥ 0 m. :math:`z_i` of the decay of :math:`k` above :math:`z_i`; 0 for no decay.
+   * - ``init.obrien``
+     - ``0``
+     - 0 or 1. The O'Brien column correction of :math:`w_0` before the projection.

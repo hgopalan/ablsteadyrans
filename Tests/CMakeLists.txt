@@ -33,6 +33,7 @@ add_executable(unit_tests
     Unit/test_SurfaceLayer.cpp
     Unit/test_BoundaryConditions.cpp
     Unit/test_Closure.cpp
+    Unit/test_Initializer.cpp
 )
 target_include_directories(unit_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Unit)
 target_link_libraries(unit_tests PRIVATE ablsteady_core GTest::gtest)
@@ -277,6 +278,31 @@ if(ABLSTEADY_PRECISION STREQUAL "DOUBLE")
                        RUN_DIR ${POISSON_B_DIR} FIXTURES_REQUIRED poisson_askervein_mlmg
                        COMMAND ${FCOMPARE} --rel_tol 1e-8 poisson_askervein_mlmg_plt00000
                                ${GOLD}/poisson_askervein_plt00000)
+    # RT-1.12.1: the mass-consistent initial field on the Askervein mesh (log-law
+    # first guess, alpha_v = 0.5): iterations, divergence and field extrema
+    # against Gold/init_askervein.json, the state against
+    # Gold/init_askervein_plt00000 (1e-8 as the Poisson golds). The gold is a
+    # double-precision run, so a single-precision build skips it.
+    set(INIT_DIR ${CMAKE_CURRENT_BINARY_DIR}/run/rt_init_askervein)
+    ablsteady_add_test(NAME rt_init_askervein NP 2 LABELS "regression;smoke" RUN_DIR ${INIT_DIR}
+                       FIXTURES_SETUP init_askervein
+                       PREFIX ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/check_init.py askervein
+                              ${GOLD}/init_askervein.json --
+                       COMMAND $<TARGET_FILE:ablsteady> ${DECKS}/inputs_init_askervein
+                               terrain.file=${PROJECT_SOURCE_DIR}/extern_erf/askervein.txt
+                               ${ABLSTEADY_TEST_AMREX_FLAGS})
+    ablsteady_add_test(NAME rt_init_askervein_matches NP 1 LABELS "regression;smoke" RUN_DIR ${INIT_DIR}
+                       FIXTURES_REQUIRED init_askervein
+                       COMMAND ${FCOMPARE} --rel_tol 1e-8 init_askervein_plt00000
+                               ${GOLD}/init_askervein_plt00000)
+    # RT-1.12.2: the hilltop speed-up over FastWindTerrain's bump for alpha_v =
+    # 1, 0.7, 0.5, 0.3, 0.1 (five runs) against FastWindTerrain's own on the
+    # same hill and profile (Gold/init_bump_trend.json: ranking, sign, spread).
+    ablsteady_add_test(NAME rt_init_bump_trend NP 2 LABELS "regression;smoke"
+                       PREFIX ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/check_init.py trend
+                              ${GOLD}/init_bump_trend.json --
+                       COMMAND $<TARGET_FILE:ablsteady> ${DECKS}/inputs_init_bump
+                               terrain.file=${DECKS}/terrain_bump_fwt.txt ${ABLSTEADY_TEST_AMREX_FLAGS})
     # RT-1.11.2: the Tucker wall distance on ERF's Neutral_Hill_2D mesh: ERF's
     # wall-distance checks (Tests/check_walldist.py), and the field against
     # Gold/walldist_hill2d_plt00000. ERF's reader takes double-precision

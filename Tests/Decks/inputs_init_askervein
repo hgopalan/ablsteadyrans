@@ -1,0 +1,42 @@
+# RT-1.12.1: the mass-consistent initial field on ERF's Askervein terrain
+# (the mesh of inputs_poisson_askervein: 30 x 30 cells of 200 m, 18 layers
+# from 20 m growing by 1.08 to a physical top of 749 m (mesh.prob_hi's 440 m
+# is the computational top), basic terrain following; terrain.file is given
+# on the command line, extern_erf/askervein.txt). The first guess is the log
+# law along x (u* = 0.6 m/s, z0 = 0.03 m) by height above the ground, the
+# correction has alpha_h = 1, alpha_v = 0.5 (less vertical adjustment, the
+# flow goes around the hill), lambda = 0 on the inflow (xlo) and outflow (xhi)
+# faces, no flux through the y walls, the ground and the top. theta = 300 K.
+mesh.n_cell        = 30 30 18
+mesh.prob_lo       = -3000. -3000. 0.
+mesh.prob_hi       =  3000.  3000. 440.
+mesh.max_grid_size = 16
+mesh.dz0           = 20.
+mesh.stretch_ratio = 1.08
+
+terrain.type      = erf_grid
+terrain.smoothing = 0
+
+bc.xlo = inflow
+bc.xhi = outflow
+bc.ylo = slip_wall
+bc.yhi = slip_wall
+bc.zlo = surface_layer
+bc.zhi = slip_wall
+bc.inflow_profile   = log_law
+bc.inflow_ustar     = 0.6
+bc.inflow_z0        = 0.03
+bc.inflow_direction = 0.
+bc.theta_profile_z  = 0.
+bc.theta_profile    = 300.
+
+init.first_guess = profile
+init.alpha_h     = 1.0
+init.alpha_v     = 0.5
+
+solver.poisson_reltol   = 1.e-10
+solver.poisson_max_iter = 200
+solver.poisson_precond  = fft
+
+io.plot_file       = init_askervein_plt
+io.write_checkpoint = 0

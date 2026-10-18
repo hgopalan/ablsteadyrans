@@ -1,20 +1,49 @@
 #include "App.H"
 
+#include "BoundaryConditions.H"
 #include "IO.H"
+#include "Initializer.H"
+#include "SurfaceLayer.H"
 #include "Inputs.H"
 #include "Mesh.H"
+#include "Poisson.H"
 #include "State.H"
 
 #include <AMReX_Print.H>
 #include <AMReX_Utility.H>
 
+#include <cstdio>
 #include <string>
 
 namespace ablsteady {
 
 void run ()
 {
-    const Inputs in = read_inputs();
+    // The inputs of this version: mesh, terrain, io, and with the initializer
+    // (init.first_guess = profile) the boundary conditions it builds the first
+    // guess from (bc.*) and the Poisson solver's controls (solver.poisson_*).
+    const Inputs in = parse_inputs();
+    auto err = validate(in);
+    const InitOptions iopt = read_init_options();
+    BoundaryInputs bin;
+    PoissonOptions popt;
+    const bool initialize = (iopt.first_guess != InitOptions::FirstGuess::none);
+    if (initialize) {
+        bin = read_boundary_inputs();
+        popt = read_poisson_options();
+        // The surface layer's options are not used by the initial field; they
+        // are read so that their range checks run (sub-phase 1.13 applies them).
+        if (bin.face[amrex::Orientation(2, amrex::Orientation::low)] == FaceType::surface_layer) { read_surface_layer_options(); }
+    }
+    for (const auto& e : unknown_inputs(parmparse_entries())) { err.push_back(e); }
+    if (initialize && !in.io.restart.empty()) {
+        err.emplace_back("init.first_guess = profile and io.restart are exclusive (a restart keeps its state)");
+    }
+    if (!err.empty()) {
+        std::string all = "ablsteady: invalid inputs:";
+        for (const auto& e : err) { all += "\n  " + e; }
+        amrex::Abort(all);
+    }
 
     const amrex::Geometry geom = make_geometry(in.mesh);
     const amrex::BoxArray ba = make_box_array(in.mesh);
@@ -29,6 +58,21 @@ void run ()
     mesh.define(ba, dm);
     if (in.io.restart.empty()) {
         mesh.build(in, geom, state.z_phys_nd);
+        if (initialize) {
+            // The mass-consistent initial field (Initializer.H); the
+            const InitResult r = initialize_state(iopt, bin, popt, mesh, geom, state);
+            char line[256];
+            std::snprintf(line, sizeof(line),
+                          "ablsteady: initializer: %d Poisson iterations (reltol %.3e), divergence %.9e before, %.9e after\n",
+                          r.poisson.iterations, static_cast<double>(popt.reltol), static_cast<double>(r.divergence_before),
+                          static_cast<double>(r.divergence_after));
+            amrex::Print() << line;
+            if (iopt.obrien) {
+                std::snprintf(line, sizeof(line), "ablsteady: initializer: O'Brien removed a top residual of %.6e m/s\n",
+                              static_cast<double>(r.obrien_top_residual));
+                amrex::Print() << line;
+            }
+        }
     } else {
         read_checkpoint(in.io.restart, state, in.mesh);
         mesh.check_restart(in, geom, state.z_phys_nd);

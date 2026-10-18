@@ -46,7 +46,7 @@ amrex::Real z_face_cross (int i, int j, int k, amrex::Array4<amrex::Real const> 
 
     Real pz_md_lo_lo = half * (x(i, j, k) + x(i, j - 1, k) - x(i, j, k - 1) - x(i, j - 1, k - 1));
     h_eta = quarter * (zp(i, j + 1, k) - zp(i, j - 1, k) + zp(i + 1, j + 1, k) - zp(i + 1, j - 1, k)) * dyinv;
-    h_zeta = quarter * (zp(i, j, k + 1) - zp(i, j, k - 1) + zp(i, j + 1, k + 1) - zp(i, j + 1, k - 1));
+    h_zeta = quarter * (zp(i, j, k + 1) - zp(i, j, k - 1) + zp(i + 1, j, k + 1) - zp(i + 1, j, k - 1));
     pz_md_lo_lo *= h_eta / h_zeta;
 
     // On z-face

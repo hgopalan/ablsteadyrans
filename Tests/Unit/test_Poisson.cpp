@@ -419,6 +419,59 @@ TEST (Poisson, MirrorSymmetry)
     }
 }
 
+// The split anisotropic operator (z_cross set, beta_v != beta_h) has the
+// mirror symmetries of the mesh as well: on a hill varying in x and y, the
+// solution for a right-hand side symmetric in x (and in y) is symmetric in x
+// (and in y) to round-off. The cross kernel's metrics are read off the
+// mesh's x- and y-edges separately; a node index mixed up between them
+// (as in sub-phase 1.10's first transcription) breaks the y symmetry at the
+// 1e-4 level.
+TEST (Poisson, SplitOperatorKeepsTheMirrorSymmetries)
+{
+    const int n = 16;
+    PCase c;
+    c.in.mesh.n_cell = amrex::IntVect(n, n, 8);
+    c.in.mesh.prob_hi = {1000, 1000, 500};
+    c.in.mesh.max_grid_size = {8, 8};
+    c.in.mesh.is_periodic = {0, 0, 0};
+    c.make([] (double x, double y) { return 100.0 * std::exp(-(std::pow(x - 500, 2) + std::pow(y - 500, 2)) / 4e4); });
+    amrex::MultiFab rhs(c.ba, c.dm, 1, 0), phi(c.ba, c.dm, 1, 1);
+    fill_cells(rhs, c, [] (double x, double y, double z) {
+        return 1e-5 * std::cos(2 * M_PI * (x - 500) / 1000) * std::cos(M_PI * (y - 500) / 1000) * (1 - z / 600);
+    });
+    amrex::MultiFab bx(c.mesh.ax.boxArray(), c.dm, 1, 0), by(c.mesh.ay.boxArray(), c.dm, 1, 0),
+                    bz(c.mesh.az.boxArray(), c.dm, 1, 0), bzc(c.mesh.az.boxArray(), c.dm, 1, 0);
+    bx.setVal(1.0);
+    by.setVal(1.0);
+    bz.setVal(0.36);
+    bzc.setVal(1.0);
+    ablsteady::FaceCoeffs fc;
+    fc.x = &bx;
+    fc.y = &by;
+    fc.z = &bz;
+    fc.z_cross = &bzc;
+    fc.precond_ratio = amrex::Real(0.36);
+    ablsteady::PoissonOptions opt;
+    opt.reltol = tol(3e-15, 2e-6);   // >= 10 machine epsilon
+    opt.max_iter = 2000;
+    ablsteady::PoissonSolver s(c.mesh, c.geom, c.z, opt);
+    phi.setVal(0.0);
+    s.solve(rhs, phi, fc, make_bc(PoissonFace::dirichlet, PoissonFace::neumann, PoissonFace::neumann));
+    amrex::FArrayBox a(c.geom.Domain(), 1, amrex::The_Pinned_Arena());
+    phi.copyTo(a);
+    amrex::Gpu::streamSynchronize();
+    double worst_x = 0, worst_y = 0, big = 0;
+    amrex::LoopOnCpu(c.geom.Domain(), [&] (int i, int j, int k) {
+        const double v = a(amrex::IntVect(i, j, k));
+        worst_x = std::max(worst_x, std::abs(v - a(amrex::IntVect(n - 1 - i, j, k))));
+        worst_y = std::max(worst_y, std::abs(v - a(amrex::IntVect(i, n - 1 - j, k))));
+        big = std::max(big, std::abs(v));
+    });
+    EXPECT_GT(big, 0);
+    EXPECT_LE(worst_x, tol(1e-12, 1e-5) * big);
+    EXPECT_LE(worst_y, tol(1e-12, 1e-5) * big);
+}
+
 // Beyond the plan: the FFT preconditioner, with the counts measured when the
 // test was written (bounds 10 % above them):
 //  * isotropic: 19 iterations; without the preconditioner more than 10 times as many;

@@ -75,6 +75,24 @@ Current tests
      - RT-1.11.2: ``wall_distance`` on ERF's Neutral_Hill_2D mesh: ERF's wall-distance checks (``Tests/check_walldist.py``:
        max relative ≤ 0.15, mean ≤ 0.03, ≤ 0.2 cells below 100 m, all finite), and the field against
        ``Tests/Gold/walldist_hill2d_plt00000`` at relative 1e-8 (a gold written by ablsteady). Double precision only.
+   * - ``rt_init_askervein``, ``rt_init_askervein_matches``
+     - RT-1.12.1: the mass-consistent initial field on the Askervein mesh (30 × 30 × 18; ``Tests/Decks/inputs_init_askervein``:
+       log law u* = 0.6 m/s, z₀ = 0.03 m along x, inflow at xlo, outflow at xhi, :math:`\alpha_h = 1`,
+       :math:`\alpha_v = 0.5`; divergence 4.05e-1 → 6.1e-12 1/s). ``Tests/check_init.py askervein``: iterations at most 10 % above the gold's 13,
+       divergence after at most 10 × ``solver.poisson_reltol`` times before, divergence before (the printed 10 digits),
+       max :math:`|w|` and the largest horizontal speed at the gold's values (1e-6), :math:`\theta` = 300 K everywhere, :math:`p' = 0`,
+       :math:`k > 0` (``Tests/Gold/init_askervein.json``); the state against ``Tests/Gold/init_askervein_plt00000``
+       at relative 1e-8. Two ranks; double precision only. :math:`\lambda` is not in the plotfile (a variation from
+       the plan): the state plotfile is the regression artefact, and the unit tests pin :math:`\lambda`.
+   * - ``rt_init_bump_trend``
+     - RT-1.12.2: the hilltop speed-up over FastWindTerrain's bump (``Tests/Decks/inputs_init_bump``,
+       ``Tests/Decks/terrain_bump_fwt.txt``: its ``regtests/phase6_solve_correction`` hill and power-law inflow) for
+       :math:`\alpha_v` = 1, 0.7, 0.5, 0.3, 0.1 (five runs on two ranks), against FastWindTerrain's own at commit
+       648f8f1 (``Tests/Gold/init_bump_trend.json``, written from its plotfiles by ``Tests/fwt_bump_speedup.py``): the
+       same ranking of the five values at 40, 80 and 150 m above the ground (at 20 m two values tie within 0.002 in
+       both codes), every speed-up above 1 at 20, 40, 80 and 150 m, the two codes within 0.02, 0.01, 0.005 and 0.003
+       of each other at those heights (measured 0.011, 0.0057, 0.0020, 0.0008), and ablsteady's own values and
+       iterations pinned (1e-6, 10 %). Double precision only (:doc:`initializer`).
    * - ``rt_bc_neutral_flat``, ``rt_bc_neutral_flat_matches``
      - RT-1.8.1: ``boundary_fluxes`` on ERF's Neutral_ABL_Flat mesh (8 × 8 × 64, 1000 m) with a fixed log-law state
        (u* = 0.35 m/s, z₀ = 0.1 m, 15°), the surface layer on the ground and a slip top: u* recovered at every ground
@@ -369,6 +387,61 @@ GoogleTest suite
      - *Beyond the plan.* No node of ``z_phys_nd`` (ghosts included) holds ERF's ``bogus_large_value``, for BTF, STF and
        Sullivan with periodic and non-periodic sides; ``fill_ghosts`` fills every ghost cell, corners and between-box
        ghosts included, with odd copies below a Dirichlet ground and even copies at Neumann faces.
+   * - UT-1.12.1
+     - :math:`\alpha_h = \alpha_v = 1`: the initial field equals the Poisson layer's plain projection of the same first
+       guess (the solve without coefficients, applied the same way) bit for bit, :math:`\lambda` included;
+       :math:`\alpha_h = \alpha_v = 2` gives the same velocity within 1e-9 of max :math:`|u|` and :math:`\lambda/4`
+       (single: 1e-4); the scalar state is untouched by the correction. *Beyond the plan:* scaling the whole z flux by
+       :math:`\alpha_v^2` instead of the cross part by :math:`\alpha_h^2` gives a different field; with periodic sides
+       the hill case is divergence-free as a singular problem and the seam ghost of :math:`u` is the corrected
+       periodic image; a :math:`\lambda` handed in with garbage is zeroed first; the divergence after is measured,
+       not assumed.
+   * - UT-1.12.2
+     - The divergence after the correction is below 10 × ``solver.poisson_reltol`` times the divergence before, in the
+       solver's own operator (``velocity_divergence``), in every initializer test.
+   * - UT-1.12.3
+     - Flat terrain, open and periodic sides: the profile is divergence-free, so :math:`\lambda`, :math:`w` and the
+       divergence stay below 1e-12 and :math:`u` equals the log law at every x face's height (single: 1e-4, 1e-5).
+   * - UT-1.12.4
+     - D4 symmetry: on a square domain with a Gaussian hill, the wind along ±x and ±y (its own inflow and outflow
+       faces each time) gives fields that are the eight transforms of each other: the cell-centred velocity vector
+       maps with the transform's matrix, :math:`w` and :math:`\lambda` as scalars, within 1e-12 of the maxima (single
+       1e-5), with the solve converged to round-off (``reltol`` 3e-15).
+   * - UT-1.12.5
+     - The speed-up above the summit (four central cells a quarter of the depth up, over the profile at their
+       height) falls by more than 0.01 at each step of :math:`\alpha_v` = 1, 0.7, 0.5, 0.3, 0.1 (1.015, 0.998,
+       0.975, 0.943, 0.913 on the 1 km test domain, whose open faces are 500 m from the summit), and
+       :math:`\alpha_h = 2, \alpha_v = 1` gives the same value as :math:`\alpha_v = 0.5` (the
+       ratio alone matters; 1e-9). The preconditioner is told the ratio: at most 21 GMRES iterations at every ratio
+       (13 to 19 measured).
+   * - UT-1.12.6
+     - The first guess over sloping terrain: :math:`u` at every x face, the two ghost layers included, and :math:`v`
+       at every y face equal the profile at the face's height above its column's ground with the 3 m floor (the
+       floor acts on the ground faces and the ghosts below); :math:`\theta` equals the sounding by absolute height;
+       :math:`k` the profile's value with the decay above 200 m, and :math:`u_*^2/C_{\mu 0}^2` everywhere without it;
+       :math:`p' = 0`; :math:`w_0 = 0` except on the ground faces, which carry no flux (:math:`\Omega_0 = 0` to
+       round-off); every ghost cell of the state is written (no NaN from the allocation); the O'Brien pass refuses a
+       layout whose boxes do not span the column.
+   * - UT-1.12.7
+     - *Beyond the plan.* O'Brien: :math:`\Omega_0` vanishes at the ground and the top exactly, the divergence left in
+       every cell is the weight difference :math:`f_{k+1}^2 a_{z,k+1} - f_k^2 a_{z,k}` (:math:`f` the height fraction,
+       which the test shows differs from the index fraction on the stretched mesh) times the column's residual
+       (1e-11), the column sum equals the residual flux, the residual the function returns equals the largest column's;
+       through the initializer the correction starts from a different divergence than without O'Brien (not a lower
+       one: the terrain-following first guess is already consistent at the ground) and gives a different :math:`w`.
+   * - UT-1.12.8
+     - *Beyond the plan.* Inputs: :math:`z_{agl,\min} < 0` or NaN, :math:`\alpha_h \le 0` or infinite,
+       :math:`\alpha_v < 0` or NaN, :math:`z_i < 0`, and any key other than ``first_guess`` given without
+       ``first_guess = profile`` are refused with the key named, by the checks and by both entry points;
+       ``first_guess = none`` leaves the state untouched; the reader takes every key and refuses an unknown
+       ``first_guess``, ``obrien = 2``, a repeated key and the keys without the first guess; the Poisson types of the
+       correction are Dirichlet on inflow and outflow faces, Neumann elsewhere, periodic where the mesh is; a face set
+       that does not fit the mesh is refused.
+   * - UT-1.12.9
+     - *Beyond the plan* (``Poisson.SplitOperatorKeepsTheMirrorSymmetries``). The split anisotropic operator
+       (``z_cross`` set, :math:`\beta_v = 0.36`) on a Gaussian hill varying in x and y keeps the mesh's x and y mirror
+       symmetries within 1e-12 of max :math:`|\phi|`; the cross kernel's first transcription broke the y symmetry at
+       the 1e-4 level.
    * - UT-1.2.1
      - Steady-criterion verdicts on converging, stalling (including a residual stuck exactly at the tolerance) and
        oscillating histories. The converging history becomes
