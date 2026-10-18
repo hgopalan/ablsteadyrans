@@ -37,6 +37,7 @@ add_executable(unit_tests
     Unit/test_Driver.cpp
     Unit/test_Predictor.cpp
     Unit/test_Simplec.cpp
+    Unit/test_Terrain.cpp
 )
 target_include_directories(unit_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Unit)
 target_link_libraries(unit_tests PRIVATE ablsteady_core GTest::gtest)
@@ -410,6 +411,29 @@ if(ABLSTEADY_PRECISION STREQUAL "DOUBLE")
     ablsteady_add_test(NAME rt_steady_neutral_flat NP 2 LABELS "regression"
                        PREFIX ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/check_steady_neutral.py --
                        COMMAND $<TARGET_FILE:ablsteady> ${DECKS}/inputs_steady_neutral_flat ${ABLSTEADY_TEST_AMREX_FLAGS})
+    # RT-1.16.1: ERF's Neutral_Hill_2D to steady (about 80 s on two ranks);
+    # the verdict, a two-order drop of the u residual and ERF's own
+    # check_hill.py --physics (extern_erf/) on the turbulence plotfile.
+    ablsteady_add_test(NAME rt_steady_hill2d NP 2 LABELS "regression"
+                       PREFIX ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/check_steady_hill.py
+                              --erf-check check_hill.py --orders 2 --
+                       COMMAND $<TARGET_FILE:ablsteady> ${DECKS}/inputs_steady_hill2d ${ABLSTEADY_TEST_AMREX_FLAGS})
+    # RT-1.16.2: ERF's Neutral_Hill_3D (64 x 64 x 20) to steady with
+    # check_hill3d.py; minutes on four ranks, so label nightly (not in
+    # ctest -L regression).
+    ablsteady_add_test(NAME rt_steady_hill3d NP 4 LABELS "nightly"
+                       PREFIX ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/check_steady_hill.py
+                              --erf-check check_hill3d.py --orders 2 --
+                       COMMAND $<TARGET_FILE:ablsteady> ${DECKS}/inputs_steady_hill3d ${ABLSTEADY_TEST_AMREX_FLAGS})
+    # RT-1.16.3 (the convergence half): Askervein on the ERF grid with an
+    # inflow and an outflow face to the steady verdict (about 2 s on two
+    # ranks). The comparison with ERF's URANS on lines A and AA needs the
+    # ERF reference run and is not in this version.
+    ablsteady_add_test(NAME rt_steady_askervein NP 2 LABELS "regression;smoke"
+                       PREFIX ${EXPECT_ABORT} --success "ablsteady: steady after" --
+                       COMMAND $<TARGET_FILE:ablsteady> ${DECKS}/inputs_steady_askervein
+                               terrain.file=${PROJECT_SOURCE_DIR}/extern_erf/askervein.txt
+                               ${ABLSTEADY_TEST_AMREX_FLAGS})
 endif()
 
 # --- Reference archives (sub-phase 1.1): ablsteady_refavg end to end --------

@@ -1,5 +1,7 @@
 #include "BoundaryConditions.H"
 
+#include "MassFlux_K.H"
+
 #include "CVFluxes.H"
 #include "Heights_K.H"
 #include "ImplicitOperator.H"
@@ -132,7 +134,7 @@ BoundaryInputs read_boundary_inputs ()
     const char* keys[] = {"xlo", "xhi", "ylo", "yhi", "zlo", "zhi", "inflow_profile", "inflow_ustar", "inflow_z0",
                           "inflow_speed", "inflow_zref", "inflow_alpha", "inflow_direction", "inflow_file",
                           "theta_profile_z", "theta_profile", "zhi_theta_grad", "rayleigh_zdamp",
-                          "rayleigh_dampcoef", "sponge_width", "sponge_strength",
+                          "rayleigh_dampcoef", "rayleigh_fields", "rayleigh_height", "sponge_width", "sponge_strength",
                           "xlo_wall_velocity", "xhi_wall_velocity", "ylo_wall_velocity", "yhi_wall_velocity",
                           "zlo_wall_velocity", "zhi_wall_velocity"};
     std::vector<std::string> errs;
@@ -143,6 +145,10 @@ BoundaryInputs read_boundary_inputs ()
         const std::string k(key);
         const bool array = k.rfind("theta_profile", 0) == 0;
         const bool three = k.size() > 14 && k.compare(k.size() - 14, 14, "_wall_velocity") == 0;
+        if (k == "rayleigh_fields") {
+            if (pp.countval(key) < 1) { errs.emplace_back("bc.rayleigh_fields takes at least one field name"); }
+            continue;
+        }
         if (three && pp.countval(key) != 3) { errs.emplace_back(std::string("bc.") + key + " takes exactly three values (u v w)"); }
         if (!array && !three && pp.countval(key) != 1) { errs.emplace_back(std::string("bc.") + key + " takes exactly one value"); }
     }
@@ -184,6 +190,23 @@ BoundaryInputs read_boundary_inputs ()
     }
     pp.query("rayleigh_zdamp", in.rayleigh_zdamp);
     pp.query("rayleigh_dampcoef", in.rayleigh_dampcoef);
+    {
+        std::string rh = "absolute";
+        if (pp.query("rayleigh_height", rh)) {
+            if (rh == "absolute") { in.rayleigh_above_ground = false; }
+            else if (rh == "above_ground") { in.rayleigh_above_ground = true; }
+            else { amrex::Abort("ablsteady: bc.rayleigh_height = " + rh + ": must be absolute or above_ground"); }
+        }
+        std::vector<std::string> names;
+        if (pp.queryarr("rayleigh_fields", names)) {
+            in.rayleigh_fields = {false, false, false, false, false};
+            for (const auto& n : names) {
+                const int f = (n == "u") ? 0 : (n == "v") ? 1 : (n == "w") ? 2 : (n == "theta") ? 3 : (n == "tke") ? 4 : -1;
+                if (f < 0) { amrex::Abort("ablsteady: bc.rayleigh_fields = " + n + ": must be among u, v, w, theta, tke"); }
+                in.rayleigh_fields[static_cast<std::size_t>(f)] = true;
+            }
+        }
+    }
     pp.query("sponge_width", in.sponge_width);
     pp.query("sponge_strength", in.sponge_strength);
     return in;
@@ -281,6 +304,10 @@ std::vector<std::string> check_boundary_inputs (const BoundaryInputs& in, const 
         err.emplace_back("bc.rayleigh_dampcoef = " + std::to_string(in.rayleigh_dampcoef) + ": must be finite and >= 0 (1/s)");
     } else if (given("rayleigh_dampcoef") && !(in.rayleigh_zdamp > 0)) {
         err.emplace_back("bc.rayleigh_dampcoef has no effect without bc.rayleigh_zdamp > 0");
+    } else if (given("rayleigh_fields") && !(in.rayleigh_zdamp > 0)) {
+        err.emplace_back("bc.rayleigh_fields has no effect without bc.rayleigh_zdamp > 0");
+    } else if (given("rayleigh_height") && !(in.rayleigh_zdamp > 0)) {
+        err.emplace_back("bc.rayleigh_height has no effect without bc.rayleigh_zdamp > 0");
     } else if (in.rayleigh_zdamp > 0 && !(in.rayleigh_dampcoef > 0)) {
         err.emplace_back("bc.rayleigh_zdamp > 0 needs bc.rayleigh_dampcoef > 0");
     }
@@ -473,6 +500,10 @@ void fill_field (amrex::MultiFab& q, int f, int d, const BoundaryInputs& in, con
 
 } // namespace
 
+namespace {
+void fill_no_flux_w (State& q, const BoundaryInputs& in, const amrex::Geometry& geom);
+} // namespace
+
 void BoundaryConditions::fill_ghosts (State& q, const SurfaceLayerOptions* surface_opt, const BuoyancyOptions& buoyancy,
                                       bool homogeneous, SurfaceState* surface_out) const
 {
@@ -561,6 +592,7 @@ void BoundaryConditions::fill_ghosts (State& q, const SurfaceLayerOptions* surfa
         fill_field<stencil::XF>(q.u, f_u, d, m_in, q.z_phys_nd, m_geom, prof, m_coriolis, gg, homogeneous);
         fill_field<stencil::YF>(q.v, f_v, d, m_in, q.z_phys_nd, m_geom, prof, m_coriolis, gg, homogeneous);
         fill_field<stencil::ZF>(q.w, f_w, d, m_in, q.z_phys_nd, m_geom, prof, m_coriolis, gg, homogeneous);
+        if (d == 2) { fill_no_flux_w(q, m_in, m_geom); }
         fill_field<stencil::CC>(q.p, f_p, d, m_in, q.z_phys_nd, m_geom, prof, m_coriolis, gg, homogeneous);
         fill_field<stencil::CC>(q.theta, f_theta, d, m_in, q.z_phys_nd, m_geom, prof, m_coriolis, gg, homogeneous);
         fill_field<stencil::CC>(q.tke, f_tke, d, m_in, q.z_phys_nd, m_geom, prof, m_coriolis, gg, homogeneous);
@@ -576,6 +608,59 @@ bool dirichlet_normal (const BoundaryInputs& in, int d, bool lo, FaceType& t)
     t = in.face[amrex::Orientation(d, lo ? amrex::Orientation::low : amrex::Orientation::high)];
     return t == FaceType::inflow || t == FaceType::slip_wall || t == FaceType::no_slip_wall
         || t == FaceType::surface_layer || t == FaceType::geostrophic;
+}
+
+//! The ground and top faces of w take the no-flux value Omega = 0,
+//! w = z_x u_f + z_y v_f (MassFlux_K.H; 0 over flat ground), with the two
+//! ghost layers mirrored about it (2 V - the interior), after the generic
+//! value fill of w in z. u and v are filled (their lateral ghosts) before w.
+//! The same formula serves the homogeneous fill (it is linear).
+// With the homogeneous fill the value is linear in the perturbation's u, v
+// given their homogeneous ghosts (the wall law's gradient of the nonlinear
+// fill is not differentiated here; no production caller fills homogeneously).
+void fill_no_flux_w (State& q, const BoundaryInputs& in, const amrex::Geometry& geom)
+{
+    const amrex::Box& dom = geom.Domain();
+    const auto dxinv = geom.InvCellSizeArray();
+    for (const bool lo : {true, false}) {
+        FaceType t;
+        if (!dirichlet_normal(in, 2, lo, t)) { continue; }
+        const int face = lo ? dom.smallEnd(2) : dom.bigEnd(2) + 1;
+        for (amrex::MFIter mfi(q.w, false); mfi.isValid(); ++mfi) {
+            amrex::Box fb = mfi.validbox();
+            if (fb.smallEnd(2) > face || fb.bigEnd(2) < face) { continue; }
+            fb.setSmall(2, face);
+            fb.setBig(2, face);
+            fb.grow(0, q.w.nGrow());
+            fb.grow(1, q.w.nGrow());
+            fb &= mfi.fabbox();
+            // Only the faces whose four u, v points and four nodal heights
+            // exist in this box's fabs (the heights have one lateral ghost
+            // layer, w two: the outermost lateral ghost column is set below
+            // from its periodic image, and on a non-periodic side keeps the
+            // lateral rule's value, which only the Dirichlet rows read).
+            const amrex::Box ub = q.u[mfi].box(), vb = q.v[mfi].box(), zb = q.z_phys_nd[mfi].box();
+            fb.setSmall(0, amrex::max(fb.smallEnd(0), ub.smallEnd(0), vb.smallEnd(0), zb.smallEnd(0)));
+            fb.setBig(0, amrex::min(fb.bigEnd(0), ub.bigEnd(0) - 1, vb.bigEnd(0), zb.bigEnd(0) - 1));
+            fb.setSmall(1, amrex::max(fb.smallEnd(1), ub.smallEnd(1), vb.smallEnd(1), zb.smallEnd(1)));
+            fb.setBig(1, amrex::min(fb.bigEnd(1), ub.bigEnd(1), vb.bigEnd(1) - 1, zb.bigEnd(1) - 1));
+            if (fb.isEmpty()) { continue; }
+            const auto w = q.w.array(mfi);
+            const auto uu = q.u.const_array(mfi), vv = q.v.const_array(mfi);
+            const auto zn = q.z_phys_nd.const_array(mfi);
+            const int ng = q.w.nGrow();
+            const int sgn = lo ? -1 : 1;
+            amrex::ParallelFor(fb, [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
+            {
+                const amrex::Real V = massflux::no_flux_w(zn, uu, vv, i, j, k, dxinv[0], dxinv[1]);
+                w(i, j, k) = V;
+                for (int m = 1; m <= ng; ++m) { w(i, j, k + sgn * m) = 2 * V - w(i, j, k - sgn * m); }
+            });
+        }
+    }
+    // The periodic images of the face rows (the lateral ghost columns the
+    // heights do not reach).
+    q.w.FillBoundary(geom.periodicity());
 }
 
 } // namespace
@@ -617,9 +702,15 @@ void BoundaryConditions::apply_rows (const State& q, ResidualFields& R, bool hom
                         r(i, j, k) = a(i, j, k) - V;
                     });
                 } else {
+                    // The ground and the top: w minus the no-flux value
+                    // (Omega = 0; 0 over flat ground). Linear in (u, v, w):
+                    // the homogeneous fill uses the same formula.
+                    const auto uu = q.u.const_array(mfi), vv = q.v.const_array(mfi);
+                    const auto zn = q.z_phys_nd.const_array(mfi);
+                    const auto dxinv = m_geom.InvCellSizeArray();
                     amrex::ParallelFor(fb, [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
                     {
-                        r(i, j, k) = a(i, j, k);
+                        r(i, j, k) = a(i, j, k) - massflux::no_flux_w(zn, uu, vv, i, j, k, dxinv[0], dxinv[1]);
                     });
                 }
             }
@@ -661,7 +752,7 @@ void BoundaryConditions::dirichlet_rows (Equation eq, Loc loc, const Mesh& mesh,
 void BoundaryConditions::apply_to_implicit (Equation eq, Loc loc, const amrex::MultiFab& z_nd, amrex::MultiFab& A) const
 {
     // The damping first: the Dirichlet face points below become identity rows.
-    add_damping_to_implicit(loc, z_nd, A);
+    add_damping_to_implicit(eq, loc, z_nd, A);
     const amrex::Box& dom = m_geom.Domain();
     const int f = (eq == Equation::u) ? f_u : (eq == Equation::v) ? f_v : (eq == Equation::w) ? f_w
                 : (eq == Equation::theta) ? f_theta : f_tke;
@@ -724,15 +815,22 @@ struct DampingCoef
     amrex::Real zd, rc, ztop, sw, inv_w, ss;
     amrex::GpuArray<amrex::Real, 3> plo, phi;
     amrex::GpuArray<int, 4> lateral;   //!< xlo, xhi, ylo, yhi hold an inflow or outflow
+    //! The Rayleigh part alone (1/s).
     AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
-    amrex::Real operator() (amrex::Real x, amrex::Real y, amrex::Real z) const noexcept
+    amrex::Real rayleigh_part (amrex::Real z) const noexcept
     {
         const amrex::Real pi = amrex::Real(3.14159265358979323846);
-        amrex::Real c = 0;
         if (rayleigh && z > zd) {
             const amrex::Real s = std::sin(amrex::Real(0.5) * pi * (z - zd) / (ztop - zd));
-            c += rc * s * s;
+            return rc * s * s;
         }
+        return 0;
+    }
+    //! The sponge part alone (1/s).
+    AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+    amrex::Real sponge_part (amrex::Real x, amrex::Real y) const noexcept
+    {
+        amrex::Real c = 0;
         if (sponge) {
             const amrex::Real dist[4] = {x - plo[0], phi[0] - x, y - plo[1], phi[1] - y};
             for (int n = 0; n < 4; ++n) {
@@ -743,6 +841,13 @@ struct DampingCoef
             }
         }
         return c;
+    }
+    //! Both parts; with_rayleigh false leaves the Rayleigh part out (a
+    //! field bc.rayleigh_fields does not name).
+    AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+    amrex::Real operator() (amrex::Real x, amrex::Real y, amrex::Real z, bool with_rayleigh = true) const noexcept
+    {
+        return (with_rayleigh ? rayleigh_part(z) : amrex::Real(0)) + sponge_part(x, y);
     }
 };
 
@@ -793,6 +898,8 @@ void BoundaryConditions::add_damping (const State& q, ResidualFields& R) const
     const int ff[5] = {f_u, f_v, f_w, f_theta, f_tke};
     for (int n = 0; n < 5; ++n) {
         const int f = ff[n];
+        const bool with_rayleigh = m_in.rayleigh_fields[static_cast<std::size_t>(n)];
+        const bool above_ground = m_in.rayleigh_above_ground;
         for (amrex::MFIter mfi(*rf[n], amrex::TilingIfNotGPU()); mfi.isValid(); ++mfi) {
             const amrex::Box bx = mfi.tilebox();
             const auto r = rf[n]->array(mfi);
@@ -807,21 +914,36 @@ void BoundaryConditions::add_damping (const State& q, ResidualFields& R) const
                 point_heights(tt, nz, i, j, k, klo, h, zc);
                 const amrex::Real x = plo[0] + (i + (nx ? 0 : amrex::Real(0.5))) * dx[0];
                 const amrex::Real y = plo[1] + (j + (ny ? 0 : amrex::Real(0.5))) * dx[1];
-                const amrex::Real c = coef(x, y, zc);
-                if (c > 0) {
+                // The Rayleigh layer relaxes towards the free atmosphere:
+                // theta towards the sounding at the point's absolute height
+                // (the terrain-following profile height would impose a warm
+                // anomaly over a crest), u and v towards the profile, w to 0.
+                // The sponge relaxes towards the inflow profile (the height
+                // above the ground, as the inflow itself).
+                const amrex::Real zr = above_ground ? h : zc;   // the layer's height coordinate
+                const amrex::Real cr = with_rayleigh ? coef.rayleigh_part(zr) : amrex::Real(0);
+                const amrex::Real cs = coef.sponge_part(x, y);
+                if (cr > 0) {
+                    const amrex::Real ref = (f == f_w) ? amrex::Real(0) : profile_value(prof, f, (f == f_theta) ? zr : h);
+                    r(i, j, k) += cr * (a(i, j, k) - ref);
+                }
+                if (cs > 0) {
                     const amrex::Real ref = (f == f_w) ? amrex::Real(0) : profile_value(prof, f, h);
-                    r(i, j, k) += c * (a(i, j, k) - ref);
+                    r(i, j, k) += cs * (a(i, j, k) - ref);
                 }
             });
         }
     }
 }
 
-void BoundaryConditions::add_damping_to_implicit (Loc loc, const amrex::MultiFab& z_nd, amrex::MultiFab& A) const
+void BoundaryConditions::add_damping_to_implicit (Equation eq, Loc loc, const amrex::MultiFab& z_nd, amrex::MultiFab& A) const
 {
     if (!damping_on()) { return; }
     const int klo = m_geom.Domain().smallEnd(2);
     const DampingCoef coef = damping_coef(m_in, m_geom);
+    const int n = (eq == Equation::u) ? 0 : (eq == Equation::v) ? 1 : (eq == Equation::w) ? 2 : (eq == Equation::theta) ? 3 : 4;
+    const bool with_rayleigh = m_in.rayleigh_fields[static_cast<std::size_t>(n)];
+    const bool above_ground = m_in.rayleigh_above_ground;
     const auto plo = m_geom.ProbLoArray();
     const auto dx = m_geom.CellSizeArray();
     const int tt = static_cast<int>(loc);
@@ -837,7 +959,7 @@ void BoundaryConditions::add_damping_to_implicit (Loc loc, const amrex::MultiFab
             point_heights(tt, nz, i, j, k, klo, h, zc);
             const amrex::Real x = plo[0] + (i + (nx ? 0 : amrex::Real(0.5))) * dx[0];
             const amrex::Real y = plo[1] + (j + (ny ? 0 : amrex::Real(0.5))) * dx[1];
-            a(i, j, k, coef_P) += coef(x, y, zc);
+            a(i, j, k, coef_P) += (with_rayleigh ? coef.rayleigh_part(above_ground ? h : zc) : amrex::Real(0)) + coef.sponge_part(x, y);
         });
     }
 }

@@ -141,6 +141,26 @@ Current tests
        passing, on one to three ranks with both compilers (the bursts of an earlier version of the predictor's
        rotation step are explained and removed in :doc:`simplec`). Label ``regression`` (the run time); double only.
        The 1 % comparison with an ERF reference run is not in this version.
+   * - ``rt_steady_hill2d``
+     - RT-1.16.1: ERF's Neutral_Hill_2D (``Tests/Decks/inputs_steady_hill2d``: 128 × 1 × 64, the Witch of Agnesi of
+       100 m and 500 m, the flat deck's sounding and forcing, Rayleigh damping of w and θ from 700 m, 16 sweeps, CFL
+       cap 4) to the steady verdict with a two-order drop of the u residual; ``Tests/check_steady_hill.py`` then runs
+       ERF's ``check_hill.py --physics`` on the turbulence plotfile: the wall distance against the exact distance to
+       the ridge, finite fields, k ≥ 0, the length-scale bound, the wall cell's k balance, the crest speed-up in the
+       three lowest cells within 0.2–0.8 (Jackson and Hunt's 0.4), the speed-up positive in the lowest ten, the
+       upstream u* within 0.25–0.55 m/s, the upstream log law in the lowest three cells within 15 %. Measured: the
+       verdict after 4590 iterations (49 s on two ranks), speed-up 0.59/0.50/0.43, u* = 0.354 m/s, every check
+       passing (:doc:`simplec`). Label ``regression``; double only.
+   * - ``rt_steady_hill3d``
+     - RT-1.16.2: ERF's Neutral_Hill_3D (``inputs_steady_hill3d``: 64 × 64 × 20, the hill of revolution, damping
+       from 550 m, 16 sweeps, cap 4) to the verdict with ``check_hill3d.py --physics`` (the 3-D checks, speed-up
+       against 1.6 h/L). Measured: 2092 iterations (148 s on four ranks), every check passing. Label ``nightly``
+       (minutes); double only.
+   * - ``rt_steady_askervein``
+     - RT-1.16.3, the convergence half: Askervein on the ERF grid of RT-1.12.1 (``inputs_steady_askervein``: 30 × 30
+       × 18, the log-law inflow, outflow, slip sides, no Coriolis, four sweeps, cap 2) to the steady verdict.
+       Measured: 156 iterations (2 s on two ranks). The 5 % comparison with ERF's URANS on lines A and AA is not in
+       this version (Kestrel). Labels ``regression;smoke``; double only.
    * - ``drift_check_selftest``
      - The ``extern_erf`` drift check on a throw-away ERF repository (:doc:`extraction`).
    * - ``refavg_snapshots``, ``refavg_build``, ``refavg_verify``, ``refavg_matches``
@@ -596,6 +616,22 @@ GoogleTest suite
      - *Beyond the plan.* The wall-k rows folded into the implicit rows: with a surface layer the first cells' k
        rows are, for ``bc.surface_wall_k = dirichlet``, the diagonal :math:`\max(u_*, u_{*,\min})/d_0` alone with
        every neighbour zero, and for ``source`` the plain rows without the ground neighbour plus that diagonal.
+   * - UT-1.16.1
+     - *Beyond the plan* (``test_Terrain.cpp``). Over a 60 m hill (and over flat ground) the ground and top faces of w
+       take the no-flux value after the fill: Ω vanishes on every ground and top face to 1e-12 (it is 0.1 or more
+       before the fill on a random w), the two ghost layers mirror about the face value, the lateral ghost columns of
+       the face rows are the periodic images of the valid faces, the Dirichlet rows of the residual vanish, and the
+       homogeneous fill of a perturbation gives the same linear relation; over flat ground the value is 0.
+   * - UT-1.16.2
+     - *Beyond the plan.* The Rayleigh layer's fields and height: with ``bc.rayleigh_fields = w theta`` the residual
+       and the implicit diagonal of u, v and k stay 0 and those of w and θ do not; θ's residual is c(θ − θ_s) with
+       the sounding at the absolute height (and at the height above the ground with ``bc.rayleigh_height =
+       above_ground``) at every damped cell (1e-12; single 1e-4); the readers of the two keys, the refusal of an
+       unknown field name and of a bad height word, and the no-effect check without a layer.
+   * - UT-1.15.7 (revised in 1.16)
+     - The rotation's pin now holds the planar-mean split: :math:`a_P` with :math:`f^2\max(\tau_c, \tau_{\mathrm{own}})`
+       and the right-hand side with the unique-face horizontal mean of the other residual per level at :math:`\tau_c`
+       and the fluctuation at :math:`\tau_{\mathrm{own}}`.
    * - UT-1.2.1
      - Steady-criterion verdicts on converging, stalling (including a residual stuck exactly at the tolerance) and
        oscillating histories. The converging history becomes

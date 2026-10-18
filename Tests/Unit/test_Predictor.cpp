@@ -7,6 +7,7 @@
 #include "BoundaryConditions.H"
 #include "ImplicitOperator.H"
 #include "MassFlux.H"
+#include "MassFlux_K.H"
 #include "Predictor.H"
 #include "Residual.H"
 #include "TransportTestHelpers.H"
@@ -691,16 +692,20 @@ TEST (Predictor, DirichletRowsAreSetExactly)
     }
     amrex::ParallelDescriptor::ReduceIntSum(seen);
     EXPECT_EQ(seen, 4 * 6);
-    // w's ground and top rows: a_P = 1, d = 0, w set to 0 in one step
+    // w's ground and top rows: a_P = 1, d = 0, w set to the no-flux value
+    // of the state's u, v (Omega = 0, 1.16) in one step
+    const auto dxinv = c.geom.InvCellSizeArray();
     for (amrex::MFIter mfi(ap.ap_w, false); mfi.isValid(); ++mfi) {
-        const auto p = host_copy(ap.ap_w, mfi), d = host_copy(ap.d_w, mfi), m = host_copy(mw, mfi), w1 = host_copy(q1.w, mfi);
+        const auto p = host_copy(ap.ap_w, mfi), d = host_copy(ap.d_w, mfi), m = host_copy(mw, mfi), w1 = host_copy(q1.w, mfi),
+                   u0 = host_copy(q.u, mfi), v0 = host_copy(q.v, mfi), zn = host_copy(q.z_phys_nd, mfi);
         amrex::LoopOnCpu(mfi.validbox(), [&] (int i, int j, int k) {
             const amrex::IntVect iv(i, j, k);
             if (m(iv) == 1) {
                 EXPECT_TRUE(k == 0 || k == 6) << k;
                 EXPECT_EQ(p(iv), 1);
                 EXPECT_EQ(d(iv), 0);
-                EXPECT_EQ(w1(iv), 0);
+                const amrex::Real wn = ablsteady::massflux::no_flux_w(zn.const_array(), u0.const_array(), v0.const_array(), i, j, k, dxinv[0], dxinv[1]);
+                EXPECT_NEAR(w1(iv), wn, tol(1e-14, 1e-6) * (1 + std::abs(wn)));
             }
         });
     }

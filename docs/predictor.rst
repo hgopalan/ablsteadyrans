@@ -57,10 +57,20 @@ than assumed. A Fourier scan of the outer iteration made for this review (first-
 second-order right-hand side, pure advection, the vertical direction solved exactly) gives the worst-mode amplification
 per outer iteration: with 2 sweeps 1.000 at CFL 0.8, 1.003 at 1, 1.05 at 2, 1.22 at 5; with 4 sweeps 1.000 up to CFL
 4 and 1.001 at 5. Horizontal diffusion helps (at a cell Péclet number of 20, 2 sweeps hold to CFL 1.2 and 4 sweeps to
-5). So for 3-D runs with the default two sweeps ``steady.cfl_max`` should stay at about 1, and four sweeps allow about
-4 (Neutral_ABL_Flat runs with four sweeps and a cap of 2: at 4 the stratified k–:math:`\theta`–:math:`w` system and
-the SER ramp fall into bursts); the driver's default cap of 10 is for phase 2. A column
-with nothing varying horizontally has exact lagged neighbours and takes any cap (the 1-D column runs at 50).
+5). **Sub-phase 1.16 rescan** (``tools/sweeps_cfl_scan.py``: the same first-order upwind :math:`A_1`, the lagged
+x neighbours zero at the first sweep, a 2-D staggered u–w–p model with the exact SIMPLEC projection, which reduces to
+the scalar factor because the lagged solve commutes with the projection): the first CFL with an amplification above 1
+is 0.9 with 2 sweeps, **2.4 with 4, 3.7 with 8 and 6.1 with 16** (second-order upwind residual; 2.3, 3.4 and 5.4
+with central; ``--thresholds`` prints the table), the worst mode a short x wave (:math:`k_x\Delta x \approx
+2.3`–2.9). The 1.15 figure of 4 for four sweeps
+is not what this operator gives; the 1.16 thresholds are the ones the terrain runs confirm. Over ERF's 2-D hill at a
+nominal cap of 2 the local CFL passes 2.4 near the crest (the speed-up, the thinner terrain-following cells) and the
+run grows slowly after 2000–4000 iterations with four sweeps (an e-folding of about 400 iterations, in the w
+residual first), converges with first-order upwind (no defect correction) and converges with 8 or 16 sweeps; a 1 cm
+hill grows the same way, so any horizontal variation seeds it (:doc:`simplec`). The hill decks run 16 sweeps with
+a cap of 4. The flat ABL deck keeps four sweeps and a cap of 2, below the threshold (at 4 the stratified
+k–:math:`\theta`–:math:`w` system and the SER ramp fall into bursts); the driver's default cap of 10 is for phase 2.
+A column with nothing varying horizontally has exact lagged neighbours and takes any cap (the 1-D column runs at 50).
 
 Point-implicit buoyancy and rotation
 ------------------------------------
@@ -72,14 +82,31 @@ per iteration whatever the CFL. With gravity on, the :math:`w` rows gain on the 
 :math:`(g/\theta_0)\max(\partial_z\theta, 0)\,\tau_\theta` and on the right-hand side the buoyancy of the change the
 :math:`\theta` equation predicts, :math:`-(g/\theta_0)\,\tau_\theta R_\theta` (the face mean of the two cells), with
 :math:`\tau_\theta = 1/(1/\Delta\tau + a_{P,\theta})` the step :math:`\theta`'s own implicit rows allow (the face mean of
-its diagonal). With Coriolis on, the :math:`u` and :math:`v` rows gain :math:`f^2\tau_c` on the diagonal and
-:math:`-f\tau_c R_v`, :math:`+f\tau_c R_u` (the four-face means) on the right-hand side, with :math:`\tau_c =
-1/\max(|f|/r, a_P - \sum a_{nb})`, :math:`r` = ``simplec.rotation_relax`` (0.3): a fraction of an inertial time
-where the drag folds are weak (a backward Euler step of the rotation alone damps it by only
-:math:`(f\Delta\tau)^2/2` per iteration; with :math:`r/|f|` by about :math:`r f\Delta\tau`), the inverse of the net
-diagonal where a drag dominates. :math:`r < 1` because the right-hand-side term carries the whole residual of the
-other component: at :math:`r = 1` it feeds an internal gravity wave of an inviscid inversion layer, which then grows
-by 1.4 per iteration (:doc:`simplec`). Both additions enter the
+its diagonal). With Coriolis on, the :math:`u` and :math:`v` rows gain :math:`f^2\max(\tau_c, \tau_{\mathrm{own}})`
+on the diagonal and on the right-hand side
+
+.. math::
+
+   -f\,\bigl(\tau_c\,\langle R_v\rangle + \tau_{\mathrm{own}}\,(\overline{R_v} - \langle R_v\rangle)\bigr),
+   \qquad
+   +f\,\bigl(\tau_c\,\langle R_u\rangle + \tau_{\mathrm{own}}\,(\overline{R_u} - \langle R_u\rangle)\bigr),
+
+with :math:`\overline{R}` the four-face mean, :math:`\langle R\rangle` the horizontal mean of the other component's
+residual over the level (one reduction per level and iteration), :math:`\tau_c = 1/\max(|f|/r, a_P - \sum a_{nb})`,
+:math:`r` = ``simplec.rotation_relax`` (0.3), and :math:`\tau_{\mathrm{own}} = 1/(1/\Delta\tau + \max(a_P - \sum
+a_{nb}, 0))` the row's own step. The inertial oscillation is horizontally uniform (:math:`u, v` of the whole level
+rotate together), so the inertial time belongs to the mean alone; the fluctuation about it is the hill's wake, a
+gravity wave or a roll, which the plain pseudo-time step treats at its own rate. :math:`\tau_c` is a fraction
+:math:`r` of an inertial time where the drag folds are weak (a backward Euler step of the rotation alone damps it by
+only :math:`(f\Delta\tau)^2/2` per iteration; with :math:`r/|f|` by about :math:`r f\Delta\tau`), the inverse of the
+net diagonal where a drag dominates. Sub-phase 1.15 applied :math:`\tau_c` to the whole four-face mean; that
+injected the other component's local residual at up to :math:`1/f` = 10 000 s and fed an internal gravity wave of an
+inviscid inversion layer (growth 1.4 per iteration at :math:`r = 1`), and over ERF's 2-D hill grew at :math:`r =
+0.3` as well. With the split both :math:`r = 0.3` and :math:`r = 1` converge on the flat case and the hill
+(:doc:`simplec`). The diagonal carries the larger of the two steps so that the mean and the fluctuation are each a
+backward Euler step of the rotation, a contraction for every :math:`f\Delta\tau` (the 2 × 2 analysis of the 1.16
+review: with :math:`f^2\tau_c` alone the fluctuation's step is a contraction only for :math:`f\Delta\tau < r +
+\sqrt{1 + r^2}`, 1.3 at :math:`r = 0.3`; the runs sit at :math:`f\Delta\tau` = 0.002–0.02). Both additions enter the
 SIMPLEC denominator :math:`d` too,
 vanish at a fixed point (the delta form and :math:`R = 0`), and are pinned by UT-1.15.7; why each is needed is in
 :doc:`simplec`. The :math:`\cos\varphi` terms of the 3-D Coriolis force stay explicit.

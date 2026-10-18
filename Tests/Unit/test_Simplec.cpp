@@ -604,10 +604,12 @@ TEST (Simplec, LidDrivenCavityRe100)
 // (Predictor.H), pinned against the formulas on a random state with a
 // stratified theta and Coriolis on: with tau_q = 1 / (1/dtau + a_P,q),
 //   a_P,w = 1/dtau + A_P + (g/theta_0) max(dtheta/dz, 0) tau_theta (face mean of theta's diagonal),
-//   a_P,u = 1/dtau + A_P + f^2 tau_c, tau_c = 1/max(|f|/r, A_P - sum A_nb) (r = 1 and 0.3),   a_P,v likewise,
+//   a_P,u = 1/dtau + A_P + f^2 max(tau_c, tau_own), tau_c = 1/max(|f|/r, A_P - sum A_nb) (r = 1 and 0.3),   a_P,v likewise,
 //   d gains the same terms, and the corrections solve the z-line systems with
 //   the right-hand sides -R_w - (g/theta_0) tau_theta avg(R_theta),
-//   -R_u - f tau_c avg(R_v), -R_v + f tau_c avg(R_u) (the four-face means).
+//   -R_u - f (tau_c <R_v> + tau_own (avg(R_v) - <R_v>)), -R_v + f (tau_c <R_u> + tau_own (avg(R_u) - <R_u>)):
+//   the horizontal mean per level with the inertial time, the fluctuation (the four-face mean minus it) with the
+//   row's own step tau_own = 1/(1/dtau + net).
 // With gravity and Coriolis off the rows are the plain ones (test_Predictor).
 TEST (Simplec, PointImplicitCouplingsArePinned)
 {
@@ -637,7 +639,11 @@ TEST (Simplec, PointImplicitCouplingsArePinned)
     ablsteady::transport_fluxes(q.u, q.v, q.w, q.z_phys_nd, c.mesh, c.geom, F);
     const amrex::Array<const amrex::MultiFab*, 3> Fp{&F[0], &F[1], &F[2]};
     amrex::MultiFab dtau(c.ba, c.dm, 1, 0);
-    fill_random(dtau, 20, 60, 57, c);
+    // dtau of 20-60 s (tau_c = r/|f| >> dtau, the runs) and of 8000-24000 s
+    // (f dtau > r: tau_own > tau_c where the net diagonal vanishes, so the
+    // diagonal's max(tau_c, tau_own) is exercised).
+    for (const double dt_scale : {1.0, 400.0}) {
+    fill_random(dtau, 20 * dt_scale, 60 * dt_scale, 57, c);
     ablsteady::face_dtau(dtau, c.mesh, c.geom, df);
     for (const double relax : {1.0, 0.3}) {
     ablsteady::State q1;
@@ -658,6 +664,31 @@ TEST (Simplec, PointImplicitCouplingsArePinned)
     amrex::MultiFab::Copy(Rvg, R.v, 0, 0, 1, 0);
     Rug.FillBoundary(c.geom.periodicity());
     Rvg.FillBoundary(c.geom.periodicity());
+    // The horizontal mean of each per level (every rank sums its valid points).
+    const int nzc = c.geom.Domain().length(2);
+    std::vector<double> mean_u(nzc, 0), mean_v(nzc, 0);
+    // Every face once: a box's high face plane in its nodal direction is the
+    // next box's low plane or the periodic image of the domain's low plane.
+    const amrex::Box& dom = c.geom.Domain();
+    auto unique = [&] (const amrex::MFIter& mfi, int d) {
+        amrex::Box b = mfi.validbox();
+        if (c.geom.isPeriodic(d) || b.bigEnd(d) != dom.bigEnd(d) + 1) { b.growHi(d, -1); }
+        return b;
+    };
+    for (amrex::MFIter mfi(R.u, false); mfi.isValid(); ++mfi) {
+        const auto ru0 = host_copy(R.u, mfi);
+        amrex::LoopOnCpu(unique(mfi, 0), [&] (int i, int j, int k) { mean_u[k] += ru0(amrex::IntVect(i, j, k)); });
+    }
+    for (amrex::MFIter mfi(R.v, false); mfi.isValid(); ++mfi) {
+        const auto rv0 = host_copy(R.v, mfi);
+        amrex::LoopOnCpu(unique(mfi, 1), [&] (int i, int j, int k) { mean_v[k] += rv0(amrex::IntVect(i, j, k)); });
+    }
+    amrex::ParallelDescriptor::ReduceRealSum(mean_u.data(), nzc);
+    amrex::ParallelDescriptor::ReduceRealSum(mean_v.data(), nzc);
+    for (int k = 0; k < nzc; ++k) {
+        mean_u[k] /= double(dom.length(0) + (c.geom.isPeriodic(0) ? 0 : 1)) * dom.length(1);
+        mean_v[k] /= double(dom.length(1) + (c.geom.isPeriodic(1) ? 0 : 1)) * dom.length(0);
+    }
     // The expected diagonals and right-hand sides.
     amrex::MultiFab apu(Au.boxArray(), c.dm, 1, 0), apv(Av.boxArray(), c.dm, 1, 0), apw(Aw.boxArray(), c.dm, 1, 0);
     amrex::MultiFab rhsu(Au.boxArray(), c.dm, 1, 0), rhsv(Av.boxArray(), c.dm, 1, 0), rhsw(Aw.boxArray(), c.dm, 1, 0);
@@ -675,21 +706,25 @@ TEST (Simplec, PointImplicitCouplingsArePinned)
             const amrex::IntVect iv(i, j, k);
             double nbu = 0;
             for (int n = 1; n < ablsteady::n_implicit_coefs; ++n) { nbu += au(iv, n); }
-            const double tau = 1.0 / std::max(double(fs) / relax, double(au(iv, ablsteady::coef_P)) - nbu);
-            eu(iv) = 1.0 / dtu(iv) + au(iv, ablsteady::coef_P) + fs * fs * tau;
+            const double net = std::max(double(au(iv, ablsteady::coef_P)) - nbu, 0.0);
+            const double tau_c = 1.0 / std::max(double(fs) / relax, net);
+            const double tau_own = 1.0 / (1.0 / dtu(iv) + net);
+            eu(iv) = 1.0 / dtu(iv) + au(iv, ablsteady::coef_P) + fs * fs * std::max(tau_c, tau_own);
             const double avg = 0.25 * (rv(amrex::IntVect(i - 1, j, k)) + rv(iv) + rv(amrex::IntVect(i - 1, j + 1, k))
                                        + rv(amrex::IntVect(i, j + 1, k)));
-            xu(iv) = -ru(iv) - fs * tau * avg;
+            xu(iv) = -ru(iv) - fs * (tau_c * mean_v[k] + tau_own * (avg - mean_v[k]));
         });
         amrex::LoopOnCpu(apv[mfi].box(), [&] (int i, int j, int k) {
             const amrex::IntVect iv(i, j, k);
             double nbv = 0;
             for (int n = 1; n < ablsteady::n_implicit_coefs; ++n) { nbv += av(iv, n); }
-            const double tau = 1.0 / std::max(double(fs) / relax, double(av(iv, ablsteady::coef_P)) - nbv);
-            ev(iv) = 1.0 / dtv(iv) + av(iv, ablsteady::coef_P) + fs * fs * tau;
+            const double net = std::max(double(av(iv, ablsteady::coef_P)) - nbv, 0.0);
+            const double tau_c = 1.0 / std::max(double(fs) / relax, net);
+            const double tau_own = 1.0 / (1.0 / dtv(iv) + net);
+            ev(iv) = 1.0 / dtv(iv) + av(iv, ablsteady::coef_P) + fs * fs * std::max(tau_c, tau_own);
             const double avg = 0.25 * (ru(amrex::IntVect(i, j - 1, k)) + ru(amrex::IntVect(i + 1, j - 1, k)) + ru(iv)
                                        + ru(amrex::IntVect(i + 1, j, k)));
-            xv(iv) = -rv(iv) + fs * tau * avg;
+            xv(iv) = -rv(iv) + fs * (tau_c * mean_u[k] + tau_own * (avg - mean_u[k]));
         });
         amrex::LoopOnCpu(apw[mfi].box(), [&] (int i, int j, int k) {
             const amrex::IntVect iv(i, j, k);
@@ -813,6 +848,7 @@ TEST (Simplec, PointImplicitCouplingsArePinned)
         EXPECT_LT(max_abs_diff(dq, delta), tol(1e-13, 1e-4) * max_abs(*row.q0)) << row.name << " relax " << relax;
     }
     }   // relax
+    }   // dt_scale
 }
 
 // ---------------------------------------------------------------------------

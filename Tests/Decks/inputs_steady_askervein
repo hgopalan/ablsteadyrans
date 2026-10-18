@@ -1,0 +1,57 @@
+# RT-1.16.3: Askervein to steady with the SIMPLEC stage on the coarse mesh of
+# RT-1.12.1 (30 x 30 x 18 cells over 6 km x 6 km, 20 m first layer stretched
+# by 1.08 to 440 m computational top; ERF's deck is 300 x 300 x 18): the
+# terrain of extern_erf/askervein.txt (given on the command line), the log
+# law inflow (u* = 0.6 m/s, z0 = 0.03 m) at xlo, outflow at xhi, slip sides,
+# the surface layer (z0 = 0.03 m), a slip top, neutral (300 K), no Coriolis
+# (ERF's deck), no sponge (the outflow's residual keeps dropping without one:
+# 1e-9 after 706 iterations at a tolerance of 1e-10), ERF's closure defaults.
+# The first guess is the mass-consistent
+# initial field of RT-1.12.1. The 5 % comparison with ERF's reference on the
+# A and AA lines needs the full mesh and the reference run (Kestrel).
+mesh.n_cell        = 30 30 18
+mesh.prob_lo       = -3000. -3000. 0.
+mesh.prob_hi       =  3000.  3000. 440.
+mesh.max_grid_size = 16
+mesh.dz0           = 20.
+mesh.stretch_ratio = 1.08
+
+terrain.type      = erf_grid
+terrain.smoothing = 0
+
+bc.xlo = inflow
+bc.xhi = outflow
+bc.ylo = slip_wall
+bc.yhi = slip_wall
+bc.zlo = surface_layer
+bc.zhi = slip_wall
+bc.surface_z0       = 0.03
+bc.inflow_profile   = log_law
+bc.inflow_ustar     = 0.6
+bc.inflow_z0        = 0.03
+bc.inflow_direction = 0.
+bc.theta_profile_z  = 0.
+bc.theta_profile    = 300.
+
+init.first_guess = profile
+init.alpha_h     = 1.0
+init.alpha_v     = 0.5
+
+solver.poisson_reltol   = 1.e-10
+solver.poisson_max_iter = 200
+solver.poisson_precond  = fft
+
+forcing.gravity = 0.
+
+turb.tke_floor = 1.e-6
+
+steady.stage                   = simplec
+steady.cfl0                    = 1.
+steady.cfl_max                 = 2.
+steady.zline_sweeps            = 4
+steady.residual_ref_iterations = 100
+steady.max_iterations          = 20000
+
+io.plot_file      = steady_askervein_plt
+io.turb_plot_file = steady_askervein_turb
+io.chk_file       = steady_askervein_chk
