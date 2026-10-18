@@ -282,8 +282,8 @@ std::vector<std::string> unknown_inputs (const std::vector<InputEntry>& entries,
         const std::string ns = e.name.substr(0, dot);
         if (contains(owned, ns)) {
             if (!e.used) {
-                msg.emplace_back("unknown input '" + e.name + "': not an input of namespace '"
-                                 + ns + "' in this version");
+                msg.emplace_back("unknown input '" + e.name + "': not an input of namespace '" + ns + "' in this version"
+                                 + ((ns == "bc" || ns == "solver") ? " (read only with init.first_guess = profile)" : ""));
             }
         } else if (!contains(amrex_namespaces(), ns)) {
             msg.emplace_back("unknown input '" + e.name + "': unknown namespace '" + ns + "'");

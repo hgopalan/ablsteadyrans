@@ -248,6 +248,8 @@ here too (``bc.surface_*``, :doc:`surface`).
      - see :doc:`surface`
      - The surface layer's options (``read_surface_layer_options``); refused unless ``bc.zlo = surface_layer``.
 
-In this version only the regression tool ``boundary_fluxes`` reads the ``bc`` keys (its deck also has the tool's own
-``fixed_state.ustar``, ``fixed_state.z0`` and ``fixed_state.direction``); the driver of sub-phase 1.13 adds them
-to the application, where setting them still stops the run.
+The application reads the ``bc`` keys with the mass-consistent initializer (:doc:`initializer`, which checks the face
+types against the mesh and takes the inflow profile and the sounding from them), and so does the regression tool
+``boundary_fluxes`` (its deck also has the tool's own ``fixed_state.ustar``, ``fixed_state.z0`` and
+``fixed_state.direction``); the driver of sub-phase 1.13 applies them in the solver. Without the initializer, setting
+them in an ablsteady deck still stops the run.
