@@ -92,8 +92,9 @@ longer depends on the ghost cell), and u and v gain the wall stress's Picard coe
 Options
 -------
 
-There are no input keys yet; the driver adds them (ERF's ``most.z0``, ``most.zref``, ``most.surf_temp_flux``,
-``dirichlet_k`` are the models).
+The keys are ``bc.surface_z0``, ``bc.surface_zref``, ``bc.surface_stability``, ``bc.surface_heat_flux`` and
+``bc.surface_wall_k`` (``read_surface_layer_options()``, :doc:`boundary`; ERF's ``most.z0``, ``most.zref``,
+``most.surf_temp_flux`` and ``dirichlet_k`` are the models). ``Cmu0`` and ``kappa`` are the closure's.
 
 .. list-table::
    :header-rows: 1

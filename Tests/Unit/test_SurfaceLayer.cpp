@@ -11,6 +11,7 @@
 
 #include <gtest/gtest.h>
 
+#include <cfenv>
 #include <cmath>
 #include <limits>
 #include <stdexcept>
@@ -47,6 +48,11 @@ TEST(SimilarityFunctions, MatchTheReferenceTable)
     };
     const similarity_funs sf;
     const double t = tol(1e-14, 1e-6);
+    // ERF's functions select between their branches; the compiler may evaluate
+    // the unstable sqrt(1 - 16 zeta) for a stable zeta too (ERF builds without
+    // -fno-math-errno, where sqrt cannot be hoisted; ablsteady with it), which
+    // would raise the invalid trap on a discarded value. Off while they are called.
+    const auto prev_fpe = amrex::disableFPExcept(amrex::FPExcept::invalid);
     for (const Row& r : rows) {
         const auto z = static_cast<amrex::Real>(r.zeta);
         const double got[6] = {sf.calc_psi_m(z), sf.calc_psi_h(z), sf.calc_phi_m(z), sf.calc_phi_h(z), sf.calc_psi_m2(z), sf.calc_psi_h2(z)};
@@ -56,6 +62,23 @@ TEST(SimilarityFunctions, MatchTheReferenceTable)
             EXPECT_NEAR(got[n], want[n], t * (1 + std::abs(want[n]))) << names[n] << " at z/L = " << r.zeta;
         }
     }
+    // ablsteady's branch-safe most_phi (the ground ghost fill) equals the
+    // table's phi at every row and ERF's functions in between.
+    for (const Row& r : rows) {
+        amrex::Real pm, ph;
+        ablsteady::most_phi(static_cast<amrex::Real>(r.zeta), pm, ph);
+        EXPECT_NEAR(pm, r.phi_m, t * (1 + std::abs(r.phi_m))) << r.zeta;
+        EXPECT_NEAR(ph, r.phi_h, t * (1 + std::abs(r.phi_h))) << r.zeta;
+    }
+    for (double zeta = -5; zeta <= 5; zeta += 0.125) {
+        amrex::Real pm, ph;
+        ablsteady::most_phi(static_cast<amrex::Real>(zeta), pm, ph);
+        const auto z = static_cast<amrex::Real>(zeta);
+        EXPECT_NEAR(pm, sf.calc_phi_m(z), t * (1 + std::abs(double(pm)))) << zeta;
+        EXPECT_NEAR(ph, sf.calc_phi_h(z), t * (1 + std::abs(double(ph)))) << zeta;
+    }
+    std::feclearexcept(FE_ALL_EXCEPT);
+    amrex::setFPExcept(prev_fpe);
     // The companions: psi_m(zeta) = int_0^zeta (1 - phi_m(x)) / x dx, so
     // d psi_m / d zeta = (1 - phi_m) / zeta (central differences, double only).
     if (std::is_same_v<amrex::Real, double>) {

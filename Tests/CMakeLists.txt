@@ -31,6 +31,7 @@ add_executable(unit_tests
     Unit/test_MassFlux.cpp
     Unit/test_Residual.cpp
     Unit/test_SurfaceLayer.cpp
+    Unit/test_BoundaryConditions.cpp
 )
 target_include_directories(unit_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Unit)
 target_link_libraries(unit_tests PRIVATE ablsteady_core GTest::gtest)
@@ -44,10 +45,13 @@ target_link_libraries(poisson_projection PRIVATE ablsteady_core)
 # RT-1.11.2 computes the Tucker wall distance: another test-only tool.
 add_executable(wall_distance Tools/wall_distance.cpp)
 target_link_libraries(wall_distance PRIVATE ablsteady_core)
+add_executable(boundary_fluxes Tools/boundary_fluxes.cpp)
+target_link_libraries(boundary_fluxes PRIVATE ablsteady_core)
 if(ABLSTEADY_GPU_BACKEND STREQUAL "CUDA")
     setup_target_for_cuda_compilation(unit_tests)
     setup_target_for_cuda_compilation(poisson_projection)
     setup_target_for_cuda_compilation(wall_distance)
+    setup_target_for_cuda_compilation(boundary_fluxes)
 endif()
 
 # --- How to launch on N ranks -------------------------------------------------
@@ -283,6 +287,22 @@ if(ABLSTEADY_PRECISION STREQUAL "DOUBLE")
                        RUN_DIR ${WALLDIST_DIR} FIXTURES_REQUIRED walldist_hill2d
                        COMMAND ${FCOMPARE} --rel_tol 1e-8 walldist_hill2d_plt00000
                                ${GOLD}/walldist_hill2d_plt00000)
+endif()
+
+# --- RT-1.8.1: boundary fluxes of a fixed log-law state (sub-phase 1.8) ------
+# Double precision only (the gold is double).
+if(ABLSTEADY_PRECISION STREQUAL "DOUBLE")
+    set(BC_DIR ${CMAKE_CURRENT_BINARY_DIR}/run/rt_bc_neutral_flat)
+    ablsteady_add_test(NAME rt_bc_neutral_flat NP 2 LABELS "regression;smoke" RUN_DIR ${BC_DIR}
+                       FIXTURES_SETUP bc_neutral_flat
+                       PREFIX ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/check_bc.py
+                              --ustar 0.35 --z0 0.1 --direction 15 --dz 15.625 --
+                       COMMAND $<TARGET_FILE:boundary_fluxes> ${DECKS}/inputs_bc_neutral_flat
+                               ${ABLSTEADY_TEST_AMREX_FLAGS})
+    ablsteady_add_test(NAME rt_bc_neutral_flat_matches NP 1 LABELS "regression;smoke"
+                       RUN_DIR ${BC_DIR} FIXTURES_REQUIRED bc_neutral_flat
+                       COMMAND ${FCOMPARE} --rel_tol 1e-10 bc_neutral_flat_plt00000
+                               ${GOLD}/bc_neutral_flat_plt00000)
 endif()
 
 # --- Reference archives (sub-phase 1.1): ablsteady_refavg end to end --------

@@ -69,6 +69,27 @@
 
 namespace ablsteady {
 
+//! MOST's gradient functions phi_m and phi_h of zeta = d/L (Businger-Dyer, as
+//! ERF's similarity_funs::calc_phi_m/calc_phi_h, which UT-1.7.1 pins). Written
+//! without a select on the sign of zeta, and with the clamps as arithmetic
+//! (|zeta| forms), not as min/max: the compiler evaluates both arms of a
+//! select, moves a select past a sqrt or a division (they cannot fail in its
+//! model), and drops a clamp inside an arm where it knows the sign; the sqrt
+//! of 1 - 16 zeta for a stable zeta > 1/16 then raises the invalid-operation
+//! trap although its value is unused. Here the argument of the sqrt is
+//! 1 + 8 (|zeta| - zeta) >= 1 for every zeta, in every form.
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+void most_phi (amrex::Real zeta, amrex::Real& phi_m, amrex::Real& phi_h) noexcept
+{
+    const amrex::Real one = 1, beta = 5, gamma = 16;   // Dyer 1974, ERF's values
+    const amrex::Real az = std::abs(zeta);
+    const amrex::Real zs = amrex::Real(0.5) * (az + zeta);   // max(zeta, 0)
+    const amrex::Real zu = amrex::Real(0.5) * (zeta - az);   // min(zeta, 0)
+    const amrex::Real r = std::sqrt(one - gamma * zu);       // >= 1
+    phi_m = one + beta * zs + (one / std::sqrt(r) - one);
+    phi_h = one + beta * zs + (one / r - one);
+}
+
 struct SurfaceLayerOptions
 {
     enum class Stability { neutral, heat_flux };
@@ -92,6 +113,12 @@ struct SurfaceLayerOptions
 
 //! Problems with the options, one message per problem, naming the option.
 std::vector<std::string> check_surface_layer_options (const SurfaceLayerOptions& opt);
+
+//! Read the ground's keys, bc.surface_z0, bc.surface_zref,
+//! bc.surface_stability (neutral | heat_flux), bc.surface_heat_flux and
+//! bc.surface_wall_k (dirichlet | source), and range-check them; aborts
+//! naming the key. Cmu0 and kappa stay the closure's (sub-phase 1.9).
+SurfaceLayerOptions read_surface_layer_options ();
 
 //! The surface layer of every ground column, on a one-cell-thick BoxArray
 //! (the ground slab of the mesh's boxes) with one ghost cell in x and y.

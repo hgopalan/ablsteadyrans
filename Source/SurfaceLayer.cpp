@@ -6,6 +6,7 @@
 #include "Stencil_K.H"
 
 #include <AMReX_ParallelReduce.H>
+#include <AMReX_ParmParse.H>
 
 #include <cmath>
 #include <limits>
@@ -74,10 +75,11 @@ void tangential_wind (amrex::Array4<amrex::Real const> const& u, amrex::Array4<a
 struct MostRelation
 {
     amrex::Real kappa, U, d, lz, gq;
+    amrex::Real ustar_min;   //!< kUstarMin, held by value: a namespace constant is not usable in device code
     AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
     amrex::Real inv_L (amrex::Real u) const noexcept
     {
-        const amrex::Real uf = amrex::max(u, kUstarMin);
+        const amrex::Real uf = amrex::max(u, ustar_min);
         return -kappa * gq / (uf * uf * uf);
     }
     AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
@@ -102,6 +104,9 @@ void columns (const State& q, const SurfaceLayerOptions& opt, const BuoyancyOpti
     const amrex::Real eps = std::numeric_limits<amrex::Real>::epsilon();
     const amrex::Real tol = 64 * eps;
     const amrex::Real hrel = std::sqrt(eps);
+    // The floors as locals: nvcc cannot use a namespace-scope constant in
+    // device code (it is odr-used through amrex::max's references).
+    const amrex::Real ws_min_c = kWsMin, ustar_min_c = kUstarMin;
     for (amrex::MFIter mfi(s.ustar, false); mfi.isValid(); ++mfi) {
         const amrex::Box bx = mfi.growntilebox(amrex::IntVect(1, 1, 0));
         const auto z = q.z_phys_nd.const_array(mfi);
@@ -122,7 +127,7 @@ void columns (const State& q, const SurfaceLayerOptions& opt, const BuoyancyOpti
             // Captured here, outside the constexpr-if blocks below: nvcc refuses
             // an extended device lambda whose first capture of a variable is
             // inside an if constexpr.
-            const amrex::Real gq_c = gq, hrel_c = hrel, tol_c = tol;
+            const amrex::Real gq_c = gq, hrel_c = hrel, tol_c = tol, ustar_min_l = ustar_min_c;
             const Column h{z, i, j, klo};
             const amrex::Real zx = stencil::deriv<stencil::NODE, stencil::ZF, 0>(z, i, j, klo) * dxinv[0];
             const amrex::Real zy = stencil::deriv<stencil::NODE, stencil::ZF, 1>(z, i, j, klo) * dxinv[1];
@@ -142,13 +147,13 @@ void columns (const State& q, const SurfaceLayerOptions& opt, const BuoyancyOpti
             amrex::Real ut[3];
             for (int c = 0; c < 3; ++c) { ut[c] = ua[c] + f * (ub[c] - ua[c]); }
             const amrex::Real mag = std::sqrt(ut[0] * ut[0] + ut[1] * ut[1] + ut[2] * ut[2]);
-            const amrex::Real U = amrex::max(mag, kWsMin);
+            const amrex::Real U = amrex::max(mag, ws_min_c);
             const amrex::Real d = zr * ia;
             const amrex::Real lz = std::log((d + z0) / z0);
             amrex::Real ustar = kappa * U / amrex::max(lz, amrex::Real(1));
             amrex::Real invL = 0;
             if constexpr (HEAT) {
-                const MostRelation F{kappa, U, d, lz, gq_c};
+                const MostRelation F{kappa, U, d, lz, gq_c, ustar_min_l};
                 bool converged = false;
                 for (int it = 0; it < kMaxNewton && !converged; ++it) {
                     const amrex::Real fu = F(ustar);
@@ -207,6 +212,42 @@ std::vector<std::string> check_surface_layer_options (const SurfaceLayerOptions&
         err.emplace_back("surface layer heat_flux is set but the stability is neutral; it would be ignored");
     }
     return err;
+}
+
+SurfaceLayerOptions read_surface_layer_options ()
+{
+    // The ground is a boundary condition: its keys live in bc.surface_*.
+    SurfaceLayerOptions opt;
+    amrex::ParmParse pp("bc");
+    for (const char* key : {"surface_z0", "surface_zref", "surface_stability", "surface_heat_flux", "surface_wall_k"}) {
+        if (pp.contains(key) && pp.countval(key) != 1) {
+            amrex::Abort(std::string("ablsteady: bc.") + key + " takes exactly one value");
+        }
+    }
+    pp.query("surface_z0", opt.z0);
+    pp.query("surface_zref", opt.zref);
+    pp.query("surface_heat_flux", opt.heat_flux);
+    std::string s = "neutral", w = "dirichlet";
+    pp.query("surface_stability", s);
+    pp.query("surface_wall_k", w);
+    if (s == "neutral") { opt.stability = SurfaceLayerOptions::Stability::neutral; }
+    else if (s == "heat_flux") { opt.stability = SurfaceLayerOptions::Stability::heat_flux; }
+    else { amrex::Abort("ablsteady: bc.surface_stability = " + s + ": must be neutral or heat_flux"); }
+    if (w == "dirichlet") { opt.wall_k = SurfaceLayerOptions::WallK::dirichlet; }
+    else if (w == "source") { opt.wall_k = SurfaceLayerOptions::WallK::source; }
+    else { amrex::Abort("ablsteady: bc.surface_wall_k = " + w + ": must be dirichlet or source"); }
+    const auto err = check_surface_layer_options(opt);
+    if (!err.empty()) {
+        // The checks say "surface layer z0"; the key is bc.surface_z0.
+        std::string all = "ablsteady: invalid inputs:";
+        const std::string from = "surface layer ";
+        for (std::string msg : err) {
+            if (msg.rfind(from, 0) == 0) { msg = "bc.surface_" + msg.substr(from.size()); }
+            all += "\n  " + msg;
+        }
+        amrex::Abort(all);
+    }
+    return opt;
 }
 
 void compute_surface_state (const State& q, const SurfaceLayerOptions& opt, const BuoyancyOptions& buoyancy,
@@ -342,15 +383,16 @@ void apply_wall_k (const SurfaceState& s, const SurfaceLayerOptions& opt, const 
         const auto us = s.ustar.const_array(mfi);
         const auto d0 = s.d0.const_array(mfi);
         const auto kw = s.kwall.const_array(mfi);
+        const amrex::Real us_min = kWallKUstarMin;   // by value for device code
         if (dirichlet) {
             amrex::ParallelFor(cb, [=] AMREX_GPU_DEVICE (int i, int j, int) noexcept
             {
-                r(i, j, k0) = amrex::max(us(i, j, 0), kWallKUstarMin) / d0(i, j, 0) * (t(i, j, k0) - kw(i, j, 0));
+                r(i, j, k0) = amrex::max(us(i, j, 0), us_min) / d0(i, j, 0) * (t(i, j, k0) - kw(i, j, 0));
             });
         } else {
             amrex::ParallelFor(cb, [=] AMREX_GPU_DEVICE (int i, int j, int) noexcept
             {
-                r(i, j, k0) += amrex::max(us(i, j, 0), kWallKUstarMin) / d0(i, j, 0) * (t(i, j, k0) - kw(i, j, 0));
+                r(i, j, k0) += amrex::max(us(i, j, 0), us_min) / d0(i, j, 0) * (t(i, j, k0) - kw(i, j, 0));
             });
         }
     }
@@ -403,17 +445,18 @@ void apply_wall_k_line (const SurfaceState& s, const SurfaceLayerOptions& opt, a
         const auto a = tri.array(mfi);
         const auto us = s.ustar.const_array(mfi);
         const auto d0 = s.d0.const_array(mfi);
+        const amrex::Real us_min = kWallKUstarMin;   // by value for device code
         if (dirichlet) {
             amrex::ParallelFor(cb, [=] AMREX_GPU_DEVICE (int i, int j, int) noexcept
             {
                 a(i, j, k0, 0) = 0;
-                a(i, j, k0, 1) = amrex::max(us(i, j, 0), kWallKUstarMin) / d0(i, j, 0);
+                a(i, j, k0, 1) = amrex::max(us(i, j, 0), us_min) / d0(i, j, 0);
                 a(i, j, k0, 2) = 0;
             });
         } else {
             amrex::ParallelFor(cb, [=] AMREX_GPU_DEVICE (int i, int j, int) noexcept
             {
-                a(i, j, k0, 1) += amrex::max(us(i, j, 0), kWallKUstarMin) / d0(i, j, 0);
+                a(i, j, k0, 1) += amrex::max(us(i, j, 0), us_min) / d0(i, j, 0);
             });
         }
     }
