@@ -112,7 +112,7 @@ Inputs parse_inputs ()
         amrex::ParmParse pp("io");
         // Scalar keys take exactly one value; extra tokens are an error, not dropped.
         for (const char* key : {"plot_file", "chk_file", "restart", "write_plotfile",
-                                "write_checkpoint"}) {
+                                "write_checkpoint", "turb_plot_file"}) {
             if (pp.contains(key) && pp.countval(key) != 1) {
                 in.parse_errors.emplace_back(std::string("io.") + key + " takes exactly one value");
             }
@@ -122,6 +122,7 @@ Inputs parse_inputs ()
         pp.query("restart", in.io.restart);
         pp.query("write_plotfile", in.io.write_plotfile);
         pp.query("write_checkpoint", in.io.write_checkpoint);
+        pp.query("turb_plot_file", in.io.turb_plot_file);
     }
 
     // A key given twice would silently take its last value.
@@ -130,7 +131,7 @@ Inputs parse_inputs ()
                        "stretch_ratio", "zlevels_file"}},
              {"terrain", {"type", "file", "smoothing", "gamma_m", "hill_height", "hill_half_width",
                           "hill_shape", "idw_neighbors", "idw_power"}},
-             {"io", {"plot_file", "chk_file", "restart", "write_plotfile", "write_checkpoint"}}}) {
+             {"io", {"plot_file", "chk_file", "restart", "write_plotfile", "write_checkpoint", "turb_plot_file"}}}) {
         amrex::ParmParse pp(ns);
         for (const auto& key : keys) {
             if (pp.countname(key) > 1) {
@@ -283,7 +284,8 @@ std::vector<std::string> unknown_inputs (const std::vector<InputEntry>& entries,
         if (contains(owned, ns)) {
             if (!e.used) {
                 msg.emplace_back("unknown input '" + e.name + "': not an input of namespace '" + ns + "' in this version"
-                                 + ((ns == "bc" || ns == "solver") ? " (read only with init.first_guess = profile)" : ""));
+                                 + ((ns == "bc" || ns == "solver")
+                                    ? " (read with init.first_guess = profile or steady.stage = simplec)" : ""));
             }
         } else if (!contains(amrex_namespaces(), ns)) {
             msg.emplace_back("unknown input '" + e.name + "': unknown namespace '" + ns + "'");

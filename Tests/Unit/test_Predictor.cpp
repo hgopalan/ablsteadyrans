@@ -122,6 +122,10 @@ struct Coefficients
         in.gamma_tke = &gk;
         in.theta_ref.z = {-1000, 5000};
         in.theta_ref.theta = {300, 300};
+        // No gravity: these tests pin the plain delta form (1/dtau + A1) du =
+        // -R; the point-implicit buoyancy and rotation of the w, u and v rows
+        // (sub-phase 1.15) are pinned by test_Simplec.cpp.
+        in.buoyancy.gravity = 0;
     }
 };
 

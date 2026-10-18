@@ -36,6 +36,7 @@ add_executable(unit_tests
     Unit/test_Initializer.cpp
     Unit/test_Driver.cpp
     Unit/test_Predictor.cpp
+    Unit/test_Simplec.cpp
 )
 target_include_directories(unit_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Unit)
 target_link_libraries(unit_tests PRIVATE ablsteady_core GTest::gtest)
@@ -80,8 +81,8 @@ set(ABLSTEADY_TEST_AMREX_FLAGS
 #                    [FIXTURES_SETUP f] [FIXTURES_REQUIRED f] [RUN_DIR dir])
 # In a serial build every test runs on one process.
 function(ablsteady_add_test)
-    cmake_parse_arguments(T "" "NAME;NP;FIXTURES_SETUP;FIXTURES_REQUIRED;RUN_DIR"
-                          "LABELS;COMMAND;PREFIX" ${ARGN})
+    cmake_parse_arguments(T "" "NAME;NP;FIXTURES_SETUP;RUN_DIR"
+                          "LABELS;COMMAND;PREFIX;FIXTURES_REQUIRED" ${ARGN})
     if(NOT T_NP)
         set(T_NP 1)
     endif()
@@ -105,7 +106,8 @@ function(ablsteady_add_test)
         set_tests_properties(${T_NAME} PROPERTIES FIXTURES_SETUP ${T_FIXTURES_SETUP})
     endif()
     if(T_FIXTURES_REQUIRED)
-        set_tests_properties(${T_NAME} PROPERTIES FIXTURES_REQUIRED ${T_FIXTURES_REQUIRED})
+        # Quoted: a list of fixtures ("a;b") must stay one argument.
+        set_tests_properties(${T_NAME} PROPERTIES FIXTURES_REQUIRED "${T_FIXTURES_REQUIRED}")
     endif()
 endfunction()
 
@@ -168,9 +170,9 @@ ablsteady_add_test(NAME smoke_restart_matches NP 1 LABELS "regression;smoke" RUN
 ablsteady_add_test(NAME abort_unknown_key NP 1 LABELS "regression;smoke"
                    PREFIX ${EXPECT_ABORT}
                           "mesh\\.max_grid_sise.*not an input of namespace 'mesh'"
-                          "turb\\.Cmu0.*not an input of namespace 'turb'"
+                          "turb\\.Cmu0 has no effect without steady\\.stage = simplec"
                           "mehs\\.n_cell.*unknown namespace 'mehs'"
-                          "steady\\.residual_tol.*not an input of namespace 'steady'"
+                          "steady\\.residual_tol has no effect without steady\\.stage = simplec"
                           "solver\\.poisson_reltol.*not an input of namespace 'solver'" --
                    COMMAND $<TARGET_FILE:ablsteady> ${DECKS}/inputs_abort_unknown_key
                            ${ABLSTEADY_TEST_AMREX_FLAGS})
@@ -180,6 +182,21 @@ ablsteady_add_test(NAME abort_range NP 1 LABELS "regression;smoke"
                           "mesh\\.is_periodic: z cannot be periodic"
                           "mesh\\.prob_lo and mesh\\.prob_hi must be finite" --
                    COMMAND $<TARGET_FILE:ablsteady> ${DECKS}/inputs_abort_range
+                           ${ABLSTEADY_TEST_AMREX_FLAGS})
+ablsteady_add_test(NAME abort_no_stage NP 1 LABELS "regression;smoke"
+                   PREFIX ${EXPECT_ABORT}
+                          "forcing\\.gravity has no effect without steady\\.stage = simplec"
+                          "convection\\.limiter has no effect without steady\\.stage = simplec"
+                          "simplec\\.alpha_p has no effect without steady\\.stage = simplec"
+                          "turb\\.Cmu0 has no effect without steady\\.stage = simplec"
+                          "steady\\.cfl0 has no effect without steady\\.stage = simplec"
+                          "io\\.turb_plot_file has no effect without steady\\.stage = simplec" --
+                   COMMAND $<TARGET_FILE:ablsteady> ${DECKS}/inputs_abort_no_stage
+                           ${ABLSTEADY_TEST_AMREX_FLAGS})
+ablsteady_add_test(NAME abort_stage_no_guess NP 1 LABELS "regression;smoke"
+                   PREFIX ${EXPECT_ABORT}
+                          "steady\\.stage = simplec needs a first guess" --
+                   COMMAND $<TARGET_FILE:ablsteady> ${DECKS}/inputs_abort_stage_no_guess
                            ${ABLSTEADY_TEST_AMREX_FLAGS})
 ablsteady_add_test(NAME abort_repeated_key NP 1 LABELS "regression;smoke"
                    PREFIX ${EXPECT_ABORT}
@@ -352,6 +369,47 @@ if(ABLSTEADY_PRECISION STREQUAL "DOUBLE")
                        RUN_DIR ${CL_DIR} FIXTURES_REQUIRED closure_column
                        COMMAND ${FCOMPARE} --rel_tol 1e-10 closure_column_plt00000
                                ${GOLD}/closure_column_plt00000)
+endif()
+
+# --- RT-1.15.1 / RT-1.15.2: the SIMPLEC stage to steady (sub-phase 1.15) -----
+# The 1-D neutral column driven by a pressure-gradient force: the steady
+# verdict, u* = sqrt(F H) exactly, the wall law in the first cell, the log law
+# within 1 % (second cell) and 2 % (lowest eight), the wall k, nu_t, a residual
+# drop of six orders (the Driver history) and identical columns. Double
+# precision only (six orders and 1e-8 are below single's floor); the restart
+# chain below runs in both.
+if(ABLSTEADY_PRECISION STREQUAL "DOUBLE")
+    ablsteady_add_test(NAME rt_steady_column NP 2 LABELS "regression;smoke"
+                       PREFIX ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/check_steady_column.py
+                              --ustar 0.35 --z0 0.1 --force 1.225e-4 --height 1000 --dz 15.625 --orders 6 --
+                       COMMAND $<TARGET_FILE:ablsteady> ${DECKS}/inputs_steady_column ${ABLSTEADY_TEST_AMREX_FLAGS})
+endif()
+# A restart continues the stage bit for bit: 40 iterations, continued to 80
+# from the checkpoint (the driver and closure histories), against 80 straight.
+set(SCR_DIR ${CMAKE_CURRENT_BINARY_DIR}/run/rt_steady_column_restart)
+ablsteady_add_test(NAME rt_steady_column_restart_first NP 2 LABELS "regression;smoke" RUN_DIR ${SCR_DIR}
+                   FIXTURES_SETUP steady_column_first
+                   COMMAND $<TARGET_FILE:ablsteady> ${DECKS}/inputs_steady_column_restart steady.max_iterations=40
+                           init.first_guess=profile ${ABLSTEADY_TEST_AMREX_FLAGS})
+ablsteady_add_test(NAME rt_steady_column_restart_continued NP 2 LABELS "regression;smoke" RUN_DIR ${SCR_DIR}
+                   FIXTURES_REQUIRED steady_column_first FIXTURES_SETUP steady_column_continued
+                   COMMAND $<TARGET_FILE:ablsteady> ${DECKS}/inputs_steady_column_restart steady.max_iterations=80
+                           io.restart=steady_column_restart_chk00040 ${ABLSTEADY_TEST_AMREX_FLAGS})
+ablsteady_add_test(NAME rt_steady_column_restart_straight NP 2 LABELS "regression;smoke" RUN_DIR ${SCR_DIR}/straight
+                   FIXTURES_SETUP steady_column_straight
+                   COMMAND $<TARGET_FILE:ablsteady> ${DECKS}/inputs_steady_column_restart steady.max_iterations=80
+                           init.first_guess=profile ${ABLSTEADY_TEST_AMREX_FLAGS})
+ablsteady_add_test(NAME rt_steady_column_restart_matches NP 1 LABELS "regression;smoke" RUN_DIR ${SCR_DIR}
+                   FIXTURES_REQUIRED steady_column_continued steady_column_straight
+                   COMMAND ${FCOMPARE} --rel_tol 1e-14 --abs_tol 1e-300 steady_column_restart_plt00080
+                           straight/steady_column_restart_plt00080)
+# ERF's Neutral_ABL_Flat to steady (about 13 s on two ranks); ERF's own
+# check_neutral.py --physics on the turbulence plotfile (extern_erf/
+# check_neutral.py). Regression label, not smoke (the run time).
+if(ABLSTEADY_PRECISION STREQUAL "DOUBLE")
+    ablsteady_add_test(NAME rt_steady_neutral_flat NP 2 LABELS "regression"
+                       PREFIX ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/check_steady_neutral.py --
+                       COMMAND $<TARGET_FILE:ablsteady> ${DECKS}/inputs_steady_neutral_flat ${ABLSTEADY_TEST_AMREX_FLAGS})
 endif()
 
 # --- Reference archives (sub-phase 1.1): ablsteady_refavg end to end --------

@@ -33,8 +33,10 @@
 
 #include "Mesh.H"
 
+#include <AMReX_Array.H>
 #include <AMReX_Geometry.H>
 #include <AMReX_MultiFab.H>
+#include <AMReX_ParmParse.H>
 #include <AMReX_Vector.H>
 
 #include <string>
@@ -74,6 +76,27 @@ struct CoriolisOptions
     amrex::Real vg{0};
 };
 
+//! Every forcing of a run (sub-phase 1.15): the buoyancy, the Coriolis and
+//! geostrophic options and a constant kinematic pressure-gradient force
+//! (m/s^2, the acceleration -(1/rho_0) grad p_large added to every momentum
+//! equation: ERF's abl_pressure_grad). Inputs forcing.*:
+//!   gravity, theta0, coriolis (0|1), latitude, rotation_period,
+//!   coriolis_3d (0|1), geostrophic (0|1), ug, vg, pressure_gradient (3 values).
+struct ForcingOptions
+{
+    BuoyancyOptions buoyancy;
+    CoriolisOptions coriolis;
+    amrex::Array<amrex::Real, 3> pressure_gradient{0, 0, 0};
+    //! The forcing.* keys given (for the has-no-effect checks).
+    std::vector<std::string> given;
+};
+
+//! Read forcing.*; aborts, naming the key, on a bad value, a repeated key or
+//! a wrong value count.
+ForcingOptions read_forcing_options ();
+//! The range checks alone, each message naming forcing.<key>.
+std::vector<std::string> check_forcing_options (const ForcingOptions& opt);
+
 //! Problems with the options, one message per problem, each naming the option.
 std::vector<std::string> check_buoyancy_options (const BuoyancyOptions& opt);
 std::vector<std::string> check_reference_profile (const ReferenceProfile& prof);
@@ -99,6 +122,12 @@ void subtract_buoyancy (const amrex::MultiFab& theta, const amrex::MultiFab& the
 void subtract_coriolis (const amrex::MultiFab& u, const amrex::MultiFab& v, const amrex::MultiFab& w,
                         const CoriolisOptions& opt, const Mesh& mesh, amrex::MultiFab& Ru, amrex::MultiFab& Rv,
                         amrex::MultiFab& Rw);
+
+//! R_c -= F_c on the valid faces of each component (the ground and top rows
+//! of w are boundary rows the boundary conditions replace). Does nothing for
+//! F = 0; aborts on a non-finite component.
+void subtract_pressure_gradient (const amrex::Array<amrex::Real, 3>& F, const Mesh& mesh, amrex::MultiFab& Ru,
+                                 amrex::MultiFab& Rv, amrex::MultiFab& Rw);
 
 } // namespace ablsteady
 

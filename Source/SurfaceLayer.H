@@ -185,9 +185,12 @@ void apply_wall_k (const SurfaceState& s, const SurfaceLayerOptions& opt, const 
 void apply_wall_to_implicit (const SurfaceState& s, Loc loc, const Mesh& mesh, const amrex::Geometry& geom,
                              amrex::MultiFab& A);
 
-//! line_jacobian's k rows (lower, diag, upper) on the first cells: for
-//! dirichlet the row is (0, a, 0); for source a is added to diag.
-void apply_wall_k_line (const SurfaceState& s, const SurfaceLayerOptions& opt, amrex::MultiFab& tri);
+//! The wall-k rows of the implicit-side coefficients A (ImplicitOperator.H,
+//! cell-centred) on the first cells, after apply_wall_to_implicit: for
+//! dirichlet the row is the diagonal a = max(u*, u*_min) / d0 alone (every
+//! neighbour 0); for source a is added to the diagonal. The rows apply_wall_k
+//! gives the residual.
+void apply_wall_k_to_implicit (const SurfaceState& s, const SurfaceLayerOptions& opt, amrex::MultiFab& A);
 
 } // namespace ablsteady
 

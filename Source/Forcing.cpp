@@ -5,8 +5,10 @@
 
 #include <AMReX_GpuContainers.H>
 
+#include <algorithm>
 #include <cmath>
 #include <string>
+#include <vector>
 
 namespace ablsteady {
 
@@ -197,6 +199,102 @@ void subtract_coriolis (const amrex::MultiFab& u, const amrex::MultiFab& v, cons
                 r(i, j, k) -= fcos * stencil::interp<XF, ZF>(uu, i, j, k);
             });
         }
+    }
+}
+
+std::vector<std::string> check_forcing_options (const ForcingOptions& opt)
+{
+    std::vector<std::string> err;
+    for (const auto& e : check_buoyancy_options(opt.buoyancy)) { err.push_back("forcing." + e.substr(e.find(' ') + 1)); }
+    for (const auto& e : check_coriolis_options(opt.coriolis)) { err.push_back("forcing." + e.substr(e.find(' ') + 1)); }
+    for (int d = 0; d < 3; ++d) {
+        if (!std::isfinite(opt.pressure_gradient[d])) {
+            err.emplace_back("forcing.pressure_gradient = " + std::to_string(opt.pressure_gradient[d])
+                             + " (component " + std::to_string(d) + "): must be finite (m/s^2)");
+            break;
+        }
+    }
+    return err;
+}
+
+namespace {
+
+const char* const kForcingKeys[] = {"gravity", "theta0", "coriolis", "latitude", "rotation_period", "coriolis_3d",
+                                    "geostrophic", "ug", "vg", "pressure_gradient"};
+
+} // namespace
+
+ForcingOptions read_forcing_options ()
+{
+    ForcingOptions opt;
+    amrex::ParmParse pp("forcing");
+    std::vector<std::string> err;
+    for (const char* key : kForcingKeys) {
+        if (!pp.contains(key)) { continue; }
+        opt.given.emplace_back(key);
+        if (pp.countname(key) > 1) { err.emplace_back(std::string("forcing.") + key + " is given more than once"); }
+        const int n = (std::string(key) == "pressure_gradient") ? 3 : 1;
+        if (pp.countval(key) != n) {
+            err.emplace_back(std::string("forcing.") + key + " takes exactly " + std::to_string(n) + " value" + (n > 1 ? "s" : ""));
+        }
+    }
+    if (err.empty()) {
+        pp.query("gravity", opt.buoyancy.gravity);
+        pp.query("theta0", opt.buoyancy.theta0);
+        auto flag = [&] (const char* key, bool& b) {
+            int v = b ? 1 : 0;
+            if (pp.query(key, v)) {
+                if (v != 0 && v != 1) { err.emplace_back(std::string("forcing.") + key + " must be 0 or 1"); }
+                b = (v == 1);
+            }
+        };
+        flag("coriolis", opt.coriolis.enabled);
+        flag("coriolis_3d", opt.coriolis.three_d);
+        flag("geostrophic", opt.coriolis.geostrophic);
+        pp.query("latitude", opt.coriolis.latitude);
+        pp.query("rotation_period", opt.coriolis.rotation_period);
+        pp.query("ug", opt.coriolis.ug);
+        pp.query("vg", opt.coriolis.vg);
+        amrex::Vector<amrex::Real> pg;
+        if (pp.queryarr("pressure_gradient", pg) && pg.size() == 3) {
+            for (int d = 0; d < 3; ++d) { opt.pressure_gradient[d] = pg[d]; }
+        }
+        for (const auto& e : check_forcing_options(opt)) { err.push_back(e); }
+        auto given = [&] (const char* k) { return std::find(opt.given.begin(), opt.given.end(), k) != opt.given.end(); };
+        if (opt.buoyancy.gravity == 0 && given("theta0")) {
+            err.emplace_back("forcing.theta0 has no effect with forcing.gravity = 0");
+        }
+        if (!opt.coriolis.enabled) {
+            for (const char* k : {"latitude", "rotation_period", "coriolis_3d", "geostrophic", "ug", "vg"}) {
+                if (given(k)) { err.emplace_back(std::string("forcing.") + k + " has no effect without forcing.coriolis = 1"); }
+            }
+        } else if (!opt.coriolis.geostrophic) {
+            for (const char* k : {"ug", "vg"}) {
+                if (given(k)) { err.emplace_back(std::string("forcing.") + k + " has no effect without forcing.geostrophic = 1"); }
+            }
+        }
+    }
+    if (!err.empty()) {
+        std::string all = "ablsteady: invalid inputs:";
+        for (const auto& e : err) { all += "\n  " + e; }
+        amrex::Abort(all);
+    }
+    return opt;
+}
+
+void subtract_pressure_gradient (const amrex::Array<amrex::Real, 3>& F, const Mesh& mesh, amrex::MultiFab& Ru,
+                                 amrex::MultiFab& Rv, amrex::MultiFab& Rw)
+{
+    const char* op = "subtract_pressure_gradient";
+    for (int d = 0; d < 3; ++d) {
+        if (!std::isfinite(F[d])) { amrex::Abort(std::string("ablsteady: ") + op + ": the force must be finite"); }
+    }
+    check_operator_field(op, "Ru", Ru, Loc::xface, mesh, 0);
+    check_operator_field(op, "Rv", Rv, Loc::yface, mesh, 0);
+    check_operator_field(op, "Rw", Rw, Loc::zface, mesh, 0);
+    amrex::MultiFab* R[3] = {&Ru, &Rv, &Rw};
+    for (int d = 0; d < 3; ++d) {
+        if (F[d] != 0) { R[d]->plus(-F[d], 0, 1, 0); }
     }
 }
 

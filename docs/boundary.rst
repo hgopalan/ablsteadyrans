@@ -35,8 +35,10 @@ for it is in parentheses; the Poisson types follow ERF's ``get_fft_bc`` for that
        instead (a slip-wall ground keeps θ even).
    * - ``no_slip_wall`` (NoSlipWall)
      - x, y, ground, top
-     - Velocity 0 on the face; θ, k and p' even. *Not in the plan*: added so the wall-bounded verification cases of
-       later sub-phases have it.
+     - Velocity equal to the wall's on the face: 0, or the tangential velocity ``bc.<face>_wall_velocity = u v w``
+       (its normal component must be 0; a moving lid). θ, k and p' even. *Not in the plan*: added so the
+       wall-bounded verification cases have it (the lid-driven cavity of UT-1.15.3 uses lateral walls and a moving
+       top).
    * - ``surface_layer`` (surface_layer)
      - ground
      - The wall model (:doc:`surface`): w = 0; u, v and θ continued below the ground with the wall law's gradient at
@@ -47,6 +49,8 @@ for it is in parentheses; the Poisson types follow ERF's ``get_fft_bc`` for that
        geostrophic forcing.
 
 The defaults are periodic sides, a ``surface_layer`` ground and a ``slip_wall`` top: ERF's canonical ABL cases.
+Lateral faces take ``periodic``, ``inflow``, ``outflow``, ``slip_wall`` or ``no_slip_wall`` (the two walls since
+sub-phase 1.15); ``surface_layer`` and ``geostrophic`` are the ground's and the top's.
 
 Ghost fills
 -----------
@@ -205,9 +209,14 @@ here too (``bc.surface_*``, :doc:`surface`).
    * - ``bc.zhi``
      - ``slip_wall``
      - ``slip_wall``, ``no_slip_wall`` or ``geostrophic`` (needs Coriolis with geostrophic forcing).
+   * - ``bc.<face>_wall_velocity``
+     - ``0 0 0``
+     - Three finite values (m/s), the velocity of a ``no_slip_wall`` face (``xlo``, ``xhi``, ``ylo``, ``yhi``,
+       ``zlo``, ``zhi``); the normal component must be 0. Refused on another face type.
    * - ``bc.inflow_profile``
      - ``log_law``
-     - ``log_law``, ``power_law`` or ``file``. The inflow keys need an inflow face or a damping layer.
+     - ``log_law``, ``power_law`` or ``file``. The inflow keys need an inflow face, a damping layer or the
+       initializer's first guess (``init.first_guess = profile``, which uses them on periodic domains too).
    * - ``bc.inflow_ustar``
      - 0.4 m/s
      - Finite, > 0 (``log_law`` only; refused with the other kinds).

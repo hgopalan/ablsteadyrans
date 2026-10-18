@@ -1,5 +1,8 @@
 #include "Predictor.H"
 
+#include "Forcing.H"
+#include "Stencil_K.H"
+
 #include "BoundaryConditions.H"
 #include "CVFluxes.H"
 #include "ImplicitOperator.H"
@@ -158,9 +161,13 @@ MomentumPredictorResult momentum_predictor (State& q, const ResidualFields& R,
                                             const ResidualInputs& in,
                                             const amrex::Array<amrex::MultiFab, AMREX_SPACEDIM>& dtau_faces,
                                             const Mesh& mesh, const amrex::Geometry& geom, int sweeps,
-                                            PredictorFields& ap, const SurfaceState* surface, const ClosureFields* fields)
+                                            PredictorFields& ap, const SurfaceState* surface, const ClosureFields* fields,
+                                            amrex::Real rotation_relax)
 {
     const char* op = "momentum_predictor";
+    if (std::isnan(rotation_relax) || !(rotation_relax > 0 && rotation_relax <= 1)) {
+        amrex::Abort("ablsteady: momentum_predictor: rotation_relax must be > 0 and <= 1 (simplec.rotation_relax)");
+    }
     if (sweeps < 1) { amrex::Abort("ablsteady: momentum_predictor: sweeps must be >= 1 (got " + std::to_string(sweeps) + ")"); }
     check_operator_field(op, "dtau_x", dtau_faces[0], Loc::xface, mesh, 0);
     check_operator_field(op, "dtau_y", dtau_faces[1], Loc::yface, mesh, 0);
@@ -170,6 +177,10 @@ MomentumPredictorResult momentum_predictor (State& q, const ResidualFields& R,
         if (std::isnan(lo) || !(lo > 0) || !std::isfinite(dtau_faces[d].max(0))) {
             amrex::Abort("ablsteady: momentum_predictor: dtau_faces must be finite and > 0 everywhere");
         }
+    }
+    if (in.bc == nullptr && (in.buoyancy.gravity > 0 || (in.coriolis.enabled && coriolis_parameter(in.coriolis) != 0))) {
+        amrex::Abort("ablsteady: momentum_predictor: the point-implicit buoyancy and rotation need the boundary conditions "
+                     "(the Dirichlet rows they skip); give in.bc, or gravity 0 and Coriolis off");
     }
     MomentumPredictorResult out;
     const Equation eqs[3] = {Equation::u, Equation::v, Equation::w};
@@ -215,6 +226,100 @@ MomentumPredictorResult momentum_predictor (State& q, const ResidualFields& R,
         amrex::MultiFab rhs(A.boxArray(), A.DistributionMap(), 1, 0);
         amrex::MultiFab::Copy(rhs, *res[c], 0, 0, 1, 0);
         rhs.mult(amrex::Real(-1), 0, 1, 0);
+        if (c < 2 && in.coriolis.enabled && coriolis_parameter(in.coriolis) != 0) {
+            // Point-implicit rotation (the header): with tau = 1 / (1/dtau +
+            // a_P) the component's own effective step, the diagonal gains
+            // f^2 tau (into d as well) and the right-hand side the Coriolis
+            // force of the change the other component's own residual
+            // predicts: -f tau R_v (face mean) on u, +f tau R_u on v.
+            const amrex::Real fs = coriolis_parameter(in.coriolis);
+            const amrex::MultiFab& other = (c == 0) ? R.v : R.u;
+            amrex::MultiFab og(other.boxArray(), other.DistributionMap(), 1, 1);
+            amrex::MultiFab::Copy(og, other, 0, 0, 1, 0);
+            og.FillBoundary(geom.periodicity());
+            // The four faces around a row are inside the domain except for a
+            // row on a non-periodic domain face that is not Dirichlet (an
+            // outflow's even mirror): those rows get no coupling.
+            const amrex::Box& dom = geom.Domain();
+            const int d = c, lo_edge = dom.smallEnd(d), hi_edge = dom.bigEnd(d) + 1;
+            const bool periodic = geom.isPeriodic(d);
+            for (amrex::MFIter mfi(*aps[c], amrex::TilingIfNotGPU()); mfi.isValid(); ++mfi) {
+                const auto p = aps[c]->array(mfi);
+                const auto dd = ds[c]->array(mfi);
+                const auto r = rhs.array(mfi);
+                const auto a = A.const_array(mfi);
+                const auto dt = dtau_faces[c].const_array(mfi);
+                const auto ro = og.const_array(mfi);
+                const auto m = has_mask ? mask.const_array(mfi) : A.const_array(mfi);
+                const bool is_u = (c == 0);
+                const amrex::Real relax = rotation_relax;
+                amrex::ParallelFor(mfi.tilebox(), [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
+                {
+                    const amrex::Real keep = has_mask ? amrex::Real(1) - m(i, j, k) : amrex::Real(1);
+                    if (keep == 0) { return; }
+                    const int n = is_u ? i : j;
+                    if (!periodic && (n == lo_edge || n == hi_edge)) { return; }
+                    // The rotation's step: rotation_relax inertial times, or
+                    // the inverse of the net diagonal where a drag dominates
+                    // (the header).
+                    const amrex::Real nb = a(i, j, k, coef_XM) + a(i, j, k, coef_XP) + a(i, j, k, coef_YM) + a(i, j, k, coef_YP)
+                                           + a(i, j, k, coef_ZM) + a(i, j, k, coef_ZP);
+                    const amrex::Real tau = amrex::Real(1) / amrex::max(std::abs(fs) / relax, a(i, j, k, coef_P) - nb);
+                    const amrex::Real stiff = fs * fs * tau;
+                    p(i, j, k) += stiff;
+                    dd(i, j, k) += stiff;
+                    const amrex::Real avg = is_u ? stencil::interp<stencil::YF, stencil::XF>(ro, i, j, k)
+                                                 : stencil::interp<stencil::XF, stencil::YF>(ro, i, j, k);
+                    r(i, j, k) += (is_u ? -fs : fs) * tau * avg;
+                });
+            }
+        }
+        if (c == 2 && in.buoyancy.gravity > 0) {
+            // Point-implicit buoyancy (the header): the w rows gain the
+            // stiffness (g/theta_0) max(d theta/dz, 0) dtau on the diagonal
+            // (into d as well) and the buoyancy of the theta change the theta
+            // equation predicts, -(g/theta_0) dtau R_theta, on the right-hand
+            // side; nothing on the Dirichlet rows.
+            check_operator_field(op, "R_theta", R.theta, Loc::cell, mesh, 0);
+            check_operator_field(op, "theta", q.theta, Loc::cell, mesh, 1);
+            const amrex::Real gt = in.buoyancy.gravity / in.buoyancy.theta0;
+            // The theta change its own step predicts, -R_theta / (1/dtau +
+            // a_P,theta): the diagonal of theta's implicit rows bounds the
+            // change where theta's operator is stiff (the diffusion of a
+            // kink), where dtau R_theta alone would be far too large.
+            amrex::MultiFab At;
+            implicit_rows(F, q.z_phys_nd, in, Equation::theta, mesh, geom, At, surface, fields);
+            for (amrex::MFIter mfi(*aps[c], amrex::TilingIfNotGPU()); mfi.isValid(); ++mfi) {
+                const auto p = aps[c]->array(mfi);
+                const auto dd = ds[c]->array(mfi);
+                const auto r = rhs.array(mfi);
+                const auto dt = dtau_faces[c].const_array(mfi);
+                const auto th = q.theta.const_array(mfi);
+                const auto rt = R.theta.const_array(mfi);
+                const auto at = At.const_array(mfi);
+                const auto z = q.z_phys_nd.const_array(mfi);
+                const auto m = has_mask ? mask.const_array(mfi) : A.const_array(mfi);
+                amrex::ParallelFor(mfi.tilebox(), [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
+                {
+                    const amrex::Real keep = has_mask ? amrex::Real(1) - m(i, j, k) : amrex::Real(1);
+                    if (keep == 0) { return; }
+                    // Cell-centre heights of the two cells (the mean of eight nodes).
+                    auto zc = [&] (int kk) {
+                        return amrex::Real(0.125) * (z(i, j, kk) + z(i + 1, j, kk) + z(i, j + 1, kk) + z(i + 1, j + 1, kk)
+                                                     + z(i, j, kk + 1) + z(i + 1, j, kk + 1) + z(i, j + 1, kk + 1)
+                                                     + z(i + 1, j + 1, kk + 1));
+                    };
+                    const amrex::Real gamma = (th(i, j, k) - th(i, j, k - 1)) / (zc(k) - zc(k - 1));
+                    // theta's effective step at the face: 1 / (1/dtau + a_P,theta), a_P,theta the face mean.
+                    const amrex::Real ap_theta = amrex::Real(0.5) * (at(i, j, k - 1, coef_P) + at(i, j, k, coef_P));
+                    const amrex::Real tau = amrex::Real(1) / (amrex::Real(1) / dt(i, j, k) + ap_theta);
+                    const amrex::Real stiff = gt * amrex::max(gamma, amrex::Real(0)) * tau;
+                    p(i, j, k) += stiff;
+                    dd(i, j, k) += stiff;
+                    r(i, j, k) -= gt * tau * amrex::Real(0.5) * (rt(i, j, k - 1) + rt(i, j, k));
+                });
+            }
+        }
         amrex::MultiFab delta;
         *last[c] = zline_jacobi(loc, A, *aps[c], rhs, sweeps, mesh, geom, delta);
         *dmax[c] = delta.norm0();

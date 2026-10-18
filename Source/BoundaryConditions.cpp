@@ -45,7 +45,9 @@ Rule rule_for (Field f, FaceType t, int d, bool lo)
         // theta's gradient bc.zhi_theta_grad is the top's; a slip-wall ground is even.
         return (f == f_theta && d == 2 && !lo) ? Rule::gradient : Rule::even;
     case FaceType::no_slip_wall:
-        return vel ? (normal_vel ? Rule::value : Rule::odd) : Rule::even;
+        // Every velocity component takes the wall's value: 0, or the moving
+        // wall's tangential velocity (bc.<face>_wall_velocity).
+        return vel ? Rule::value : Rule::even;
     case FaceType::surface_layer:
         if (normal_vel) { return Rule::value; }
         return (vel || f == f_theta) ? Rule::gradient : Rule::even;
@@ -130,14 +132,19 @@ BoundaryInputs read_boundary_inputs ()
     const char* keys[] = {"xlo", "xhi", "ylo", "yhi", "zlo", "zhi", "inflow_profile", "inflow_ustar", "inflow_z0",
                           "inflow_speed", "inflow_zref", "inflow_alpha", "inflow_direction", "inflow_file",
                           "theta_profile_z", "theta_profile", "zhi_theta_grad", "rayleigh_zdamp",
-                          "rayleigh_dampcoef", "sponge_width", "sponge_strength"};
+                          "rayleigh_dampcoef", "sponge_width", "sponge_strength",
+                          "xlo_wall_velocity", "xhi_wall_velocity", "ylo_wall_velocity", "yhi_wall_velocity",
+                          "zlo_wall_velocity", "zhi_wall_velocity"};
     std::vector<std::string> errs;
     for (const char* key : keys) {
         if (!pp.contains(key)) { continue; }
         in.given.emplace_back(key);
         if (pp.countname(key) > 1) { errs.emplace_back(std::string("bc.") + key + " is given more than once"); }
-        const bool array = std::string(key).rfind("theta_profile", 0) == 0;
-        if (!array && pp.countval(key) != 1) { errs.emplace_back(std::string("bc.") + key + " takes exactly one value"); }
+        const std::string k(key);
+        const bool array = k.rfind("theta_profile", 0) == 0;
+        const bool three = k.size() > 14 && k.compare(k.size() - 14, 14, "_wall_velocity") == 0;
+        if (three && pp.countval(key) != 3) { errs.emplace_back(std::string("bc.") + key + " takes exactly three values (u v w)"); }
+        if (!array && !three && pp.countval(key) != 1) { errs.emplace_back(std::string("bc.") + key + " takes exactly one value"); }
     }
     for (const char* key : kSurfaceKeys) {
         if (pp.contains(key)) { in.given.emplace_back(key); }   // read by read_surface_layer_options
@@ -169,6 +176,12 @@ BoundaryInputs read_boundary_inputs ()
         in.theta_ref.theta = tt;
     }
     pp.query("zhi_theta_grad", in.zhi_theta_grad);
+    for (int o = 0; o < 6; ++o) {
+        amrex::Vector<amrex::Real> wv;
+        if (pp.queryarr((std::string(kFaceKeys[o]) + "_wall_velocity").c_str(), wv) && wv.size() == 3) {
+            for (int c = 0; c < 3; ++c) { in.wall_velocity[o][c] = wv[c]; }
+        }
+    }
     pp.query("rayleigh_zdamp", in.rayleigh_zdamp);
     pp.query("rayleigh_dampcoef", in.rayleigh_dampcoef);
     pp.query("sponge_width", in.sponge_width);
@@ -206,9 +219,22 @@ std::vector<std::string> check_boundary_inputs (const BoundaryInputs& in, const 
         }
         any_inflow = any_inflow || t == FaceType::inflow;
         any_outflow = any_outflow || t == FaceType::outflow;
+        const std::string wkey = key + "_wall_velocity";
+        const bool wgiven = std::find(in.given.begin(), in.given.end(), std::string(kFaceKeys[o]) + "_wall_velocity") != in.given.end();
+        if (wgiven && t != FaceType::no_slip_wall) {
+            err.emplace_back(wkey + " has no effect without " + key + " = no_slip_wall");
+        } else if (wgiven) {
+            const auto& wv = in.wall_velocity[o];
+            if (!(std::isfinite(wv[0]) && std::isfinite(wv[1]) && std::isfinite(wv[2]))) {
+                err.emplace_back(wkey + ": every component must be finite (m/s)");
+            } else if (wv[d] != 0) {
+                err.emplace_back(wkey + " = " + std::to_string(wv[0]) + " " + std::to_string(wv[1]) + " "
+                                 + std::to_string(wv[2]) + ": the normal component must be 0 (the wall moves in its plane)");
+            }
+        }
     }
     auto given = [&] (const char* k) { return std::find(in.given.begin(), in.given.end(), k) != in.given.end(); };
-    const bool needs_profile = any_inflow || in.sponge_width > 0 || in.rayleigh_zdamp > 0;
+    const bool needs_profile = any_inflow || in.sponge_width > 0 || in.rayleigh_zdamp > 0 || in.profile_needed;
     if (needs_profile) {
         for (const auto& e : check_inflow_profile_options(in.inflow)) { err.push_back(e); }
         // The keys of the other kinds would be read and ignored.
@@ -227,7 +253,10 @@ std::vector<std::string> check_boundary_inputs (const BoundaryInputs& in, const 
     } else {
         for (const char* k : {"inflow_profile", "inflow_ustar", "inflow_z0", "inflow_speed", "inflow_zref",
                               "inflow_alpha", "inflow_direction", "inflow_file"}) {
-            if (given(k)) { err.emplace_back(std::string("bc.") + k + " has no effect without an inflow face or a damping layer"); }
+            if (given(k)) {
+                err.emplace_back(std::string("bc.") + k
+                                 + " has no effect without an inflow face, a damping layer or init.first_guess = profile");
+            }
         }
     }
     for (const auto& e : check_reference_profile(in.theta_ref)) { err.push_back("bc.theta_profile: " + e); }
@@ -427,6 +456,9 @@ void fill_field (amrex::MultiFab& q, int f, int d, const BoundaryInputs& in, con
             const Rule rule = rule_for(static_cast<Field>(f), t, d, lo);
             amrex::Real value = 0;
             if (t == FaceType::geostrophic) { value = (f == f_u) ? cor.ug : (f == f_v) ? cor.vg : amrex::Real(0); }
+            if (t == FaceType::no_slip_wall && f <= f_w) {
+                value = in.wall_velocity[amrex::Orientation(d, lo ? amrex::Orientation::low : amrex::Orientation::high)][f];
+            }
             if (rule == Rule::gradient) {
                 if (t == FaceType::surface_layer) {
                     fill_gradient_z<T>(q, z_nd, geom, lo, ground_grad, f == f_u ? 0 : f == f_v ? 1 : 2, 0, homogeneous);

@@ -434,29 +434,31 @@ void apply_wall_to_implicit (const SurfaceState& s, Loc loc, const Mesh& mesh, c
     }
 }
 
-void apply_wall_k_line (const SurfaceState& s, const SurfaceLayerOptions& opt, amrex::MultiFab& tri)
+void apply_wall_k_to_implicit (const SurfaceState& s, const SurfaceLayerOptions& opt, amrex::MultiFab& A)
 {
-    check_slab("apply_wall_k_line", s, tri);
+    check_slab("apply_wall_k_to_implicit", s, A);
+    if (A.nComp() != n_implicit_coefs || !A.ixType().cellCentered()) {
+        amrex::Abort("ablsteady: apply_wall_k_to_implicit: A must be the cell-centred implicit coefficients");
+    }
     const bool dirichlet = (opt.wall_k == SurfaceLayerOptions::WallK::dirichlet);
-    for (amrex::MFIter mfi(tri, false); mfi.isValid(); ++mfi) {
+    for (amrex::MFIter mfi(A, false); mfi.isValid(); ++mfi) {
         amrex::Box cb = mfi.validbox();
         cb.setBig(2, cb.smallEnd(2));
         const int k0 = cb.smallEnd(2);
-        const auto a = tri.array(mfi);
+        const auto a = A.array(mfi);
         const auto us = s.ustar.const_array(mfi);
         const auto d0 = s.d0.const_array(mfi);
         const amrex::Real us_min = kWallKUstarMin;   // by value for device code
         if (dirichlet) {
             amrex::ParallelFor(cb, [=] AMREX_GPU_DEVICE (int i, int j, int) noexcept
             {
-                a(i, j, k0, 0) = 0;
-                a(i, j, k0, 1) = amrex::max(us(i, j, 0), us_min) / d0(i, j, 0);
-                a(i, j, k0, 2) = 0;
+                for (int n = 0; n < n_implicit_coefs; ++n) { a(i, j, k0, n) = 0; }
+                a(i, j, k0, coef_P) = amrex::max(us(i, j, 0), us_min) / d0(i, j, 0);
             });
         } else {
             amrex::ParallelFor(cb, [=] AMREX_GPU_DEVICE (int i, int j, int) noexcept
             {
-                a(i, j, k0, 1) += amrex::max(us(i, j, 0), us_min) / d0(i, j, 0);
+                a(i, j, k0, coef_P) += amrex::max(us(i, j, 0), us_min) / d0(i, j, 0);
             });
         }
     }

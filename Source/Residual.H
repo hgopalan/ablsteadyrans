@@ -96,6 +96,8 @@ struct ResidualInputs
     ConvectionOptions theta;                      //!< theta convection
     BuoyancyOptions buoyancy;
     CoriolisOptions coriolis;
+    //! The constant kinematic pressure-gradient force (m/s^2) on u, v, w (Forcing.H).
+    amrex::Array<amrex::Real, 3> pressure_gradient{0, 0, 0};
     JvpScales jvp_scales;
     //! The wall model (sub-phase 1.7) on the ground; null: none, and the
     //! ground fluxes come from the ghost cells like any interior face.
@@ -133,7 +135,7 @@ void line_jacobian (const State& q, const ResidualInputs& in, Equation eq, int d
                     const amrex::Geometry& geom, amrex::MultiFab& tri);
 
 //! The folded rows of A1 for one equation: all n_implicit_coefs coefficients
-//! (ImplicitOperator.H) with the wall model's rows, the closure's
+//! (ImplicitOperator.H) with the wall model's rows (k's wall-k rows included), the closure's
 //! point-implicit k diagonal, the damping diagonal, the Dirichlet identity
 //! rows and the ghost couplings of the boundary rows applied (the same rows
 //! line_jacobian splits by direction). A: defined here if empty. surface and

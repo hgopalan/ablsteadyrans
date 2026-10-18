@@ -67,6 +67,7 @@
 #include "State.H"
 #include "SurfaceLayer.H"
 
+#include <AMReX_Array.H>
 #include <AMReX_Geometry.H>
 #include <AMReX_MultiFab.H>
 
@@ -95,6 +96,10 @@ struct BoundaryInputs
     ReferenceProfile theta_ref{amrex::Vector<amrex::Real>{0}, amrex::Vector<amrex::Real>{300}};
     //! d theta / dz imposed through the top (K/m), slip_wall and geostrophic tops.
     amrex::Real zhi_theta_grad{0};
+    //! The velocity of a no_slip_wall face (m/s; bc.<face>_wall_velocity = u v w,
+    //! the normal component 0): a moving wall (the lid of a cavity). Indexed
+    //! like face.
+    std::array<amrex::Array<amrex::Real, 3>, 6> wall_velocity{};
     //! Rayleigh layer: start height (m, > 0 enables) and coefficient (1/s, >= 0).
     amrex::Real rayleigh_zdamp{0};
     amrex::Real rayleigh_dampcoef{0};
@@ -103,6 +108,10 @@ struct BoundaryInputs
     amrex::Real sponge_strength{0};
     //! The bc.* keys given (a key with no effect for the face types is an error).
     std::vector<std::string> given;
+    //! Set by the caller when the inflow profile is used without an inflow
+    //! face (the initializer's first guess on a periodic domain, 1.15): the
+    //! bc.inflow_* keys are then checked and not refused.
+    bool profile_needed{false};
 };
 
 //! Read the bc.* keys (no range checks).

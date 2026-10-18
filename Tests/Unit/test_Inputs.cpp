@@ -59,10 +59,11 @@ struct ScopedKeys
     }
 };
 
-TEST (Inputs, OwnedNamespacesAreTheEightOfThePlan)
+TEST (Inputs, OwnedNamespacesAreThoseOfThisVersion)
 {
+    // The plan's eight plus the stage's forcing, convection and simplec (1.15).
     const std::vector<std::string> expect{
-        "mesh", "terrain", "init", "turb", "bc", "steady", "solver", "io"};
+        "mesh", "terrain", "init", "turb", "bc", "steady", "solver", "io", "forcing", "convection", "simplec"};
     EXPECT_EQ(ablsteady::owned_namespaces(), expect);
 }
 

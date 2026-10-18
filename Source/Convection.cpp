@@ -2,8 +2,12 @@
 
 #include "Stencil_K.H"
 
+#include <AMReX_ParmParse.H>
+
 #include <cmath>
 #include <limits>
+#include <string>
+#include <vector>
 
 namespace ablsteady {
 
@@ -152,6 +156,47 @@ void subtract_transport_divergence (Loc loc, const amrex::MultiFab& q,
     case Loc::yface: transport_divergence<stencil::YF>(q, F, mesh.detJ, dxinv, out); break;
     case Loc::zface: transport_divergence<stencil::ZF>(q, F, mesh.detJ, dxinv, out); break;
     }
+}
+
+ConvectionInputs read_convection_options ()
+{
+    ConvectionInputs in;
+    amrex::ParmParse pp("convection");
+    std::vector<std::string> err;
+    for (const char* key : {"limiter", "smooth_eps_velocity", "smooth_eps_theta"}) {
+        if (!pp.contains(key)) { continue; }
+        in.given.emplace_back(key);
+        if (pp.countname(key) > 1) { err.emplace_back(std::string("convection.") + key + " is given more than once"); }
+        if (pp.countval(key) != 1) { err.emplace_back(std::string("convection.") + key + " takes exactly one value"); }
+    }
+    if (err.empty()) {
+        std::string lim = "van_leer";
+        pp.query("limiter", lim);
+        Limiter L = Limiter::van_leer;
+        if (lim == "van_leer") { L = Limiter::van_leer; }
+        else if (lim == "van_albada") { L = Limiter::van_albada; }
+        else if (lim == "upwind") { L = Limiter::upwind; }
+        else { err.emplace_back("convection.limiter = " + lim + ": must be van_leer, van_albada or upwind"); }
+        in.momentum.limiter = L;
+        in.theta.limiter = L;
+        pp.query("smooth_eps_velocity", in.momentum.smooth_eps);
+        pp.query("smooth_eps_theta", in.theta.smooth_eps);
+        for (const auto& e : check_convection_options(in.momentum)) { err.push_back("convection.smooth_eps_velocity: " + e); }
+        for (const auto& e : check_convection_options(in.theta)) { err.push_back("convection.smooth_eps_theta: " + e); }
+        if (L != Limiter::van_albada) {
+            for (const char* k : {"smooth_eps_velocity", "smooth_eps_theta"}) {
+                if (pp.contains(k)) {
+                    err.emplace_back(std::string("convection.") + k + " has no effect without convection.limiter = van_albada");
+                }
+            }
+        }
+    }
+    if (!err.empty()) {
+        std::string all = "ablsteady: invalid inputs:";
+        for (const auto& e : err) { all += "\n  " + e; }
+        amrex::Abort(all);
+    }
+    return in;
 }
 
 } // namespace ablsteady

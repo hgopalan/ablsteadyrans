@@ -44,8 +44,14 @@
 
 namespace ablsteady {
 
+//! The solver stage the application runs (steady.stage): none writes the
+//! state and stops (the behaviour before sub-phase 1.15); simplec runs the
+//! SIMPLEC stage (Simplec.H) under the driver.
+enum class StageKind { none, simplec };
+
 struct SteadyOptions
 {
+    StageKind stage{StageKind::none};    //!< steady.stage (none | simplec)
     SteadyParams criterion;              //!< steady.residual_*, monitor_* (SteadyCriterion.H)
     int max_iterations{10000};           //!< steady.max_iterations (>= 1)
     amrex::Real cfl0{1};                 //!< steady.cfl0 (> 0): the CFL of the first iterations

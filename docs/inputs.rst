@@ -1,8 +1,8 @@
 Inputs
 ======
 
-Inputs are ``namespace.key = value`` lines. ablsteady owns eight namespaces: ``mesh``, ``terrain``, ``init``,
-``turb``, ``bc``, ``steady``, ``solver`` and ``io``.
+Inputs are ``namespace.key = value`` lines. ablsteady owns eleven namespaces: ``mesh``, ``terrain``, ``init``,
+``turb``, ``bc``, ``steady``, ``solver``, ``io``, ``forcing``, ``convection`` and ``simplec``.
 
 The run stops, naming the input, when:
 
@@ -118,14 +118,19 @@ A key that has no effect for the chosen ``terrain.type`` or ``terrain.smoothing`
    * - ``io.write_checkpoint``
      - ``1``
      - 0 or 1.
+   * - ``io.turb_plot_file``
+     - empty
+     - Prefix of the turbulence diagnostics plotfile with ERF's variable names (:doc:`output`); empty: none. Needs
+       ``steady.stage = simplec``.
 
 ``steady``
 ----------
 
 The steady driver (:doc:`driver`) reads ``steady.*`` through ``read_steady_options()``: the five parameters of the
-definition of a steady solution (:doc:`steady`) and its own. The application reads them from sub-phase 1.15, when it
-has a stage to run; until then setting these keys stops the run, like any other key the application does not read.
-Each row matches the check in ``Source/SteadyCriterion.cpp`` or ``Source/Driver.cpp``; a repeated key is refused.
+definition of a steady solution (:doc:`steady`) and its own. The application runs the driver with
+``steady.stage = simplec`` (:doc:`simplec`); with the default ``none`` it writes the state and stops, and every other
+``steady.*`` key is refused (it would have no effect). Each row matches the check in ``Source/SteadyCriterion.cpp`` or
+``Source/Driver.cpp``; a repeated key is refused.
 
 .. list-table::
    :header-rows: 1
@@ -134,6 +139,9 @@ Each row matches the check in ``Source/SteadyCriterion.cpp`` or ``Source/Driver.
    * - Input
      - Default
      - Range and meaning
+   * - ``steady.stage``
+     - ``none``
+     - ``none`` (write the state and stop) or ``simplec`` (run the SIMPLEC stage under the driver).
    * - ``steady.residual_tol``
      - ``5e-5``
      - Finite, > 0. Every scaled residual must be below it.
@@ -237,16 +245,109 @@ setting these keys stops the run, like any other key it does not read. Each row 
 The boundary conditions (:doc:`boundary`) read ``bc.*`` through ``read_boundary_inputs()`` and
 ``read_surface_layer_options()``; their table is in :doc:`boundary`. The application reads ``bc.*`` with the
 initializer (``init.first_guess = profile``: the face types, the inflow profile and the sounding act on the initial
-field; the damping, top-gradient and surface-layer keys are range-checked only, see :doc:`initializer`), as does the
-regression tool ``boundary_fluxes``; without the initializer the application has no solver yet, so setting them stops
-the run.
+field; the damping, top-gradient and surface-layer keys are range-checked only, see :doc:`initializer`) and with the
+SIMPLEC stage (``steady.stage = simplec``, where every key acts), as does the regression tool ``boundary_fluxes``;
+without either, setting them stops the run. The ``bc.inflow_*`` keys are accepted without an inflow face when the
+initializer uses them as the first guess (and on a restart of such a run).
 
 ``turb``
 --------
 
 The k–L closure (:doc:`closure`) reads ``turb.*`` through ``read_closure_options()``; its table is in :doc:`closure`.
-In this version only the regression tool ``closure_column`` reads them: the application has no solver yet, so
-setting them in an ablsteady deck stops the run.
+The application reads them with the SIMPLEC stage (``steady.stage = simplec``, which always runs the closure), as does
+the regression tool ``closure_column``; without the stage, setting them stops the run.
+
+``forcing``
+-----------
+
+The forcing of a run (:doc:`residual`), read through ``read_forcing_options()`` (``Source/Forcing.cpp``); with the
+SIMPLEC stage only. Each row matches ``check_forcing_options``; a repeated key and a key with no effect are refused.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 14 56
+
+   * - Input
+     - Default
+     - Range and meaning
+   * - ``forcing.gravity``
+     - ``9.81``
+     - Finite, ≥ 0 m/s². 0 turns the buoyancy (and the point-implicit buoyancy of the predictor) off.
+   * - ``forcing.theta0``
+     - ``300``
+     - Finite, > 0 K. The Boussinesq reference potential temperature.
+   * - ``forcing.coriolis``
+     - ``0``
+     - 0 or 1. The Coriolis force (and the point-implicit rotation of the predictor).
+   * - ``forcing.latitude``
+     - ``0``
+     - In [−90, 90] degrees. With ``coriolis = 1`` only.
+   * - ``forcing.rotation_period``
+     - ``86400``
+     - Finite, > 0 s (:math:`f = 4\pi\sin\varphi/T`). With ``coriolis = 1`` only.
+   * - ``forcing.coriolis_3d``
+     - ``1``
+     - 0 or 1: the :math:`\cos\varphi` terms on u and w (ERF's ``coriolis_3d``). With ``coriolis = 1`` only.
+   * - ``forcing.geostrophic``
+     - ``0``
+     - 0 or 1: the geostrophic forcing (needs ``coriolis = 1`` and a non-zero latitude).
+   * - ``forcing.ug``, ``forcing.vg``
+     - ``0``
+     - Finite m/s: the geostrophic wind. With ``geostrophic = 1`` only.
+   * - ``forcing.pressure_gradient``
+     - ``0 0 0``
+     - Three finite values (m/s²): the constant kinematic pressure-gradient force on u, v, w (ERF's
+       ``abl_pressure_grad``).
+
+``convection``
+--------------
+
+The convection options of the momentum and :math:`	heta` equations (:doc:`transport`; :math:`k` is always bounded
+upwind), read through ``read_convection_options()`` (``Source/Convection.cpp``); with the SIMPLEC stage only.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 34 14 52
+
+   * - Input
+     - Default
+     - Range and meaning
+   * - ``convection.limiter``
+     - ``van_leer``
+     - ``van_leer``, ``van_albada`` or ``upwind``, for momentum and :math:`	heta`.
+   * - ``convection.smooth_eps_velocity``
+     - ``1e-5``
+     - > 0 m/s with its square a finite normal number: the van Albada eps of the momentum equations. With
+       ``limiter = van_albada`` only.
+   * - ``convection.smooth_eps_theta``
+     - ``1e-5``
+     - The same for :math:`	heta` (K).
+
+``simplec``
+-----------
+
+The SIMPLEC stage's own keys (:doc:`simplec`), read through ``read_simplec_options()``; with ``steady.stage =
+simplec`` only. The sweep count is ``steady.zline_sweeps``.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 34 14 52
+
+   * - Input
+     - Default
+     - Range and meaning
+   * - ``simplec.pressure_reltol``
+     - ``1e-3``
+     - ≥ 10 machine epsilon and < 1: the relative tolerance of the pressure correction's Poisson solve (the plan's 0.1
+       is unstable with a stable stratification: :doc:`simplec`).
+   * - ``simplec.alpha_p``
+     - ``1``
+     - > 0 and ≤ 1: the pressure under-relaxation :math:`p' \leftarrow p' + \alpha_p\phi` (SIMPLEC needs none).
+   * - ``simplec.rotation_relax``
+     - ``0.3``
+     - > 0 and ≤ 1: the step of the predictor's point-implicit rotation in inertial times, :math:`\tau_c =
+       1/\max(|f|/r, a_P - \sum a_{nb})` (:doc:`predictor`); 1 injects the other component's whole residual and
+       bursts in an inviscid stratified layer, 0.1–0.5 converge (0.3 in half the iterations of 0.2).
 
 ``init``
 --------

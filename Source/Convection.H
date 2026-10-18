@@ -51,6 +51,21 @@ struct ConvectionOptions
 //! Problems with the options, one message per problem (empty when valid).
 std::vector<std::string> check_convection_options (const ConvectionOptions& opt);
 
+//! The convection options of a run (sub-phase 1.15), inputs convection.*:
+//! limiter (van_leer | van_albada | upwind) for the momentum and theta
+//! equations (k is always bounded upwind), smooth_eps_velocity (m/s) and
+//! smooth_eps_theta (K), the van Albada eps of each.
+struct ConvectionInputs
+{
+    ConvectionOptions momentum;
+    ConvectionOptions theta;
+    std::vector<std::string> given;
+};
+
+//! Read convection.*; aborts, naming the key, on a bad value, a repeated key
+//! or a key with no effect (smooth_eps_* without the van Albada limiter).
+ConvectionInputs read_convection_options ();
+
 //! Convective fluxes F q_face on the control-volume faces of q (at loc), in
 //! G (defined here with define_cv_fluxes if it is not defined yet). F are the
 //! three transport-flux MultiFabs, face-centred on the mesh's BoxArray with

@@ -8,7 +8,7 @@ initializer that builds on [FastWindTerrain](https://github.com/hgopalan/FastWin
 **Status:** phase 1 of 4 under way. Inputs, the terrain-following mesh (ERF's BTF, STF and Sullivan mappings),
 I/O, restart, ERF reference archives, the definition of a steady solution, the Poisson layer (ERF's terrain
 Poisson operator with GMRES and an FFT preconditioner, or AMReX's MLTerrainPoisson with multigrid) and the Tucker
-wall distance are in place; there is no flow solver yet.
+wall distance are in place, and the SIMPLEC stage runs under the steady driver (`steady.stage = simplec`).
 
 ## Quick start
 

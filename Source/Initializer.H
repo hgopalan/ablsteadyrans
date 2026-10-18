@@ -95,7 +95,7 @@ struct InitResult
 //! and p' of q (defined on the mesh's layout, z_phys_nd built); returns the
 //! O'Brien top residual (0 without O'Brien). Nothing with first_guess = none.
 amrex::Real first_guess_state (const InitOptions& opt, const BoundaryInputs& bc, const Mesh& mesh,
-                               const amrex::Geometry& geom, State& q);
+                               const amrex::Geometry& geom, State& q, const CoriolisOptions& coriolis = CoriolisOptions{});
 
 //! Fill q (defined on the mesh's layout, z_phys_nd built) with the initial
 //! field: the first guess, theta, k and p' as above, then the correction.
@@ -105,7 +105,8 @@ amrex::Real first_guess_state (const InitOptions& opt, const BoundaryInputs& bc,
 //! filled (BoundaryConditions::fill_ghosts does that for the solver).
 //! Nothing happens with first_guess = none.
 InitResult initialize_state (const InitOptions& opt, const BoundaryInputs& bc, const PoissonOptions& popt, const Mesh& mesh,
-                             const amrex::Geometry& geom, State& q, amrex::MultiFab* lambda = nullptr);
+                             const amrex::Geometry& geom, State& q, amrex::MultiFab* lambda = nullptr,
+                             const CoriolisOptions& coriolis = CoriolisOptions{});
 
 //! The O'Brien pass alone (for its test): Omega on the z-faces of q's layout
 //! from the column continuity of (u, v) with the top residual removed with
