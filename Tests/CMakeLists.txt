@@ -35,6 +35,7 @@ add_executable(unit_tests
     Unit/test_Closure.cpp
     Unit/test_Initializer.cpp
     Unit/test_Driver.cpp
+    Unit/test_Predictor.cpp
 )
 target_include_directories(unit_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Unit)
 target_link_libraries(unit_tests PRIVATE ablsteady_core GTest::gtest)

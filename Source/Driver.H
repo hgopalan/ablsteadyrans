@@ -28,7 +28,7 @@
 // <checkpoint>/Driver with hex floats, so a restart continues bit for bit.
 //
 // Inputs (steady.*): see SteadyOptions. The application reads them from
-// sub-phase 1.14, when it has a stage to run.
+// sub-phase 1.15, when it has a stage to run.
 
 #include "Mesh.H"
 #include "Reference.H"
@@ -55,9 +55,10 @@ struct SteadyOptions
     int switch_window{20};               //!< steady.switch_window (>= 1): hysteresis window, iterations
     amrex::Real switch_residual{amrex::Real(1.0e-2)};  //!< steady.switch_residual (> 0, <= 1): r_n at which to go forward
     amrex::Real switch_back_growth{10};  //!< steady.switch_back_growth (> 1): growth of r_n over a window that sends back
+    int zline_sweeps{2};                 //!< steady.zline_sweeps (2..100): z-line Jacobi sweeps per predictor step, for the SIMPLEC stage of 1.15 (Predictor.H)
     Machine machine{Machine::Local};     //!< steady.machine (local | kestrel-cpu | kestrel-gpu): the AU rate
     int nodes{1};                        //!< steady.nodes (>= 1): for the AU
-    std::vector<std::string> given;      //!< the steady.* keys given (for the application's has-no-effect checks, 1.14)
+    std::vector<std::string> given;      //!< the steady.* keys given (for the application's has-no-effect checks, 1.15)
 };
 
 //! Read steady.*; aborts, naming the key, on a bad value or a repeated key.

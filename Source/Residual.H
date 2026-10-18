@@ -132,6 +132,16 @@ enum LineCoef : int { line_lower = 0, line_diag, line_upper, n_line_coefs };
 void line_jacobian (const State& q, const ResidualInputs& in, Equation eq, int dir, const Mesh& mesh,
                     const amrex::Geometry& geom, amrex::MultiFab& tri);
 
+//! The folded rows of A1 for one equation: all n_implicit_coefs coefficients
+//! (ImplicitOperator.H) with the wall model's rows, the closure's
+//! point-implicit k diagonal, the damping diagonal, the Dirichlet identity
+//! rows and the ghost couplings of the boundary rows applied (the same rows
+//! line_jacobian splits by direction). A: defined here if empty. surface and
+//! fields as for line_jacobian below.
+void implicit_rows (const amrex::Array<const amrex::MultiFab*, AMREX_SPACEDIM>& F, const amrex::MultiFab& z_nd,
+                    const ResidualInputs& in, Equation eq, const Mesh& mesh, const amrex::Geometry& geom,
+                    amrex::MultiFab& A, const SurfaceState* surface = nullptr, const ClosureFields* fields = nullptr);
+
 //! The same from transport fluxes F already computed (transport_fluxes), for
 //! line solvers that sweep every direction with one state.
 //! With a wall model (and eq not w), surface must be the state's surface

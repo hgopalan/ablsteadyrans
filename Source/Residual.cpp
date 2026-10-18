@@ -231,15 +231,14 @@ void line_jacobian (const State& q, const ResidualInputs& in, Equation eq, int d
                   in.closure != nullptr ? &cf : nullptr);
 }
 
-void line_jacobian (const amrex::Array<const amrex::MultiFab*, AMREX_SPACEDIM>& F, const amrex::MultiFab& z_nd,
-                    const ResidualInputs& in, Equation eq, int dir, const Mesh& mesh, const amrex::Geometry& geom,
-                    amrex::MultiFab& tri, const SurfaceState* surface, const ClosureFields* fields)
+void implicit_rows (const amrex::Array<const amrex::MultiFab*, AMREX_SPACEDIM>& F, const amrex::MultiFab& z_nd,
+                    const ResidualInputs& in, Equation eq, const Mesh& mesh, const amrex::Geometry& geom,
+                    amrex::MultiFab& A, const SurfaceState* surface, const ClosureFields* fields)
 {
-    check_diffusivities("line_jacobian", in);
-    if (dir < 0 || dir > 2) { amrex::Abort("ablsteady: line_jacobian: dir must be 0, 1 or 2"); }
+    check_diffusivities("implicit_rows", in);
     const bool closure = (in.closure != nullptr);
     if (closure && (fields == nullptr || fields->empty())) {
-        amrex::Abort("ablsteady: line_jacobian: with a closure the rows need its fields at the state (Closure::evaluate)");
+        amrex::Abort("ablsteady: implicit_rows: with a closure the rows need its fields at the state (Closure::evaluate)");
     }
     Loc loc = Loc::cell;
     const amrex::MultiFab* g = closure ? &fields->nu : in.nu;
@@ -250,7 +249,6 @@ void line_jacobian (const amrex::Array<const amrex::MultiFab*, AMREX_SPACEDIM>& 
     case Equation::theta: g = closure ? &fields->gamma_theta : in.gamma_theta; break;
     case Equation::tke: g = closure ? &fields->gamma_tke : in.gamma_tke; break;
     }
-    amrex::MultiFab A;
     implicit_coefficients(loc, F, *g, z_nd, mesh, geom, A, face_mean_of(in));
     if (closure && eq == Equation::tke) {
         // Point-implicit sources: the Patankar diagonal (eps + max(-P_b, 0))/k.
@@ -259,14 +257,25 @@ void line_jacobian (const amrex::Array<const amrex::MultiFab*, AMREX_SPACEDIM>& 
     const bool wall = (in.surface != nullptr && eq != Equation::w);
     if (wall) {
         if (surface == nullptr) {
-            amrex::Abort("ablsteady: line_jacobian: with a wall model the first cells' rows need the surface state");
+            amrex::Abort("ablsteady: implicit_rows: with a wall model the first cells' rows need the surface state");
         }
         apply_wall_to_implicit(*surface, loc, mesh, geom, A);
     }
+    if (in.bc != nullptr) { in.bc->apply_to_implicit(eq, loc, z_nd, A); }
+}
+
+void line_jacobian (const amrex::Array<const amrex::MultiFab*, AMREX_SPACEDIM>& F, const amrex::MultiFab& z_nd,
+                    const ResidualInputs& in, Equation eq, int dir, const Mesh& mesh, const amrex::Geometry& geom,
+                    amrex::MultiFab& tri, const SurfaceState* surface, const ClosureFields* fields)
+{
+    if (dir < 0 || dir > 2) { amrex::Abort("ablsteady: line_jacobian: dir must be 0, 1 or 2"); }
+    amrex::MultiFab A;
+    implicit_rows(F, z_nd, in, eq, mesh, geom, A, surface, fields);
+    const Loc loc = (eq == Equation::u) ? Loc::xface : (eq == Equation::v) ? Loc::yface : (eq == Equation::w) ? Loc::zface : Loc::cell;
+    const bool wall = (in.surface != nullptr && eq != Equation::w);
     if (tri.empty()) { tri.define(A.boxArray(), A.DistributionMap(), n_line_coefs, 0); }
     check_operator_field("line_jacobian", "tri", tri, loc, mesh, 0);
     if (tri.nComp() != n_line_coefs) { amrex::Abort("ablsteady: line_jacobian: tri needs 3 components"); }
-    if (in.bc != nullptr) { in.bc->apply_to_implicit(eq, loc, z_nd, A); }
     amrex::MultiFab::Copy(tri, A, coef_XM + 2 * dir, line_lower, 1, 0);
     amrex::MultiFab::Copy(tri, A, coef_P, line_diag, 1, 0);
     amrex::MultiFab::Copy(tri, A, coef_XP + 2 * dir, line_upper, 1, 0);
