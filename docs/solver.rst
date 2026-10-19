@@ -119,8 +119,9 @@ uses updated upper neighbours. One ``steady.zline_sweeps`` sweep is this symmetr
 wind whose :math:`u` and :math:`v` have the same sign in the ordering, a pass resolves the first-order upwind
 coupling exactly; the pure-advection defect-correction factor stays below one at every CFL, approaching one for the
 odd–even mode as the CFL grows. With opposite signs, each pass leaves one upwind neighbour lagged; one sweep is
-stable only to a CFL of about 2.5 and two to about 33. Couplings across box faces use the previous pass, so the
-iteration path depends on ``mesh.max_grid_size`` and boxes shorter than the CFL limit the solve. The hill results
+stable only to a CFL of about 2.5 and two to about 33. Couplings across box faces use the previous pass (the
+default ``steady.line_ghosts = lagged``, below), so the iteration path depends on ``mesh.max_grid_size`` and boxes
+shorter than the CFL limit the solve. The hill results
 are in :doc:`results`; ``tools/sweeps_cfl_scan.py --thresholds`` prints the scalar stability factors.
 
 **Box-local sweeps, overlap and face ownership.** Sub-phase 2.2 adds two ways to treat the neighbours across a box
@@ -131,8 +132,10 @@ face (``Source/LineSweeps.H``):
   shared face are solved; ``OverrideSync`` keeps the lowest box index's copy.
 - ``steady.line_ghosts = zero``: no communication inside the sweeps. Each box sweeps the region it owns, grown by
   :math:`n_o` = ``steady.line_overlap`` columns in x and y, with :math:`\delta = 0` outside it, and keeps only the
-  owned points. The system (:math:`A`, :math:`a_P`, the right-hand side) on the grown region comes from one
-  ``FillBoundary`` of copies with :math:`n_o` ghost cells. Along a periodic axis one cell wide (y in a 2-D deck)
+  owned points. The region is clipped to the domain on a non-periodic axis and is not grown along an axis one cell
+  wide. :math:`n_o` is at most 8 and at most the narrowest box width along each axis it applies to, so the grown
+  region never reaches past the neighbouring box (or one period). The system (:math:`A`, :math:`a_P`, the
+  right-hand side) on the grown region comes from one ``FillBoundary`` of copies with :math:`n_o` ghost cells. Along a periodic axis one cell wide (y in a 2-D deck)
   both neighbours are the column itself; their coefficients move to the diagonal, which solves that coupling
   exactly.
 
@@ -150,8 +153,10 @@ mask, the lowest box index, would keep a copy that was not swept). Cells and z f
 **GPU diagonal ordering.** ``steady.line_order = diagonal`` visits the planes :math:`(i - i_0) + (j - j_0) = s` in
 increasing :math:`s` (forward) or decreasing (backward), one column per thread inside a plane. A column's lower x/y
 neighbours lie on plane :math:`s - 1` and its upper neighbours on :math:`s + 1`, so each column sees the same
-values as in the lexicographic order: the result is the sequential sweep's, bit for bit (UT-2.2.4). The GPU
-timings and the per-machine defaults come in a later sub-phase.
+values as in the lexicographic order: the result is the sequential sweep's, bit for bit (UT-2.2.4), with either
+``steady.line_ghosts``. Each plane is one kernel launch, so a box of :math:`n_x \times n_y` columns takes
+:math:`n_x + n_y - 1` launches per pass instead of one. The GPU timings and the per-machine defaults come in a later
+sub-phase.
 
 **Pressure correction.** With the SIMPLEC denominator :math:`d = a_P - \sum a_{nb}`,
 

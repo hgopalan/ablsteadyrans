@@ -198,7 +198,7 @@ definition of a steady solution (:doc:`solver`) and its own. The application run
        the x/y neighbours lagged) or line LU-SGS (a symmetric Gauss–Seidel over the columns of each box with the
        exact z-line solve, exact along a wind whose u and v share a sign and stable at every CFL there; with
        u and v of opposite sign one sweep is stable only to a CFL of about 2.5 and two to about 33; a sequential
-       thread per box on a GPU until sub-phase 2.2). The sweep's path depends on the box layout
+       thread per box on a GPU unless ``steady.line_order = diagonal``). The sweep's path depends on the box layout
        (``mesh.max_grid_size``); the converged state does not. The LU-SGS hill deck runs two sweeps at
        ``steady.cfl_max = 16`` (two boxes of 64 × 1 columns).
    * - ``steady.line_ghosts``
