@@ -334,6 +334,13 @@ GoogleTest suite
    * - UT-1.4.9
      - *Beyond the plan.* Node heights shared by two boxes (or periodic images) are equal, for BTF, STF and Sullivan,
        periodic and not (under gcc each box's copy differed by up to 1e-13 m before ``Mesh`` synchronised them).
+   * - UT-1.4.10
+     - *Beyond the plan* (``Mesh.GhostNodesStandForTheirImages``). Every ghost node in x and y, at every k (the rows
+       below the ground and above the top included), equals the node it stands for, bit for bit: its periodic image,
+       or the edge node of its row at a non-periodic face. BTF, STF and Sullivan; periodic in x only, y only, both and
+       neither; on 1, 2 and 4 ranks. Before ``fill_ghost_columns`` the corners outside a wall and a periodic side held
+       the clamped corner column (up to 8 m off) and the row below the ground of periodic ghost columns was
+       extrapolated from the clamped columns (STF, Sullivan).
    * - UT-1.7.1
      - ERF's similarity functions (the copied ``ERF_MOSTUtils.H``, byte-identical by the drift check): Businger–Dyer
        ψ and φ and Jimenez ψ against a Python table of the same formulas, z/L from −5 to 5, to 1e-14 (single 1e-6);

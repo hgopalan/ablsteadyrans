@@ -34,6 +34,61 @@ amrex::GpuArray<ERF_BC, AMREX_SPACEDIM * 2> terrain_bc (const amrex::Geometry& g
     return bc;
 }
 
+//! Make every ghost node of z_phys_nd stand for the node it represents, at
+//! every k. After ERF's construction and FillBoundary two kinds were left:
+//!  - ghost columns outside a non-periodic face whose periodic image in the
+//!    other direction is a ghost too (corners such as (-1, -1) with x walls
+//!    and periodic y): ERF clamps them in both directions, to the column of
+//!    (0, 0) instead of (0, ny - 1);
+//!  - the rows below the ground and above the top of ghost columns: ERF
+//!    extrapolates them before FillBoundary, from the clamped columns, and
+//!    FillBoundary does not reach them (they are outside every valid box).
+//! Here, after FillBoundary: (1) a node outside a non-periodic face takes
+//! the height of the edge node of its own row (clamp only in the
+//! non-periodic direction; the edge column's periodic ghosts are already
+//! filled); (2) every column's rows below the ground and above the top are
+//! recomputed from that column with ERF's own expressions, 2 z_0 - z_1 and
+//! z_n + (k - n)(z_n - z_{n-1}), so a valid column keeps its values when
+//! nothing above changed it, and a ghost column gets exactly its image's.
+void fill_ghost_columns (amrex::MultiFab& z_phys_nd, const amrex::Geometry& geom)
+{
+    const amrex::Box& domain = geom.Domain();
+    const int domlo_x = domain.smallEnd(0);
+    const int domhi_x = domain.bigEnd(0) + 1;   // nodal
+    const int domlo_y = domain.smallEnd(1);
+    const int domhi_y = domain.bigEnd(1) + 1;
+    const int k0 = domain.smallEnd(2);
+    const int kn = domain.bigEnd(2) + 1;
+    const bool per_x = geom.isPeriodic(0);
+    const bool per_y = geom.isPeriodic(1);
+    for (amrex::MFIter mfi(z_phys_nd, false); mfi.isValid(); ++mfi) {
+        const amrex::Box gbx = mfi.fabbox();
+        const auto z = z_phys_nd.array(mfi);
+        amrex::Box lat = gbx;
+        lat.setSmall(2, k0);
+        lat.setBig(2, kn);
+        amrex::ParallelFor(lat, [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
+        {
+            const int ic = per_x ? i : amrex::max(domlo_x, amrex::min(domhi_x, i));
+            const int jc = per_y ? j : amrex::max(domlo_y, amrex::min(domhi_y, j));
+            if (ic != i || jc != j) { z(i, j, k) = z(ic, jc, k); }
+        });
+        amrex::Box cols = gbx;
+        cols.setSmall(2, k0);
+        cols.setBig(2, k0);
+        const int klo = gbx.smallEnd(2);
+        const int khi = gbx.bigEnd(2);
+        amrex::ParallelFor(cols, [=] AMREX_GPU_DEVICE (int i, int j, int) noexcept
+        {
+            constexpr amrex::Real two = 2;
+            if (klo <= k0 - 1) { z(i, j, k0 - 1) = two * z(i, j, k0) - z(i, j, k0 + 1); }
+            for (int k = kn + 1; k <= khi; ++k) {
+                z(i, j, k) = z(i, j, kn) + (k - kn) * (z(i, j, kn) - z(i, j, kn - 1));
+            }
+        });
+    }
+}
+
 } // namespace
 
 void Mesh::define (const amrex::BoxArray& ba, const amrex::DistributionMapping& dm)
@@ -69,6 +124,7 @@ void Mesh::build_from_ground (const Inputs& in, const amrex::Geometry& geom, amr
     // compute different values there. The ghost nodes are refilled to match.
     z_phys_nd.OverrideSync(geom.periodicity());
     z_phys_nd.FillBoundary(geom.periodicity());
+    fill_ghost_columns(z_phys_nd, geom);
 
     make_metrics(geom, z_phys_nd);
     make_quality(geom, z_phys_nd);
@@ -111,6 +167,10 @@ void Mesh::check_restart (const Inputs& in, const amrex::Geometry& geom, amrex::
                      "mesh and terrain inputs give at " + std::to_string(ndiff)
                      + " nodes; restart with the inputs the checkpoint was written with");
     }
+    // The ghost nodes too: a checkpoint written before fill_ghost_columns
+    // holds the old corner and below-ground ghost heights (valid nodes are
+    // equal, checked above).
+    amrex::MultiFab::Copy(z_phys_nd, rebuilt, 0, 0, 1, z_phys_nd.nGrowVect());
 }
 
 void Mesh::make_metrics (const amrex::Geometry& geom, amrex::MultiFab& z_phys_nd)

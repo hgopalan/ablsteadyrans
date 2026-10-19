@@ -17,6 +17,7 @@
 
 #include <gtest/gtest.h>
 
+#include <array>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -804,6 +805,70 @@ TEST (Mesh, SharedNodesAgree)
             synced.OverrideSync(s.geom.periodicity());
             amrex::MultiFab::Subtract(synced, s.z, 0, 0, 1, 0);
             EXPECT_EQ(static_cast<double>(synced.norm0()), 0.0) << "smoothing " << sm << " periodic " << per;
+        }
+    }
+}
+
+// Beyond the plan: every ghost node in x and y holds the height of the node it
+// stands for, at every k (ghost rows in z included): its periodic image in a
+// periodic direction, the edge node in a non-periodic one. A corner ghost
+// outside a non-periodic face and a periodic one (x walls, y periodic: node
+// (-1, -1)) is the edge node of the periodic image's column, (0, ny - 1),
+// not (0, 0). ERF's construction clamps the ghost columns in both directions
+// and FillBoundary cannot reach those corners (their periodic image is a
+// ghost node too), so before the fix they held the clamped column's heights.
+TEST (Mesh, GhostNodesStandForTheirImages)
+{
+    for (const int sm : {0, 1, 2}) {
+        for (const auto& per : {std::array<int, 2>{1, 0}, std::array<int, 2>{0, 1}, std::array<int, 2>{0, 0},
+                                std::array<int, 2>{1, 1}}) {
+            MeshCase s = hill3d(sm, "round");
+            s.in.mesh.is_periodic = {per[0], per[1], 0};
+            s.make();
+            s.mesh.build(s.in, s.geom, s.z);
+            const int nx = s.in.mesh.n_cell[0], ny = s.in.mesh.n_cell[1];
+            const int ng = s.z.nGrow();
+            const int kl = -ng, kh = s.in.mesh.n_cell[2] + ng;
+            const int nk = kh - kl + 1;
+            // The columns of the domain's nodes, every k of the fabs, on every
+            // rank (a node held by several boxes has one value: the mean).
+            std::vector<double> sum((nx + 1) * (ny + 1) * nk, 0.0), cnt(sum.size(), 0.0);
+            auto at = [&] (int i, int j, int k) { return (static_cast<std::size_t>(k - kl) * (ny + 1) + j) * (nx + 1) + i; };
+            for (amrex::MFIter mfi(s.z, false); mfi.isValid(); ++mfi) {
+                const amrex::Box gb = mfi.fabbox();
+                amrex::FArrayBox f(gb, 1, amrex::The_Pinned_Arena());
+                f.copy<amrex::RunOn::Device>(s.z[mfi], gb);
+                amrex::Gpu::streamSynchronize();
+                const amrex::Box vb = mfi.validbox();
+                amrex::LoopOnCpu(gb, [&] (int i, int j, int k) {
+                    if (i < vb.smallEnd(0) || i > vb.bigEnd(0) || j < vb.smallEnd(1) || j > vb.bigEnd(1)) { return; }
+                    sum[at(i, j, k)] += static_cast<double>(f(amrex::IntVect(i, j, k)));
+                    cnt[at(i, j, k)] += 1;
+                });
+            }
+            const auto comm = amrex::ParallelDescriptor::Communicator();
+            amrex::ParallelAllReduce::Sum(sum.data(), static_cast<int>(sum.size()), comm);
+            amrex::ParallelAllReduce::Sum(cnt.data(), static_cast<int>(cnt.size()), comm);
+            // The node a ghost stands for: periodic node n is node 0.
+            auto image = [] (int i, int n, bool p) { return p ? ((i % n) + n) % n : std::max(0, std::min(n, i)); };
+            long bad = 0;
+            double worst = 0;
+            for (amrex::MFIter mfi(s.z, false); mfi.isValid(); ++mfi) {
+                const amrex::Box gb = mfi.fabbox();
+                amrex::FArrayBox f(gb, 1, amrex::The_Pinned_Arena());
+                f.copy<amrex::RunOn::Device>(s.z[mfi], gb);
+                amrex::Gpu::streamSynchronize();
+                amrex::LoopOnCpu(gb, [&] (int i, int j, int k) {
+                    const int ii = image(i, nx, per[0] != 0), jj = image(j, ny, per[1] != 0);
+                    if (ii == i && jj == j) { return; }
+                    const double ref = sum[at(ii, jj, k)] / cnt[at(ii, jj, k)];
+                    const double v = static_cast<double>(f(amrex::IntVect(i, j, k)));
+                    if (v != ref) { ++bad; worst = std::max(worst, std::abs(v - ref)); }
+                });
+            }
+            amrex::ParallelAllReduce::Sum(bad, comm);
+            amrex::ParallelAllReduce::Max(worst, comm);
+            EXPECT_EQ(bad, 0) << "smoothing " << sm << ", periodic " << per[0] << " " << per[1] << ", worst " << worst << " m";
         }
     }
 }

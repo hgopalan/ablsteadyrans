@@ -65,7 +65,8 @@ public:
 
     //! After a restart: rebuild from the inputs, check the result equals the
     //! checkpoint's z_phys_nd on every valid node (abort, naming io.restart,
-    //! if the mesh or terrain inputs changed), then compute the metrics.
+    //! if the mesh or terrain inputs changed), take the rebuilt ghost nodes,
+    //! then compute the metrics.
     void check_restart (const Inputs& in, const amrex::Geometry& geom,
                         amrex::MultiFab& z_phys_nd);
 
