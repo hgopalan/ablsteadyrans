@@ -201,6 +201,22 @@ definition of a steady solution (:doc:`solver`) and its own. The application run
        thread per box on a GPU until sub-phase 2.2). The sweep's path depends on the box layout
        (``mesh.max_grid_size``); the converged state does not. The LU-SGS hill deck runs two sweeps at
        ``steady.cfl_max = 16`` (two boxes of 64 × 1 columns).
+   * - ``steady.line_ghosts``
+     - ``lagged``
+     - ``lagged`` or ``zero`` (sub-phase 2.2); refused unless ``steady.sweep = lusgs``. ``lagged``: the x/y
+       neighbours across a box face take the previous pass's values (sub-phase 2.1, bit-identical). ``zero``:
+       box-local sweeps with δ = 0 outside the swept region, no communication inside the sweeps, each C-grid
+       face swept by one box (its low face; the domain's high face, and on a periodic axis the seam, by the last
+       box).
+   * - ``steady.line_overlap``
+     - ``0``
+     - An integer ≥ 0 and ≤ 8, and ≤ the narrowest box width along each axis it applies to (not along a
+       one-cell axis); > 0 only with ``steady.line_ghosts = zero``. Each box sweeps its owned region grown by
+       this many columns and keeps the owned part.
+   * - ``steady.line_order``
+     - ``sequential``
+     - ``sequential`` or ``diagonal``; refused unless ``steady.sweep = lusgs``. ``diagonal`` sweeps the
+       wavefronts i + j = const, one column per thread: the same result as ``sequential``, bit for bit.
    * - ``steady.machine``
      - ``local``
      - ``local``, ``kestrel-cpu`` or ``kestrel-gpu``: the allocation-unit rate of the accounting (0, 10, 100 AU per
