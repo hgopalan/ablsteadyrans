@@ -96,6 +96,9 @@ is killed:
    * - M22
      - ``steady.line_alternate`` given with ``zjacobi`` accepted
      - UT-2.2.5 (``Driver``)
+   * - M23
+     - ``steady.line_alternate = 1`` with ``steady.zline_sweeps = 1`` accepted (the option read and ignored)
+     - UT-2.2.5 (``Driver``)
 
 The tests run with the GPU CI flags (see :doc:`running`). Each test runs in its own directory under
 ``<build>/Tests/run/``.
@@ -855,7 +858,7 @@ GoogleTest suite
        The refusals naming ``steady.line_overlap`` (< 0, > 8, with the lagged ghosts, wider than the narrowest box),
        no overlap along a one-cell axis, the readers of ``steady.line_ghosts``, ``line_overlap`` and ``line_order``
        (values, defaults, unknown words, a repeated key, a line key with ``zjacobi``), the dispatcher. The reader
-       of ``steady.line_alternate`` (the value, the default 0, 2 and -1 refused, refused with ``zjacobi``).
+       of ``steady.line_alternate`` (the value, the default 0, 2 and -1 refused, refused with ``zjacobi`` and with one sweep).
    * - UT-2.2.6
      - *Beyond the plan* (``LineSweeps.AlternatingOrderingSweepsBothDiagonals``). The alternating ordering
        (``steady.line_alternate = 1``). On an 8 × 8 × 4 system coupled only to the :math:`(i-1)` and :math:`(j+1)`

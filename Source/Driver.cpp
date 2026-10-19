@@ -79,6 +79,11 @@ std::vector<std::string> check_steady_options (const SteadyOptions& opt)
         err.emplace_back("steady.zline_sweeps must be >= 2 and <= 100 (one lagged sweep is unstable at large horizontal CFL)");
     }
     for (auto& e : check_line_options(line_sweep_options(opt))) { err.push_back(std::move(e)); }
+    // Only the odd sweeps are reversed, so with one sweep the option would be
+    // read and ignored.
+    if (opt.sweep == SweepKind::lusgs && opt.line_alternate == 1 && opt.zline_sweeps < 2) {
+        err.emplace_back("steady.line_alternate = 1 needs steady.zline_sweeps >= 2 (only the odd sweeps are reversed)");
+    }
     if (opt.sweep != SweepKind::lusgs) {
         for (const char* key : {"line_ghosts", "line_overlap", "line_order", "line_alternate"}) {
             if (std::find(opt.given.begin(), opt.given.end(), key) != opt.given.end()) {

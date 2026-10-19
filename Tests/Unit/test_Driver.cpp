@@ -725,6 +725,7 @@ TEST (Driver, DivergenceStopsAndTheChecksNameTheirInput)
         {"steady.line_alternate", [] (SteadyOptions& b) { b.given.emplace_back("line_alternate"); }},
         {"steady.line_alternate", [] (SteadyOptions& b) { b.sweep = ablsteady::SweepKind::lusgs; b.line_alternate = 2; }},
         {"steady.line_alternate", [] (SteadyOptions& b) { b.sweep = ablsteady::SweepKind::lusgs; b.line_alternate = -1; }},
+        {"steady.line_alternate", [] (SteadyOptions& b) { b.sweep = ablsteady::SweepKind::lusgs; b.line_alternate = 1; b.zline_sweeps = 1; }},
         {"steady.residual_tol", [] (SteadyOptions& b) { b.criterion.residual_tol = 0; }},
         {"steady.monitor_window", [] (SteadyOptions& b) { b.criterion.monitor_window = 1; }},
     };
