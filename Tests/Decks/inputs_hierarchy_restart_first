@@ -1,0 +1,16 @@
+# The Askervein mesh of inputs_mesh_askervein_hierarchy without a hierarchy:
+# writes the checkpoint that inputs_hierarchy_restart continues with three
+# levels (the hierarchy is rebuilt from the checkpoint's node heights).
+# terrain.file is given on the command line (extern_erf/askervein.txt).
+mesh.n_cell        = 60 60 18
+mesh.prob_lo       = -3000. -3000. 0.
+mesh.prob_hi       =  3000.  3000. 440.
+mesh.max_grid_size = 32
+mesh.dz0           = 20.
+mesh.stretch_ratio = 1.08
+
+terrain.type      = erf_grid
+terrain.smoothing = 1
+
+io.write_plotfile = 0
+io.chk_file       = hier_restart_chk

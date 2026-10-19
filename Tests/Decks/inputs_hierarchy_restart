@@ -1,0 +1,19 @@
+# Restart of inputs_hierarchy_restart_first with a three-level hierarchy, on
+# another box layout: the coarse levels, rebuilt from the checkpoint's node
+# heights, must equal the golds of a fresh run (RT-2.3.1).
+# terrain.file is given on the command line (extern_erf/askervein.txt).
+mesh.n_cell           = 60 60 18
+mesh.prob_lo          = -3000. -3000. 0.
+mesh.prob_hi          =  3000.  3000. 440.
+mesh.max_grid_size    = 32
+mesh.dz0              = 20.
+mesh.stretch_ratio    = 1.08
+mesh.hierarchy_levels = 3
+
+terrain.type             = erf_grid
+terrain.smoothing        = 1
+terrain.hierarchy_passes = 1
+
+io.restart          = hier_restart_chk00000
+io.plot_file        = hier_restart_plt
+io.write_checkpoint = 0

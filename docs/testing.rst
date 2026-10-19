@@ -57,6 +57,31 @@ Current tests
        The golds of the three mesh tests above were written by ablsteady itself (``Tests/check_mesh.py --write``):
        they detect changes, they do not show correctness. Correctness of the same code paths comes from UT-1.4.7
        (ERF's own output) and the closed-form unit tests.
+   * - ``rt_askervein_hierarchy``, ``rt_askervein_hierarchy_level1_matches``, ``rt_askervein_hierarchy_level2_matches``
+     - RT-2.3.1 and RT-2.3.2: the Askervein mesh of ``rt_askervein_mesh`` with STF and a three-level hierarchy
+       (``inputs_mesh_askervein_hierarchy``: 60, 30 and 15 cells a side, the same 18 layers, 1 and 3 ground passes).
+       In double precision, level 0's ``z`` and ``detJ`` statistics and every level's quality report against
+       ``Tests/Gold/askervein_hierarchy_mesh.json`` (the per-level headers and the summary table included); in both
+       precisions, ``z`` and ``detJ`` of levels 1 and 2 against
+       ``Tests/Gold/askervein_hierarchy_level{1,2}_plt00000`` (relative 1e-12; 1e-5 in single precision). The golds
+       were written by ablsteady: they detect changes. The coarse grounds were checked against an independent
+       rebuild (UT-2.3.2).
+   * - ``rt_steep_ridge_hierarchy_quality``
+     - RT-2.3.2: the steep ridge of ``rt_steep_ridge_quality`` on 32 × 4 × 16 cells with three levels: the report
+       of every level against ``Tests/Gold/steep_ridge_hierarchy_mesh.json``, with the STF and top warnings (no
+       coarse-level hint: levels 1 and 2 cap no more than level 0), and the per-level headers and summary table. Double precision only. The gold was written
+       by ablsteady: it detects changes.
+   * - ``rt_askervein_hierarchy_hint``
+     - RT-2.3.2: the Askervein hierarchy with unsmoothed coarse grounds (``terrain.hierarchy_passes = 0``): levels 1
+       and 2 cap STF at 9 and 10 z-levels against level 0's 8, so the report gives the coarse-level hint; against
+       ``Tests/Gold/askervein_hierarchy_p0_mesh.json`` (written by ablsteady). Double precision only.
+   * - ``rt_hierarchy_restart_first``, ``rt_hierarchy_restart``, ``rt_hierarchy_restart_level{1,2}_matches``
+     - A checkpoint of the Askervein mesh written without a hierarchy (2 ranks), restarted with three levels on 3
+       ranks: the rebuilt levels 1 and 2 against the golds of ``rt_askervein_hierarchy``.
+   * - ``abort_hierarchy``, ``abort_hierarchy_passes_unused``, ``abort_hierarchy_tool``
+     - UT-2.3.5 at the application: n_cell x not divisible by 4 for three levels, a box size not a multiple of 4
+       and passes out of range; passes given without a hierarchy; a test-only tool (``wall_distance``) given a
+       hierarchy. Each message names its input.
    * - ``abort_poisson_options``
      - ``poisson_projection`` with ``solver.poisson_reltol`` repeated and out of range: both named.
        (``abort_unknown_key`` checks that the application refuses ``solver.poisson_reltol``.)
@@ -702,6 +727,35 @@ GoogleTest suite
        at latitude 90), the geostrophic wind at the top within 0.5 m/s, k at the floor in the inversion and largest
        near the ground, the first cell's k = u*²/C_μ0² (1e-12), u* in 0.2–0.6 m/s, the table identical on every
        rank.
+   * - UT-2.3.1
+     - Three levels of a stretched mesh (dz0 = 40 m, the ratio solved by Newton), flat and over a round STF hill:
+       every level's z-levels equal level 0's bit for bit, with the same nz and z extent and x, y halved per level;
+       on flat ground every node of every level sits at its z-level exactly.
+   * - UT-2.3.2
+     - The pass counts :math:`p(2^l - 1)` pinned for p = 0 to 3 and l = 0 to 4; for p = 0, 1, 2 every coarse ground
+       of the hill mesh (non-periodic x, periodic y, 8 boxes) equals an independent host rebuild (injection, then
+       that many passes, β = 1/8, in double precision) to 1e-12 of the hill height and differs from one pass more
+       or fewer by more than 1 mm; level 0 is the run's own mesh; a constant 37.5 m ground is unchanged on every
+       level, bit for bit, ghost nodes included.
+   * - UT-2.3.3
+     - Free-stream preservation on every level for BTF, STF and Sullivan: the metric divergence of a uniform (10, 5)
+       m/s wind below 1e-12 of :math:`(|U| + |V|)/\Delta x` of the level; the coarse grounds are not flat.
+   * - UT-2.3.4
+     - Flat terrain, three levels (16 × 8, 8 × 4, 4 × 2 × 24 cells, stretched): (a) each level's own Poisson solver
+       gives the same φ column for a right-hand side in z alone; (b) the full residual of a conventionally neutral
+       column state (the k-L closure, the surface layer, Coriolis with a geostrophic wind, a capping inversion with
+       buoyancy) has the same u, v, w, p, θ and k columns on every level, so every level has the same column
+       solutions; (c) ten SIMPLEC iterations keep every column of a level alike. Relative 1e-12. See *Variations
+       from the plan* in the pull request for why (b) compares the steady equations rather than iterates.
+   * - UT-2.3.5
+     - Every invalid hierarchy input gives one message naming the key (n_cell x or y not divisible, levels beyond
+       the cells, a box size not a multiple of the coarsening, levels 0 and 11, passes −1 and 65, passes without a
+       hierarchy), and ``validate`` reports it; ``hierarchy_box_array`` gives boxes of at most
+       ``max_grid_size`` that coarsen exactly and span the column; a level 0 laid out by ``make_box_array`` with boxes
+       of 6 cells is refused, naming ``mesh.max_grid_size``.
+   * - UT-2.3.6
+     - A level gathered onto one box equals the distributed level (8 boxes) bit for bit: node heights with ghost
+       nodes, ``detJ``, the three face areas, ``z_cc`` and the quality report, for BTF and STF, on 1, 2 and 4 ranks.
    * - UT-1.15.7 (revised in 1.16)
      - The rotation's pin now holds the planar-mean split: :math:`a_P` with :math:`f^2\max(\tau_c, \tau_{\mathrm{own}})`
        and the right-hand side with the unique-face horizontal mean of the other residual per level at :math:`\tau_c`

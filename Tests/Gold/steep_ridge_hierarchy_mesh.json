@@ -1,0 +1,123 @@
+{
+  "levels": [
+    {
+      "header": {
+        "boxes": 1,
+        "dx": 320.0,
+        "dy": 320.0,
+        "gathered": false,
+        "nx": 16,
+        "ny": 2,
+        "nz": 16,
+        "passes": 1
+      },
+      "hint": false,
+      "level": 1,
+      "report": {
+        "max aspect ratio max(dx,dy) / thickness": 7.999564879,
+        "max coordinate-surface slope (deg)": 34.64890228,
+        "max ground height (m)": 520.1663202,
+        "max ground slope (deg)": 34.64890228,
+        "max top-node displacement (m)": 131.0545935,
+        "min cell thickness / flat layer thickness": 0.6400348115,
+        "min first-cell centre above ground (m)": 24.585751,
+        "min nodal layer thickness / flat thickness": 0.546327517
+      },
+      "stf_capped": 16,
+      "top_warning": true,
+      "warning": true
+    },
+    {
+      "header": {
+        "boxes": 1,
+        "dx": 640.0,
+        "dy": 640.0,
+        "gathered": false,
+        "nx": 8,
+        "ny": 1,
+        "nz": 16,
+        "passes": 3
+      },
+      "hint": false,
+      "level": 2,
+      "report": {
+        "max aspect ratio max(dx,dy) / thickness": 17.19065748,
+        "max coordinate-surface slope (deg)": 13.19069055,
+        "max ground height (m)": 344.4307314,
+        "max ground slope (deg)": 13.19069055,
+        "max top-node displacement (m)": 5.035670071,
+        "min cell thickness / flat layer thickness": 0.5956723886,
+        "min first-cell centre above ground (m)": 23.87638344,
+        "min nodal layer thickness / flat thickness": 0.5049473138
+      },
+      "stf_capped": 12,
+      "top_warning": true,
+      "warning": true
+    }
+  ],
+  "report": {
+    "max aspect ratio max(dx,dy) / thickness": 4.835192486,
+    "max coordinate-surface slope (deg)": 49.36775833,
+    "max ground height (m)": 600.0,
+    "max ground slope (deg)": 49.36775833,
+    "max top-node displacement (m)": 138.1896408,
+    "min cell thickness / flat layer thickness": 0.5294515176,
+    "min first-cell centre above ground (m)": 21.71488453,
+    "min nodal layer thickness / flat thickness": 0.5021026428
+  },
+  "stats": {
+    "detJ": {
+      "max": 1.095856262218856,
+      "min": 0.529451517639689,
+      "sum": 1923.0373059095746,
+      "sum_sq": 1832.9137551598008
+    },
+    "z": {
+      "max": 1118.485009361122,
+      "min": 39.98197754047282,
+      "sum": 1184950.764699003,
+      "sum_sq": 857308979.8195937
+    }
+  },
+  "stf_capped": 16,
+  "summary": [
+    {
+      "capped": 16,
+      "dx": 160,
+      "dy": 160,
+      "level": 0,
+      "max_aspect": 4.8352,
+      "max_slope": 49.37,
+      "min_thick": 0.5021,
+      "nx": 32,
+      "ny": 4,
+      "passes": 0
+    },
+    {
+      "capped": 16,
+      "dx": 320,
+      "dy": 320,
+      "level": 1,
+      "max_aspect": 7.9996,
+      "max_slope": 34.65,
+      "min_thick": 0.54633,
+      "nx": 16,
+      "ny": 2,
+      "passes": 1
+    },
+    {
+      "capped": 12,
+      "dx": 640,
+      "dy": 640,
+      "level": 2,
+      "max_aspect": 17.191,
+      "max_slope": 13.19,
+      "min_thick": 0.50495,
+      "nx": 8,
+      "ny": 1,
+      "passes": 3
+    }
+  ],
+  "top_warning": true,
+  "warning": true
+}

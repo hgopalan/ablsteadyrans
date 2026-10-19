@@ -1,0 +1,17 @@
+# The steep ridge of inputs_mesh_steep_ridge (600 m high, 300 m half-width,
+# STF) on 32 x 4 x 16 cells with a three-level x/y grid hierarchy (32, 16 and
+# 8 cells in x; y periodic and uniform). The report of every level, with the
+# STF warnings and the coarse-level hint. RT-2.3.2.
+mesh.n_cell           = 32 4 16
+mesh.prob_lo          = -2560. 0. 0.
+mesh.prob_hi          =  2560. 640. 1000.
+mesh.is_periodic      = 1 1 0
+mesh.hierarchy_levels = 3
+
+terrain.type             = agnesi
+terrain.hill_height      = 600.
+terrain.hill_half_width  = 300.
+terrain.hierarchy_passes = 1
+
+io.plot_file        = steep_hier_plt
+io.write_checkpoint = 0
