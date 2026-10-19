@@ -40,6 +40,16 @@ fixed state (for example RT-1.8.1 on the flat case); the last column is the firs
        deck's 600 s (:doc:`references`).
      - Yes
      - 1.16 (RT-1.16.3)
+   * - 5b
+     - Askervein, conventionally neutral (beyond the plan)
+     - Step 5 with the potential temperature, gravity, Coriolis (57.2 N) and the flat case's sounding kept: an
+       inversion from 700 m, 0.03 K/m above, the top raised to 1599 m with Rayleigh damping above 1200 m. The
+       inflow is the steady planar mean of a precursor column (``inputs_precursor_askervein_cnbl``), whose
+       geostrophic wind turns the 10 m wind onto +x and sets u* = 0.6 m/s, the inflow of step 5. The wind veers to
+       −y with height, so the flow enters through xlo and yhi and leaves through xhi and ylo. No ERF reference
+       yet: step 5 stays the comparison case.
+     - Yes
+     - Beyond the plan (``rt_steady_askervein_cnbl``)
    * - 6
      - Bolund, Perdigão
      - Steep escarpment (Bolund); double ridge (Perdigão).
