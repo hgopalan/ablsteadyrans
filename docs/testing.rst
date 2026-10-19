@@ -338,7 +338,7 @@ GoogleTest suite
      - *Beyond the plan* (``Mesh.GhostNodesStandForTheirImages``). Every ghost node in x and y, at every k (the rows
        below the ground and above the top included), equals the node it stands for, bit for bit: its periodic image,
        or the edge node of its row at a non-periodic face. BTF, STF and Sullivan; periodic in x only, y only, both and
-       neither; on 1, 2 and 4 ranks. Before ``fill_ghost_columns`` the corners outside a wall and a periodic side held
+       neither, and a layout split in z; on 1, 2 and 4 ranks; every copy of a domain node agrees. Before ``fill_ghost_columns`` the corners outside a wall and a periodic side held
        the clamped corner column (up to 8 m off) and the row below the ground of periodic ghost columns was
        extrapolated from the clamped columns (STF, Sullivan).
    * - UT-1.7.1

@@ -50,6 +50,8 @@ amrex::GpuArray<ERF_BC, AMREX_SPACEDIM * 2> terrain_bc (const amrex::Geometry& g
 //! recomputed from that column with ERF's own expressions, 2 z_0 - z_1 and
 //! z_n + (k - n)(z_n - z_{n-1}), so a valid column keeps its values when
 //! nothing above changed it, and a ghost column gets exactly its image's.
+//! Every side is periodic or zero-gradient here; a symmetry side (ERF_BC::
+//! symmetry, none yet) would need its mirrored ghosts kept instead.
 void fill_ghost_columns (amrex::MultiFab& z_phys_nd, const amrex::Geometry& geom)
 {
     const amrex::Box& domain = geom.Domain();
@@ -64,9 +66,12 @@ void fill_ghost_columns (amrex::MultiFab& z_phys_nd, const amrex::Geometry& geom
     for (amrex::MFIter mfi(z_phys_nd, false); mfi.isValid(); ++mfi) {
         const amrex::Box gbx = mfi.fabbox();
         const auto z = z_phys_nd.array(mfi);
+        // The domain's levels this fab holds (a layout split in z, which
+        // ERF's construction supports, holds part of them).
         amrex::Box lat = gbx;
         lat.setSmall(2, k0);
         lat.setBig(2, kn);
+        lat &= gbx;
         amrex::ParallelFor(lat, [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
         {
             const int ic = per_x ? i : amrex::max(domlo_x, amrex::min(domhi_x, i));
@@ -81,7 +86,11 @@ void fill_ghost_columns (amrex::MultiFab& z_phys_nd, const amrex::Geometry& geom
         amrex::ParallelFor(cols, [=] AMREX_GPU_DEVICE (int i, int j, int) noexcept
         {
             constexpr amrex::Real two = 2;
+            // ERF's row below the ground, then (more ghost rows) the same line.
             if (klo <= k0 - 1) { z(i, j, k0 - 1) = two * z(i, j, k0) - z(i, j, k0 + 1); }
+            for (int k = k0 - 2; k >= klo; --k) {
+                z(i, j, k) = z(i, j, k0) + (k0 - k) * (z(i, j, k0) - z(i, j, k0 + 1));
+            }
             for (int k = kn + 1; k <= khi; ++k) {
                 z(i, j, k) = z(i, j, kn) + (k - kn) * (z(i, j, kn) - z(i, j, kn - 1));
             }

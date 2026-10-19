@@ -309,9 +309,13 @@ void fill_terrain_surface (amrex::MultiFab& z_phys_nd, const amrex::Geometry& ge
 
     if (t.type == "flat") {
         for (amrex::MFIter mfi(z_phys_nd); mfi.isValid(); ++mfi) {
+            // The ground slab, in a tile that holds it (a layout split in z
+            // has boxes without the ground).
             amrex::Box zbx = mfi.growntilebox();
             zbx.setSmall(2, k0);
             zbx.setBig(2, k0);
+            zbx &= mfi.growntilebox();
+            if (zbx.isEmpty()) { continue; }
             const auto z = z_phys_nd.array(mfi);
             amrex::ParallelFor(zbx, [=] AMREX_GPU_DEVICE (int i, int j, int) noexcept { z(i, j, k0) = 0; });
         }
@@ -327,9 +331,13 @@ void fill_terrain_surface (amrex::MultiFab& z_phys_nd, const amrex::Geometry& ge
         const amrex::Real ycen = amrex::Real(0.5) * (plo[1] + phi[1]);
         const int dir = (t.hill_shape == "ridge_x") ? 0 : (t.hill_shape == "ridge_y") ? 1 : 2;
         for (amrex::MFIter mfi(z_phys_nd); mfi.isValid(); ++mfi) {
+            // The ground slab, in a tile that holds it (a layout split in z
+            // has boxes without the ground).
             amrex::Box zbx = mfi.growntilebox();
             zbx.setSmall(2, k0);
             zbx.setBig(2, k0);
+            zbx &= mfi.growntilebox();
+            if (zbx.isEmpty()) { continue; }
             const auto z = z_phys_nd.array(mfi);
             if (dir == 0) {
                 amrex::ParallelFor(zbx, [=] AMREX_GPU_DEVICE (int i, int j, int) noexcept
@@ -374,9 +382,12 @@ void fill_terrain_surface (amrex::MultiFab& z_phys_nd, const amrex::Geometry& ge
     std::optional<IdwInterpolator> idw;
     if (is_xyz) { idw.emplace(pts, t.idw_neighbors, t.idw_power); }
     for (amrex::MFIter mfi(z_phys_nd); mfi.isValid(); ++mfi) {
+        // The ground slab, in a tile that holds it (see above).
         amrex::Box zbx = mfi.growntilebox();
         zbx.setSmall(2, k0);
         zbx.setBig(2, k0);
+        zbx &= mfi.growntilebox();
+        if (zbx.isEmpty()) { continue; }
         amrex::FArrayBox h(zbx, 1, amrex::The_Pinned_Arena());
         const auto ha = h.array();
         amrex::LoopOnCpu(zbx, [&] (int i, int j, int k) {
