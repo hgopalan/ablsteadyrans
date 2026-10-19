@@ -25,6 +25,8 @@ amrex::IntVect loc_type (Loc loc)
     }
 }
 
+std::uint64_t g_launches = 0;
+
 using CArr = amrex::Array4<amrex::Real const>;
 using MArr = amrex::Array4<amrex::Real>;
 
@@ -38,6 +40,7 @@ void pass_sequential_forward (const amrex::Box& S, CArr const& a, CArr const& dg
 {
     const int ilo = S.smallEnd(0), ihi = S.bigEnd(0), jlo = S.smallEnd(1), jhi = S.bigEnd(1);
     const int klo = S.smallEnd(2), khi = S.bigEnd(2);
+    ++g_launches;
     amrex::ParallelFor(1, [=] AMREX_GPU_DEVICE (int) noexcept
     {
         for (int j = jlo; j <= jhi; ++j) {
@@ -51,6 +54,7 @@ void pass_sequential_backward (const amrex::Box& S, CArr const& a, CArr const& d
 {
     const int ilo = S.smallEnd(0), ihi = S.bigEnd(0), jlo = S.smallEnd(1), jhi = S.bigEnd(1);
     const int klo = S.smallEnd(2), khi = S.bigEnd(2);
+    ++g_launches;
     amrex::ParallelFor(1, [=] AMREX_GPU_DEVICE (int) noexcept
     {
         for (int j = jhi; j >= jlo; --j) {
@@ -67,6 +71,7 @@ void plane (int s, const amrex::Box& S, CArr const& a, CArr const& dg, CArr cons
     const int ilo = S.smallEnd(0), jlo = S.smallEnd(1), klo = S.smallEnd(2), khi = S.bigEnd(2);
     const int nx = S.length(0), ny = S.length(1);
     const int amin = std::max(0, s - (ny - 1)), amax = std::min(s, nx - 1);
+    ++g_launches;
     amrex::ParallelFor(amax - amin + 1, [=] AMREX_GPU_DEVICE (int m) noexcept
     {
         const int ia = amin + m;
@@ -232,6 +237,8 @@ amrex::Real lusgs_zero (Loc loc, const amrex::MultiFab& A, const amrex::MultiFab
 }
 
 } // namespace
+
+std::uint64_t& line_sweep_launches () noexcept { return g_launches; }
 
 const char* sweep_name (SweepKind kind) noexcept { return kind == SweepKind::lusgs ? "lusgs" : "zjacobi"; }
 const char* line_ghosts_name (LineGhosts g) noexcept { return g == LineGhosts::zero ? "zero" : "lagged"; }

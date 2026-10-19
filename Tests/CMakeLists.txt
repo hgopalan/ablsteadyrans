@@ -451,28 +451,35 @@ if(ABLSTEADY_PRECISION STREQUAL "DOUBLE")
                        COMMAND $<TARGET_FILE:ablsteady> ${DECKS}/inputs_steady_hill3d ${ABLSTEADY_TEST_AMREX_FLAGS})
     # RT-2.2.1: a truly neutral Hill_3D (inputs_steady_hill3d_neutral) to
     # round-off with the z-line Jacobi sweeps and with the box-local line
-    # LU-SGS sweeps (zero ghosts, overlap 2, diagonal ordering); the two
-    # states compared with fcompare. theta is uniform with a free constant
-    # (no theta Dirichlet condition, gravity 0), which drifts by 1e-4 K at
-    # round-off, so the comparison is at 1e-7 (u, v, w, p, k agree to 3e-10).
+    # LU-SGS sweeps (zero ghosts, overlap 2, diagonal ordering); then
+    # check_line_match.py compares the two states to 1e-8: u, v, w, p and k
+    # directly, theta after subtracting its mean (with no theta condition and
+    # gravity 0 its constant is free and drifts by about 1e-4 K at round-off).
+    # The setup step empties the run directories, so a plotfile left by an
+    # earlier run cannot be compared.
     set(RT221_DIR ${CMAKE_CURRENT_BINARY_DIR}/run/rt_steady_hill3d_neutral)
+    add_test(NAME rt_steady_hill3d_neutral_clean
+             COMMAND ${Python3_EXECUTABLE} -c
+                     "import shutil, os, sys; shutil.rmtree(sys.argv[1], ignore_errors=True); [os.makedirs(os.path.join(sys.argv[1], d)) for d in ('zjacobi', 'lusgs')]"
+                     ${RT221_DIR})
+    set_tests_properties(rt_steady_hill3d_neutral_clean PROPERTIES LABELS "nightly" FIXTURES_SETUP hill3d_neutral_clean)
     ablsteady_add_test(NAME rt_steady_hill3d_neutral_zjacobi NP 4 LABELS "nightly" RUN_DIR ${RT221_DIR}/zjacobi
-                       FIXTURES_SETUP hill3d_neutral_zjacobi
+                       FIXTURES_REQUIRED hill3d_neutral_clean FIXTURES_SETUP hill3d_neutral_zjacobi
                        PREFIX ${EXPECT_ABORT} --success "ablsteady: steady after" --
                        COMMAND $<TARGET_FILE:ablsteady> ${DECKS}/inputs_steady_hill3d_neutral
                                ${ABLSTEADY_TEST_AMREX_FLAGS})
     ablsteady_add_test(NAME rt_steady_hill3d_neutral_lusgs NP 4 LABELS "nightly" RUN_DIR ${RT221_DIR}/lusgs
-                       FIXTURES_SETUP hill3d_neutral_lusgs
+                       FIXTURES_REQUIRED hill3d_neutral_clean FIXTURES_SETUP hill3d_neutral_lusgs
                        PREFIX ${EXPECT_ABORT} --success "ablsteady: steady after" --
                        COMMAND $<TARGET_FILE:ablsteady> ${DECKS}/inputs_steady_hill3d_neutral_lusgs
                                ${ABLSTEADY_TEST_AMREX_FLAGS})
     add_test(NAME rt_steady_hill3d_neutral_matches
-             COMMAND ${Python3_EXECUTABLE} -c
-                     "import glob, subprocess, sys; a = sorted(glob.glob('zjacobi/steady_hill3d_neutral_plt*'))[-1]; b = sorted(glob.glob('lusgs/steady_hill3d_neutral_plt*'))[-1]; sys.exit(subprocess.call([sys.argv[1], '--rel_tol', '1e-7', a, b]))"
-                     ${FCOMPARE}
+             COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/check_line_match.py zjacobi lusgs
+                     steady_hill3d_neutral_plt --rel_tol 1e-8
              WORKING_DIRECTORY ${RT221_DIR})
     set_tests_properties(rt_steady_hill3d_neutral_matches PROPERTIES LABELS "nightly"
-                         FIXTURES_REQUIRED "hill3d_neutral_zjacobi;hill3d_neutral_lusgs")
+                         FIXTURES_REQUIRED "hill3d_neutral_zjacobi;hill3d_neutral_lusgs"
+                         ENVIRONMENT PYTHONDONTWRITEBYTECODE=1)
     # RT-1.16.3 (the convergence half): Askervein on the ERF grid with an
     # inflow and an outflow face to the steady verdict (about 2 s on two
     # ranks). The comparison with ERF's URANS on lines A and AA needs the

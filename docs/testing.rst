@@ -235,11 +235,13 @@ Current tests
        300 K, ``forcing.gravity = 0``, damping of w alone, four boxes) run to round-off (every residual below 1e-11
        and ten orders down) with 16 z-line Jacobi sweeps at a cap of 4 and with the box-local line LU-SGS sweeps
        (``inputs_steady_hill3d_neutral_lusgs``: zero ghosts, overlap 2, the diagonal ordering, two sweeps, cap 16);
-       ``amrex_fcompare`` compares the two plotfiles. The conventionally neutral deck has no fixed point to this
-       tolerance (it keeps entraining the inversion), hence the variant. Measured: 3495 iterations (76 s on four
-       ranks) against 1792 (34 s); u, v, w, p and k agree to 3e-10. θ has a free constant (no θ condition, no
-       gravity) that drifts by 1e-4 K at round-off, so the comparison is at 1e-7 (θ at 1.6e-8). Label
-       ``nightly``; double only.
+       ``Tests/check_line_match.py`` compares the two plotfiles at 1e-8 of each field's maximum
+       (``rt_steady_hill3d_neutral_clean`` empties the run directories first, so a stale plotfile cannot be
+       compared, and the checker requires exactly one plotfile per run). The conventionally neutral deck has no
+       fixed point to this tolerance (it keeps entraining the inversion), hence the variant. Measured: 3495
+       iterations (70 s on four ranks) against 1792 (32 s); u, v, w, p and k agree to 9e-10 absolute (at most
+       3e-8 of the tolerance scale). θ has a free constant (no θ condition, no gravity) that drifts by 1e-4 K at
+       round-off, so θ is compared after subtracting each run's mean: 3e-11 K. Label ``nightly``; double only.
    * - ``rt_steady_askervein``
      - RT-1.16.3, the convergence half: Askervein on the ERF grid of RT-1.12.1 (``inputs_steady_askervein``: 30 × 30
        × 18, the log-law inflow, outflow, slip sides, no Coriolis, four sweeps, cap 2) to the steady verdict.
@@ -786,6 +788,11 @@ GoogleTest suite
      - ``LineSweeps.DiagonalOrderingEqualsTheSequentialSweep``. The diagonal wavefront ordering equals the
        sequential sweep bit for bit (the correction and the reported change): every location, 1, 2 and 4 boxes,
        periodic and not, one and three sweeps, the lagged ghosts and the zero ghosts with :math:`n_o` = 0 and 2.
+       A per-rank launch counter (``line_sweep_launches``) pins which path ran: two launches per box and sweep for
+       the sequential order, two per wavefront plane of the swept region for the diagonal one, so an ordering
+       that is ignored fails. The stage tests (``Predictor.APIsTheDiagonalPlusThePseudoTimeTerm``,
+       ``Simplec.WallKRowsAreFolded``) check the same counts through ``momentum_predictor`` and ``scalar_sweep``, so the options
+       are shown to reach the sweeps.
    * - UT-2.2.5
      - *Beyond the plan* (``LineSweeps.RefusalsAndNames`` and ``Driver.DivergenceStopsAndTheChecksNameTheirInput``).
        The refusals naming ``steady.line_overlap`` (< 0, > 8, with the lagged ghosts, wider than the narrowest box),

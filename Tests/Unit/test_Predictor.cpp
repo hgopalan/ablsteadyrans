@@ -17,9 +17,11 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <cstdint>
 #include <limits>
 #include <random>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -284,6 +286,32 @@ TEST (Predictor, APIsTheDiagonalPlusThePseudoTimeTerm)
     amrex::MultiFab::Copy(q1.tke, q.tke, 0, 0, 1, 2);
     ablsteady::PredictorFields ap;
     const auto r = ablsteady::momentum_predictor(q1, pr.R, {&pr.F[0], &pr.F[1], &pr.F[2]}, co.in, df, c.mesh, c.geom, 3, ap);
+    {
+        // Sub-phase 2.2: the line options reach the sweeps of u, v and w (the
+        // diagonal ordering's launches, one per wavefront plane of the owned
+        // region with the zero ghosts), not only steady.sweep.
+        ablsteady::State q2;
+        define_state(q2, c);
+        for (auto [d, s] : {std::pair{&q2.u, &q.u}, {&q2.v, &q.v}, {&q2.w, &q.w}, {&q2.p, &q.p}, {&q2.theta, &q.theta},
+                            {&q2.tke, &q.tke}}) {
+            amrex::MultiFab::Copy(*d, *s, 0, 0, 1, 2);
+        }
+        ablsteady::LineSweepOptions opt(ablsteady::SweepKind::lusgs);
+        opt.ghosts = ablsteady::LineGhosts::zero;
+        opt.order = ablsteady::LineOrder::diagonal;
+        std::uint64_t planes = 0;
+        for (const amrex::MultiFab* f : {&q2.u, &q2.v, &q2.w}) {
+            const Loc loc = f->ixType().nodeCentered(0) ? Loc::xface : f->ixType().nodeCentered(1) ? Loc::yface : Loc::zface;
+            for (amrex::MFIter mfi(*f, false); mfi.isValid(); ++mfi) {
+                const amrex::Box o = ablsteady::line_owned_box(loc, mfi.validbox(), c.geom);
+                planes += static_cast<std::uint64_t>(o.length(0) + o.length(1) - 1);
+            }
+        }
+        ablsteady::PredictorFields ap2;
+        const auto n0 = ablsteady::line_sweep_launches();
+        ablsteady::momentum_predictor(q2, pr.R, {&pr.F[0], &pr.F[1], &pr.F[2]}, co.in, df, c.mesh, c.geom, 3, ap2, nullptr, nullptr, 1, opt);
+        EXPECT_EQ(ablsteady::line_sweep_launches() - n0, 2u * 3u * planes);
+    }
     EXPECT_GT(r.max_du, 0);
     EXPECT_GT(r.max_dv, 0);
     EXPECT_GT(r.max_dw, 0);
@@ -1215,9 +1243,9 @@ TEST (Predictor, LusgsFixedPointAndRefusals)
     }
     random_system(c, Loc::cell, 11u, 0.5, A, ap, rhs);
     amrex::MultiFab d1, d2, d3;
-    ablsteady::line_sweeps(ablsteady::SweepKind::lusgs, Loc::cell, A, ap, rhs, 2, c.mesh, c.geom, d1);
+    ablsteady::line_sweeps(ablsteady::LineSweepOptions(ablsteady::SweepKind::lusgs), Loc::cell, A, ap, rhs, 2, c.mesh, c.geom, d1);
     ablsteady::zline_lusgs(Loc::cell, A, ap, rhs, 2, c.mesh, c.geom, d2);
-    ablsteady::line_sweeps(ablsteady::SweepKind::zjacobi, Loc::cell, A, ap, rhs, 2, c.mesh, c.geom, d3);
+    ablsteady::line_sweeps(ablsteady::LineSweepOptions(ablsteady::SweepKind::zjacobi), Loc::cell, A, ap, rhs, 2, c.mesh, c.geom, d3);
     EXPECT_EQ(max_diff_gathered(d1, gather(d2)), 0);
     EXPECT_GT(max_diff_gathered(d1, gather(d3)), 0);
     amrex::MultiFab delta;

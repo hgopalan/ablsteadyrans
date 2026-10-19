@@ -118,8 +118,10 @@ solve but visits each box's columns in order: a forward pass uses updated lower 
 uses updated upper neighbours. One ``steady.zline_sweeps`` sweep is this symmetric pair, and one is allowed. For a
 wind whose :math:`u` and :math:`v` have the same sign in the ordering, a pass resolves the first-order upwind
 coupling exactly; the pure-advection defect-correction factor stays below one at every CFL, approaching one for the
-odd–even mode as the CFL grows. With opposite signs, each pass leaves one upwind neighbour lagged; one sweep is
-stable only to a CFL of about 2.5 and two to about 33. Couplings across box faces use the previous pass (the
+odd–even mode as the CFL grows. With opposite signs, each pass leaves one upwind neighbour lagged. The first-order
+line solve alone still contracts, by :math:`c_u c_v/((1+c_u)(1+c_v)) < 1` per sweep, close to one at a large CFL;
+the defect-correction iteration (the second-order residual) is stable with one sweep only to a CFL of about 2.5,
+and with two to about 33. Couplings across box faces use the previous pass (the
 default ``steady.line_ghosts = lagged``, below), so the iteration path depends on ``mesh.max_grid_size`` and boxes
 shorter than the CFL limit the solve. The hill results
 are in :doc:`results`; ``tools/sweeps_cfl_scan.py --thresholds`` prints the scalar stability factors.

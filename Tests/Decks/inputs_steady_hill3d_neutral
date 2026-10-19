@@ -9,7 +9,9 @@
 # residual 1e-11 and ten orders below its reference. The test runs it with
 # the z-line Jacobi sweeps (this deck) and with the box-local line LU-SGS
 # sweeps (steady.sweep = lusgs, steady.line_ghosts = zero, overlap 2, the
-# diagonal ordering) and compares the two plotfiles to 1e-8.
+# diagonal ordering) and compares the two states to 1e-8 (Tests/
+# check_line_match.py; theta after subtracting its mean: its constant is
+# free with no theta condition and drifts by about 1e-4 K at round-off).
 mesh.n_cell        = 32 32 16
 mesh.prob_lo       = -2560. -2560. 0.
 mesh.prob_hi       =  2560.  2560. 800.

@@ -61,6 +61,7 @@
 #include <AMReX_Geometry.H>
 #include <AMReX_MultiFab.H>
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -78,16 +79,25 @@ enum class LineOrder : int { sequential = 0, diagonal = 1 };
 inline constexpr int max_line_overlap = 8;
 
 //! The sweep options (steady.sweep, line_ghosts, line_overlap, line_order).
-//! Implicit from a SweepKind: the other options keep their defaults (the
-//! path of sub-phase 2.1).
+//! From a SweepKind the other options keep their defaults (the path of
+//! sub-phase 2.1); explicit, so a caller that passes steady.sweep alone
+//! cannot drop the line options silently.
 struct LineSweepOptions
 {
-    LineSweepOptions (SweepKind k = SweepKind::zjacobi) noexcept : kind(k) {}   // NOLINT(google-explicit-constructor)
+    LineSweepOptions () noexcept : kind(SweepKind::zjacobi) {}
+    explicit LineSweepOptions (SweepKind k) noexcept : kind(k) {}
     SweepKind kind;
     LineGhosts ghosts{LineGhosts::lagged};
     int overlap{0};
     LineOrder order{LineOrder::sequential};
 };
+
+//! The number of LU-SGS kernel launches on this rank since the start of the
+//! run (a diagnostic, host side): one per box and pass in the sequential
+//! order, one per box, pass and wavefront plane (n_x + n_y - 1 for a swept
+//! region of n_x x n_y columns) in the diagonal order. The tests read it to
+//! check which kernels an option reaches.
+std::uint64_t& line_sweep_launches () noexcept;
 
 //! The names of the options ("zjacobi", "lusgs"; "lagged", "zero";
 //! "sequential", "diagonal").

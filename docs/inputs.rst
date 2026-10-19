@@ -197,7 +197,8 @@ definition of a steady solution (:doc:`solver`) and its own. The application run
      - ``zjacobi`` or ``lusgs`` (sub-phase 2.1): the line solver of the sweeps, z-line Jacobi (independent columns,
        the x/y neighbours lagged) or line LU-SGS (a symmetric Gauss–Seidel over the columns of each box with the
        exact z-line solve, exact along a wind whose u and v share a sign and stable at every CFL there; with
-       u and v of opposite sign one sweep is stable only to a CFL of about 2.5 and two to about 33; a sequential
+       u and v of opposite sign the defect correction is stable with one sweep only to a CFL of about 2.5 and with
+       two to about 33 (:doc:`solver`); a sequential
        thread per box on a GPU unless ``steady.line_order = diagonal``). The sweep's path depends on the box layout
        (``mesh.max_grid_size``); the converged state does not. The LU-SGS hill deck runs two sweeps at
        ``steady.cfl_max = 16`` (two boxes of 64 × 1 columns).
@@ -211,7 +212,7 @@ definition of a steady solution (:doc:`solver`) and its own. The application run
    * - ``steady.line_overlap``
      - ``0``
      - An integer ≥ 0 and ≤ 8, and ≤ the narrowest box width along each axis it applies to (not along a
-       one-cell axis); > 0 only with ``steady.line_ghosts = zero``. Each box sweeps its owned region grown by
+       one-cell axis); > 0 only with ``steady.line_ghosts = zero``; refused unless ``steady.sweep = lusgs``. Each box sweeps its owned region grown by
        this many columns and keeps the owned part.
    * - ``steady.line_order``
      - ``sequential``

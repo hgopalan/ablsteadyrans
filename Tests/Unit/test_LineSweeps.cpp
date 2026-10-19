@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <cstdint>
 #include <cmath>
 #include <random>
 #include <stdexcept>
@@ -474,7 +475,10 @@ TEST (LineSweeps, ConvergedStateDoesNotDependOnTheLayout)
 // UT-2.2.4. The diagonal wavefront ordering gives the sequential sweep's
 // result bit for bit: every location, 1, 2 and 4 boxes (an uneven 7 x 6
 // split too), periodic and not, one and three sweeps, the lagged ghosts and
-// the zero ghosts with n_o = 0 and 2; the reported change too.
+// the zero ghosts with n_o = 0 and 2; the reported change too. The launch
+// counter shows each ordering reaches its own kernels (one launch per box
+// and pass against one per wavefront plane), so the test cannot pass by
+// running the sequential kernels twice.
 TEST (LineSweeps, DiagonalOrderingEqualsTheSequentialSweep)
 {
     struct Layout { int nx, ny, mx, my; };
@@ -490,8 +494,25 @@ TEST (LineSweeps, DiagonalOrderingEqualsTheSequentialSweep)
                         LineSweepOptions diag = base;
                         diag.order = LineOrder::diagonal;
                         amrex::MultiFab ds, dd;
+                        const auto n0 = ablsteady::line_sweep_launches();
                         const amrex::Real cs = ablsteady::zline_lusgs(loc, A, ap, rhs, sweeps, c.mesh, c.geom, ds, base);
+                        const auto n1 = ablsteady::line_sweep_launches();
                         const amrex::Real cd = ablsteady::zline_lusgs(loc, A, ap, rhs, sweeps, c.mesh, c.geom, dd, diag);
+                        const auto n2 = ablsteady::line_sweep_launches();
+                        // the kernels each ordering reaches: one launch per box and
+                        // pass (sequential), one per plane (diagonal)
+                        std::uint64_t planes = 0, boxes = 0;
+                        for (amrex::MFIter mfi(ds, false); mfi.isValid(); ++mfi) {
+                            const amrex::Box S = base.ghosts == LineGhosts::lagged
+                                                 ? mfi.validbox()
+                                                 : ablsteady::line_sweep_box(loc, ablsteady::line_owned_box(loc, mfi.validbox(), c.geom),
+                                                                             base.overlap, c.geom);
+                            planes += static_cast<std::uint64_t>(S.length(0) + S.length(1) - 1);
+                            ++boxes;
+                        }
+                        EXPECT_EQ(n1 - n0, 2u * static_cast<unsigned>(sweeps) * boxes) << loc_name(loc);
+                        EXPECT_EQ(n2 - n1, 2u * static_cast<unsigned>(sweeps) * planes) << loc_name(loc);
+                        if (boxes > 0) { EXPECT_GT(n2 - n1, n1 - n0); }   // counts are per rank
                         EXPECT_GT(ds.norm0(), 0.1);
                         EXPECT_EQ(max_diff(ds, dd), 0) << loc_name(loc) << " periodic " << periodic << " boxes " << c.ba.size()
                                                        << " ghosts " << ablsteady::line_ghosts_name(base.ghosts) << " n_o "
