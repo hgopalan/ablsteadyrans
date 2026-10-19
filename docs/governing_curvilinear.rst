@@ -62,6 +62,10 @@ The metric terms are differences of the node heights:
 - :math:`J` is the cell volume divided by :math:`\Delta x\,\Delta y\,\Delta\zeta`. The x- and y-face area factors
   :math:`a_x, a_y` are :math:`z_\zeta` on those faces.
 
+Every ghost node of the node heights stands for a domain node: its periodic image across a periodic side, the
+edge node of its row across any other side, at every height including the extrapolated rows below the ground
+(:math:`2z_0 - z_1`) and above the top. A restart takes the ghost nodes from the rebuilt mesh.
+
 Physical derivatives follow from the chain rule:
 
 .. math::

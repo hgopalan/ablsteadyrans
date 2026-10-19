@@ -209,11 +209,11 @@ MeshHierarchy::MeshHierarchy (const Inputs& in, const amrex::Geometry& geom, con
             amrex::DistributionMapping dmg(bag);
             amrex::MultiFab zg(amrex::convert(bag, amrex::IntVect(1)), dmg, 1, lev->z.nGrowVect());
             zg.setVal(0.0);
-            // No periodic shift: the grown source boxes cover every node of
-            // the grown destination box at its own index. With a shift, a
-            // corner ghost node outside a non-periodic face (which ERF's
-            // terrain construction clamps, not wraps) would land on, and
-            // overwrite, the periodic image of a correct ghost node.
+            // No periodic shift is needed: the grown source boxes cover every
+            // node of the grown destination box at its own index. (Every
+            // ghost node holds the node it stands for, Mesh's
+            // fill_ghost_columns, so a shifted copy would carry the same
+            // values; the copy at its own index does not rely on that.)
             zg.ParallelCopy(lev->z, 0, 0, 1, lev->z.nGrowVect(), zg.nGrowVect());
             Mesh mg;
             mg.define(bag, dmg);
