@@ -20,45 +20,64 @@ Every test is first shown to fail on the bug it guards against, or on a one-line
 Tests the plan does not list are marked *beyond the plan*.
 
 The one-line mutants of sub-phase 2.2 (``Source/LineSweeps.cpp`` and ``Source/Driver.cpp``), each run against
-``LineSweeps.*``, ``Driver.*``, ``Predictor.*`` and ``Simplec.*`` on one and two ranks; every one is killed:
+``LineSweeps.*``, ``Driver.*`` and ``Predictor.Lusgs*`` on two ranks by ``tools/line_sweep_mutants.py``; every one
+is killed:
 
 .. list-table::
    :header-rows: 1
-   :widths: 6 44 50
+   :widths: 6 50 44
 
    * - Mutant
      - Change
      - Failing tests
    * - M1
-     - The overlap ignored (the swept region not grown)
+     - Overlap ignored (swept region not grown)
      - UT-2.2.1, UT-2.2.2
    * - M2
-     - A face updated twice (a box keeps its high face)
+     - Face updated twice (box keeps its high face)
      - UT-2.2.1, UT-2.2.2, UT-2.2.3
    * - M3
-     - The periodic seam swept by both end boxes
+     - Periodic seam updated twice (first box keeps the domain's low face)
      - UT-2.2.1, UT-2.2.2, UT-2.2.3
    * - M4
-     - A wavefront skipping a plane (the last of the forward pass)
+     - Forward wavefront skips its last plane
      - UT-2.2.4
    * - M5
-     - The ghost δ not zeroed (``FillBoundary`` of the iterate before each pass)
-     - UT-2.2.1
+     - Backward wavefront skips plane 0
+     - UT-2.2.4
    * - M6
-     - The non-owned face copies keep AMReX's default owner
-     - UT-2.2.1, UT-2.2.2, UT-2.2.3
+     - Ghost δ not zeroed (neighbours' values exchanged between passes)
+     - UT-2.2.1
    * - M7
+     - Non-owned face copies keep their own value (owner mask all 1)
+     - UT-2.2.1, UT-2.2.2, UT-2.2.3
+   * - M8
+     - One-cell periodic axis not folded into the diagonal
+     - UT-2.2.1
+   * - M9
      - ``steady.line_overlap`` not read
      - UT-2.2.5 (``Driver``)
-   * - M8
+   * - M10
+     - ``steady.line_ghosts`` not read
+     - UT-2.2.5 (``Driver``)
+   * - M11
+     - ``steady.line_order`` not read
+     - UT-2.2.5 (``Driver``)
+   * - M12
      - ``steady.line_overlap`` above 8 accepted
      - UT-2.2.5 (``Driver``)
-   * - M9
-     - An overlap wider than the narrowest box accepted
+   * - M13
+     - A negative ``steady.line_overlap`` accepted
      - UT-2.2.5 (``Driver`` and ``LineSweeps``)
-   * - M10
-     - A one-cell periodic axis not folded into the diagonal
-     - UT-2.2.1
+   * - M14
+     - Overlap with lagged ghosts accepted
+     - UT-2.2.5 (``Driver`` and ``LineSweeps``)
+   * - M15
+     - Overlap wider than the narrowest box accepted
+     - UT-2.2.5 (``Driver`` and ``LineSweeps``)
+   * - M16
+     - Line key given with ``zjacobi`` accepted
+     - UT-2.2.5 (``Driver``)
 
 The tests run with the GPU CI flags (see :doc:`running`). Each test runs in its own directory under
 ``<build>/Tests/run/``.
