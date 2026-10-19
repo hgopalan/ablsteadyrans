@@ -32,8 +32,8 @@ M = [
   "for (int s = last; s >= 0; --s) { plane(s, S, a, dg, r, d, c, e); }",
   "for (int s = last; s > 0; --s) { plane(s, S, a, dg, r, d, c, e); }"),
  ("M6", "ghost delta not zeroed (neighbours' values exchanged between passes)", "Source/LineSweeps.cpp",
-  "            const PassFn pass = pass_of(order, forward);\n            for (amrex::MFIter mfi(work, false);",
-  "            const PassFn pass = pass_of(order, forward); work.FillBoundary(geom.periodicity());\n            for (amrex::MFIter mfi(work, false);"),
+  "            const PassFn pass = pass_of(order, forward, alternate && s % 2 == 1);\n            for (amrex::MFIter mfi(work, false);",
+  "            const PassFn pass = pass_of(order, forward, alternate && s % 2 == 1); work.FillBoundary(geom.periodicity());\n            for (amrex::MFIter mfi(work, false);"),
  ("M7", "non-owned face copies keep their own value (owner mask all 1)", "Source/LineSweeps.cpp",
   "m(i, j, k) = owned.contains(i, j, k) ? 1 : 0;", "m(i, j, k) = 1;"),
  ("M8", "one-cell periodic axis not folded into the diagonal", "Source/LineSweeps.cpp",
@@ -54,6 +54,21 @@ M = [
   "narrowest < std::numeric_limits<int>::max() && overlap > narrowest) {", "narrowest < std::numeric_limits<int>::max() && overlap > narrowest + 1) {"),
  ("M16", "line key given with zjacobi accepted", "Source/Driver.cpp",
   "if (opt.sweep != SweepKind::lusgs) {\n        for (const char* key", "if (false) {\n        for (const char* key"),
+ # beyond the plan: the alternating ordering (steady.line_alternate)
+ ("M17", "odd sweeps not reversed (alternation ignored)", "Source/LineSweeps.cpp",
+  "    if (jrev) {", "    if (false) {"),
+ ("M18", "reversed forward wavefront skips its last plane", "Source/LineSweeps.cpp",
+  "for (int s = 0; s <= last; ++s) { plane_jrev(s, S, a, dg, r, d, c, e); }",
+  "for (int s = 0; s < last; ++s) { plane_jrev(s, S, a, dg, r, d, c, e); }"),
+ ("M19", "reversed sequential forward pass walks j ascending", "Source/LineSweeps.cpp",
+  "        for (int j = jhi; j >= jlo; --j) {\n            for (int i = ilo; i <= ihi; ++i)",
+  "        for (int j = jlo; j <= jhi; ++j) {\n            for (int i = ilo; i <= ihi; ++i)"),
+ ("M20", "steady.line_alternate not read", "Source/Driver.cpp",
+  'pp.query("line_alternate", opt.line_alternate);', ';'),
+ ("M21", "line_alternate = 2 accepted", "Source/LineSweeps.cpp",
+  "if (opt.alternate != 0 && opt.alternate != 1) {", "if (opt.alternate < 0 || opt.alternate > 2) {"),
+ ("M22", "line_alternate given with zjacobi accepted", "Source/Driver.cpp",
+  '{"line_ghosts", "line_overlap", "line_order", "line_alternate"}', '{"line_ghosts", "line_overlap", "line_order"}'),
 ]
 
 
