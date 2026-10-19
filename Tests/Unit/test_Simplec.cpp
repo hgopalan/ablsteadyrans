@@ -390,14 +390,12 @@ TEST (Simplec, CorrectionTendsToTheProjectionAsDtauGrows)
         amrex::MultiFab mask;
         lam.bc->dirichlet_rows(Equation::w, Loc::zface, c.mesh, mask);
         EXPECT_EQ(mask.sum(0), 2.0 * 8 * 4);
-        for (amrex::MFIter mfi(pf.d_w, false); mfi.isValid(); ++mfi) {
-            const auto d = pf.d_w.array(mfi);
-            const auto m = mask.const_array(mfi);
-            amrex::ParallelFor(mfi.validbox(), [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
-            {
-                d(i, j, k) *= amrex::Real(1) - m(i, j, k);
-            });
-        }
+        // d_w *= 1 - mask with MultiFab operations: nvcc refuses an extended
+        // device lambda in a gtest TestBody (a private member function).
+        amrex::MultiFab keep(mask.boxArray(), mask.DistributionMap(), 1, 0);
+        keep.setVal(1);
+        amrex::MultiFab::Subtract(keep, mask, 0, 0, 1, 0);
+        amrex::MultiFab::Multiply(pf.d_w, keep, 0, 0, 1, 0);
         ablsteady::State q1;
         define_state(q1, c);
         copy_state(q1, qs);
@@ -746,7 +744,8 @@ TEST (Simplec, PointImplicitCouplingsArePinned)
             ew(iv) = 1.0 / dtw(iv) + aw(iv, ablsteady::coef_P) + stiff;
             xw(iv) = -rw(iv) - gt * tau * 0.5 * (rt(amrex::IntVect(i, j, k - 1)) + rt(iv));
         });
-        for (auto pr : {std::pair<amrex::MultiFab*, amrex::FArrayBox*>{&apu, &eu}, {&apv, &ev}, {&apw, &ew}, {&rhsu, &xu}, {&rhsv, &xv}, {&rhsw, &xw}}) {
+        using Pair = std::pair<amrex::MultiFab*, amrex::FArrayBox*>;   // every element typed: nvcc does not deduce bare braces
+        for (const Pair& pr : {Pair{&apu, &eu}, Pair{&apv, &ev}, Pair{&apw, &ew}, Pair{&rhsu, &xu}, Pair{&rhsv, &xv}, Pair{&rhsw, &xw}}) {
             (*pr.first)[mfi].copy<amrex::RunOn::Device>(*pr.second, (*pr.first)[mfi].box());
         }
         amrex::Gpu::streamSynchronize();
@@ -822,8 +821,8 @@ TEST (Simplec, PointImplicitCouplingsArePinned)
     EXPECT_LT(max_abs_diff(pf.ap_v, apv), tol(1e-14, 1e-5) * max_abs(apv));
     EXPECT_LT(max_abs_diff(pf.ap_w, apw), tol(1e-14, 1e-5) * max_abs(apw));
     // d = a_P - sum of the neighbours (0 on the Dirichlet rows) with the same additions.
-    for (auto pr : {std::tuple<const amrex::MultiFab*, const amrex::MultiFab*, const amrex::MultiFab*, const amrex::MultiFab*>{&pf.d_u, &pf.ap_u, &Au, nullptr},
-                    {&pf.d_v, &pf.ap_v, &Av, nullptr}, {&pf.d_w, &pf.ap_w, &Aw, &mw}}) {
+    using Rows = std::tuple<const amrex::MultiFab*, const amrex::MultiFab*, const amrex::MultiFab*, const amrex::MultiFab*>;
+    for (const Rows& pr : {Rows{&pf.d_u, &pf.ap_u, &Au, nullptr}, Rows{&pf.d_v, &pf.ap_v, &Av, nullptr}, Rows{&pf.d_w, &pf.ap_w, &Aw, &mw}}) {
         for (amrex::MFIter mfi(*std::get<0>(pr), false); mfi.isValid(); ++mfi) {
             const auto d = host_copy(*std::get<0>(pr), mfi), p = host_copy(*std::get<1>(pr), mfi), a = host_copy(*std::get<2>(pr), mfi);
             amrex::LoopOnCpu(mfi.validbox(), [&] (int i, int j, int k) {
@@ -845,7 +844,8 @@ TEST (Simplec, PointImplicitCouplingsArePinned)
         amrex::MultiFab dq(row.A->boxArray(), c.dm, 1, 0);
         amrex::MultiFab::Copy(dq, *row.q1, 0, 0, 1, 0);
         amrex::MultiFab::Subtract(dq, *row.q0, 0, 0, 1, 0);
-        EXPECT_LT(max_abs_diff(dq, delta), tol(1e-13, 1e-4) * max_abs(*row.q0)) << row.name << " relax " << relax;
+        // single: the large-step rows (dt_scale 400) lose another digit in the z-line solve
+        EXPECT_LT(max_abs_diff(dq, delta), tol(1e-13, dt_scale > 1 ? 4e-4 : 1e-4) * max_abs(*row.q0)) << row.name << " relax " << relax;
     }
     }   // relax
     }   // dt_scale
@@ -934,15 +934,10 @@ TEST (Simplec, WallKRowsAreFolded)
             amrex::MultiFab dtau(c.ba, c.dm, 1, 0);
             fill_random(dtau, 20, 60, 77, c);
             amrex::MultiFab ap(c.ba, c.dm, 1, 0), rhs(c.ba, c.dm, 1, 0), delta;
-            for (amrex::MFIter mfi(ap, false); mfi.isValid(); ++mfi) {
-                const auto p = ap.array(mfi);
-                const auto a = A.const_array(mfi);
-                const auto dt = dtau.const_array(mfi);
-                amrex::ParallelFor(mfi.validbox(), [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
-                {
-                    p(i, j, k) = amrex::Real(1) / dt(i, j, k) + a(i, j, k, ablsteady::coef_P);
-                });
-            }
+            // ap = 1/dtau + A_P with MultiFab operations (no device lambda in a TestBody)
+            ap.setVal(1);
+            amrex::MultiFab::Divide(ap, dtau, 0, 0, 1, 0);
+            amrex::MultiFab::Add(ap, A, ablsteady::coef_P, 0, 1, 0);
             amrex::MultiFab::Copy(rhs, R.tke, 0, 0, 1, 0);
             rhs.mult(amrex::Real(-1), 0, 1, 0);
             ablsteady::zline_jacobi(Loc::cell, A, ap, rhs, 2, c.mesh, c.geom, delta);
@@ -956,6 +951,33 @@ TEST (Simplec, WallKRowsAreFolded)
             amrex::MultiFab::Subtract(dk, q.tke, 0, 0, 1, 0);
             EXPECT_GT(res.max_dq, 0);
             EXPECT_LT(max_abs_diff(dk, delta), tol(1e-13, 1e-4) * max_abs(q.tke));
+            // UT-2.1.4 (sub-phase 2.1): the same sweep with the line LU-SGS
+            // solver is the zline_lusgs solve of the same rows, differs from
+            // the Jacobi one, and with a floor above the smallest result the
+            // clip holds k >= floor everywhere.
+            {
+                amrex::MultiFab dl;
+                ablsteady::zline_lusgs(Loc::cell, A, ap, rhs, 2, c.mesh, c.geom, dl);
+                amrex::MultiFab k2(c.ba, c.dm, 1, 2);
+                amrex::MultiFab::Copy(k2, q.tke, 0, 0, 1, 2);
+                ablsteady::SimplecWorkspace w2;
+                const auto rl = ablsteady::scalar_sweep(Equation::tke, k2, R.tke, {&F[0], &F[1], &F[2]}, q.z_phys_nd, in, dtau,
+                                                        c.mesh, c.geom, 2, 0, &ss, &cf, w2, ablsteady::SweepKind::lusgs);
+                amrex::MultiFab dk2(c.ba, c.dm, 1, 0);
+                amrex::MultiFab::Copy(dk2, k2, 0, 0, 1, 0);
+                amrex::MultiFab::Subtract(dk2, q.tke, 0, 0, 1, 0);
+                EXPECT_GT(rl.max_dq, 0);
+                EXPECT_LT(max_abs_diff(dk2, dl), tol(1e-13, 1e-4) * max_abs(q.tke));
+                EXPECT_GT(max_abs_diff(dl, delta), tol(1e-12, 1e-5) * max_abs(q.tke));   // not the Jacobi solve
+                const amrex::Real floor_v = amrex::Real(0.5) * (k2.min(0) + k2.max(0));   // a floor above the smallest result
+                amrex::MultiFab k3(c.ba, c.dm, 1, 2);
+                amrex::MultiFab::Copy(k3, q.tke, 0, 0, 1, 2);
+                ablsteady::SimplecWorkspace w3;
+                const auto rf = ablsteady::scalar_sweep(Equation::tke, k3, R.tke, {&F[0], &F[1], &F[2]}, q.z_phys_nd, in, dtau,
+                                                        c.mesh, c.geom, 2, floor_v, &ss, &cf, w3, ablsteady::SweepKind::lusgs);
+                EXPECT_GT(rf.clipped, 0);
+                EXPECT_GE(k3.min(0), floor_v);
+            }
         }
     }
 }

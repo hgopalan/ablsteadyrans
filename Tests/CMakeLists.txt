@@ -419,6 +419,12 @@ if(ABLSTEADY_PRECISION STREQUAL "DOUBLE")
                        PREFIX ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/check_steady_hill.py
                               --erf-check check_hill.py --orders 2 --
                        COMMAND $<TARGET_FILE:ablsteady> ${DECKS}/inputs_steady_hill2d ${ABLSTEADY_TEST_AMREX_FLAGS})
+    # RT-2.1.1: the same case with the line LU-SGS sweeps (two symmetric
+    # sweeps, CFL cap 16): the verdict, the residual drop and ERF's checks.
+    ablsteady_add_test(NAME rt_steady_hill2d_lusgs NP 2 LABELS "regression"
+                       PREFIX ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/check_steady_hill.py
+                              --erf-check check_hill.py --orders 2 --
+                       COMMAND $<TARGET_FILE:ablsteady> ${DECKS}/inputs_steady_hill2d_lusgs ${ABLSTEADY_TEST_AMREX_FLAGS})
     # RT-1.16.2: ERF's Neutral_Hill_3D (64 x 64 x 20) to steady with
     # check_hill3d.py; minutes on four ranks, so label nightly (not in
     # ctest -L regression).

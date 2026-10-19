@@ -151,6 +151,11 @@ Current tests
        upstream u* within 0.25–0.55 m/s, the upstream log law in the lowest three cells within 15 %. Measured: the
        verdict after 4590 iterations (49 s on two ranks), speed-up 0.59/0.50/0.43, u* = 0.354 m/s, every check
        passing (:doc:`solver`). Label ``regression``; double only.
+   * - ``rt_steady_hill2d_lusgs``
+     - RT-2.1.1: the 2-D hill with the line LU-SGS sweeps (``inputs_steady_hill2d_lusgs``: two symmetric sweeps,
+       CFL cap 16) to the verdict with a two-order drop and ERF's ``check_hill.py --physics``. Measured: 3062
+       iterations (23 s on two ranks), every check passing, the steady state within the convergence tolerance of
+       the Jacobi deck's (:doc:`results`). Label ``regression``; double only.
    * - ``rt_steady_hill3d``
      - RT-1.16.2: ERF's Neutral_Hill_3D (``inputs_steady_hill3d``: 64 × 64 × 20, the hill of revolution, damping
        from 550 m, 16 sweeps, cap 4) to the verdict with ``check_hill3d.py --physics`` (the 3-D checks, speed-up
@@ -641,6 +646,29 @@ GoogleTest suite
        the sounding at the absolute height (and at the height above the ground with ``bc.rayleigh_height =
        above_ground``) at every damped cell (1e-12; single 1e-4); the readers of the two keys, the refusal of an
        unknown field name and of a bad height word, and the no-effect check without a layer.
+   * - UT-2.1.1
+     - One and two symmetric line LU-SGS sweeps on a 6 × 3 × 4 box (cells and x faces; non-periodic, and periodic
+       cells where the seam couplings are the previous pass's values) equal a dense block-triangular reference (the
+       forward and backward solves with the lower or upper x/y couplings and every z coupling in the matrix, the rest
+       on the right-hand side) to 1e-12 of the solution; 40 sweeps reach the dense solution of the full system to
+       1e-11.
+   * - UT-2.1.2
+     - Pure first-order upwind convection along x on a non-periodic box, wind in +x or −x: one symmetric sweep equals
+       the dense solution to 1e-12, a second sweep changes nothing (1e-13), and two z-line Jacobi sweeps are still
+       1e-3 off (the lag).
+   * - UT-2.1.3
+     - The real :math:`A_1` of u (implicit vertical advection and diffusion, the principal diffusion) on a periodic 4
+       × 4 × 6 hill mesh with a uniform wind of either sign at Δτ = 20 s: the LU-SGS error falls with every sweep,
+       is below the Jacobi error after four sweeps, and reaches 1e-10 of the dense solution after 40.
+   * - UT-2.1.4
+     - The scalar sweep of k with ``lusgs`` is the ``zline_lusgs`` solve of the same rows (1e-13), differs from the
+       Jacobi solve, and with a floor above the smallest result the clip holds k ≥ floor everywhere (cells clipped
+       > 0).
+   * - UT-2.1.5
+     - A zero right-hand side gives a zero correction and zero change for one and three sweeps; the dispatcher
+       routes by kind (``line_sweeps``); sweeps < 1 and a wrong A are refused; the readers of ``steady.sweep``
+       (values, the default, an unknown word refused, ``zline_sweeps`` ≥ 1 with ``lusgs`` and ≥ 2 with
+       ``zjacobi``).
    * - UT-1.15.7 (revised in 1.16)
      - The rotation's pin now holds the planar-mean split: :math:`a_P` with :math:`f^2\max(\tau_c, \tau_{\mathrm{own}})`
        and the right-hand side with the unique-face horizontal mean of the other residual per level at :math:`\tau_c`

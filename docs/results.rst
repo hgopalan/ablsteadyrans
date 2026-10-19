@@ -147,6 +147,54 @@ ranks, against 242 s for ERF's 4 h run, which is still a quarter of an inertial 
      - **49 (idle)**
      - **steady** (the deck)
 
+**Line LU-SGS on the 2-D hill (sub-phase 2.1).** With two symmetric sweeps and a CFL cap of 16, the 2-D hill reaches
+the verdict in 3062 iterations (23 s on two ranks) against 4590 iterations and 49 s for sixteen Jacobi sweeps at a
+cap of 4. Every ERF check passes; the steady fields are within the verdict tolerance of the Jacobi result (:math:`u`
+within 0.017 m/s and :math:`w` within 2e-4 m/s). On the 3-D hill, two LU-SGS sweeps at a cap of 16 take 823
+iterations (51 s on four ranks) against 2092 iterations (148 s) for sixteen Jacobi sweeps at a cap of 4; ERF's
+checks pass in both cases.
+
+.. list-table:: Line LU-SGS on the 2-D hill (two ranks)
+   :header-rows: 1
+   :widths: 22 18 18
+
+   * - Sweeps / cap
+     - Iterations
+     - Wall (s)
+   * - 1 / 4
+     - 6306
+     - 41
+   * - 2 / 4
+     - 4937
+     - 35
+   * - 1 / 8
+     - 4962
+     - 34
+   * - 2 / 8
+     - 3619
+     - 27
+   * - 1 / 16
+     - 4369
+     - 31
+   * - **2 / 16**
+     - **3062**
+     - **23**
+   * - 2 / 32
+     - 2886
+     - 22
+   * - 4 / 32
+     - 5278
+     - 84
+   * - 2 / 64
+     - 8431
+     - 106
+   * - 4 / 64
+     - 20 000
+     - 481 (not steady)
+   * - 2 / 128
+     - 20 000
+     - 405 (not steady)
+
 Newton–Krylov
 -------------
 

@@ -521,7 +521,7 @@ TEST (Predictor, AConvergedStateIsAFixedPoint)
     {
         for (amrex::MFIter mfi(q.u, false); mfi.isValid(); ++mfi) {
             if (mfi.validbox().contains(amrex::IntVect(3, 1, 2))) {
-                amrex::FArrayBox one(amrex::Box(amrex::IntVect(3, 1, 2), amrex::IntVect(3, 1, 2)), 1, amrex::The_Pinned_Arena());
+                amrex::FArrayBox one(amrex::Box(amrex::IntVect(3, 1, 2), amrex::IntVect(3, 1, 2), q.u.ixType()), 1, amrex::The_Pinned_Arena());   // the x-face type of u
                 one.setVal<amrex::RunOn::Host>(amrex::Real(7.5));
                 q.u[mfi].copy<amrex::RunOn::Device>(one, one.box());
                 amrex::Gpu::streamSynchronize();
@@ -780,6 +780,452 @@ TEST (Predictor, IndependentOfTheBoxLayout)
         EXPECT_LT(max_abs(on1), tol(1e-12, 1e-5) * (max_abs(*a[n]) + 1e-30)) << n;
     }
     EXPECT_NEAR(r1.max_du, r2.max_du, tol(1e-12, 1e-5) * r1.max_du);
+}
+
+// ---------------------------------------------------------------------------
+// Sub-phase 2.1: the line LU-SGS sweeps (zline_lusgs).
+//
+// Dense reference of one symmetric line Gauss-Seidel sweep on one box: with
+// the unknowns ordered column by column (j outer, i inner, k innermost) and
+// the full system N delta = rhs of dense_solve, the forward pass solves
+// M_f delta_f = rhs - (N - M_f) delta_0 with M_f the lower block triangle
+// of N plus every z coupling (a column's own block), and the backward pass
+// M_b delta_1 = rhs - (N - M_b) delta_f with M_b the upper one. A coupling
+// through a periodic seam is the previous pass's value in both passes
+// (the ghost image), as in the code.
+struct DenseSystem
+{
+    int n = 0;
+    amrex::Box b;
+    std::vector<double> N;                    // row-major n x n
+    std::vector<double> rhs;
+    std::vector<signed char> kind;            // per entry: 0 none, 1 same column, 2 lower, 3 upper, 4 wrapped
+    int idx (int i, int j, int k) const { return (((j - b.smallEnd(1)) * b.length(0) + (i - b.smallEnd(0))) * b.length(2)) + (k - b.smallEnd(2)); }
+};
+
+DenseSystem build_dense (const amrex::MultiFab& A, const amrex::MultiFab& ap, const amrex::MultiFab& rhs, const amrex::Geometry& geom, Loc loc)
+{
+    DenseSystem d;
+    const amrex::MultiFab gA = gather(A), gp = gather(ap), gr = gather(rhs);
+    for (amrex::MFIter mfi(gr, false); mfi.isValid(); ++mfi) {   // rank 0
+        d.b = mfi.validbox();
+        const auto a = host_copy(gA, mfi), p = host_copy(gp, mfi), r = host_copy(gr, mfi);
+        d.n = d.b.numPts();
+        d.N.assign(static_cast<std::size_t>(d.n) * d.n, 0.0);
+        d.kind.assign(static_cast<std::size_t>(d.n) * d.n, 0);
+        d.rhs.assign(d.n, 0.0);
+        const amrex::Box dom = amrex::convert(geom.Domain(), type_of(loc));
+        amrex::LoopOnCpu(d.b, [&] (int i, int j, int k) {
+            const amrex::IntVect iv(i, j, k);
+            const int row = d.idx(i, j, k);
+            d.N[static_cast<std::size_t>(row) * d.n + row] += p(iv);
+            d.kind[static_cast<std::size_t>(row) * d.n + row] = 1;
+            d.rhs[row] = r(iv);
+            const int nb[6][3] = {{i - 1, j, k}, {i + 1, j, k}, {i, j - 1, k}, {i, j + 1, k}, {i, j, k - 1}, {i, j, k + 1}};
+            const int comp[6] = {ablsteady::coef_XM, ablsteady::coef_XP, ablsteady::coef_YM, ablsteady::coef_YP,
+                                 ablsteady::coef_ZM, ablsteady::coef_ZP};
+            for (int m = 0; m < 6; ++m) {
+                int ii = nb[m][0], jj = nb[m][1];
+                const int kk = nb[m][2];
+                bool wrapped = false;
+                for (int dd = 0; dd < 2; ++dd) {
+                    int& c = (dd == 0) ? ii : jj;
+                    if (c < dom.smallEnd(dd) || c > dom.bigEnd(dd)) {
+                        if (!geom.isPeriodic(dd)) { c = -100000; break; }
+                        const int len = geom.Domain().length(dd);
+                        while (c < dom.smallEnd(dd)) { c += len; }
+                        while (c > dom.bigEnd(dd)) { c -= len; }
+                        wrapped = true;
+                    }
+                }
+                if (ii < dom.smallEnd(0) || jj < dom.smallEnd(1) || kk < d.b.smallEnd(2) || kk > d.b.bigEnd(2)) { continue; }
+                if (!d.b.contains(amrex::IntVect(ii, jj, kk))) { continue; }
+                const int col = d.idx(ii, jj, kk);
+                d.N[static_cast<std::size_t>(row) * d.n + col] -= a(iv, comp[m]);
+                signed char kd = 1;
+                if (m >= 4) { kd = 1; }                          // the column's own z coupling
+                else if (wrapped) { kd = 4; }
+                else { kd = (col < row) ? 2 : 3; }
+                d.kind[static_cast<std::size_t>(row) * d.n + col] = kd;
+            }
+        });
+    }
+    return d;
+}
+
+// Gaussian elimination with partial pivoting of M x = b (M row-major n x n).
+std::vector<double> solve_dense (std::vector<double> M, std::vector<double> b)
+{
+    const int n = static_cast<int>(b.size());
+    for (int col = 0; col < n; ++col) {
+        int piv = col;
+        for (int r2 = col + 1; r2 < n; ++r2) {
+            if (std::abs(M[static_cast<std::size_t>(r2) * n + col]) > std::abs(M[static_cast<std::size_t>(piv) * n + col])) { piv = r2; }
+        }
+        if (piv != col) {
+            for (int c2 = 0; c2 < n; ++c2) { std::swap(M[static_cast<std::size_t>(col) * n + c2], M[static_cast<std::size_t>(piv) * n + c2]); }
+            std::swap(b[col], b[piv]);
+        }
+        const double pv = M[static_cast<std::size_t>(col) * n + col];
+        for (int r2 = col + 1; r2 < n; ++r2) {
+            const double f = M[static_cast<std::size_t>(r2) * n + col] / pv;
+            if (f == 0) { continue; }
+            for (int c2 = col; c2 < n; ++c2) { M[static_cast<std::size_t>(r2) * n + c2] -= f * M[static_cast<std::size_t>(col) * n + c2]; }
+            b[r2] -= f * b[col];
+        }
+    }
+    std::vector<double> x(n, 0.0);
+    for (int row = n - 1; row >= 0; --row) {
+        double sum = b[row];
+        for (int c2 = row + 1; c2 < n; ++c2) { sum -= M[static_cast<std::size_t>(row) * n + c2] * x[c2]; }
+        x[row] = sum / M[static_cast<std::size_t>(row) * n + row];
+    }
+    return x;
+}
+
+// One symmetric sweep of the dense reference from delta0 (rank 0; returns delta1).
+std::vector<double> dense_sgs_sweep (const DenseSystem& d, const std::vector<double>& delta0)
+{
+    const int n = d.n;
+    auto half = [&] (bool forward, const std::vector<double>& prev) {
+        std::vector<double> M(static_cast<std::size_t>(n) * n, 0.0), b(d.rhs);
+        for (int row = 0; row < n; ++row) {
+            for (int col = 0; col < n; ++col) {
+                const std::size_t e = static_cast<std::size_t>(row) * n + col;
+                const signed char kd = d.kind[e];
+                if (kd == 0) { continue; }
+                const bool in_M = (kd == 1) || (forward ? kd == 2 : kd == 3);
+                if (in_M) { M[e] = d.N[e]; }
+                else { b[row] -= d.N[e] * prev[col]; }
+            }
+        }
+        return solve_dense(M, b);
+    };
+    const std::vector<double> f = half(true, delta0);
+    return half(false, f);
+}
+
+// The gathered MultiFab as the dense ordering's vector (rank 0; empty elsewhere).
+std::vector<double> as_vector (const amrex::MultiFab& mf, const DenseSystem& d)
+{
+    const amrex::MultiFab g = gather(mf);
+    std::vector<double> v;
+    for (amrex::MFIter mfi(g, false); mfi.isValid(); ++mfi) {
+        v.assign(d.n, 0.0);
+        const auto x = host_copy(g, mfi);
+        amrex::LoopOnCpu(mfi.validbox(), [&] (int i, int j, int k) { v[d.idx(i, j, k)] = x(amrex::IntVect(i, j, k)); });
+    }
+    return v;
+}
+
+double max_diff_vec (const std::vector<double>& a, const std::vector<double>& b)
+{
+    double worst = 0;
+    for (std::size_t i = 0; i < a.size(); ++i) { worst = std::max(worst, std::abs(a[i] - b[i])); }
+    amrex::ParallelDescriptor::ReduceRealMax(worst);
+    return worst;
+}
+
+double max_abs_vec (const std::vector<double>& a)
+{
+    double worst = 0;
+    for (double v : a) { worst = std::max(worst, std::abs(v)); }
+    amrex::ParallelDescriptor::ReduceRealMax(worst);
+    return worst;
+}
+
+// A random M-matrix system at loc on one box: the six neighbour coefficients
+// in [lo, hi], the diagonal their sum plus 1/dtau, a random right-hand side.
+void random_system (const PCase& c, Loc loc, unsigned seed, double extra, amrex::MultiFab& A, amrex::MultiFab& ap, amrex::MultiFab& rhs)
+{
+    const amrex::BoxArray ba = amrex::convert(c.ba, type_of(loc));
+    A.define(ba, c.dm, ablsteady::n_implicit_coefs, 0);
+    ap.define(ba, c.dm, 1, 0);
+    rhs.define(ba, c.dm, 1, 0);
+    std::mt19937 gen(seed);
+    std::uniform_real_distribution<double> dist(0.1, 1.0), rd(-1.0, 1.0);
+    for (amrex::MFIter mfi(A, false); mfi.isValid(); ++mfi) {
+        const amrex::Box b = mfi.validbox();
+        amrex::FArrayBox fa(b, ablsteady::n_implicit_coefs, amrex::The_Pinned_Arena()), fp(b, 1, amrex::The_Pinned_Arena()),
+                         fr(b, 1, amrex::The_Pinned_Arena());
+        amrex::LoopOnCpu(b, [&] (int i, int j, int k) {
+            const amrex::IntVect iv(i, j, k);
+            double sum = 0;
+            for (int n = 1; n < ablsteady::n_implicit_coefs; ++n) { const double v = dist(gen); fa(iv, n) = static_cast<amrex::Real>(v); sum += v; }
+            fa(iv, ablsteady::coef_P) = static_cast<amrex::Real>(sum);
+            fp(iv) = static_cast<amrex::Real>(sum + extra);
+            fr(iv) = static_cast<amrex::Real>(rd(gen));
+        });
+        A[mfi].copy<amrex::RunOn::Device>(fa, b);
+        ap[mfi].copy<amrex::RunOn::Device>(fp, b);
+        rhs[mfi].copy<amrex::RunOn::Device>(fr, b);
+        amrex::Gpu::streamSynchronize();
+    }
+    // the two copies of a periodic seam face carry the same system
+    A.OverrideSync(c.geom.periodicity());
+    ap.OverrideSync(c.geom.periodicity());
+    rhs.OverrideSync(c.geom.periodicity());
+}
+
+// UT-2.1.1. One and two symmetric sweeps on a 6 x 3 x 4 box (cells, and the
+// x faces) equal the dense block-triangular reference to 1e-12 (relative),
+// on a non-periodic box and on a periodic one (where the seam couplings are
+// the previous pass's values; cells only there: the two copies of a seam
+// face are solved at different points of the pass and OverrideSync keeps
+// one, which the dense reference with one unknown per face does not model).
+TEST (Predictor, LusgsSweepMatchesTheDenseReference)
+{
+    for (const bool periodic : {false, true}) {
+        PCase c = make_mesh(6, 3, 4, 40, periodic, periodic);
+        for (const Loc loc : {Loc::cell, Loc::xface}) {
+            if (periodic && loc != Loc::cell) { continue; }
+            amrex::MultiFab A, ap, rhs;
+            random_system(c, loc, periodic ? 5u : 7u, 0.5, A, ap, rhs);
+            const DenseSystem d = build_dense(A, ap, rhs, c.geom, loc);
+            std::vector<double> ref(static_cast<std::size_t>(d.n), 0.0);
+            for (int sweeps = 1; sweeps <= 2; ++sweeps) {
+                ref = dense_sgs_sweep(d, ref);
+                amrex::MultiFab delta;
+                ablsteady::zline_lusgs(loc, A, ap, rhs, sweeps, c.mesh, c.geom, delta);
+                const std::vector<double> got = as_vector(delta, d);
+                EXPECT_LT(max_diff_vec(got, ref), tol(1e-12, 1e-5) * max_abs_vec(ref)) << "periodic " << periodic << " sweeps " << sweeps;
+            }
+            // and the sweeps converge to the dense solution of the full system
+            const std::vector<double> exact = solve_dense(d.N, d.rhs);
+            amrex::MultiFab delta;
+            ablsteady::zline_lusgs(loc, A, ap, rhs, 40, c.mesh, c.geom, delta);
+            EXPECT_LT(max_diff_vec(as_vector(delta, d), exact), tol(1e-11, 1e-4) * max_abs_vec(exact)) << "periodic " << periodic;
+        }
+    }
+}
+
+// UT-2.1.1 on two boxes (mesh.max_grid_size 3 in x): the couplings across
+// the box face are the previous pass's, so one sweep differs from the
+// one-box sweep, but 40 sweeps still reach the dense solution of the full
+// system to 1e-11, the shared x face is single-valued after the solve
+// (OverrideSync), and the result on two ranks equals the one on one rank
+// (the same BoxArray; the block Jacobi across boxes is rank-independent).
+TEST (Predictor, LusgsOnTwoBoxesConvergesAndIsRankIndependent)
+{
+    PCase c = make_mesh(6, 3, 4, 40, false, false, 3);
+    ASSERT_EQ(c.ba.size(), 2);
+    for (const Loc loc : {Loc::cell, Loc::xface}) {
+        amrex::MultiFab A, ap, rhs;
+        random_system(c, loc, 13u, 0.5, A, ap, rhs);
+        const DenseSystem d = build_dense(A, ap, rhs, c.geom, loc);
+        const std::vector<double> exact = solve_dense(d.N, d.rhs);
+        amrex::MultiFab delta;
+        ablsteady::zline_lusgs(loc, A, ap, rhs, 40, c.mesh, c.geom, delta);
+        EXPECT_LT(max_diff_vec(as_vector(delta, d), exact), tol(1e-11, 1e-4) * max_abs_vec(exact));
+        amrex::MultiFab d2;
+        ablsteady::zline_lusgs(loc, A, ap, rhs, 1, c.mesh, c.geom, d2);
+        // the shared face of the two boxes is single-valued
+        if (loc == Loc::xface) {
+            amrex::MultiFab copy(d2.boxArray(), d2.DistributionMap(), 1, 0);
+            amrex::MultiFab::Copy(copy, d2, 0, 0, 1, 0);
+            copy.OverrideSync(c.geom.periodicity());
+            amrex::MultiFab::Subtract(copy, d2, 0, 0, 1, 0);
+            EXPECT_EQ(copy.norm0(), 0);
+        }
+        // rank parity (cells; a shared face's two copies are solved by both
+        // boxes and the replay below keeps one): gather the one-sweep result
+        // and compare with a serial replay of the two-box sweep on rank 0
+        // every rank gathers (collective); rank 0 then replays the sweep on
+        // the gathered one-box system with the two-box traversal: the first
+        // box's columns, then the second's
+        const amrex::MultiFab g = gather(d2), gA = gather(A), gp = gather(ap), gr = gather(rhs);
+        double worst = 0;
+        int seen = 0;
+        for (amrex::MFIter mfi(g, false); mfi.isValid(); ++mfi) {   // rank 0 only
+            if (loc != Loc::cell) { ++seen; break; }
+            const auto a = host_copy(gA, mfi), p = host_copy(gp, mfi), r = host_copy(gr, mfi), x = host_copy(g, mfi);
+            const amrex::Box b = mfi.validbox();
+            const int klo = b.smallEnd(2), khi = b.bigEnd(2);
+            amrex::FArrayBox dl(amrex::grow(b, 1), 1, amrex::The_Pinned_Arena());
+            dl.setVal<amrex::RunOn::Host>(0.0);
+            amrex::FArrayBox cc(b, 1, amrex::The_Pinned_Arena()), ee(b, 1, amrex::The_Pinned_Arena());
+            auto column = [&] (int i, int j, const amrex::FArrayBox& src) {
+                for (int k = klo; k <= khi; ++k) {
+                    const amrex::IntVect iv(i, j, k);
+                    const double rk = r(iv) + a(iv, ablsteady::coef_XM) * src(amrex::IntVect(i - 1, j, k)) + a(iv, ablsteady::coef_XP) * src(amrex::IntVect(i + 1, j, k))
+                                      + a(iv, ablsteady::coef_YM) * src(amrex::IntVect(i, j - 1, k)) + a(iv, ablsteady::coef_YP) * src(amrex::IntVect(i, j + 1, k));
+                    const double lower = -a(iv, ablsteady::coef_ZM), upper = -a(iv, ablsteady::coef_ZP);
+                    if (k == klo) { cc(iv) = upper / p(iv); ee(iv) = rk / p(iv); }
+                    else {
+                        const double m = p(iv) - lower * cc(amrex::IntVect(i, j, k - 1));
+                        cc(iv) = upper / m;
+                        ee(iv) = (rk - lower * ee(amrex::IntVect(i, j, k - 1))) / m;
+                    }
+                }
+                dl(amrex::IntVect(i, j, khi)) = ee(amrex::IntVect(i, j, khi));
+                for (int k = khi - 1; k >= klo; --k) { dl(amrex::IntVect(i, j, k)) = ee(amrex::IntVect(i, j, k)) - cc(amrex::IntVect(i, j, k)) * dl(amrex::IntVect(i, j, k + 1)); }
+            };
+            // the two boxes: x in [0, 2] and [3, 5] (cells; faces [0, 3] and [3, 6])
+            const int split = 3;
+            for (const bool forward : {true, false}) {
+                amrex::FArrayBox lag(amrex::grow(b, 1), 1, amrex::The_Pinned_Arena());   // the previous pass's values at the box face
+                lag.copy<amrex::RunOn::Host>(dl);
+                for (const int box : {0, 1}) {
+                    const int ilo = (box == 0) ? b.smallEnd(0) : split, ihi = (box == 0) ? ((loc == Loc::xface) ? split : split - 1) : b.bigEnd(0);
+                    // a box reads its own updated columns and the other box's previous-pass values
+                    amrex::FArrayBox src(amrex::grow(b, 1), 1, amrex::The_Pinned_Arena());
+                    src.copy<amrex::RunOn::Host>(lag);
+                    auto own = [&] (int i) { return i >= ilo && i <= ihi; };
+                    auto step = [&] (int i, int j) {
+                        // own columns from dl (updated in this pass), the neighbour box's from lag
+                        for (int di = -1; di <= 1; di += 2) {
+                            for (int k = klo; k <= khi; ++k) {
+                                const amrex::IntVect n(i + di, j, k);
+                                if (own(i + di)) { src(n) = dl(n); } else { src(n) = lag(n); }
+                            }
+                        }
+                        for (int dj = -1; dj <= 1; dj += 2) {
+                            for (int k = klo; k <= khi; ++k) { const amrex::IntVect n(i, j + dj, k); src(n) = dl(n); }
+                        }
+                        column(i, j, src);
+                    };
+                    if (forward) { for (int j = b.smallEnd(1); j <= b.bigEnd(1); ++j) { for (int i = ilo; i <= ihi; ++i) { step(i, j); } } }
+                    else { for (int j = b.bigEnd(1); j >= b.smallEnd(1); --j) { for (int i = ihi; i >= ilo; --i) { step(i, j); } } }
+                }
+            }
+            // compare away from the shared face (whose owner OverrideSync picks)
+            amrex::LoopOnCpu(b, [&] (int i, int j, int k) {
+                if (loc == Loc::xface && i == split) { return; }
+                worst = std::max(worst, std::abs(double(x(amrex::IntVect(i, j, k))) - dl(amrex::IntVect(i, j, k))));
+                ++seen;
+            });
+        }
+        amrex::ParallelDescriptor::ReduceRealMax(worst);
+        amrex::ParallelDescriptor::ReduceIntSum(seen);
+        EXPECT_GT(seen, 0);
+        EXPECT_LT(worst, tol(1e-12, 1e-5) * max_abs_vec(exact)) << (loc == Loc::cell ? "cell" : "xface");
+    }
+}
+
+// UT-2.1.2. Pure first-order upwind convection along x (a_xm = c for a wind
+// in +x, a_xp = c for -x, nothing else) on a non-periodic box: the pass in
+// the wind's direction solves the system exactly, so one symmetric sweep
+// equals the dense solution to 1e-12 for either sign; with the wind in +x
+// the forward pass alone is already exact (the backward pass changes nothing).
+TEST (Predictor, LusgsOnePassIsExactAlongTheWind)
+{
+    PCase c = make_mesh(7, 3, 4, 0, false, false);
+    for (const bool plus : {true, false}) {
+        const amrex::BoxArray ba = c.ba;
+        amrex::MultiFab A(ba, c.dm, ablsteady::n_implicit_coefs, 0), ap(ba, c.dm, 1, 0), rhs(ba, c.dm, 1, 0);
+        A.setVal(0.0);
+        A.setVal(amrex::Real(3), plus ? ablsteady::coef_XM : ablsteady::coef_XP, 1, 0);
+        A.setVal(amrex::Real(3), ablsteady::coef_P, 1, 0);
+        ap.setVal(amrex::Real(3) + amrex::Real(0.25));   // 1/dtau = 0.25
+        fill_random(rhs, -1, 1, plus ? 3u : 4u, c);
+        const DenseSystem d = build_dense(A, ap, rhs, c.geom, Loc::cell);
+        const std::vector<double> exact = solve_dense(d.N, d.rhs);
+        amrex::MultiFab delta;
+        const amrex::Real change = ablsteady::zline_lusgs(Loc::cell, A, ap, rhs, 1, c.mesh, c.geom, delta);
+        EXPECT_LT(max_diff_vec(as_vector(delta, d), exact), tol(1e-12, 1e-5) * max_abs_vec(exact)) << plus;
+        // the reported change is the backward pass's: nothing for +x (the
+        // forward pass alone was exact), the whole solution for -x
+        if (plus) { EXPECT_LT(change, tol(1e-13, 1e-6) * max_abs_vec(exact)); }
+        else { EXPECT_GT(change, 0.5 * max_abs_vec(exact)); }
+        // a second sweep changes nothing: the first was exact
+        amrex::MultiFab delta2;
+        const amrex::Real change2 = ablsteady::zline_lusgs(Loc::cell, A, ap, rhs, 2, c.mesh, c.geom, delta2);
+        EXPECT_LT(change2, tol(1e-13, 1e-6) * max_abs_vec(exact)) << plus;
+        // z-line Jacobi needs many sweeps for the same system (the lag)
+        amrex::MultiFab dj;
+        ablsteady::zline_jacobi(Loc::cell, A, ap, rhs, 2, c.mesh, c.geom, dj);
+        EXPECT_GT(max_diff_vec(as_vector(dj, d), exact), 1e-3 * max_abs_vec(exact)) << plus;
+    }
+}
+
+// UT-2.1.3. The real first-order operator A1 of u (the implicit upwind
+// advection and the principal diffusion) on a periodic 4 x 4 x 6 hill mesh
+// with a uniform wind of either sign at dtau = 20 s: the LU-SGS sweeps
+// converge to the dense solution to 1e-10 (40 sweeps), the error falls with
+// every sweep, and after four sweeps it is below the z-line Jacobi error.
+TEST (Predictor, LusgsConvergesForEitherWindSign)
+{
+    for (const double wind : {6.0, -6.0}) {
+        PCase c = make_mesh(4, 4, 6, 60);
+        ablsteady::State q;
+        define_state(q, c);
+        fill_state(q, c, 5);
+        q.u.setVal(static_cast<amrex::Real>(wind));
+        q.v.setVal(static_cast<amrex::Real>(0.3 * wind));
+        q.w.setVal(0.0);
+        Coefficients co;
+        co.make(c, 1.0, 7);
+        amrex::MultiFab dtau(c.ba, c.dm, 1, 0);
+        dtau.setVal(amrex::Real(20));
+        amrex::Array<amrex::MultiFab, 3> df;
+        ablsteady::face_dtau(dtau, c.mesh, c.geom, df);
+        Problem pr;
+        pr.make(q, co, c, Equation::u);
+        amrex::MultiFab ap(pr.A.boxArray(), c.dm, 1, 0);
+        for (amrex::MFIter mfi(ap, false); mfi.isValid(); ++mfi) {
+            const auto a = host_copy(pr.A, mfi), dd = host_copy(df[0], mfi);
+            amrex::FArrayBox out(mfi.validbox(), 1, amrex::The_Pinned_Arena());
+            amrex::LoopOnCpu(mfi.validbox(), [&] (int i, int j, int k) {
+                const amrex::IntVect iv(i, j, k);
+                out(iv) = amrex::Real(1) / dd(iv) + a(iv, ablsteady::coef_P);
+            });
+            ap[mfi].copy<amrex::RunOn::Device>(out, mfi.validbox());
+            amrex::Gpu::streamSynchronize();
+        }
+        amrex::MultiFab rhs(pr.A.boxArray(), c.dm, 1, 0);
+        fill_random(rhs, -1, 1, 9, c);
+        amrex::MultiFab exact;
+        dense_solve(pr.A, ap, rhs, c.geom, Loc::xface, exact);
+        const double scale = exact.norm0();
+        ASSERT_GT(scale, 0);
+        double prev = 1e300, err4 = 0;
+        for (int sweeps : {1, 2, 4, 8, 16}) {
+            amrex::MultiFab delta;
+            ablsteady::zline_lusgs(Loc::xface, pr.A, ap, rhs, sweeps, c.mesh, c.geom, delta);
+            const double err = max_diff_gathered(delta, exact) / scale;
+            if (prev > tol(1e-14, 1e-6)) { EXPECT_LT(err, prev) << wind << " " << sweeps; }
+            prev = err;
+            if (sweeps == 4) { err4 = err; }
+        }
+        amrex::MultiFab dj;
+        ablsteady::zline_jacobi(Loc::xface, pr.A, ap, rhs, 4, c.mesh, c.geom, dj);
+        EXPECT_LT(err4, max_diff_gathered(dj, exact) / scale) << wind;
+        amrex::MultiFab delta;
+        const amrex::Real change = ablsteady::zline_lusgs(Loc::xface, pr.A, ap, rhs, 40, c.mesh, c.geom, delta);
+        EXPECT_LT(max_diff_gathered(delta, exact) / scale, tol(1e-10, 1e-4)) << wind;
+        EXPECT_LT(change / scale, tol(1e-10, 1e-4)) << wind;
+    }
+}
+
+// UT-2.1.5 and the refusals. A zero right-hand side (a fixed point: R = 0)
+// gives delta = 0 exactly for any number of sweeps; the dispatcher routes by
+// kind; sweeps < 1 and a bad A are refused as for zline_jacobi; the kinds
+// have their names.
+TEST (Predictor, LusgsFixedPointAndRefusals)
+{
+    PCase c = make_mesh(5, 3, 4, 30);
+    amrex::MultiFab A, ap, rhs;
+    random_system(c, Loc::cell, 11u, 0.5, A, ap, rhs);
+    rhs.setVal(0.0);
+    for (const int sweeps : {1, 3}) {
+        amrex::MultiFab delta;
+        const amrex::Real change = ablsteady::zline_lusgs(Loc::cell, A, ap, rhs, sweeps, c.mesh, c.geom, delta);
+        EXPECT_EQ(delta.norm0(), 0);
+        EXPECT_EQ(change, 0);
+    }
+    random_system(c, Loc::cell, 11u, 0.5, A, ap, rhs);
+    amrex::MultiFab d1, d2, d3;
+    ablsteady::line_sweeps(ablsteady::SweepKind::lusgs, Loc::cell, A, ap, rhs, 2, c.mesh, c.geom, d1);
+    ablsteady::zline_lusgs(Loc::cell, A, ap, rhs, 2, c.mesh, c.geom, d2);
+    ablsteady::line_sweeps(ablsteady::SweepKind::zjacobi, Loc::cell, A, ap, rhs, 2, c.mesh, c.geom, d3);
+    EXPECT_EQ(max_diff_gathered(d1, gather(d2)), 0);
+    EXPECT_GT(max_diff_gathered(d1, gather(d3)), 0);
+    amrex::MultiFab delta;
+    EXPECT_THROW(ablsteady::zline_lusgs(Loc::cell, A, ap, rhs, 0, c.mesh, c.geom, delta), std::runtime_error);
+    amrex::MultiFab bad(c.ba, c.dm, 2, 0);
+    EXPECT_THROW(ablsteady::zline_lusgs(Loc::cell, bad, ap, rhs, 1, c.mesh, c.geom, delta), std::runtime_error);
+    EXPECT_STREQ(ablsteady::sweep_name(ablsteady::SweepKind::lusgs), "lusgs");
+    EXPECT_STREQ(ablsteady::sweep_name(ablsteady::SweepKind::zjacobi), "zjacobi");
 }
 
 } // namespace

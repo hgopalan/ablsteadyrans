@@ -414,8 +414,10 @@ double summit_speedup (const ablsteady::State& q, const PCase& c, const Boundary
     cell_centre(q, uc, vc, wc);
     amrex::Box centre(amrex::IntVect(n / 2 - 1, n / 2 - 1, k), amrex::IntVect(n / 2, n / 2, k));
     amrex::BoxArray one(centre);
+    // the heights from the ground nodes (k = 0) up to the cells' top nodes
+    amrex::BoxArray column(amrex::Box(amrex::IntVect(n / 2 - 1, n / 2 - 1, 0), amrex::IntVect(n / 2, n / 2, k)));
     const amrex::DistributionMapping dm1(amrex::Vector<int>{0});
-    amrex::MultiFab gu(one, dm1, 1, 0), gv(one, dm1, 1, 0), gz(amrex::convert(one, amrex::IntVect(1)), dm1, 1, 0);
+    amrex::MultiFab gu(one, dm1, 1, 0), gv(one, dm1, 1, 0), gz(amrex::convert(column, amrex::IntVect(1)), dm1, 1, 0);
     gu.ParallelCopy(uc, 0, 0, 1, 0, 0);
     gv.ParallelCopy(vc, 0, 0, 1, 0, 0);
     gz.ParallelCopy(q.z_phys_nd, 0, 0, 1, 0, 0);

@@ -113,6 +113,17 @@ the previous sweep (z-line Jacobi). ``steady.zline_sweeps`` sets the sweeps per 
 
 The flat ABL deck runs 4 sweeps at a cap of 2. The terrain decks run **16 sweeps at a cap of 4**.
 
+**Line LU-SGS sweeps.** ``steady.sweep = lusgs`` (sub-phase 2.1; ``zjacobi`` is the default) keeps the exact z-line
+solve but visits each box's columns in order: a forward pass uses updated lower x/y neighbours, then a backward pass
+uses updated upper neighbours. One ``steady.zline_sweeps`` sweep is this symmetric pair, and one is allowed. For a
+wind whose :math:`u` and :math:`v` have the same sign in the ordering, a pass resolves the first-order upwind
+coupling exactly; the pure-advection defect-correction factor stays below one at every CFL, approaching one for the
+odd–even mode as the CFL grows. With opposite signs, each pass leaves one upwind neighbour lagged; one sweep is
+stable only to a CFL of about 2.5 and two to about 33. Couplings across box faces use the previous pass, so the
+iteration path depends on ``mesh.max_grid_size`` and boxes shorter than the CFL limit the solve. The sweeps are
+sequential per box on a GPU until sub-phase 2.2 adds the GPU diagonal ordering. The hill results are in
+:doc:`results`; ``tools/sweeps_cfl_scan.py --thresholds`` prints the scalar stability factors.
+
 **Pressure correction.** With the SIMPLEC denominator :math:`d = a_P - \sum a_{nb}`,
 
 .. math::
