@@ -18,7 +18,7 @@ cd ablsteadyrans
 cmake -S . -B build-rel -DCMAKE_BUILD_TYPE=Release
 cmake --build build-rel -j 8
 ctest --test-dir build-rel --output-on-failure
-mpirun -n 2 build-rel/ablsteady Tests/Decks/inputs_smoke
+mpirun -n 2 build-rel/ablsteady Tests/Infrastructure/Smoke_Restart/inputs_smoke
 ```
 
 ## Documentation

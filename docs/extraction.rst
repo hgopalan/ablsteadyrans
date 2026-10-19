@@ -64,7 +64,7 @@ Licences and attribution
      - How ablsteady uses it
      - Licence and what it requires
    * - ERF
-     - Copied files in ``extern_erf/``; ``Tests/Gold/erf_hill2d_*`` are ERF outputs at the pinned commit.
+     - Copied files in ``extern_erf/``; ``Tests/Unit_Tests/Gold/erf_hill2d_*`` are ERF outputs at the pinned commit.
      - BSD-style licence with the LBNL "Enhancements" clause (ERF ``LICENSE.md``). Redistributed source must keep
        ERF's copyright notice, conditions and disclaimer: ERF's ``LICENSE.md`` is copied into ``extern_erf/`` with
        the first copied file, and copied files keep their headers.

@@ -1,0 +1,47 @@
+# The 1-D neutral column of inputs_steady_column without an iteration cap,
+# the initializer or the turbulence plotfile: the restart test gives
+# steady.max_iterations, init.first_guess and io.restart on the command line
+# (a run of 40 iterations, continued to 80, against 80 straight; bit for
+# bit on the same rank count). A flat
+# doubly periodic column (4 x 4 x 64 cells, 1000 m; every column identical),
+# the surface layer on the ground (z0 = 0.1 m), a slip top, uniform theta,
+# driven by the constant pressure-gradient force F = u*^2 / H with
+# u* = 0.35 m/s and H = 1000 m: at steady the wall stress balances the force
+# exactly, u*^2 = F H, the stress profile is u*^2 (1 - z/H) and the lowest
+# cells follow the log law within 1 %. The k-L closure with the uncapped
+# geometric length and the logarithmic face mean (as RT-1.9.1). The first
+# guess is the log law of the inflow profile (not an inflow: the initializer
+# uses it on the periodic domain). Nothing varies horizontally, so the
+# lagged x/y neighbours of the z-line sweeps are exact and the CFL cap can
+# be large (50; the 3-D guidance is 1 with two sweeps, 4 with four).
+# Tests/Canonical_RANS/Neutral_Column/check_steady_column.py.
+mesh.n_cell        = 4 4 64
+mesh.prob_hi       = 2560. 2560. 1000.
+mesh.is_periodic   = 1 1 0
+mesh.max_grid_size = 4 4
+
+terrain.type = flat
+
+bc.zlo = surface_layer
+bc.zhi = slip_wall
+bc.surface_z0 = 0.1
+bc.theta_profile_z = 0.
+bc.theta_profile   = 300.
+bc.inflow_profile  = log_law
+bc.inflow_ustar    = 0.25
+bc.inflow_z0       = 0.1
+bc.inflow_direction = 0.
+
+turb.max_geom_lscale = 1.0e12
+turb.face_mean       = logarithmic
+
+forcing.pressure_gradient = 1.225e-4 0. 0.
+
+steady.stage                = simplec
+steady.cfl0                 = 1.
+steady.cfl_max              = 50.
+steady.residual_drop_orders = 6
+steady.residual_tol         = 1.e-8
+
+io.plot_file      = steady_column_restart_plt
+io.chk_file       = steady_column_restart_chk

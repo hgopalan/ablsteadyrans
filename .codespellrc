@@ -1,4 +1,4 @@
 [codespell]
 # ABL: atmospheric boundary layer; SER: switched evolution relaxation.
-skip = ./external,./.git,./build-*,./docs/_build,./Tests/Gold
+skip = ./external,./.git,./build-*,./docs/_build,./Tests/*/Gold
 ignore-words-list = abl,ser
