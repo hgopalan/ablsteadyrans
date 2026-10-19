@@ -53,6 +53,15 @@
 //    old upper ones exactly as the sequential order does: the two orderings
 //    perform the same operations on the same values and give bit-identical
 //    results (UT-2.2.4).
+//
+// Alternating ordering (steady.line_alternate = 1; beyond the plan of
+// sub-phase 2.2): the even sweeps (0, 2, ...) take the pair above, (+i, +j)
+// then (-i, -j); the odd sweeps take the j-reversed pair, (+i, -j) then
+// (-i, +j) (the diagonal ordering's wavefronts are then i - j = const). A
+// wind whose u and v have opposite signs is then swept exactly by one of
+// the two pairs. With one sweep per call (steady.zline_sweeps = 1) it has
+// no effect. Its own kernels; the wavefront argument holds as for the
+// ascending pair.
 
 #include "CVFluxes.H"
 #include "Mesh.H"
@@ -90,6 +99,7 @@ struct LineSweepOptions
     LineGhosts ghosts{LineGhosts::lagged};
     int overlap{0};
     LineOrder order{LineOrder::sequential};
+    int alternate{0};   //!< steady.line_alternate (0 or 1): odd sweeps j-reversed
 };
 
 //! The number of LU-SGS kernel launches on this rank since the start of the
@@ -107,7 +117,8 @@ const char* line_order_name (LineOrder o) noexcept;
 
 //! The range checks of the LU-SGS options, each message naming its
 //! steady.<key>: line_overlap an integer >= 0 and <= max_line_overlap, and 0
-//! unless line_ghosts = zero. The kind is not checked here.
+//! unless line_ghosts = zero; line_alternate 0 or 1. The kind is not
+//! checked here.
 std::vector<std::string> check_line_options (const LineSweepOptions& opt);
 
 //! 1 along x or y when that axis is periodic and the domain one cell wide.

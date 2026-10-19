@@ -22,7 +22,7 @@ namespace {
 const char* const kKeys[] = {"residual_tol", "residual_drop_orders", "residual_ref_iterations", "monitor_rel_tol",
                              "monitor_window", "max_iterations", "cfl0", "cfl_max", "ser_exponent", "ser_max_growth",
                              "switch_window", "switch_residual", "switch_back_growth", "zline_sweeps", "sweep", "line_ghosts", "line_overlap",
-                             "line_order", "machine", "nodes", "stage"};
+                             "line_order", "line_alternate", "machine", "nodes", "stage"};
 
 constexpr int kDriverVersion = 1;
 const char* const kDriverMagic = "ablsteady-driver";
@@ -80,7 +80,7 @@ std::vector<std::string> check_steady_options (const SteadyOptions& opt)
     }
     for (auto& e : check_line_options(line_sweep_options(opt))) { err.push_back(std::move(e)); }
     if (opt.sweep != SweepKind::lusgs) {
-        for (const char* key : {"line_ghosts", "line_overlap", "line_order"}) {
+        for (const char* key : {"line_ghosts", "line_overlap", "line_order", "line_alternate"}) {
             if (std::find(opt.given.begin(), opt.given.end(), key) != opt.given.end()) {
                 err.emplace_back(std::string("steady.") + key + " has no effect unless steady.sweep = lusgs");
             }
@@ -95,6 +95,7 @@ LineSweepOptions line_sweep_options (const SteadyOptions& opt)
     o.ghosts = opt.line_ghosts;
     o.overlap = opt.line_overlap;
     o.order = opt.line_order;
+    o.alternate = opt.line_alternate;
     return o;
 }
 
@@ -147,6 +148,7 @@ SteadyOptions read_steady_options ()
         else if (word == "diagonal") { opt.line_order = LineOrder::diagonal; }
         else { amrex::Abort("ablsteady: steady.line_order = " + word + ": must be sequential or diagonal"); }
     }
+    pp.query("line_alternate", opt.line_alternate);
     std::string stage;
     if (pp.query("stage", stage)) {
         if (stage == "none") { opt.stage = StageKind::none; }

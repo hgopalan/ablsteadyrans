@@ -71,6 +71,7 @@ struct SteadyOptions
     LineGhosts line_ghosts{LineGhosts::lagged};
     int line_overlap{0};
     LineOrder line_order{LineOrder::sequential};
+    int line_alternate{0};   //!< steady.line_alternate (0 | 1): odd sweeps j-reversed (beyond the plan, LineSweeps.H); lusgs only
     Machine machine{Machine::Local};     //!< steady.machine (local | kestrel-cpu | kestrel-gpu): the AU rate
     int nodes{1};                        //!< steady.nodes (>= 1): for the AU
     std::vector<std::string> given;      //!< the steady.* keys given (for the application's has-no-effect checks, 1.15)

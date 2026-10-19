@@ -270,7 +270,8 @@ void run ()
         amrex::Print() << "ablsteady: SIMPLEC stage: " << sopt.zline_sweeps << " " << sweep_name(sopt.sweep) << " sweeps";
         if (sopt.sweep == SweepKind::lusgs) {
             amrex::Print() << " (ghosts " << line_ghosts_name(sopt.line_ghosts) << ", overlap " << sopt.line_overlap << ", "
-                           << line_order_name(sopt.line_order) << " order)";
+                           << line_order_name(sopt.line_order) << " order"
+                           << (sopt.line_alternate != 0 ? ", alternating" : "") << ")";
         }
         amrex::Print() << ", pressure reltol "
                        << simplec.pressure_reltol << ", alpha_p " << simplec.alpha_p << ", cfl0 " << sopt.cfl0

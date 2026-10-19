@@ -93,10 +93,77 @@ void pass_diagonal_backward (const amrex::Box& S, CArr const& a, CArr const& dg,
     for (int s = last; s >= 0; --s) { plane(s, S, a, dg, r, d, c, e); }
 }
 
+// The j-reversed pair of the alternating ordering (steady.line_alternate):
+// (+i, -j) forward, then (-i, +j) backward.
+
+void pass_sequential_forward_jrev (const amrex::Box& S, CArr const& a, CArr const& dg, CArr const& r, MArr const& d,
+                                   MArr const& c, MArr const& e)
+{
+    const int ilo = S.smallEnd(0), ihi = S.bigEnd(0), jlo = S.smallEnd(1), jhi = S.bigEnd(1);
+    const int klo = S.smallEnd(2), khi = S.bigEnd(2);
+    ++g_launches;
+    amrex::ParallelFor(1, [=] AMREX_GPU_DEVICE (int) noexcept
+    {
+        for (int j = jhi; j >= jlo; --j) {
+            for (int i = ilo; i <= ihi; ++i) { solve_column(a, dg, r, d, c, e, d, i, j, klo, khi); }
+        }
+    });
+}
+
+void pass_sequential_backward_jrev (const amrex::Box& S, CArr const& a, CArr const& dg, CArr const& r, MArr const& d,
+                                    MArr const& c, MArr const& e)
+{
+    const int ilo = S.smallEnd(0), ihi = S.bigEnd(0), jlo = S.smallEnd(1), jhi = S.bigEnd(1);
+    const int klo = S.smallEnd(2), khi = S.bigEnd(2);
+    ++g_launches;
+    amrex::ParallelFor(1, [=] AMREX_GPU_DEVICE (int) noexcept
+    {
+        for (int j = jlo; j <= jhi; ++j) {
+            for (int i = ihi; i >= ilo; --i) { solve_column(a, dg, r, d, c, e, d, i, j, klo, khi); }
+        }
+    });
+}
+
+// The anti-diagonal wavefront (i - ilo) + (jhi - j) = s of S, one column per
+// thread: the planes of the j-reversed pair.
+void plane_jrev (int s, const amrex::Box& S, CArr const& a, CArr const& dg, CArr const& r, MArr const& d, MArr const& c,
+                 MArr const& e)
+{
+    const int ilo = S.smallEnd(0), jhi = S.bigEnd(1), klo = S.smallEnd(2), khi = S.bigEnd(2);
+    const int nx = S.length(0), ny = S.length(1);
+    const int amin = std::max(0, s - (ny - 1)), amax = std::min(s, nx - 1);
+    ++g_launches;
+    amrex::ParallelFor(amax - amin + 1, [=] AMREX_GPU_DEVICE (int m) noexcept
+    {
+        const int ia = amin + m;
+        solve_column(a, dg, r, d, c, e, d, ilo + ia, jhi - (s - ia), klo, khi);
+    });
+}
+
+void pass_diagonal_forward_jrev (const amrex::Box& S, CArr const& a, CArr const& dg, CArr const& r, MArr const& d,
+                                 MArr const& c, MArr const& e)
+{
+    const int last = S.length(0) + S.length(1) - 2;
+    for (int s = 0; s <= last; ++s) { plane_jrev(s, S, a, dg, r, d, c, e); }
+}
+
+void pass_diagonal_backward_jrev (const amrex::Box& S, CArr const& a, CArr const& dg, CArr const& r, MArr const& d,
+                                  MArr const& c, MArr const& e)
+{
+    const int last = S.length(0) + S.length(1) - 2;
+    for (int s = last; s >= 0; --s) { plane_jrev(s, S, a, dg, r, d, c, e); }
+}
+
 using PassFn = void (*) (const amrex::Box&, CArr const&, CArr const&, CArr const&, MArr const&, MArr const&, MArr const&);
 
-PassFn pass_of (LineOrder order, bool forward)
+// The pass of sweep s: with steady.line_alternate the odd sweeps take the
+// j-reversed pair.
+PassFn pass_of (LineOrder order, bool forward, bool jrev)
 {
+    if (jrev) {
+        if (order == LineOrder::diagonal) { return forward ? pass_diagonal_forward_jrev : pass_diagonal_backward_jrev; }
+        return forward ? pass_sequential_forward_jrev : pass_sequential_backward_jrev;
+    }
     if (order == LineOrder::diagonal) { return forward ? pass_diagonal_forward : pass_diagonal_backward; }
     return forward ? pass_sequential_forward : pass_sequential_backward;
 }
@@ -112,7 +179,7 @@ void abort_on (const std::vector<std::string>& err)
 // Sub-phase 2.1's path (steady.line_ghosts = lagged): the previous pass's
 // values across box faces and periodic seams, every valid point swept.
 amrex::Real lusgs_lagged (const amrex::MultiFab& A, const amrex::MultiFab& ap, const amrex::MultiFab& rhs, int sweeps,
-                          LineOrder order, const amrex::Geometry& geom, amrex::MultiFab& delta)
+                          LineOrder order, bool alternate, const amrex::Geometry& geom, amrex::MultiFab& delta)
 {
     amrex::MultiFab cprime(A.boxArray(), A.DistributionMap(), 1, 0), dprime(A.boxArray(), A.DistributionMap(), 1, 0),
                     before(A.boxArray(), A.DistributionMap(), 1, 0);
@@ -127,7 +194,7 @@ amrex::Real lusgs_lagged (const amrex::MultiFab& A, const amrex::MultiFab& ap, c
             // copies of a shared face differ within a pass and OverrideSync
             // keeps the owner's at the end).
             delta.FillBoundary(geom.periodicity());
-            const PassFn pass = pass_of(order, forward);
+            const PassFn pass = pass_of(order, forward, alternate && s % 2 == 1);
             for (amrex::MFIter mfi(delta, false); mfi.isValid(); ++mfi) {
                 pass(mfi.validbox(), A.const_array(mfi), ap.const_array(mfi), rhs.const_array(mfi), delta.array(mfi),
                      cprime.array(mfi), dprime.array(mfi));
@@ -146,7 +213,8 @@ amrex::Real lusgs_lagged (const amrex::MultiFab& A, const amrex::MultiFab& ap, c
 // region grown by the overlap, delta = 0 outside it, no communication
 // between the passes.
 amrex::Real lusgs_zero (Loc loc, const amrex::MultiFab& A, const amrex::MultiFab& ap, const amrex::MultiFab& rhs,
-                        int sweeps, LineOrder order, int overlap, const amrex::Geometry& geom, amrex::MultiFab& delta)
+                        int sweeps, LineOrder order, bool alternate, int overlap, const amrex::Geometry& geom,
+                        amrex::MultiFab& delta)
 {
     const amrex::BoxArray& ba = A.boxArray();
     const amrex::DistributionMapping& dm = A.DistributionMap();
@@ -198,7 +266,7 @@ amrex::Real lusgs_zero (Loc loc, const amrex::MultiFab& A, const amrex::MultiFab
     for (int s = 0; s < sweeps; ++s) {
         for (const bool forward : {true, false}) {
             if (s == sweeps - 1 && !forward) { amrex::MultiFab::Copy(before, work, 0, 0, 1, 0); }
-            const PassFn pass = pass_of(order, forward);
+            const PassFn pass = pass_of(order, forward, alternate && s % 2 == 1);
             for (amrex::MFIter mfi(work, false); mfi.isValid(); ++mfi) {
                 const amrex::Box S = line_sweep_box(loc, line_owned_box(loc, mfi.validbox(), geom), overlap, geom);
                 pass(S, As->const_array(mfi), aps->const_array(mfi), rs->const_array(mfi), work.array(mfi),
@@ -253,6 +321,9 @@ std::vector<std::string> check_line_options (const LineSweepOptions& opt)
     } else if (opt.overlap > 0 && opt.ghosts != LineGhosts::zero) {
         err.emplace_back("steady.line_overlap = " + std::to_string(opt.overlap)
                          + ": needs steady.line_ghosts = zero (the lagged ghosts sweep the valid box alone)");
+    }
+    if (opt.alternate != 0 && opt.alternate != 1) {
+        err.emplace_back("steady.line_alternate = " + std::to_string(opt.alternate) + ": must be 0 or 1");
     }
     return err;
 }
@@ -352,8 +423,8 @@ amrex::Real zline_lusgs (Loc loc, const amrex::MultiFab& A, const amrex::MultiFa
         if (!lay.empty()) { err.push_back(lay); }
     }
     abort_on(err);
-    if (opt.ghosts == LineGhosts::zero) { return lusgs_zero(loc, A, ap, rhs, sweeps, opt.order, opt.overlap, geom, delta); }
-    return lusgs_lagged(A, ap, rhs, sweeps, opt.order, geom, delta);
+    if (opt.ghosts == LineGhosts::zero) { return lusgs_zero(loc, A, ap, rhs, sweeps, opt.order, opt.alternate != 0, opt.overlap, geom, delta); }
+    return lusgs_lagged(A, ap, rhs, sweeps, opt.order, opt.alternate != 0, geom, delta);
 }
 
 } // namespace ablsteady
