@@ -434,6 +434,30 @@ if(ABLSTEADY_PRECISION STREQUAL "DOUBLE")
                        COMMAND $<TARGET_FILE:ablsteady> ${DECKS}/inputs_steady_askervein
                                terrain.file=${PROJECT_SOURCE_DIR}/extern_erf/askervein.txt
                                ${ABLSTEADY_TEST_AMREX_FLAGS})
+    # Beyond the plan: Askervein in a conventionally neutral boundary layer.
+    # The precursor column runs to steady, then tools/make_inflow_table.py
+    # checks its 10 m wind is along +x (0.01 deg), u* = 0.6 m/s (1e-3) and the
+    # committed inflow table matches it (1e-3). The 3-D case runs on that
+    # table to the steady verdict.
+    set(CNBL_DIR ${CMAKE_CURRENT_BINARY_DIR}/run/rt_precursor_askervein_cnbl)
+    ablsteady_add_test(NAME rt_precursor_askervein_cnbl NP 2 LABELS "regression" RUN_DIR ${CNBL_DIR}
+                       FIXTURES_SETUP precursor_askervein_cnbl
+                       PREFIX ${EXPECT_ABORT} --success "ablsteady: steady after" --
+                       COMMAND $<TARGET_FILE:ablsteady> ${DECKS}/inputs_precursor_askervein_cnbl
+                               ${ABLSTEADY_TEST_AMREX_FLAGS})
+    add_test(NAME rt_precursor_askervein_cnbl_table
+             COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/make_inflow_table.py
+                     precursor_askervein_cnbl_plt precursor_askervein_cnbl_turb
+                     --ug 17.028798 --vg -7.380863 --check ${DECKS}/askervein_cnbl_inflow.txt
+             WORKING_DIRECTORY ${CNBL_DIR})
+    set_tests_properties(rt_precursor_askervein_cnbl_table PROPERTIES LABELS "regression"
+                         FIXTURES_REQUIRED precursor_askervein_cnbl)
+    ablsteady_add_test(NAME rt_steady_askervein_cnbl NP 2 LABELS "regression"
+                       PREFIX ${EXPECT_ABORT} --success "ablsteady: steady after" --
+                       COMMAND $<TARGET_FILE:ablsteady> ${DECKS}/inputs_steady_askervein_cnbl
+                               terrain.file=${PROJECT_SOURCE_DIR}/extern_erf/askervein.txt
+                               bc.inflow_file=${DECKS}/askervein_cnbl_inflow.txt
+                               ${ABLSTEADY_TEST_AMREX_FLAGS})
 endif()
 
 # --- Reference archives (sub-phase 1.1): ablsteady_refavg end to end --------

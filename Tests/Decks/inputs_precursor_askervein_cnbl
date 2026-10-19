@@ -1,0 +1,58 @@
+# Precursor for the conventionally neutral Askervein case
+# (inputs_steady_askervein_cnbl): a flat doubly periodic column (4 x 4 x 26
+# cells) on Askervein's vertical mesh (20 m first layer stretched by 1.08 to
+# 1599 m), the surface layer with Askervein's roughness (z0 = 0.03 m), a slip
+# top, the sounding of the flat and hill cases (300 K to 700 m, 309 K at
+# 1000 m, 0.03 K/m above), Coriolis at Askervein's latitude (57.2 N, Earth's
+# sidereal day: f = 1.226e-4 1/s, horizontal terms only) and the geostrophic
+# wind (ug, vg). The geostrophic wind is turned so that the 10 m wind blows
+# along +x and its speed set so that u* = 0.6 m/s, the friction velocity of
+# the neutral deck's log-law inflow (tools/make_inflow_table.py finds both).
+# The planar mean of the steady column is the inflow table
+# Tests/Decks/askervein_cnbl_inflow.txt (z u v theta k).
+# Settings of the flat case: four z-line sweeps, a CFL cap of 2, the drop
+# criterion of 2 orders (the capped layer entrains the inversion without
+# end; inputs_steady_neutral_flat).
+mesh.n_cell        = 4 4 26
+mesh.prob_hi       = 2560. 2560. 1600.
+mesh.is_periodic   = 1 1 0
+mesh.max_grid_size = 4 4
+mesh.dz0           = 20.
+mesh.stretch_ratio = 1.08
+
+terrain.type = flat
+
+bc.zlo = surface_layer
+bc.zhi = slip_wall
+bc.surface_z0 = 0.03
+bc.theta_profile_z = 0. 700. 1000. 1600.
+bc.theta_profile   = 300. 300. 309. 327.
+bc.zhi_theta_grad  = 0.03
+bc.inflow_profile   = log_law
+bc.inflow_ustar     = 0.6
+bc.inflow_z0        = 0.03
+bc.inflow_direction = 0.
+
+init.first_guess = profile
+
+forcing.coriolis        = 1
+forcing.coriolis_3d     = 0
+forcing.latitude        = 57.2
+forcing.rotation_period = 86164.0905
+forcing.geostrophic     = 1
+forcing.ug              = 17.028798
+forcing.vg              = -7.380863
+
+turb.tke_floor = 1.e-6
+
+steady.stage                   = simplec
+steady.cfl0                    = 1.
+steady.cfl_max                 = 2.
+steady.zline_sweeps            = 4
+steady.residual_ref_iterations = 100
+steady.residual_drop_orders    = 2
+steady.max_iterations          = 20000
+
+io.plot_file      = precursor_askervein_cnbl_plt
+io.turb_plot_file = precursor_askervein_cnbl_turb
+io.chk_file       = precursor_askervein_cnbl_chk
