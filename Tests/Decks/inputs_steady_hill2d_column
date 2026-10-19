@@ -4,7 +4,7 @@
 # as a 1-D problem to init.column_tol first, is broadcast as the first guess
 # and projected): the Ekman balance is in the first guess, so the inertial
 # spin-up of the profile guess is gone. ERF's check_hill.py --physics as for the other hill
-# decks. See docs/initializer.rst and docs/simplec.rst.
+# decks. See docs/initial_conditions.rst and docs/results.rst.
 mesh.n_cell        = 128 1 64
 mesh.prob_lo       = -2560. 0. 0.
 mesh.prob_hi       =  2560. 40. 1000.
@@ -48,7 +48,7 @@ steady.cfl0                    = 1.
 steady.cfl_max                 = 16.
 steady.zline_sweeps            = 2
 steady.sweep                   = lusgs
-simplec.rotation_relax         = 1.   # with the planar-mean split 1 converges in half the iterations of 0.3 (docs/simplec.rst)
+simplec.rotation_relax         = 1.   # with the planar-mean split 1 converges in half the iterations of 0.3 (docs/solver.rst)
 steady.residual_ref_iterations = 100
 steady.residual_drop_orders    = 2
 steady.max_iterations          = 20000

@@ -521,7 +521,7 @@ TEST (Predictor, AConvergedStateIsAFixedPoint)
     {
         for (amrex::MFIter mfi(q.u, false); mfi.isValid(); ++mfi) {
             if (mfi.validbox().contains(amrex::IntVect(3, 1, 2))) {
-                amrex::FArrayBox one(amrex::Box(amrex::IntVect(3, 1, 2), amrex::IntVect(3, 1, 2)), 1, amrex::The_Pinned_Arena());
+                amrex::FArrayBox one(amrex::Box(amrex::IntVect(3, 1, 2), amrex::IntVect(3, 1, 2), q.u.ixType()), 1, amrex::The_Pinned_Arena());   // the x-face type of u
                 one.setVal<amrex::RunOn::Host>(amrex::Real(7.5));
                 q.u[mfi].copy<amrex::RunOn::Device>(one, one.box());
                 amrex::Gpu::streamSynchronize();

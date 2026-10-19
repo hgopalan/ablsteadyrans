@@ -31,6 +31,7 @@ set(ABLSTEADY_SOURCES
     Driver.cpp
     Predictor.cpp
     Simplec.cpp
+    Newton.cpp
     TurbulenceOutput.cpp
     App.cpp
     # Copied from ERF (extern_erf/EXTRACTED.md)

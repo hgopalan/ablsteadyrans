@@ -92,7 +92,7 @@ Current tests
        same ranking of the five values at 40, 80 and 150 m above the ground (at 20 m two values tie within 0.002 in
        both codes), every speed-up above 1 at 20, 40, 80 and 150 m, the two codes within 0.02, 0.01, 0.005 and 0.003
        of each other at those heights (measured 0.011, 0.0057, 0.0020, 0.0008), and ablsteady's own values and
-       iterations pinned (1e-6, 10 %). Double precision only (:doc:`initializer`).
+       iterations pinned (1e-6, 10 %). Double precision only (:doc:`initial_conditions`).
    * - ``rt_bc_neutral_flat``, ``rt_bc_neutral_flat_matches``
      - RT-1.8.1: ``boundary_fluxes`` on ERF's Neutral_ABL_Flat mesh (8 × 8 × 64, 1000 m) with a fixed log-law state
        (u* = 0.35 m/s, z₀ = 0.1 m, 15°), the surface layer on the ground and a slip top: u* recovered at every ground
@@ -139,7 +139,7 @@ Current tests
        u*²/C_μ0², the log law in the lowest four cells within 10 %, K_mv of the second cell within 30 % of κ u* z.
        Measured: the verdict after about 2850 iterations (13 s on two ranks), u* = 0.377 m/s, every ERF check
        passing, on one to three ranks with both compilers (the bursts of an earlier version of the predictor's
-       rotation step are explained and removed in :doc:`simplec`). Label ``regression`` (the run time); double only.
+       rotation step are explained and removed in :doc:`solver`). Label ``regression`` (the run time); double only.
        The 1 % comparison with an ERF reference run is not in this version.
    * - ``rt_steady_hill2d``
      - RT-1.16.1: ERF's Neutral_Hill_2D (``Tests/Decks/inputs_steady_hill2d``: 128 × 1 × 64, the Witch of Agnesi of
@@ -150,12 +150,12 @@ Current tests
        three lowest cells within 0.2–0.8 (Jackson and Hunt's 0.4), the speed-up positive in the lowest ten, the
        upstream u* within 0.25–0.55 m/s, the upstream log law in the lowest three cells within 15 %. Measured: the
        verdict after 4590 iterations (49 s on two ranks), speed-up 0.59/0.50/0.43, u* = 0.354 m/s, every check
-       passing (:doc:`simplec`). Label ``regression``; double only.
+       passing (:doc:`solver`). Label ``regression``; double only.
    * - ``rt_steady_hill2d_lusgs``
      - RT-2.1.1: the 2-D hill with the line LU-SGS sweeps (``inputs_steady_hill2d_lusgs``: two symmetric sweeps,
        CFL cap 16) to the verdict with a two-order drop and ERF's ``check_hill.py --physics``. Measured: 3062
        iterations (23 s on two ranks), every check passing, the steady state within the convergence tolerance of
-       the Jacobi deck's (:doc:`simplec`). Label ``regression``; double only; since 2.1b it runs in the column
+       the Jacobi deck's (:doc:`results`). Label ``regression``; double only; since 2.1b it runs in the column
        test's directory (``run/rt_steady_hill2d_column``) so the spin-up check can read both histories.
    * - ``rt_steady_hill2d_column``, ``rt_column_guess_spinup``
      - RT-2.1b.1: the 2-D hill LU-SGS deck started from the converged column (``inputs_steady_hill2d_column``) to
@@ -175,6 +175,19 @@ Current tests
        × 18, the log-law inflow, outflow, slip sides, no Coriolis, four sweeps, cap 2) to the steady verdict.
        Measured: 156 iterations (2 s on two ranks). The 5 % comparison with ERF's URANS on lines A and AA is not in
        this version (Kestrel). Labels ``regression;smoke``; double only.
+   * - ``rt_precursor_askervein_cnbl``, ``rt_precursor_askervein_cnbl_table``
+     - Beyond the plan: the precursor column of the conventionally neutral Askervein case
+       (``inputs_precursor_askervein_cnbl``: 4 × 4 × 26 on Askervein's 20 m × 1.08 levels, z0 = 0.03 m, the flat
+       case's sounding, Coriolis at 57.2 N, geostrophic wind (17.028798, −7.380863) m/s) to the steady verdict.
+       ``tools/make_inflow_table.py --check``: the 10 m wind within 0.01° of +x, u* within 1e-3 of 0.6 m/s, and
+       ``Tests/Decks/askervein_cnbl_inflow.txt`` within 1e-3 of the precursor's planar means (u, v relative to the
+       geostrophic speed, θ in K, k relative to its maximum). Measured: 11087 iterations on one rank. Label
+       ``regression``; double only.
+   * - ``rt_steady_askervein_cnbl``
+     - Beyond the plan: Askervein in a conventionally neutral boundary layer (``inputs_steady_askervein_cnbl``: 30 ×
+       30 × 26 to 1599 m, the precursor's table as inflow on xlo and yhi, outflow on xhi and ylo, Rayleigh damping
+       of w and θ above 1200 m, four sweeps, cap 2) to the steady verdict. Measured: 220 iterations (156 for
+       ``rt_steady_askervein``); u residual down four orders. Label ``regression``; double only.
    * - ``drift_check_selftest``
      - The ``extern_erf`` drift check on a throw-away ERF repository (:doc:`extraction`).
    * - ``refavg_snapshots``, ``refavg_build``, ``refavg_verify``, ``refavg_matches``
@@ -397,7 +410,7 @@ GoogleTest suite
    * - UT-1.10.1b
      - *Beyond the plan.* With a tangential gradient at sloped ground: order 2 on flat ground (≥ 1.95), between 0.8 and
        1.2 over a 120 m hill (64 → 128 → 256 cells), and a fine-mesh error 3 to 6 times that over a 60 m hill (slope²).
-       Double precision only. Pins ERF's ground treatment (:doc:`poisson`).
+       Double precision only. Pins ERF's ground treatment (:doc:`solver`).
    * - UT-1.10.2
      - The anisotropic operator with :math:`\beta_v/\beta_h` = 1, 0.5, 0.1 (``z_cross`` set) on flat ground and over
        the hill, and a spatially varying :math:`\beta` over the hill: order ≥ 1.9 (single: 1.8, 1.6). Without
@@ -727,3 +740,28 @@ GoogleTest suite
    * - UT-1.3.4
      - The sum gives the same bits on 1, 2 and 4 ranks and within 16 ε Σ\|x\| of the exact sum; the maximum
        handles NaN and −0.
+   * - UT-3.1.1
+     - ``Newton.JvpEpsSweepAgainstQuadraticResidual``: on a residual that is exactly quadratic in q (upwind
+       convection, Coriolis, slip walls), the analytic :math:`Jv` and :math:`B(v,v)` from central differences; the
+       sweep of ``steady.newton_fd_eps_scale`` from 1e-2 to 1e-12 gives the V-shaped error, the truncation branch
+       equal to :math:`\epsilon\|B\|/\|Jv\|` to 1e-3, and the default within a factor 3 of the minimum (1.5×
+       measured); a uniform :math:`\Delta\tau` adds :math:`x/\Delta\tau` on the right rows; Dirichlet rows are
+       identity rows.
+   * - UT-3.1.2
+     - ``Newton.ColumnConvergesQuadratically``: plain Newton on the Ekman column; the reductions 0.403, 0.171,
+       0.0131, 2.09e-4, 9.41e-8 pinned to a factor 2, the last two steps above the round-off floor gain more than
+       three orders each, and :math:`r_{n+1} \le r_n^2` after the first step.
+   * - UT-3.1.3
+     - ``Newton.PoiseuilleInOneStep``: one step gives the discrete Poiseuille profile to 1e-9.
+       ``Newton.GmresSolvesKnownSystemOnAnyLayout``: ``amrex::GMRES<NewtonVector, NewtonOperator>`` recovers a known
+       solution of a non-symmetric system to 1e-5 on one and four boxes (8 × 6 × 8) and on one and nine boxes
+       (9 × 9 × 8); the layouts agree to 1e-7.
+   * - UT-3.1.3 (c)
+     - *Beyond the plan.* ``Newton.VectorOperationsAndBitIdenticalInnerProduct``: the vector operations; the inner
+       product counts shared and periodic faces once and has the same bits on every rank and for two distribution
+       mappings. ``Newton.OptionReadersAndRangeChecks``: the four ``steady.newton_*`` keys are read, and each
+       range check names the key and value. ``Newton.KrylovMemoryEstimateAndBudget``: the :math:`2m + 3` vector
+       count and bytes of a 512 × 512 × 128 box; the budget abort names both keys.
+       ``Newton.PreconditionerHookAndOptionsReachTheSolver``: the hook is set up once per step and applied once
+       per GMRES iteration, and its output is used; restart and tolerance reach GMRES.
+       ``Newton.ColumnRestartAndToleranceSweep``: GMRES iterations against the restart length (:doc:`solver`).

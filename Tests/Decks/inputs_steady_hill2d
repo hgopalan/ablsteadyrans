@@ -8,7 +8,7 @@
 # (0.2 1/s; ERF damps w alone in its time-accurate run, the pseudo-time
 # iteration needs theta's half of the gravity-wave oscillator damped too),
 # 16 z-line sweeps at a CFL cap of 4 (the lagged sweeps' threshold, docs/
-# predictor.rst), ERF's closure defaults, the wall distance as the height above
+# solver.rst), ERF's closure defaults, the wall distance as the height above
 # the terrain (erf.wall_dist_type = terrain_height). The first guess is the
 # log law with u* = 0.35 m/s. ERF's check_hill.py --physics reads
 # io.turb_plot_file (Tests/check_steady_hill.py).
@@ -54,7 +54,7 @@ steady.stage                   = simplec
 steady.cfl0                    = 1.
 steady.cfl_max                 = 4.
 steady.zline_sweeps            = 16
-simplec.rotation_relax         = 1.   # with the planar-mean split 1 converges in half the iterations of 0.3 (docs/simplec.rst)
+simplec.rotation_relax         = 1.   # with the planar-mean split 1 converges in half the iterations of 0.3 (docs/solver.rst)
 steady.residual_ref_iterations = 100
 steady.residual_drop_orders    = 2
 steady.max_iterations          = 20000

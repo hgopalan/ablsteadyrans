@@ -21,7 +21,7 @@
 //                  - c_r(z) ((u + iv) - (u_p + i v_p)),
 //   dk/dt        = d/dz(gamma_k dk/dz) + P_s + P_b - eps - c_r(z) (k - k_p),
 // with theta held at the sounding (the first guess takes theta from it, and
-// a column with an inversion warms without end, docs/simplec.rst), so N^2 is
+// a column with an inversion warms without end, docs/results.rst), so N^2 is
 // the sounding's;
 // the diffusion, the Coriolis term (implicit through the complex unknown),
 // the wall drag and the Rayleigh layer implicit, the k sinks point-implicit

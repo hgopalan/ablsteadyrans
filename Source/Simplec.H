@@ -17,7 +17,7 @@
 //      relative tolerance simplec.pressure_reltol (1e-3: the plan's 0.1
 //      leaves a divergence that advects a stable stratification and feeds
 //      the buoyancy; Neutral_ABL_Flat diverges at 0.1 and 1e-2 and
-//      converges at 1e-3 and 1e-4, docs/simplec.rst); then
+//      converges at 1e-3 and 1e-4, docs/solver.rst); then
 //      p += alpha_p p' and u += -(1/d) grad p' as the solver's
 //      coefficient-weighted fluxes (u, v and Omega; w follows, as the
 //      initializer). Faces with d = 0 (the Dirichlet rows of the open faces)

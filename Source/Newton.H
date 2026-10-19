@@ -1,0 +1,249 @@
+#ifndef ABLSTEADY_NEWTON_H_
+#define ABLSTEADY_NEWTON_H_
+
+// The Newton–Krylov core (plan sub-phase 3.1): one Newton step
+//
+//   (D + J) dq = -R(q),    D = 1/dtau on the rows with a pseudo-time term,
+//
+// solved by flexible GMRES (amrex::GMRES, setFlexible(true)) without
+// forming J: every product J v is jvp (Residual.H), a forward difference of
+// the full second-order residual with the scaled step of JvpScales. R and J
+// are per unit volume, so D = 1/dtau is the plan's V/dtau divided by the
+// cell volume (the convention of Residual.H and Predictor.H).
+//
+// The rows of D: the momentum faces (dtau on faces from face_dtau,
+// Predictor.H: the mean of the two cells), theta and k (the cell dtau). No
+// pseudo-time term on the continuity rows (p has no time derivative) and on
+// the Dirichlet rows of the normal velocities (R = q - V, identity in J;
+// BoundaryConditions::dirichlet_rows), as in the SIMPLEC predictor. A null
+// dtau is an infinite step: plain Newton, D = 0.
+//
+// GMRES works in scaled variables, so that its inner products weigh the
+// fields alike: the unknown x = S^-1 dq with S = diag(s_u, s_v, s_w, s_p,
+// s_theta, s_k) the scales of ResidualInputs::jvp_scales (the velocity scale
+// for u, v, w), and the equations scaled by T^-1 with T = diag(s_u, s_v,
+// s_w, 1, s_theta, s_k): every scaled row is in 1/s (continuity already is).
+// The solved system is A x = b with
+//
+//   A = T^-1 (D + J) S,   b = -T^-1 R(q),   dq = S x.
+//
+// The unknown spans every state field: the C-grid face velocities u, v, w,
+// and p, theta, k at cell centres. A single MultiFab cannot hold fields of
+// four index types, so the vector type of GMRES is NewtonVector, the six
+// fields without ghost cells. GMRES's operations act on the valid points;
+// apply builds dq = S x in a State with ghost cells and fills them with the
+// homogeneous boundary fill (BoundaryConditions::fill_ghosts, homogeneous)
+// before jvp reads them. A face shared by two boxes (or a periodic image) is
+// one unknown: the inner products count it once (the owner mask), and every
+// operation keeps the copies equal (the vector operations act point by
+// point; residual() syncs its face rows).
+//
+// Reductions: dotProduct and norm2 sum each box in double, put the box sums
+// in a vector indexed by box, all-reduce it (each slot has one contributor,
+// so the reduction is exact) and add the slots in box order. The result is
+// the same bits on every rank and for any number of ranks with the same
+// BoxArray.
+//
+// The preconditioner is a hook (NewtonPreconditioner): the identity (a copy)
+// by default; sub-phase 3.3 plugs in one SIMPLEC iteration or a hypre solve
+// through it without changing NewtonKrylov.
+//
+// Memory: FGMRES(m) keeps m + 1 Arnoldi vectors, m preconditioned vectors
+// and two work vectors, all of state size: 2m + 3 vectors. The estimate is
+// printed at construction and checked against steady.newton_mem_budget_gb
+// on the rank that holds the most points; the residual evaluations of apply
+// and jvp allocate their own temporaries outside it.
+//
+// Inputs (steady.*, read by read_newton_options): newton_gmres_restart,
+// newton_fd_eps_scale, newton_krylov_rtol, newton_mem_budget_gb. The
+// application does not run the Newton step yet (sub-phase 3.5 switches to
+// it), so it does not read them: setting them stops the run as unknown keys.
+
+#include "Mesh.H"
+#include "Residual.H"
+#include "State.H"
+
+#include <AMReX_Array.H>
+#include <AMReX_Geometry.H>
+#include <AMReX_MultiFab.H>
+#include <AMReX_iMultiFab.H>
+
+#include <memory>
+#include <string>
+#include <vector>
+
+namespace ablsteady {
+
+//! The Newton–Krylov inputs. The defaults are provisional: sub-phase 3.6
+//! (the phase 3 checkpoint) tunes them.
+struct NewtonOptions
+{
+    int gmres_restart{30};                    //!< steady.newton_gmres_restart (5..200)
+    //! steady.newton_fd_eps_scale (> 0, <= 1e-2): jvp's relative step h,
+    //! sqrt(machine epsilon) of amrex::Real by default.
+    amrex::Real fd_eps_scale{std::sqrt(std::numeric_limits<amrex::Real>::epsilon())};
+    amrex::Real krylov_rtol{amrex::Real(1.0e-2)};   //!< steady.newton_krylov_rtol (> 0, < 1)
+    amrex::Real mem_budget_gb{70};            //!< steady.newton_mem_budget_gb (> 0, <= 80), 1 GB = 1e9 bytes
+    std::vector<std::string> given;           //!< the steady.newton_* keys given
+};
+
+//! Range checks, one message per violation naming steady.<key> and the value.
+std::vector<std::string> check_newton_options (const NewtonOptions& opt);
+//! Read steady.newton_*; aborts, naming the key, on a bad value, a repeated
+//! key or a wrong value count.
+NewtonOptions read_newton_options ();
+
+//! The fields of a Newton vector, in State order.
+enum NewtonField : int { nf_u = 0, nf_v, nf_w, nf_p, nf_theta, nf_tke, n_newton_fields };
+
+//! GMRES's vector: the six state fields on the state's layout, no ghosts.
+struct NewtonVector
+{
+    amrex::Array<amrex::MultiFab, n_newton_fields> f;
+    void define (const amrex::BoxArray& ba, const amrex::DistributionMapping& dm);
+};
+
+//! The preconditioner hook: dq ~ (D + J)^-1 r in physical units (r on the
+//! residual's rows, dq on the state's fields; both NewtonVectors). setup is
+//! called once per Newton step, after R(q) and before GMRES, with the state
+//! (ghost cells filled) and the step (null: none). FGMRES lets apply change
+//! from one call to the next (an inner iteration stopped by a tolerance).
+class NewtonPreconditioner
+{
+public:
+    virtual ~NewtonPreconditioner () = default;
+    virtual void setup (const State& /*q*/, const amrex::MultiFab* /*dtau*/) {}
+    virtual void apply (NewtonVector& dq, const NewtonVector& r) = 0;
+};
+
+//! A = T^-1 (D + J) S with the interface amrex::GMRES<NewtonVector,
+//! NewtonOperator> needs. It references q, R0, in, mesh and geom, which must
+//! outlive it and keep their layout; q's ghost cells must be filled and R0
+//! must be R(q).
+class NewtonOperator
+{
+public:
+    using RT = amrex::Real;
+
+    //! dtau: cell-centred on the mesh's layout (> 0), or null for plain
+    //! Newton. pc: null for the identity. Aborts without in.bc (the
+    //! perturbation's ghost fill needs it).
+    NewtonOperator (const State& q, const ResidualFields& R0, const ResidualInputs& in, const Mesh& mesh,
+                    const amrex::Geometry& geom, const amrex::MultiFab* dtau, NewtonPreconditioner* pc = nullptr);
+
+    // The amrex::GMRES interface.
+    void apply (NewtonVector& Ax, const NewtonVector& x);
+    void precond (NewtonVector& z, const NewtonVector& r);
+    [[nodiscard]] NewtonVector makeVecRHS () const;
+    [[nodiscard]] NewtonVector makeVecLHS () const;
+    void assign (NewtonVector& lhs, const NewtonVector& rhs) const;
+    void increment (NewtonVector& lhs, const NewtonVector& rhs, RT a) const;
+    void linComb (NewtonVector& lhs, RT a, const NewtonVector& rhs_a, RT b, const NewtonVector& rhs_b) const;
+    void scale (NewtonVector& v, RT fac) const;
+    void setToZero (NewtonVector& v) const;
+    [[nodiscard]] RT dotProduct (const NewtonVector& a, const NewtonVector& b) const;
+    [[nodiscard]] RT norm2 (const NewtonVector& v) const;
+
+    //! b = -T^-1 R (the right-hand side of the Newton system).
+    void rhs (const ResidualFields& R, NewtonVector& b) const;
+    //! dq += S x on the valid points (dq a State on the layout).
+    void add_update (State& dq, const NewtonVector& x) const;
+
+    //! The scales of the unknowns (S) and of the rows (T), in NewtonField order.
+    [[nodiscard]] const amrex::Array<amrex::Real, n_newton_fields>& unknown_scales () const { return m_s; }
+    [[nodiscard]] const amrex::Array<amrex::Real, n_newton_fields>& row_scales () const { return m_t; }
+    //! jvp calls and the smallest and largest eps they used, since construction.
+    [[nodiscard]] int jvp_calls () const { return m_jvp_calls; }
+    [[nodiscard]] amrex::Real eps_min () const { return m_eps_min; }
+    [[nodiscard]] amrex::Real eps_max () const { return m_eps_max; }
+
+private:
+    const State& m_q;
+    const ResidualFields& m_R0;
+    const ResidualInputs& m_in;
+    const Mesh& m_mesh;
+    const amrex::Geometry& m_geom;
+    NewtonPreconditioner* m_pc;
+    amrex::BoxArray m_ba;
+    amrex::DistributionMapping m_dm;
+    amrex::Array<amrex::Real, n_newton_fields> m_s{};
+    amrex::Array<amrex::Real, n_newton_fields> m_t{};
+    //! 1/dtau on each field's points (0 on continuity and Dirichlet rows);
+    //! empty when there is no pseudo-time term.
+    amrex::Array<amrex::MultiFab, n_newton_fields> m_inv_dtau;
+    bool m_has_dtau{false};
+    //! The Dirichlet rows of the face velocities (1 there, 0 elsewhere).
+    amrex::Array<amrex::MultiFab, 3> m_dir;
+    //! The owner mask of each face field (shared faces counted once).
+    amrex::Array<std::unique_ptr<amrex::iMultiFab>, 3> m_owner;
+    State m_dq;              //!< S x with ghost cells, apply's work field
+    ResidualFields m_Jv;     //!< jvp's output
+    NewtonVector m_pr, m_pz; //!< the hook's physical-unit work vectors (with a hook only)
+    int m_jvp_calls{0};
+    amrex::Real m_eps_min{0}, m_eps_max{0};
+};
+
+//! Krylov memory of FGMRES(restart) on vectors of the layout: the vector
+//! count, the bytes of one vector over all ranks and the largest share of
+//! one rank (identical on every rank: computed from the BoxArray and
+//! DistributionMapping, no communication).
+struct KrylovMemory
+{
+    int vectors{0};               //!< 2 restart + 3 (FGMRES)
+    int arnoldi_vectors{0};       //!< restart + 1
+    double vector_bytes{0};       //!< one vector, all ranks
+    double total_bytes{0};        //!< every vector, all ranks
+    double max_rank_bytes{0};     //!< every vector, the rank with the most points
+    int max_rank{0};
+};
+KrylovMemory krylov_memory (int restart, const amrex::BoxArray& ba, const amrex::DistributionMapping& dm);
+
+//! What one Newton step did.
+struct NewtonStepInfo
+{
+    int gmres_iterations{0};
+    int gmres_status{-1};                     //!< amrex::GMRES: 0 converged, 1 iteration cap
+    amrex::Real residual_norm{0};             //!< |b| = |T^-1 R(q)|_2 before the step
+    amrex::Real krylov_residual{0};           //!< GMRES's final |b - A x|_2 (its Arnoldi estimate)
+    amrex::Real krylov_relative{0};           //!< krylov_residual / residual_norm (0 for R = 0)
+    amrex::Real eps_min{0}, eps_max{0};       //!< the jvp steps used
+    int jvp_calls{0};
+};
+
+//! One Newton step at a time. mesh, geom and in are referenced: they must
+//! outlive the object. Prints the Krylov memory estimate at construction and
+//! aborts, naming steady.newton_mem_budget_gb and steady.newton_gmres_restart,
+//! when the rank with the most points would exceed the budget; aborts on
+//! check_newton_options failures and without in.bc.
+class NewtonKrylov
+{
+public:
+    //! verbose > 0: the memory estimate at construction and one line per step
+    //! (iterations, Krylov residual, eps).
+    NewtonKrylov (const NewtonOptions& opt, const ResidualInputs& in, const Mesh& mesh, const amrex::Geometry& geom,
+                  const amrex::BoxArray& ba, const amrex::DistributionMapping& dm, int verbose = 1);
+
+    //! q += dq from (D + J) dq = -R(q), with q's ghost cells filled by
+    //! in.bc before R(q) and after the update. dtau: cell-centred (> 0), or
+    //! null for plain Newton. pc: null for the identity.
+    NewtonStepInfo step (State& q, const amrex::MultiFab* dtau, NewtonPreconditioner* pc = nullptr);
+
+    [[nodiscard]] const NewtonStepInfo& last () const { return m_last; }
+    [[nodiscard]] const KrylovMemory& memory () const { return m_mem; }
+    [[nodiscard]] const NewtonOptions& options () const { return m_opt; }
+    //! The residual inputs with jvp's step set from the options.
+    [[nodiscard]] const ResidualInputs& residual_inputs () const { return m_in; }
+
+private:
+    NewtonOptions m_opt;
+    ResidualInputs m_in;
+    const Mesh& m_mesh;
+    const amrex::Geometry& m_geom;
+    KrylovMemory m_mem;
+    NewtonStepInfo m_last;
+    int m_verbose{1};
+};
+
+} // namespace ablsteady
+
+#endif

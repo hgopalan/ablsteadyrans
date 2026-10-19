@@ -260,7 +260,7 @@ ColumnGuessResult run_column_guess (const Inputs& in, const InitOptions& iopt, c
         thomas(lo, dW, up, rW);
         // theta stays the sounding (the first guess takes theta from it, and
         // a column with an inversion warms without end: the entrainment drift
-        // of docs/simplec.rst); N^2 is the sounding's.
+        // of docs/results.rst); N^2 is the sounding's.
         // k: the wall-k Dirichlet row, the Patankar sinks
         faces(gk, lo, up, da);
         std::vector<double> dK(nz), rK(nz);
