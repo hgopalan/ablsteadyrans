@@ -18,6 +18,19 @@ Pull requests
   factual tone;
 - the documentation builds without warnings.
 
+Notes on floating-point traps
+-----------------------------
+
+The CI runs with ``amrex.fpe_trap_invalid = 1``. Two places need care:
+
+- **Closure kernels.** A compiler evaluates both arms of a select, so a square root meant for the other branch can
+  raise the invalid trap on a value that is never used. The kernels take their branch decisions once and feed every
+  arm a valid argument, written as :math:`\tfrac12(x \pm |x|)`. The results stay bit-identical to ERF's.
+- **AMReX** ``MLTerrainPoisson`` **(not fixed here).** Its fused CPU red-black smoother is vectorized over a
+  stride-2 loop and reads scratch lanes that are never written, which can raise the invalid trap on wide boxes. The
+  multigrid back end therefore switches the trap off around the solve and checks the solution for non-finite values.
+  Zeroing the scratch array in AMReX would remove the need.
+
 Layout
 ------
 

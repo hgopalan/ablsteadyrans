@@ -30,11 +30,11 @@ Copied in sub-phase 1.10, unchanged: ERF's terrain Poisson operator (``ERF_Terra
 the FFT preconditioner's boundaries (``Outflow``/``Open``: odd, periodic: periodic, any other name: even). The copy
 includes the zero total flux through Neumann faces, terrain cross term included (ERF#4272, merged as ERF#4279).
 ``ERF_SolveWithGMRES.cpp`` is an ERF member function and is not copied; ``Source/Poisson.cpp`` drives GMRES the same
-way (:doc:`poisson`). Two shim headers in ``Source/erf_shims/`` stand
+way (:doc:`solver`). Two shim headers in ``Source/erf_shims/`` stand
 in for ERF headers the copies include.
 
 Copied in sub-phase 1.7, unchanged: ``ERF_MOSTUtils.H``, whose ``similarity_funs`` give the surface layer's
-stability functions (:doc:`surface`). ERF's MOST kernels (``ERF_MOSTStress.H``, ``ERF_MOSTAverage.cpp``) are not
+stability functions (:doc:`boundary_conditions`). ERF's MOST kernels (``ERF_MOSTStress.H``, ``ERF_MOSTAverage.cpp``) are not
 copied: they are tied to ERF's state layout and plane averaging, and ``Source/SurfaceLayer.cpp`` follows their
 formulas per column. The reference-height lookup fix the plan names (ERF#3982) is already in the pinned ERF.
 
