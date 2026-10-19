@@ -1,0 +1,9 @@
+# Must abort (UT-2.3.5 at the application): terrain.hierarchy_passes given
+# without a grid hierarchy (mesh.hierarchy_levels left at 1).
+mesh.n_cell = 32 32 8
+mesh.prob_hi = 3200. 3200. 800.
+
+terrain.hierarchy_passes = 2
+
+io.write_plotfile   = 0
+io.write_checkpoint = 0

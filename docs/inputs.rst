@@ -52,6 +52,14 @@ All errors are reported together. Each row below matches the range check in ``So
    * - ``mesh.zlevels_file``
      - empty
      - A file of n_cell z + 1 increasing heights starting at 0. Not together with ``mesh.dz0``.
+   * - ``mesh.hierarchy_levels``
+     - ``1``
+     - An integer from 1 to 10: the levels L of the x/y grid hierarchy (:doc:`governing_curvilinear`). 1 is the mesh
+       alone. With L > 1, n_cell x and y must be divisible by :math:`2^{L-1}` and ``mesh.max_grid_size`` x and y
+       must be multiples of :math:`2^{L-1}`. Level 0 is then laid out so that every level coarsens it exactly, which
+       can differ from the L = 1 layout (the last bits of a solve can differ). The levels are built, reported and
+       written with the plotfile; the solver runs on level 0 in this version. The test-only tools refuse L > 1.
+       May change across a restart.
 
 ``terrain``
 -----------
@@ -92,6 +100,10 @@ A key that has no effect for the chosen ``terrain.type`` or ``terrain.smoothing`
    * - ``terrain.idw_power``
      - ``2``
      - Finite, > 0; ``xyz`` only. Weight exponent, :math:`d^{-p}`.
+   * - ``terrain.hierarchy_passes``
+     - ``1``
+     - An integer from 0 to 64; only with ``mesh.hierarchy_levels`` > 1. The ground of hierarchy level l is smoothed
+       by this many times :math:`2^l - 1` passes (:doc:`governing_curvilinear`).
 
 ``io``
 ------

@@ -22,6 +22,7 @@ add_executable(unit_tests
     Unit/test_Sha256.cpp
     Unit/test_Reference.cpp
     Unit/test_Mesh.cpp
+    Unit/test_MeshHierarchy.cpp
     Unit/test_Poisson.cpp
     Unit/test_PoissonB.cpp
     Unit/test_WallDistance.cpp
@@ -246,6 +247,80 @@ else()
                        COMMAND $<TARGET_FILE:ablsteady> ${DECKS}/inputs_mesh_steep_ridge
                                ${ABLSTEADY_TEST_AMREX_FLAGS})
 endif()
+# RT-2.3.1 and RT-2.3.2 (sub-phase 2.3): the Askervein mesh with STF and a
+# three-level x/y grid hierarchy (60, 30, 15 cells a side; the same 18 layers).
+# In double precision, level 0's statistics and every level's quality report
+# against Gold/askervein_hierarchy_mesh.json; in both precisions, the z and
+# detJ of levels 1 and 2 against their gold plotfiles (fcompare).
+set(ASKH_DIR ${CMAKE_CURRENT_BINARY_DIR}/run/rt_askervein_hierarchy)
+if(ABLSTEADY_PRECISION STREQUAL "DOUBLE")
+    set(_askh_prefix ${CHECK_MESH} ${GOLD}/askervein_hierarchy_mesh.json --)
+else()
+    set(_askh_prefix "")
+endif()
+ablsteady_add_test(NAME rt_askervein_hierarchy NP 2 LABELS "regression;smoke" RUN_DIR ${ASKH_DIR}
+                   FIXTURES_SETUP askervein_hierarchy PREFIX ${_askh_prefix}
+                   COMMAND $<TARGET_FILE:ablsteady> ${DECKS}/inputs_mesh_askervein_hierarchy
+                           terrain.file=${PROJECT_SOURCE_DIR}/extern_erf/askervein.txt
+                           ${ABLSTEADY_TEST_AMREX_FLAGS})
+foreach(lev 1 2)
+    ablsteady_add_test(NAME rt_askervein_hierarchy_level${lev}_matches NP 1 LABELS "regression;smoke"
+                       RUN_DIR ${ASKH_DIR} FIXTURES_REQUIRED askervein_hierarchy
+                       COMMAND ${FCOMPARE} --rel_tol ${FCOMPARE_RTOL} askervein_hier_plt_level${lev}_00000
+                               ${GOLD}/askervein_hierarchy_level${lev}_plt00000)
+endforeach()
+# A restart rebuilds the hierarchy: a checkpoint written without one,
+# continued with three levels on another layout (4 boxes from 2 ranks to 3),
+# gives the coarse levels of the fresh run's golds.
+set(HRS_DIR ${CMAKE_CURRENT_BINARY_DIR}/run/rt_hierarchy_restart)
+ablsteady_add_test(NAME rt_hierarchy_restart_first NP 2 LABELS "regression;smoke" RUN_DIR ${HRS_DIR}
+                   FIXTURES_SETUP hierarchy_restart_first
+                   COMMAND $<TARGET_FILE:ablsteady> ${DECKS}/inputs_hierarchy_restart_first
+                           terrain.file=${PROJECT_SOURCE_DIR}/extern_erf/askervein.txt ${ABLSTEADY_TEST_AMREX_FLAGS})
+ablsteady_add_test(NAME rt_hierarchy_restart NP 3 LABELS "regression;smoke" RUN_DIR ${HRS_DIR}
+                   FIXTURES_REQUIRED hierarchy_restart_first FIXTURES_SETUP hierarchy_restart
+                   COMMAND $<TARGET_FILE:ablsteady> ${DECKS}/inputs_hierarchy_restart
+                           terrain.file=${PROJECT_SOURCE_DIR}/extern_erf/askervein.txt ${ABLSTEADY_TEST_AMREX_FLAGS})
+foreach(lev 1 2)
+    ablsteady_add_test(NAME rt_hierarchy_restart_level${lev}_matches NP 1 LABELS "regression;smoke"
+                       RUN_DIR ${HRS_DIR} FIXTURES_REQUIRED hierarchy_restart
+                       COMMAND ${FCOMPARE} --rel_tol ${FCOMPARE_RTOL} hier_restart_plt_level${lev}_00000
+                               ${GOLD}/askervein_hierarchy_level${lev}_plt00000)
+endforeach()
+if(ABLSTEADY_PRECISION STREQUAL "DOUBLE")
+    # RT-2.3.2: the same mesh with unsmoothed coarse grounds: the coarse
+    # levels cap STF more than level 0 and the report gives the hint.
+    ablsteady_add_test(NAME rt_askervein_hierarchy_hint NP 2 LABELS "regression;smoke"
+                       PREFIX ${CHECK_MESH} ${GOLD}/askervein_hierarchy_p0_mesh.json --
+                       COMMAND $<TARGET_FILE:ablsteady> ${DECKS}/inputs_mesh_askervein_hierarchy_p0
+                               terrain.file=${PROJECT_SOURCE_DIR}/extern_erf/askervein.txt
+                               ${ABLSTEADY_TEST_AMREX_FLAGS})
+    # RT-2.3.2: the steep ridge with a three-level hierarchy: the report of
+    # every level, with the STF warnings and the coarse-level hint.
+    ablsteady_add_test(NAME rt_steep_ridge_hierarchy_quality NP 1 LABELS "regression;smoke"
+                       PREFIX ${CHECK_MESH} ${GOLD}/steep_ridge_hierarchy_mesh.json --
+                       COMMAND $<TARGET_FILE:ablsteady> ${DECKS}/inputs_mesh_steep_ridge_hierarchy
+                               ${ABLSTEADY_TEST_AMREX_FLAGS})
+endif()
+# UT-2.3.5 at the application: a hierarchy that does not divide the mesh, a
+# box size below the coarsening and passes out of range abort, naming the keys.
+ablsteady_add_test(NAME abort_hierarchy NP 1 LABELS "regression;smoke"
+                   PREFIX ${EXPECT_ABORT}
+                          "mesh\\.hierarchy_levels = 3 needs mesh\\.n_cell x and y divisible by 2\\^2 = 4 \\(got 30 32\\)"
+                          "mesh\\.max_grid_size must be a multiple of 2\\^\\(mesh\\.hierarchy_levels - 1\\) = 4"
+                          "terrain\\.hierarchy_passes must be an integer from 0 to 64 \\(got -1\\)" --
+                   COMMAND $<TARGET_FILE:ablsteady> ${DECKS}/inputs_abort_hierarchy
+                           ${ABLSTEADY_TEST_AMREX_FLAGS})
+ablsteady_add_test(NAME abort_hierarchy_passes_unused NP 1 LABELS "regression;smoke"
+                   PREFIX ${EXPECT_ABORT}
+                          "terrain\\.hierarchy_passes has no effect unless mesh\\.hierarchy_levels > 1" --
+                   COMMAND $<TARGET_FILE:ablsteady> ${DECKS}/inputs_abort_hierarchy_unused
+                           ${ABLSTEADY_TEST_AMREX_FLAGS})
+# A test-only tool works on level 0 alone and refuses a hierarchy.
+ablsteady_add_test(NAME abort_hierarchy_tool NP 1 LABELS "regression;smoke"
+                   PREFIX ${EXPECT_ABORT} "mesh\\.hierarchy_levels has no effect in wall_distance" --
+                   COMMAND $<TARGET_FILE:wall_distance> ${DECKS}/inputs_abort_hierarchy_tool
+                           ${ABLSTEADY_TEST_AMREX_FLAGS})
 # RT-1.4.3: a run without a solve writes the mapped-grid plotfile of the 2-D
 # hill; it matches Gold/hill2d_plt00000 (relative tolerance 1e-12: compilers
 # that fuse multiply-adds differ from those that do not in the last bit).

@@ -98,6 +98,8 @@ int main (int argc, char* argv[])
     {
         ablsteady::Inputs in = ablsteady::parse_inputs();
         auto err = ablsteady::validate(in);
+        // The tool works on level 0 alone: a grid hierarchy would be ignored.
+        if (in.mesh.hierarchy_levels != 1) { err.emplace_back("mesh.hierarchy_levels has no effect in closure_column"); }
         const ablsteady::BoundaryInputs bin = ablsteady::read_boundary_inputs();
         ablsteady::SurfaceLayerOptions sopt = ablsteady::read_surface_layer_options();
         const ablsteady::ClosureOptions copt = ablsteady::read_closure_options();

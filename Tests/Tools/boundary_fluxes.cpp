@@ -72,6 +72,8 @@ int main (int argc, char* argv[])
     {
         ablsteady::Inputs in = ablsteady::parse_inputs();
         auto err = ablsteady::validate(in);
+        // The tool works on level 0 alone: a grid hierarchy would be ignored.
+        if (in.mesh.hierarchy_levels != 1) { err.emplace_back("mesh.hierarchy_levels has no effect in boundary_fluxes"); }
         const ablsteady::BoundaryInputs bin = ablsteady::read_boundary_inputs();
         const ablsteady::SurfaceLayerOptions sopt = ablsteady::read_surface_layer_options();
         amrex::Real ustar = amrex::Real(0.4), z0 = amrex::Real(0.1), direction = 0;

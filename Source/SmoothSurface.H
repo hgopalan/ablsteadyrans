@@ -26,10 +26,16 @@ namespace ablsteady {
 //! non-negative, so no new extrema appear, for beta <= 1/4. ERF's STF uses
 //! beta up to 0.2.
 //!
-//! Not called by the mesh yet: ERF's STF loop does its own smoothing. Meant
-//! for the coarse levels of the x/y grid hierarchy (sub-phase 2.3).
+//! The level-0 mesh does not call it (ERF's STF loop does its own
+//! smoothing); the coarse levels of the x/y grid hierarchy smooth their
+//! ground with it (MeshHierarchy.H).
 //! Aborts unless passes >= 0 and 0 <= beta < 1/4.
 void smooth_surface (amrex::MultiFab& h, const amrex::Geometry& geom, int passes, amrex::Real beta);
+
+//! Fill the ghost nodes in x and y of the k = 0 slab of h: periodic images
+//! and interior ghosts by FillBoundary, ghosts outside a non-periodic face
+//! with the height of the nearest domain node (as smooth_surface leaves them).
+void fill_surface_ghosts (amrex::MultiFab& h, const amrex::Geometry& geom);
 
 } // namespace ablsteady
 

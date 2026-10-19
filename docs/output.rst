@@ -27,6 +27,14 @@ It can be read with yt, ParaView, VisIt or AMReX's ``amrex_fcompare``.
 The node heights themselves, ghost nodes included, are written to ``Level_0/z_phys_nd`` inside the plotfile as a
 VisMF MultiFab.
 
+Grid hierarchy plotfiles
+------------------------
+
+With ``mesh.hierarchy_levels`` = L > 1 and ``io.write_plotfile = 1``, every coarse level l = 1 … L − 1 is written next
+to the plotfile as ``<io.plot_file>_level<l>_NNNNN``: the cell variables ``z`` and ``detJ`` of that level, and its
+node heights in ``Level_0/z_phys_nd``. The run log has one mesh-quality report per level and a summary table
+(:doc:`governing_curvilinear`).
+
 Turbulence diagnostics plotfile
 -------------------------------
 
