@@ -167,6 +167,13 @@ TEST (PoissonB, UnsupportedCombinationsAreRefused)
     unused.given = {"poisson_precond"};
     EXPECT_NE(ablsteady::check_poisson_options(unused).front().find("solver.poisson_precond has no effect"),
               std::string::npos);
+    // solver.poisson_precond with the default back end (the key not given):
+    // the message says how to fix the deck; given explicitly, it does not.
+    ablsteady::PoissonOptions dflt;
+    dflt.given = {"poisson_precond"};
+    EXPECT_NE(ablsteady::check_poisson_options(dflt).front().find("gmres_mlmg is the default"), std::string::npos);
+    dflt.given = {"poisson_precond", "poisson_backend"};
+    EXPECT_EQ(ablsteady::check_poisson_options(dflt).front().find("gmres_mlmg is the default"), std::string::npos);
     unused.given = {"poisson_restart"};
     EXPECT_NE(ablsteady::check_poisson_options(unused).front().find("solver.poisson_restart has no effect"),
               std::string::npos);

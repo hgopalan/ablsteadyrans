@@ -596,8 +596,9 @@ TEST (Simplec, LidDrivenCavityRe100)
     amrex::Print() << "cavity Re 100 on " << N << "^2: " << r.iterations << " iterations, worst |du| " << worst_u
                    << " worst |dv| " << worst_v << "\n";
     // Nothing varies in y: v stays 0 to round-off (exactly 0 with back end A;
-    // MLMG's red-black smoother leaves about 1e-13 across the two y cells).
-    EXPECT_LT(max_abs(q.v), 1e-10);
+    // MLMG's red-black smoother leaves about 1e-13 across the two y cells in
+    // double, 2e-8 in single).
+    EXPECT_LT(max_abs(q.v), tol(1e-10, 1e-6));
 }
 
 // ---------------------------------------------------------------------------

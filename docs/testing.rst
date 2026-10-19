@@ -49,6 +49,9 @@ is killed:
    * - P6
      - The fallback to ``mlmg`` instead of ``gmres_fft``
      - ``unit_np2``, ``rt_steady_askervein``
+   * - P7
+     - The ``solver.poisson_precond`` refusal without its hint about the default
+     - ``PoissonB.UnsupportedCombinationsAreRefused`` (``unit_np2``)
 
 The one-line mutants of sub-phase 2.2 (``Source/LineSweeps.cpp`` and ``Source/Driver.cpp``), each run against
 ``LineSweeps.*``, ``Driver.*`` and ``Predictor.Lusgs*`` on two ranks by ``tools/line_sweep_mutants.py``; every one
@@ -314,7 +317,7 @@ Current tests
    * - ``rt_steady_hill3d_neutral_zjacobi``, ``rt_steady_hill3d_neutral_lusgs``, ``rt_steady_hill3d_neutral_matches``
      - RT-2.2.1: a truly neutral Hill_3D (``inputs_steady_hill3d_neutral``: 32 × 32 × 16 over the same domain, θ =
        300 K, ``forcing.gravity = 0``, damping of w alone, four boxes) run to near round-off (every residual below 1e-11
-       and six orders down; ten orders put the θ and p residuals, which carry only the divergence, under the
+       and eight orders down; ten orders put the θ and p residuals, which carry only the divergence, under the
        rounding floor once ``gmres_mlmg`` became the default) with 16 z-line Jacobi sweeps at a cap of 4 and with the box-local line LU-SGS sweeps
        (``inputs_steady_hill3d_neutral_lusgs``: zero ghosts, overlap 2, the diagonal ordering, two sweeps, cap 16);
        ``Tests/Canonical_RANS/Truly_Neutral_Hill_3D/check_line_match.py`` compares the two plotfiles at 1e-8 of each field's maximum
@@ -328,7 +331,7 @@ Current tests
      - The default ``solver.poisson_backend = gmres_mlmg`` against the previous default: the line LU-SGS deck of
        RT-2.2.1 run again with ``gmres_fft`` (``run/rt_steady_hill3d_neutral/lusgs_fft``) to round-off;
        ``check_line_match.py`` (the case folder) compares it with ``rt_steady_hill3d_neutral_lusgs`` (now ``gmres_mlmg``, the log
-       pattern ``pressure gmres_mlmg`` checked) at 1e-8 of each field's maximum. Measured: both stop at 1789 iterations; u, v, w, p and k agree to 2.2e-13 absolute or better, θ − mean to 2.4e-11 K Label
+       pattern ``pressure gmres_mlmg`` checked) at 1e-8 of each field's maximum. Measured: both stop at 1789 iterations; u, v, w, p and k agree to 2.2e-13 absolute or better, θ − mean to 2.4e-11 K. Label
        ``nightly``; double only.
    * - ``rt_steady_askervein``
      - RT-1.16.3, the convergence half: Askervein on the ERF grid of RT-1.12.1 (``inputs_steady_askervein``: 30 × 30

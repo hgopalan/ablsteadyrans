@@ -258,7 +258,7 @@ void run ()
         amrex::MultiFab dist;
         if (copt.wall_distance == WallDistanceKind::tucker) {
             dist.define(ba, dm, 1, 1);
-            const PoissonResult wd = tucker_wall_distance(mesh, geom, state.z_phys_nd, dist);
+            const PoissonResult wd = tucker_wall_distance(mesh, geom, state.z_phys_nd, dist, popt);
             amrex::Print() << "ablsteady: Tucker wall distance: " << wd.iterations << " Poisson iterations\n";
             extend_by_zero_gradient(dist, geom);
         } else {

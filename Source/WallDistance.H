@@ -15,7 +15,8 @@ namespace ablsteady {
 //!   laplacian(phi) = -1,  phi = 0 on the ground,
 //! with zero flux through the top and through non-periodic side faces
 //! (periodic directions stay periodic), on the terrain-following mesh with
-//! the Poisson layer (opt.backend; back end A by default, with the full
+//! the Poisson layer (opt.backend: the application passes the run's
+//! solver.poisson_* controls, default gmres_mlmg; both back ends carry the full
 //! terrain cross terms), then sets in every valid cell
 //!   d = -|grad phi| + sqrt(|grad phi|^2 + 2 phi),
 //! with ERF's cell-centred physical gradient (centred differences and the

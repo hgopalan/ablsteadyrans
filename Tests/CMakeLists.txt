@@ -563,10 +563,12 @@ if(ABLSTEADY_PRECISION STREQUAL "DOUBLE")
                        PREFIX ${EXPECT_ABORT} --success "ablsteady: steady after" --
                        COMMAND $<TARGET_FILE:ablsteady> ${HILL3D_NEUTRAL_CASE}/inputs_steady_hill3d_neutral
                                ${ABLSTEADY_TEST_AMREX_FLAGS})
-    # The default pressure correction is gmres_mlmg (checked in the log).
+    # The default back end, gmres_mlmg, for the pressure correction and for the
+    # alpha_v = alpha_h projection (both checked in the log).
     ablsteady_add_test(NAME rt_steady_hill3d_neutral_lusgs NP 4 LABELS "nightly" RUN_DIR ${RT221_DIR}/lusgs
                        FIXTURES_REQUIRED hill3d_neutral_clean FIXTURES_SETUP hill3d_neutral_lusgs
-                       PREFIX ${EXPECT_ABORT} --success "ablsteady: steady after" "pressure gmres_mlmg reltol" --
+                       PREFIX ${EXPECT_ABORT} --success "ablsteady: steady after" "pressure gmres_mlmg reltol"
+                              "Poisson iterations \\(gmres_mlmg," --
                        COMMAND $<TARGET_FILE:ablsteady> ${HILL3D_NEUTRAL_CASE}/inputs_steady_hill3d_neutral_lusgs
                                ${ABLSTEADY_TEST_AMREX_FLAGS})
     add_test(NAME rt_steady_hill3d_neutral_matches

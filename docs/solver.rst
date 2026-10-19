@@ -323,8 +323,16 @@ B's work per pressure correction nearly flat as the first layer thins (mean Pois
      - 324 iterations, 2.1
 
 (140 × 140 cells, the layers stretched by 1.08 to about 750 m, line LU-SGS with two sweeps at a CFL cap of 16,
-``init.alpha_v = init.alpha_h = 1``.) At the same ``simplec.pressure_reltol`` back end B also leaves 10–30 times
-less divergence after the correction, since it stops on the :math:`J`-scaled residual.
+``init.alpha_v = init.alpha_h = 1``.) The tolerances differ: back end B stops on the :math:`J`-weighted residual
+(the cell-volume, mass-imbalance norm), back end A on the plain one. On these Askervein runs, where the
+divergence sits in the thin near-ground cells (:math:`J \ll 1`), back end B left 10–30 times less divergence after
+each correction at the same ``simplec.pressure_reltol``; where the divergence sits in tall cells aloft
+(:math:`J > 1`) the same value stops looser in the plain norm, by up to :math:`J_\max/J_\min`.
+
+**Residuals that were exactly zero.** Back end A solves a horizontally uniform problem exactly, so some residuals
+stayed exactly 0 (v across two periodic y cells, θ with no gravity). With back end B they sit at round-off
+(about 1e-13 in double). ``steady.residual_tol`` times :math:`10^{-N}` (``steady.residual_drop_orders``) far below
+that floor can then not be met; the defaults (5e-5, four orders) are far from it.
 
 **The initializer's split coefficient.** With :math:`\alpha_v \ne \alpha_h` the initializer's operator is
 :math:`\nabla\cdot(\mathrm{diag}(\alpha_h^2, \alpha_h^2, \alpha_v^2)\nabla\lambda)`, whose z-face flux needs a

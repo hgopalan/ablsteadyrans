@@ -116,8 +116,10 @@ struct PoissonResult
     amrex::Real removed_mean{0};
 };
 
-//! The Poisson layer, back end A (sub-phase 1.10): ERF's TerrainPoisson
-//! operator (extern_erf/) solved by amrex::GMRES with ERF's FFT preconditioner.
+//! The Poisson layer: back end A (sub-phase 1.10), ERF's TerrainPoisson
+//! operator (extern_erf/) solved by amrex::GMRES with ERF's FFT preconditioner,
+//! or back end B (sub-phase 1.11, the default gmres_mlmg), AMReX's
+//! MLTerrainPoisson with multigrid; PoissonOptions::backend chooses.
 //!
 //! Solves  A phi = rhs  with
 //!   A phi = (1/J) [ d_xi (a_x beta_x f_x) + d_eta (a_y beta_y f_y) + d_zeta (a_z g_z) ],

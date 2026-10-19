@@ -26,7 +26,7 @@ the run directories first, so a stale plotfile cannot be compared, and the check
 per run.
 
 ## Expected Results
-- Both runs reach near round-off: every residual below 1e-11 and six orders down (ten orders put theta and p under the rounding floor; see the deck).
+- Both runs reach near round-off: every residual below 1e-11 and eight orders down (ten orders put theta and p under the rounding floor; see the deck).
 - Measured: 3495 iterations (70 s on four ranks) for z-line Jacobi against 1792 (32 s) for LU-SGS.
 - u, v, w, p and k agree to 9e-10 absolute (at most 3e-8 of the tolerance scale).
 - `gmres_mlmg` against `gmres_fft` on the LU-SGS deck: both stop at 1789 iterations; u, v, w, p and k agree to 2.2e-13 absolute or better, theta minus its mean to 2.4e-11 K.

@@ -354,7 +354,10 @@ std::vector<std::string> check_poisson_options (const PoissonOptions& opt)
     auto given = [&opt] (const char* k) { return std::find(opt.given.begin(), opt.given.end(), k) != opt.given.end(); };
     if (given("poisson_precond") && opt.backend != "gmres_fft") {
         err.emplace_back("solver.poisson_precond has no effect with solver.poisson_backend = " + opt.backend
-                         + " (back end A only)");
+                         + " (back end A only)"
+                         + (given("poisson_backend") ? std::string()
+                                                     : std::string("; gmres_mlmg is the default: remove the key, or set "
+                                                                   "solver.poisson_backend = gmres_fft")));
     }
     if (given("poisson_restart") && opt.backend == "mlmg") {
         err.emplace_back("solver.poisson_restart has no effect with solver.poisson_backend = mlmg (no GMRES)");
