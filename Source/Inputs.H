@@ -54,6 +54,9 @@ struct MeshInputs
     bool stretch_ratio_given{false};
     //! File of nz+1 increasing node heights, the first 0, instead of dz0.
     std::string zlevels_file;
+    //! Levels of the x/y grid hierarchy (MeshHierarchy.H): 1 is the mesh
+    //! alone; level l has 2^l times fewer cells in x and y, the same z-levels.
+    int hierarchy_levels{1};
 };
 
 //! The ground surface and how the mesh follows it (sub-phase 1.4).
@@ -76,6 +79,9 @@ struct TerrainInputs
     //! xyz: nearest points used and the weight power (FastWindTerrain's defaults).
     int idw_neighbors{6};
     amrex::Real idw_power{2};
+    //! Grid hierarchy: level l's ground is smoothed by hierarchy_passes (2^l - 1)
+    //! passes (MeshHierarchy.H).
+    int hierarchy_passes{1};
     //! Keys given in the inputs (a key with no effect for the chosen type is an error).
     std::vector<std::string> given;
 };
@@ -124,6 +130,12 @@ std::vector<std::string> unknown_inputs (const std::vector<InputEntry>& entries)
 //! ablsteady_refavg owns only "refavg").
 std::vector<std::string> unknown_inputs (const std::vector<InputEntry>& entries,
                                          const std::vector<std::string>& owned);
+
+//! The Newton–Krylov keys of read_newton_options (Newton.H), without the
+//! "steady." prefix. The application does not read them before sub-phase
+//! 3.5; unknown_inputs names that sub-phase for these keys only.
+inline constexpr const char* kNewtonInputKeys[] = {"newton_gmres_restart", "newton_fd_eps_scale",
+                                                   "newton_krylov_rtol", "newton_mem_budget_gb"};
 
 //! The current ParmParse table as InputEntry records.
 std::vector<InputEntry> parmparse_entries ();

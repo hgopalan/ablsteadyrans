@@ -55,6 +55,8 @@ int main (int argc, char* argv[])
         using ablsteady::PoissonFace;
         ablsteady::Inputs in = ablsteady::parse_inputs();
         auto err = ablsteady::validate(in);
+        // The tool works on level 0 alone: a grid hierarchy would be ignored.
+        if (in.mesh.hierarchy_levels != 1) { err.emplace_back("mesh.hierarchy_levels has no effect in poisson_projection"); }
         const auto opt = ablsteady::read_poisson_options();
         for (const auto& e : ablsteady::unknown_inputs(ablsteady::parmparse_entries(),
                                                        {"mesh", "terrain", "io", "solver"})) {

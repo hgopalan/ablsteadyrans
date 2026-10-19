@@ -269,22 +269,59 @@ Sub-phase 3.1 adds one Newton step solved by GMRES. The application does not run
 
    (D + J)\,\delta q = -R(q), \qquad A = T^{-1}(D + J)\,S, \qquad b = -T^{-1}R(q), \qquad \delta q = S x .
 
-- :math:`J = \partial R/\partial q` with :math:`\nu_t` frozen, applied by the Jacobian–vector product of
-  :doc:`discretization`.
+- :math:`J = \partial R/\partial q`, applied by the Jacobian–vector product of :doc:`discretization`. With fixed
+  diffusivities :math:`\nu_t` is frozen; with a closure the residual computes :math:`\nu_t(q)`, so :math:`J`
+  differentiates it too.
 - :math:`D` is :math:`1/\Delta\tau` on momentum, :math:`\theta` and :math:`k`, and 0 on continuity and Dirichlet
   rows. :math:`D = 0` is plain Newton.
 - :math:`S` and :math:`T` scale the fields so GMRES weighs them alike.
 
 GMRES is flexible, so the preconditioner (sub-phase 3.3) may change between iterations; it is the identity for now.
-FGMRES(:math:`m`) keeps :math:`2m + 3` vectors of state size. The run stops, naming
-``steady.newton_mem_budget_gb``, if they do not fit.
+
+**Ghost fill.** :math:`R` here is :math:`R(\mathrm{fill}(q))`: the ghost cells come from the boundary conditions,
+and :math:`Jv` refills :math:`q + \epsilon v`. On terrain with ``bc.zlo = surface_layer`` one fill is not a fixed
+point: the surface layer reads the ground :math:`w` face, which the no-flux rule then resets from the
+:math:`u, v` ghosts, so a second fill changes :math:`R` by about 1e-5. The step therefore evaluates :math:`R` on a
+copy of :math:`q` filled once more, and every :math:`Jv` differences against that. On flat ground and on walls
+the fill is idempotent and nothing changes.
+
+**When an update is skipped.** If :math:`|b|` is not finite, or the Krylov residual comes back above :math:`|b|`
+(or not finite), the update is not applied and the step prints a line saying so. A stagnated solve (a short
+restart at its iteration cap) can end at :math:`|b|` plus round-off; its update is then about zero, so skipping
+it does not change the answer. The closing ghost fill still runs,
+so on terrain under the wall law the ground :math:`w` face can move slightly.
+
+**Memory.** FGMRES(:math:`m`) keeps :math:`2m + 3` vectors of state size. The run stops, naming
+``steady.newton_mem_budget_gb``, if they do not fit on the rank with the most points. The estimate leaves out the
+step's own buffers (about 8 vectors more while GMRES runs, 2 more with a preconditioner) and the residual's
+temporaries. On one 512 × 512 × 128 box restart 20 passes the check at 69.4 GB, but the Krylov vectors and the
+step's buffers come to about 82 GB, before the state, the mesh and the residual's temporaries, so leave that
+margin.
+
+**Limits of GMRES here.** The forward difference has an error near 1e-8 in double (1.6e-3 in single). Below that
+level GMRES still reports convergence (its Arnoldi estimate drops to round-off) while the true linear residual
+stays at the floor: 1.4e-8 on the Ekman column, 4.6e-8 to 1.7e-6 on the 30 m hill case. A Krylov tolerance below
+that buys nothing. Short restarts can stall: on the Ekman column restart 5 reaches the 2000-iteration cap on the
+third step at the default 1e-2, and restarts 5 and 10 at 1e-6; on the hill case plain Newton with restart 30
+stalls at the cap once :math:`|R|` is small (2.6e-10 at rtol 1e-2), while restart 200 converges to round-off.
+
+**Defaults.** ``steady.newton_krylov_rtol = 1e-2`` and ``steady.newton_gmres_restart = 30`` are provisional
+(sub-phase 3.6 tunes them). On the column they take 3, 5 and 8 iterations for the first three steps, but over ten
+plain Newton steps restart 30 takes 1469 iterations against 346 for restart 200, and restart 10 reaches the cap on
+step 4. A single step can also raise :math:`|R|` (by 25× at rtol 0.1 on the column); the line search and the
+:math:`\Delta\tau` ramp of sub-phase 3.2 address that.
 
 Reproducibility
 ---------------
 
 Residual norms and monitors use ``deterministic_sum``: each column is summed in k order, columns in storage order,
 and each box total goes into its own slot of a vector that is reduced over the ranks. The result has the same bits
-for any number of ranks on a fixed BoxArray, so every rank reaches the same verdict at the same iteration.
+for any number of ranks on a fixed BoxArray, so every rank reaches the same verdict at the same iteration. The
+Newton stage's inner product and the finite-difference step of :math:`Jv` (sums over face and cell points with
+shared faces counted once) are summed the same way, so the GMRES iterates are bit-identical on any rank count (with
+the identity preconditioner, or a hook whose result does not depend on the distribution). A
+different BoxArray adds in a different order: the GMRES solutions of two box layouts agree to the finite-difference
+round-off carried through the solve's restarts, not to the last bit.
 
 References
 ----------

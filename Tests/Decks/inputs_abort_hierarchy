@@ -1,0 +1,12 @@
+# Must abort (UT-2.3.5 at the application): three hierarchy levels need
+# n_cell x and y divisible by 4 and boxes of at least 4 cells, and the
+# smoothing passes are out of range.
+mesh.n_cell           = 30 32 8
+mesh.prob_hi          = 3000. 3200. 800.
+mesh.max_grid_size    = 2
+mesh.hierarchy_levels = 3
+
+terrain.hierarchy_passes = -1
+
+io.write_plotfile   = 0
+io.write_checkpoint = 0

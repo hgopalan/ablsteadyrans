@@ -7,7 +7,9 @@
 
 #include <AMReX_iMultiFab.H>
 
+#include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <limits>
 #include <string>
 
@@ -96,32 +98,56 @@ void check_inputs (const char* op, const ResidualInputs& in)
 }
 
 // Over the owned points of q (shared faces once): sum of |(q - offset) / s|,
-// sum of (v / s)^2 and the number of points, added to sums.
+// sum of (v / s)^2 and the number of points, per box, written to slots
+// (3 per box: box_sums[3 * box + c]). One thread per (i, j) column adds its
+// k values in order and the host adds the columns in storage order, so a box
+// gives the same bits whatever rank owns it (as NewtonOperator::dotProduct).
 template <bool OFFSET>
 void scaled_sums (const amrex::MultiFab& q, const amrex::MultiFab& v, const amrex::MultiFab* offset, amrex::Real s,
-                  const amrex::Periodicity& per, double sums[3])
+                  const amrex::Periodicity& per, amrex::Vector<double>& box_sums)
 {
     const auto mask = q.OwnerMask(per);
-    amrex::ReduceOps<amrex::ReduceOpSum, amrex::ReduceOpSum, amrex::ReduceOpSum> ops;
-    amrex::ReduceData<double, double, double> data(ops);
     const double sinv = 1.0 / static_cast<double>(s);
     for (amrex::MFIter mfi(q, false); mfi.isValid(); ++mfi) {
+        const amrex::Box bx = mfi.validbox();
+        const int klo = bx.smallEnd(2);
+        const int khi = bx.bigEnd(2);
+        amrex::Box cols = bx;
+        cols.setBig(2, klo);
+        const auto npts = static_cast<std::size_t>(cols.numPts());
+        amrex::Gpu::DeviceVector<double> colsum(3 * npts);
+        double* cs = colsum.data();
+        const auto lo = amrex::lbound(cols);
+        const auto len = amrex::length(cols);
         const auto qa = q.const_array(mfi);
         const auto va = v.const_array(mfi);
         const auto m = mask->const_array(mfi);
         const auto o = OFFSET ? offset->const_array(mfi) : qa;
-        ops.eval(mfi.validbox(), data, [=] AMREX_GPU_DEVICE (int i, int j, int k) -> amrex::GpuTuple<double, double, double>
+        amrex::ParallelFor(cols, [=] AMREX_GPU_DEVICE (int i, int j, int k0) noexcept
         {
-            if (m(i, j, k) == 0) { return {0.0, 0.0, 0.0}; }
-            const double qq = OFFSET ? static_cast<double>(qa(i, j, k) - o(i, j, k)) : static_cast<double>(qa(i, j, k));
-            const double vv = static_cast<double>(va(i, j, k)) * sinv;
-            return {std::abs(qq) * sinv, vv * vv, 1.0};
+            double s0 = 0, s1 = 0, s2 = 0;
+            for (int k = klo; k <= khi; ++k) {
+                if (m(i, j, k) == 0) { continue; }
+                const double qq = OFFSET ? static_cast<double>(qa(i, j, k) - o(i, j, k)) : static_cast<double>(qa(i, j, k));
+                const double vv = static_cast<double>(va(i, j, k)) * sinv;
+                s0 += std::abs(qq) * sinv;
+                s1 += vv * vv;
+                s2 += 1.0;
+            }
+            const std::size_t c = static_cast<std::size_t>((i - lo.x) + (j - lo.y) * len.x + (k0 - lo.z) * len.x * len.y);
+            cs[3 * c] = s0;
+            cs[3 * c + 1] = s1;
+            cs[3 * c + 2] = s2;
         });
+        amrex::Vector<double> h(3 * npts);
+        amrex::Gpu::copyAsync(amrex::Gpu::deviceToHost, colsum.begin(), colsum.end(), h.begin());
+        amrex::Gpu::streamSynchronize();
+        double t[3] = {0, 0, 0};
+        for (std::size_t c = 0; c < npts; ++c) {
+            for (int n = 0; n < 3; ++n) { t[n] += h[3 * c + n]; }
+        }
+        for (int n = 0; n < 3; ++n) { box_sums[3 * mfi.index() + n] = t[n]; }
     }
-    const auto r = data.value();
-    sums[0] += amrex::get<0>(r);
-    sums[1] += amrex::get<1>(r);
-    sums[2] += amrex::get<2>(r);
 }
 
 amrex::Vector<const amrex::MultiFab*> solution_fields (const State& q)
@@ -305,15 +331,28 @@ amrex::Real jvp (const State& q, const State& v, const ResidualInputs& in, const
     fill_theta_ref(in.theta_ref, q.z_phys_nd, theta_ref);
     const auto& js = in.jvp_scales;
     const amrex::Real scale[6] = {js.velocity, js.velocity, js.velocity, js.pressure, js.theta, js.tke};
+    // One slot per (field, box, sum), all-reduced (one contributor per slot:
+    // exact) and added in field and box order: the step, and so J v, has the
+    // same bits for any DistributionMapping of the BoxArray (the GMRES of
+    // the Newton stage then gives the same iterates on any rank count).
+    const int nboxes = static_cast<int>(q.p.boxArray().size());
+    amrex::Vector<double> slots(static_cast<std::size_t>(6 * 3 * nboxes), 0.0);
+    for (int n = 0; n < 6; ++n) {
+        amrex::Vector<double> box_sums(static_cast<std::size_t>(3 * nboxes), 0.0);
+        if (n == 4) {
+            scaled_sums<true>(*qf[n], *vf[n], &theta_ref, scale[n], per, box_sums);
+        } else {
+            scaled_sums<false>(*qf[n], *vf[n], nullptr, scale[n], per, box_sums);
+        }
+        std::copy(box_sums.begin(), box_sums.end(), slots.begin() + static_cast<std::ptrdiff_t>(3 * nboxes * n));
+    }
+    amrex::ParallelDescriptor::ReduceRealSum(slots.dataPtr(), static_cast<int>(slots.size()));
     double sums[3] = {0, 0, 0};
     for (int n = 0; n < 6; ++n) {
-        if (n == 4) {
-            scaled_sums<true>(*qf[n], *vf[n], &theta_ref, scale[n], per, sums);
-        } else {
-            scaled_sums<false>(*qf[n], *vf[n], nullptr, scale[n], per, sums);
+        for (int b = 0; b < nboxes; ++b) {
+            for (int c = 0; c < 3; ++c) { sums[c] += slots[static_cast<std::size_t>(3 * (nboxes * n + b) + c)]; }
         }
     }
-    amrex::ParallelAllReduce::Sum(sums, 3, amrex::ParallelDescriptor::Communicator());
     if (sums[1] == 0) {
         for (auto& f : Jv.fields()) { f.mf->setVal(0.0); }
         return 0;

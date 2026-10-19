@@ -52,6 +52,14 @@ All errors are reported together. Each row below matches the range check in ``So
    * - ``mesh.zlevels_file``
      - empty
      - A file of n_cell z + 1 increasing heights starting at 0. Not together with ``mesh.dz0``.
+   * - ``mesh.hierarchy_levels``
+     - ``1``
+     - An integer from 1 to 10: the levels L of the x/y grid hierarchy (:doc:`governing_curvilinear`). 1 is the mesh
+       alone. With L > 1, n_cell x and y must be divisible by :math:`2^{L-1}` and ``mesh.max_grid_size`` x and y
+       must be multiples of :math:`2^{L-1}`. Level 0 is then laid out so that every level coarsens it exactly, which
+       can differ from the L = 1 layout (the last bits of a solve can differ). The levels are built, reported and
+       written with the plotfile; the solver runs on level 0 in this version. The test-only tools refuse L > 1.
+       May change across a restart.
 
 ``terrain``
 -----------
@@ -92,6 +100,10 @@ A key that has no effect for the chosen ``terrain.type`` or ``terrain.smoothing`
    * - ``terrain.idw_power``
      - ``2``
      - Finite, > 0; ``xyz`` only. Weight exponent, :math:`d^{-p}`.
+   * - ``terrain.hierarchy_passes``
+     - ``1``
+     - An integer from 0 to 64; only with ``mesh.hierarchy_levels`` > 1. The ground of hierarchy level l is smoothed
+       by this many times :math:`2^l - 1` passes (:doc:`governing_curvilinear`).
 
 ``io``
 ------
@@ -237,14 +249,21 @@ definition of a steady solution (:doc:`solver`) and its own. The application run
      - Integer, ≥ 5 and ≤ 200. GMRES restart length of the Newton step (:doc:`solver`).
    * - ``steady.newton_fd_eps_scale``
      - :math:`\sqrt{\epsilon_\mathrm{mach}}` of ``amrex::Real``
-     - > 0 and ≤ 1e-2. Relative step :math:`h` of the Jacobian-vector product (:doc:`solver`).
+     - ≥ :math:`\epsilon_\mathrm{mach}^{3/4}` of ``amrex::Real`` (1.8189894035458565e-12 in double,
+       6.41553051e-06 in single) and ≤ 1e-2. Relative step :math:`h` of the Jacobian-vector product
+       (:doc:`solver`). Away from the default :math:`Jv` loses digits: relative error 7.2e-8 at the default, 9.4e-3
+       at 1e-2 and about 1e-3 at the lower bound (double). Below the bound the error grows as :math:`1/h`; at
+       :math:`\epsilon_\mathrm{mach}` it is about 1 and Newton stalls or diverges.
    * - ``steady.newton_krylov_rtol``
      - ``1e-2``
-     - > 0 and < 1. Relative tolerance of GMRES in each Newton step.
+     - > 0 and < 1. Relative tolerance of GMRES in each Newton step. Below the forward difference's floor
+       (1.4e-8 on the Ekman column, up to 1.7e-6 on the hill case, in double) GMRES reports convergence without
+       the true residual following (:doc:`solver`).
    * - ``steady.newton_mem_budget_gb``
      - ``70``
      - > 0 and ≤ 80. Krylov memory per rank in GB (10\ :sup:`9` bytes); the run aborts when the estimate of
-       ``2 steady.newton_gmres_restart + 3`` state-size vectors exceeds it.
+       ``2 steady.newton_gmres_restart + 3`` state-size vectors on the rank with the most points exceeds it. The
+       step's own buffers (about 9 vectors more) are not counted: leave that margin.
 
 The four ``steady.newton_*`` rows are read by ``read_newton_options()`` (sub-phase 3.1). Their defaults are
 provisional until sub-phase 3.6 (PR-28) tunes them. The application runs no Newton step before sub-phase 3.5, so

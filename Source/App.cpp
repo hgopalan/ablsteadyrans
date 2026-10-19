@@ -10,6 +10,7 @@
 #include "Initializer.H"
 #include "Inputs.H"
 #include "Mesh.H"
+#include "MeshHierarchy.H"
 #include "Poisson.H"
 #include "Simplec.H"
 #include "State.H"
@@ -152,7 +153,8 @@ void run ()
     }
 
     const amrex::Geometry geom = make_geometry(in.mesh);
-    const amrex::BoxArray ba = make_box_array(in.mesh);
+    // With a grid hierarchy, boxes every level coarsens exactly.
+    const amrex::BoxArray ba = hierarchy_box_array(in.mesh);
     if (solve && sopt.sweep == SweepKind::lusgs) {
         // The overlap against the layout (LineSweeps.H), before any work.
         const std::string lay = check_line_overlap_layout(ba, sopt.line_overlap);
@@ -229,6 +231,21 @@ void run ()
 
     amrex::Print() << mesh.quality_report();
 
+    // The x/y grid hierarchy (mesh.hierarchy_levels > 1): built from level 0's
+    // node heights, reported and written with the plotfile. The stage runs on
+    // level 0 (grid sequencing over the levels is sub-phase 2.5).
+    std::unique_ptr<MeshHierarchy> hierarchy;
+    if (in.mesh.hierarchy_levels > 1) {
+        hierarchy = std::make_unique<MeshHierarchy>(in, geom, state.z_phys_nd, mesh);
+        amrex::Print() << hierarchy->quality_report();
+    }
+    auto write_hierarchy = [&] {
+        if (!hierarchy) { return; }
+        for (const auto& name : hierarchy->write_plotfiles(in.io.plot_file, state.step)) {
+            amrex::Print() << "ablsteady: wrote " << name << "\n";
+        }
+    };
+
     if (solve) {
         // The run's models.
         const BoundaryConditions bc(bin, geom, mesh, fopt.coriolis);
@@ -301,6 +318,7 @@ void run ()
         if (in.io.write_plotfile == 1) {
             const auto name = write_plotfile(in.io.plot_file, state, geom, &mesh.detJ);
             amrex::Print() << "ablsteady: wrote " << name << "\n";
+            write_hierarchy();
         }
         if (!in.io.turb_plot_file.empty()) {
             // The closure's fields and the wall state at the final state.
@@ -329,6 +347,7 @@ void run ()
     if (in.io.write_plotfile == 1) {
         const auto name = write_plotfile(in.io.plot_file, state, geom, &mesh.detJ);
         amrex::Print() << "ablsteady: wrote " << name << "\n";
+        write_hierarchy();
     }
     if (in.io.write_checkpoint == 1) {
         const auto name = write_checkpoint(in.io.chk_file, state, in.mesh);

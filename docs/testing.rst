@@ -135,6 +135,31 @@ Current tests
        The golds of the three mesh tests above were written by ablsteady itself (``Tests/check_mesh.py --write``):
        they detect changes, they do not show correctness. Correctness of the same code paths comes from UT-1.4.7
        (ERF's own output) and the closed-form unit tests.
+   * - ``rt_askervein_hierarchy``, ``rt_askervein_hierarchy_level1_matches``, ``rt_askervein_hierarchy_level2_matches``
+     - RT-2.3.1 and RT-2.3.2: the Askervein mesh of ``rt_askervein_mesh`` with STF and a three-level hierarchy
+       (``inputs_mesh_askervein_hierarchy``: 60, 30 and 15 cells a side, the same 18 layers, 1 and 3 ground passes).
+       In double precision, level 0's ``z`` and ``detJ`` statistics and every level's quality report against
+       ``Tests/Gold/askervein_hierarchy_mesh.json`` (the per-level headers and the summary table included); in both
+       precisions, ``z`` and ``detJ`` of levels 1 and 2 against
+       ``Tests/Gold/askervein_hierarchy_level{1,2}_plt00000`` (relative 1e-12; 1e-5 in single precision). The golds
+       were written by ablsteady: they detect changes. The coarse grounds were checked against an independent
+       rebuild (UT-2.3.2).
+   * - ``rt_steep_ridge_hierarchy_quality``
+     - RT-2.3.2: the steep ridge of ``rt_steep_ridge_quality`` on 32 × 4 × 16 cells with three levels: the report
+       of every level against ``Tests/Gold/steep_ridge_hierarchy_mesh.json``, with the STF and top warnings (no
+       coarse-level hint: levels 1 and 2 cap no more than level 0), and the per-level headers and summary table. Double precision only. The gold was written
+       by ablsteady: it detects changes.
+   * - ``rt_askervein_hierarchy_hint``
+     - RT-2.3.2: the Askervein hierarchy with unsmoothed coarse grounds (``terrain.hierarchy_passes = 0``): levels 1
+       and 2 cap STF at 9 and 10 z-levels against level 0's 8, so the report gives the coarse-level hint; against
+       ``Tests/Gold/askervein_hierarchy_p0_mesh.json`` (written by ablsteady). Double precision only.
+   * - ``rt_hierarchy_restart_first``, ``rt_hierarchy_restart``, ``rt_hierarchy_restart_level{1,2}_matches``
+     - A checkpoint of the Askervein mesh written without a hierarchy (2 ranks), restarted with three levels on 3
+       ranks: the rebuilt levels 1 and 2 against the golds of ``rt_askervein_hierarchy``.
+   * - ``abort_hierarchy``, ``abort_hierarchy_passes_unused``, ``abort_hierarchy_tool``
+     - UT-2.3.5 at the application: n_cell x not divisible by 4 for three levels, a box size not a multiple of 4
+       and passes out of range; passes given without a hierarchy; a test-only tool (``wall_distance``) given a
+       hierarchy. Each message names its input.
    * - ``abort_poisson_options``
      - ``poisson_projection`` with ``solver.poisson_reltol`` repeated and out of range: both named.
        (``abort_unknown_key`` checks that the application refuses ``solver.poisson_reltol``.)
@@ -265,14 +290,21 @@ Current tests
        × 18, the log-law inflow, outflow, slip sides, no Coriolis, four sweeps, cap 2) to the steady verdict.
        Measured: 156 iterations (2 s on two ranks). The 5 % comparison with ERF's URANS on lines A and AA is not in
        this version (Kestrel). Labels ``regression;smoke``; double only.
-   * - ``rt_precursor_askervein_cnbl``, ``rt_precursor_askervein_cnbl_table``
+   * - ``rt_precursor_askervein_cnbl``, ``rt_precursor_askervein_cnbl_fixed``, ``rt_precursor_askervein_cnbl_table``
      - Beyond the plan: the precursor column of the conventionally neutral Askervein case
        (``inputs_precursor_askervein_cnbl``: 4 × 4 × 26 on Askervein's 20 m × 1.08 levels, z0 = 0.03 m, the flat
        case's sounding, Coriolis at 57.2 N, geostrophic wind (17.028798, −7.380863) m/s) to the steady verdict.
-       ``tools/make_inflow_table.py --check``: the 10 m wind within 0.01° of +x, u* within 1e-3 of 0.6 m/s, and
-       ``Tests/Decks/askervein_cnbl_inflow.txt`` within 1e-3 of the precursor's planar means (u, v relative to the
-       geostrophic speed, θ in K, k relative to its maximum). Measured: 11087 iterations on one rank. Label
-       ``regression``; double only.
+       ``rt_precursor_askervein_cnbl_fixed`` runs the same deck to the step in the table's header (11087), with an
+       unreachable drop criterion (the deck is written at configure time; a regenerated table carries its step). ``tools/make_inflow_table.py --check`` on
+       that run: the plotfile step equal to the table's, the 10 m wind within 0.01° of +x, u* within 1e-3 of
+       0.6 m/s, and ``Tests/Decks/askervein_cnbl_inflow.txt`` within 1e-3 of the planar means (u, v relative to the
+       geostrophic speed, θ in K, k relative to its maximum). **Why a fixed step.** Under the capping inversion θ
+       has no fixed point: the inversion base cools by 1.35e-4 K per iteration as it rises, and the mixed layer
+       warms by 1.5e-5 K. The verdict comes when the k residual leaves a limit cycle of about 600 iterations (the
+       Poisson iteration count switching between 5 and 6), at an iteration that depends on the compiler's
+       rounding: 11087 with Apple clang and 11073 with gcc-16, 1.7e-3 K apart in θ. At step 11087 the two builds
+       agree to 2e-4 K. A build that left the cycle one cycle later would fail the table check, and the verdict
+       run would show its step. Label ``regression``; double only.
    * - ``rt_steady_askervein_cnbl``
      - Beyond the plan: Askervein in a conventionally neutral boundary layer (``inputs_steady_askervein_cnbl``: 30 ×
        30 × 26 to 1599 m, the precursor's table as inflow on xlo and yhi, outflow on xhi and ylo, Rayleigh damping
@@ -417,6 +449,13 @@ GoogleTest suite
    * - UT-1.4.9
      - *Beyond the plan.* Node heights shared by two boxes (or periodic images) are equal, for BTF, STF and Sullivan,
        periodic and not (under gcc each box's copy differed by up to 1e-13 m before ``Mesh`` synchronised them).
+   * - UT-1.4.10
+     - *Beyond the plan* (``Mesh.GhostNodesStandForTheirImages``). Every ghost node in x and y, at every k (the rows
+       below the ground and above the top included), equals the node it stands for, bit for bit: its periodic image,
+       or the edge node of its row at a non-periodic face. BTF, STF and Sullivan; periodic in x only, y only, both and
+       neither, and a layout split in z; on 1, 2 and 4 ranks; every copy of a domain node agrees. Before ``fill_ghost_columns`` the corners outside a wall and a periodic side held
+       the clamped corner column (up to 8 m off) and the row below the ground of periodic ghost columns was
+       extrapolated from the clamped columns (STF, Sullivan).
    * - UT-1.7.1
      - ERF's similarity functions (the copied ``ERF_MOSTUtils.H``, byte-identical by the drift check): Businger–Dyer
        ψ and φ and Jimenez ψ against a Python table of the same formulas, z/L from −5 to 5, to 1e-14 (single 1e-6);
@@ -826,6 +865,35 @@ GoogleTest suite
        the reversed pairs too, at the launch counts of UT-2.2.4 (three layouts, periodic and not, every location,
        lagged ghosts and zero ghosts with :math:`n_o = 2`, one to three sweeps). One sweep is unchanged by the option
        (only the odd sweeps are reversed); two and three sweeps differ. The range check names the key.
+   * - UT-2.3.1
+     - Three levels of a stretched mesh (dz0 = 40 m, the ratio solved by Newton), flat and over a round STF hill:
+       every level's z-levels equal level 0's bit for bit, with the same nz and z extent and x, y halved per level;
+       on flat ground every node of every level sits at its z-level exactly.
+   * - UT-2.3.2
+     - The pass counts :math:`p(2^l - 1)` pinned for p = 0 to 3 and l = 0 to 4; for p = 0, 1, 2 every coarse ground
+       of the hill mesh (non-periodic x, periodic y, 8 boxes) equals an independent host rebuild (injection, then
+       that many passes, β = 1/8, in double precision) to 1e-12 of the hill height and differs from one pass more
+       or fewer by more than 1 mm; level 0 is the run's own mesh; a constant 37.5 m ground is unchanged on every
+       level, bit for bit, ghost nodes included.
+   * - UT-2.3.3
+     - Free-stream preservation on every level for BTF, STF and Sullivan: the metric divergence of a uniform (10, 5)
+       m/s wind below 1e-12 of :math:`(|U| + |V|)/\Delta x` of the level; the coarse grounds are not flat.
+   * - UT-2.3.4
+     - Flat terrain, three levels (16 × 8, 8 × 4, 4 × 2 × 24 cells, stretched): (a) each level's own Poisson solver
+       gives the same φ column for a right-hand side in z alone; (b) the full residual of a conventionally neutral
+       column state (the k-L closure, the surface layer, Coriolis with a geostrophic wind, a capping inversion with
+       buoyancy) has the same u, v, w, p, θ and k columns on every level, so every level has the same column
+       solutions; (c) ten SIMPLEC iterations keep every column of a level alike. Relative 1e-12. See *Variations
+       from the plan* in the pull request for why (b) compares the steady equations rather than iterates.
+   * - UT-2.3.5
+     - Every invalid hierarchy input gives one message naming the key (n_cell x or y not divisible, levels beyond
+       the cells, a box size not a multiple of the coarsening, levels 0 and 11, passes −1 and 65, passes without a
+       hierarchy), and ``validate`` reports it; ``hierarchy_box_array`` gives boxes of at most
+       ``max_grid_size`` that coarsen exactly and span the column; a level 0 laid out by ``make_box_array`` with boxes
+       of 6 cells is refused, naming ``mesh.max_grid_size``.
+   * - UT-2.3.6
+     - A level gathered onto one box equals the distributed level (8 boxes) bit for bit: node heights with ghost
+       nodes, ``detJ``, the three face areas, ``z_cc`` and the quality report, for BTF and STF, on 1, 2 and 4 ranks.
    * - UT-1.15.7 (revised in 1.16)
      - The rotation's pin now holds the planar-mean split: :math:`a_P` with :math:`f^2\max(\tau_c, \tau_{\mathrm{own}})`
        and the right-hand side with the unique-face horizontal mean of the other residual per level at :math:`\tau_c`
@@ -874,25 +942,44 @@ GoogleTest suite
    * - UT-3.1.1
      - ``Newton.JvpEpsSweepAgainstQuadraticResidual``: on a residual that is exactly quadratic in q (upwind
        convection, Coriolis, slip walls), the analytic :math:`Jv` and :math:`B(v,v)` from central differences; the
-       sweep of ``steady.newton_fd_eps_scale`` from 1e-2 to 1e-12 gives the V-shaped error, the truncation branch
+       sweep of ``steady.newton_fd_eps_scale`` from 1e-2 to 3.2e-12 (its lower bound is 1.8e-12) gives the V-shaped error, the truncation branch
        equal to :math:`\epsilon\|B\|/\|Jv\|` to 1e-3, and the default within a factor 3 of the minimum (1.5×
        measured); a uniform :math:`\Delta\tau` adds :math:`x/\Delta\tau` on the right rows; Dirichlet rows are
        identity rows.
    * - UT-3.1.2
      - ``Newton.ColumnConvergesQuadratically``: plain Newton on the Ekman column; the reductions 0.403, 0.171,
-       0.0131, 2.09e-4, 9.41e-8 pinned to a factor 2, the last two steps above the round-off floor gain more than
-       three orders each, and :math:`r_{n+1} \le r_n^2` after the first step.
+       0.0131, 2.09e-4, 8.26e-8 pinned to a factor 2, the last two steps above the round-off floor gain more than
+       three orders each, and :math:`r_{n+1} \le r_n^2` after the first step. In single precision the first three
+       reductions are pinned and the last two steps sit on the forward difference's floor (they depend on FMA
+       contraction); the single-precision CI job compiles only, so this branch runs on request.
    * - UT-3.1.3
      - ``Newton.PoiseuilleInOneStep``: one step gives the discrete Poiseuille profile to 1e-9.
        ``Newton.GmresSolvesKnownSystemOnAnyLayout``: ``amrex::GMRES<NewtonVector, NewtonOperator>`` recovers a known
        solution of a non-symmetric system to 1e-5 on one and four boxes (8 × 6 × 8) and on one and nine boxes
-       (9 × 9 × 8); the layouts agree to 1e-7.
+       (9 × 9 × 8); the layouts agree to 1e-6, a quarter of either solve's error (two box layouts add their sums
+       in different orders and GMRES carries the rounding through its restarts; 6.5e-8 and 1.5e-8 measured, 1.4e-8
+       to 3.1e-7 before jvp's step sums were made independent of the distribution), and
+       the four boxes give the same iteration count and the same solution bits with every box on rank 0.
    * - UT-3.1.3 (c)
      - *Beyond the plan.* ``Newton.VectorOperationsAndBitIdenticalInnerProduct``: the vector operations; the inner
        product counts shared and periodic faces once and has the same bits on every rank and for two distribution
-       mappings. ``Newton.OptionReadersAndRangeChecks``: the four ``steady.newton_*`` keys are read, and each
+       mappings. ``Newton.JvpBitIdenticalForAnyDistribution``: jvp's step and :math:`Jv` have the same bits with
+       every box on rank 0 as on the distributed layout, for 16 rough perturbations on twelve boxes (on 2 and 4 ranks;
+       the identity on one). ``Newton.OptionReadersAndRangeChecks``: the four ``steady.newton_*`` keys are read, and each
        range check names the key and value. ``Newton.KrylovMemoryEstimateAndBudget``: the :math:`2m + 3` vector
        count and bytes of a 512 × 512 × 128 box; the budget abort names both keys.
        ``Newton.PreconditionerHookAndOptionsReachTheSolver``: the hook is set up once per step and applied once
        per GMRES iteration, and its output is used; restart and tolerance reach GMRES.
-       ``Newton.ColumnRestartAndToleranceSweep``: GMRES iterations against the restart length (:doc:`solver`).
+       ``Newton.ColumnRestartAndToleranceSweep``: GMRES iterations against the restart length (:doc:`results`).
+   * - UT-3.1.3 (d)
+     - *Beyond the plan* (test_NewtonCoverage.cpp, from the post-merge review of #19).
+       ``Newton.TerrainWallLawOperatorMatchesCentralDifference``: on a 30 m hill under the wall law, where one ghost
+       fill is not a fixed point, the operator matches a central difference of :math:`q \mapsto R(\mathrm{fill}(q))`
+       to 1e-5 on one and six boxes (2.6e-8 to 4.8e-8 measured), and is off by more than 1 with the base point
+       :math:`R(q)`. ``Newton.TerrainWallLawStepsReduceResidual``: four default steps there reduce :math:`|R|` at
+       every step. ``Newton.UpdateSkippedAboveRhsNorm``: the rule that skips an update. ``Newton.KrylovBudgetIsPerRank``:
+       one box per rank fits a budget the total exceeds. ``Newton.InnerProductSameBitsWithAllBoxesOnRankZero``: the
+       inner product with every box on rank 0 has the bits of the distributed layout (on 2 and 4 ranks).
+       ``Newton.StepDiagnosticsAndEpsRange``: the step's Krylov residual and eps range.
+       ``Newton.NonUniformDtauOnFaces``: a non-uniform :math:`\Delta\tau` gives :math:`x/\Delta\tau_f` with the
+       face mean of the two cells.

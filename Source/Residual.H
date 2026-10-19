@@ -27,9 +27,10 @@
 //
 // Contract for the later terms: everything that belongs to R enters inside
 // residual() (through ResidualInputs), so that jvp, which differentiates
-// residual(), sees it. The diffusivities are inputs held fixed, so until the
-// closure computes nu_t from q inside residual() (sub-phase 1.9), jvp is
-// the Jacobian with nu_t frozen (a Picard linearisation of diffusion).
+// residual(), sees it. With fixed diffusivities (inputs) jvp is the
+// Jacobian with nu_t frozen (a Picard linearisation of diffusion); with a
+// closure (ResidualInputs::closure) residual() computes nu_t from q, so jvp
+// differentiates nu_t too.
 //
 // line_jacobian gives, for one field and one direction, the tridiagonal
 // coefficients of the first-order implicit-side operator A1 along lines in

@@ -264,5 +264,25 @@ Newton–Krylov
 -------------
 
 On the Ekman column of UT-3.1.2, plain Newton reduces the scaled residual by 0.403, 0.171, 0.0131, 2.09e-4 and
-9.41e-8 in its first five steps, with :math:`r_{n+1}/r_n^2` between 0.25 and 0.65 (quadratic convergence). At the
-default Krylov tolerance 1e-2 every restart length from 10 up takes 3, 5 and 8 GMRES iterations.
+8.26e-8 in its first five steps, with :math:`r_{n+1}/r_n^2` between 0.25 and 0.57 (quadratic convergence). At the
+default Krylov tolerance 1e-2 every restart length from 10 up takes 3, 5 and 8 GMRES iterations in the first three
+steps; restart 5 reaches the 2000-iteration cap on the third.
+
+Ten plain Newton steps on the column at rtol 1e-2 (GMRES iterations in all):
+
+.. list-table::
+   :header-rows: 1
+
+   * - Restart
+     - 10
+     - 30 (default)
+     - 60
+     - **200**
+   * - Iterations
+     - 4942 (cap reached on step 4)
+     - 1469
+     - 647
+     - **346**
+
+On a 30 m hill under the wall law (9 × 6 × 8, inflow and outflow, :math:`\Delta\tau` = 20 s, the defaults)
+four steps take :math:`|R|` from 11.3 to 0.211, every solve meeting its tolerance.

@@ -22,6 +22,7 @@ add_executable(unit_tests
     Unit/test_Sha256.cpp
     Unit/test_Reference.cpp
     Unit/test_Mesh.cpp
+    Unit/test_MeshHierarchy.cpp
     Unit/test_Poisson.cpp
     Unit/test_PoissonB.cpp
     Unit/test_WallDistance.cpp
@@ -39,6 +40,7 @@ add_executable(unit_tests
     Unit/test_LineSweeps.cpp
     Unit/test_Simplec.cpp
     Unit/test_Newton.cpp
+    Unit/test_NewtonCoverage.cpp
     Unit/test_Terrain.cpp
 )
 target_include_directories(unit_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Unit)
@@ -246,6 +248,80 @@ else()
                        COMMAND $<TARGET_FILE:ablsteady> ${DECKS}/inputs_mesh_steep_ridge
                                ${ABLSTEADY_TEST_AMREX_FLAGS})
 endif()
+# RT-2.3.1 and RT-2.3.2 (sub-phase 2.3): the Askervein mesh with STF and a
+# three-level x/y grid hierarchy (60, 30, 15 cells a side; the same 18 layers).
+# In double precision, level 0's statistics and every level's quality report
+# against Gold/askervein_hierarchy_mesh.json; in both precisions, the z and
+# detJ of levels 1 and 2 against their gold plotfiles (fcompare).
+set(ASKH_DIR ${CMAKE_CURRENT_BINARY_DIR}/run/rt_askervein_hierarchy)
+if(ABLSTEADY_PRECISION STREQUAL "DOUBLE")
+    set(_askh_prefix ${CHECK_MESH} ${GOLD}/askervein_hierarchy_mesh.json --)
+else()
+    set(_askh_prefix "")
+endif()
+ablsteady_add_test(NAME rt_askervein_hierarchy NP 2 LABELS "regression;smoke" RUN_DIR ${ASKH_DIR}
+                   FIXTURES_SETUP askervein_hierarchy PREFIX ${_askh_prefix}
+                   COMMAND $<TARGET_FILE:ablsteady> ${DECKS}/inputs_mesh_askervein_hierarchy
+                           terrain.file=${PROJECT_SOURCE_DIR}/extern_erf/askervein.txt
+                           ${ABLSTEADY_TEST_AMREX_FLAGS})
+foreach(lev 1 2)
+    ablsteady_add_test(NAME rt_askervein_hierarchy_level${lev}_matches NP 1 LABELS "regression;smoke"
+                       RUN_DIR ${ASKH_DIR} FIXTURES_REQUIRED askervein_hierarchy
+                       COMMAND ${FCOMPARE} --rel_tol ${FCOMPARE_RTOL} askervein_hier_plt_level${lev}_00000
+                               ${GOLD}/askervein_hierarchy_level${lev}_plt00000)
+endforeach()
+# A restart rebuilds the hierarchy: a checkpoint written without one,
+# continued with three levels on another layout (4 boxes from 2 ranks to 3),
+# gives the coarse levels of the fresh run's golds.
+set(HRS_DIR ${CMAKE_CURRENT_BINARY_DIR}/run/rt_hierarchy_restart)
+ablsteady_add_test(NAME rt_hierarchy_restart_first NP 2 LABELS "regression;smoke" RUN_DIR ${HRS_DIR}
+                   FIXTURES_SETUP hierarchy_restart_first
+                   COMMAND $<TARGET_FILE:ablsteady> ${DECKS}/inputs_hierarchy_restart_first
+                           terrain.file=${PROJECT_SOURCE_DIR}/extern_erf/askervein.txt ${ABLSTEADY_TEST_AMREX_FLAGS})
+ablsteady_add_test(NAME rt_hierarchy_restart NP 3 LABELS "regression;smoke" RUN_DIR ${HRS_DIR}
+                   FIXTURES_REQUIRED hierarchy_restart_first FIXTURES_SETUP hierarchy_restart
+                   COMMAND $<TARGET_FILE:ablsteady> ${DECKS}/inputs_hierarchy_restart
+                           terrain.file=${PROJECT_SOURCE_DIR}/extern_erf/askervein.txt ${ABLSTEADY_TEST_AMREX_FLAGS})
+foreach(lev 1 2)
+    ablsteady_add_test(NAME rt_hierarchy_restart_level${lev}_matches NP 1 LABELS "regression;smoke"
+                       RUN_DIR ${HRS_DIR} FIXTURES_REQUIRED hierarchy_restart
+                       COMMAND ${FCOMPARE} --rel_tol ${FCOMPARE_RTOL} hier_restart_plt_level${lev}_00000
+                               ${GOLD}/askervein_hierarchy_level${lev}_plt00000)
+endforeach()
+if(ABLSTEADY_PRECISION STREQUAL "DOUBLE")
+    # RT-2.3.2: the same mesh with unsmoothed coarse grounds: the coarse
+    # levels cap STF more than level 0 and the report gives the hint.
+    ablsteady_add_test(NAME rt_askervein_hierarchy_hint NP 2 LABELS "regression;smoke"
+                       PREFIX ${CHECK_MESH} ${GOLD}/askervein_hierarchy_p0_mesh.json --
+                       COMMAND $<TARGET_FILE:ablsteady> ${DECKS}/inputs_mesh_askervein_hierarchy_p0
+                               terrain.file=${PROJECT_SOURCE_DIR}/extern_erf/askervein.txt
+                               ${ABLSTEADY_TEST_AMREX_FLAGS})
+    # RT-2.3.2: the steep ridge with a three-level hierarchy: the report of
+    # every level, with the STF warnings and the coarse-level hint.
+    ablsteady_add_test(NAME rt_steep_ridge_hierarchy_quality NP 1 LABELS "regression;smoke"
+                       PREFIX ${CHECK_MESH} ${GOLD}/steep_ridge_hierarchy_mesh.json --
+                       COMMAND $<TARGET_FILE:ablsteady> ${DECKS}/inputs_mesh_steep_ridge_hierarchy
+                               ${ABLSTEADY_TEST_AMREX_FLAGS})
+endif()
+# UT-2.3.5 at the application: a hierarchy that does not divide the mesh, a
+# box size below the coarsening and passes out of range abort, naming the keys.
+ablsteady_add_test(NAME abort_hierarchy NP 1 LABELS "regression;smoke"
+                   PREFIX ${EXPECT_ABORT}
+                          "mesh\\.hierarchy_levels = 3 needs mesh\\.n_cell x and y divisible by 2\\^2 = 4 \\(got 30 32\\)"
+                          "mesh\\.max_grid_size must be a multiple of 2\\^\\(mesh\\.hierarchy_levels - 1\\) = 4"
+                          "terrain\\.hierarchy_passes must be an integer from 0 to 64 \\(got -1\\)" --
+                   COMMAND $<TARGET_FILE:ablsteady> ${DECKS}/inputs_abort_hierarchy
+                           ${ABLSTEADY_TEST_AMREX_FLAGS})
+ablsteady_add_test(NAME abort_hierarchy_passes_unused NP 1 LABELS "regression;smoke"
+                   PREFIX ${EXPECT_ABORT}
+                          "terrain\\.hierarchy_passes has no effect unless mesh\\.hierarchy_levels > 1" --
+                   COMMAND $<TARGET_FILE:ablsteady> ${DECKS}/inputs_abort_hierarchy_unused
+                           ${ABLSTEADY_TEST_AMREX_FLAGS})
+# A test-only tool works on level 0 alone and refuses a hierarchy.
+ablsteady_add_test(NAME abort_hierarchy_tool NP 1 LABELS "regression;smoke"
+                   PREFIX ${EXPECT_ABORT} "mesh\\.hierarchy_levels has no effect in wall_distance" --
+                   COMMAND $<TARGET_FILE:wall_distance> ${DECKS}/inputs_abort_hierarchy_tool
+                           ${ABLSTEADY_TEST_AMREX_FLAGS})
 # RT-1.4.3: a run without a solve writes the mapped-grid plotfile of the 2-D
 # hill; it matches Gold/hill2d_plt00000 (relative tolerance 1e-12: compilers
 # that fuse multiply-adds differ from those that do not in the last bit).
@@ -490,9 +566,10 @@ if(ABLSTEADY_PRECISION STREQUAL "DOUBLE")
                                terrain.file=${PROJECT_SOURCE_DIR}/extern_erf/askervein.txt
                                ${ABLSTEADY_TEST_AMREX_FLAGS})
     # Beyond the plan: Askervein in a conventionally neutral boundary layer.
-    # The precursor column runs to steady, then tools/make_inflow_table.py
-    # checks its 10 m wind is along +x (0.01 deg), u* = 0.6 m/s (1e-3) and the
-    # committed inflow table matches it (1e-3). The 3-D case runs on that
+    # The precursor column runs to steady; a companion run of the same deck
+    # stops at the table's step, and tools/make_inflow_table.py checks its
+    # 10 m wind is along +x (0.01 deg), u* = 0.6 m/s (1e-3) and the committed
+    # inflow table matches it (1e-3, the same step). The 3-D case runs on that
     # table to the steady verdict.
     set(CNBL_DIR ${CMAKE_CURRENT_BINARY_DIR}/run/rt_precursor_askervein_cnbl)
     ablsteady_add_test(NAME rt_precursor_askervein_cnbl NP 2 LABELS "regression" RUN_DIR ${CNBL_DIR}
@@ -500,13 +577,51 @@ if(ABLSTEADY_PRECISION STREQUAL "DOUBLE")
                        PREFIX ${EXPECT_ABORT} --success "ablsteady: steady after" --
                        COMMAND $<TARGET_FILE:ablsteady> ${DECKS}/inputs_precursor_askervein_cnbl
                                ${ABLSTEADY_TEST_AMREX_FLAGS})
+    # The table check reads a companion run stopped at the table's own step
+    # (read from the table's header, so a regenerated table carries its step
+    # here), not the run above. Under the capping inversion theta has no
+    # fixed point: the inversion base cools by 1.35e-4 K per iteration as it
+    # rises and the mixed layer warms by 1.5e-5 K. The verdict comes when the
+    # k residual leaves a limit cycle of about 600 iterations (the Poisson
+    # iteration count switching between 5 and 6), at an iteration that depends
+    # on the compiler's rounding: 11087 with Apple clang, 11073 with gcc-16,
+    # theta 1.7e-3 K apart. At the fixed step the two builds agree to 2e-4 K,
+    # so theta keeps 1e-3 K like u, v and k. A build that left the cycle one
+    # cycle later would fail here, and the verdict run would show its step.
+    # The deck is the precursor's with only the step limit and an unreachable
+    # drop criterion changed, written at configure time.
+    file(STRINGS ${DECKS}/askervein_cnbl_inflow.txt _cnbl_header LIMIT_COUNT 1 REGEX "planar means of")
+    string(REGEX MATCH "_plt([0-9]+) " _cnbl_step_match "${_cnbl_header}")
+    if(NOT _cnbl_step_match)
+        message(FATAL_ERROR "askervein_cnbl_inflow.txt: no \"planar means of <plotfile><step> (\" header line")
+    endif()
+    set(CNBL_TABLE_STEP ${CMAKE_MATCH_1})
+    file(READ ${DECKS}/inputs_precursor_askervein_cnbl _cnbl_deck)
+    foreach(_kv "max_iterations          = ${CNBL_TABLE_STEP}" "residual_drop_orders    = 9")
+        string(REGEX MATCH "^[a-z_]+" _k "${_kv}")
+        string(REGEX MATCHALL "\nsteady\\.${_k} [^\n]*" _hits "${_cnbl_deck}")
+        list(LENGTH _hits _n)
+        if(NOT _n EQUAL 1)
+            message(FATAL_ERROR "inputs_precursor_askervein_cnbl must set steady.${_k} exactly once (found ${_n})")
+        endif()
+        string(REGEX REPLACE "\nsteady\\.${_k} [^\n]*" "\nsteady.${_kv}" _cnbl_deck "${_cnbl_deck}")
+    endforeach()
+    file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/inputs_precursor_askervein_cnbl_fixed "${_cnbl_deck}")
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+                 ${DECKS}/inputs_precursor_askervein_cnbl ${DECKS}/askervein_cnbl_inflow.txt)
+    set(CNBL_FIXED_DIR ${CMAKE_CURRENT_BINARY_DIR}/run/rt_precursor_askervein_cnbl_fixed)
+    ablsteady_add_test(NAME rt_precursor_askervein_cnbl_fixed NP 2 LABELS "regression" RUN_DIR ${CNBL_FIXED_DIR}
+                       FIXTURES_SETUP precursor_askervein_cnbl_fixed
+                       PREFIX ${EXPECT_ABORT} --success "ablsteady: not steady after ${CNBL_TABLE_STEP} iterations" --
+                       COMMAND $<TARGET_FILE:ablsteady> ${CMAKE_CURRENT_BINARY_DIR}/inputs_precursor_askervein_cnbl_fixed
+                               ${ABLSTEADY_TEST_AMREX_FLAGS})
     add_test(NAME rt_precursor_askervein_cnbl_table
              COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/make_inflow_table.py
                      precursor_askervein_cnbl_plt precursor_askervein_cnbl_turb
                      --ug 17.028798 --vg -7.380863 --check ${DECKS}/askervein_cnbl_inflow.txt
-             WORKING_DIRECTORY ${CNBL_DIR})
+             WORKING_DIRECTORY ${CNBL_FIXED_DIR})
     set_tests_properties(rt_precursor_askervein_cnbl_table PROPERTIES LABELS "regression"
-                         FIXTURES_REQUIRED precursor_askervein_cnbl)
+                         FIXTURES_REQUIRED precursor_askervein_cnbl_fixed)
     ablsteady_add_test(NAME rt_steady_askervein_cnbl NP 2 LABELS "regression"
                        PREFIX ${EXPECT_ABORT} --success "ablsteady: steady after" --
                        COMMAND $<TARGET_FILE:ablsteady> ${DECKS}/inputs_steady_askervein_cnbl

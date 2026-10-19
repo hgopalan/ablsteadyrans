@@ -1,5 +1,7 @@
 #include "Inputs.H"
 
+#include "MeshHierarchy.H"
+
 #include <AMReX.H>
 #include <AMReX_ParmParse.H>
 #include <AMReX_Print.H>
@@ -75,7 +77,7 @@ Inputs parse_inputs ()
 
     {
         amrex::ParmParse pp("mesh");
-        for (const char* key : {"dz0", "stretch_ratio", "zlevels_file"}) {
+        for (const char* key : {"dz0", "stretch_ratio", "zlevels_file", "hierarchy_levels"}) {
             if (pp.contains(key) && pp.countval(key) != 1) {
                 in.parse_errors.emplace_back(std::string("mesh.") + key + " takes exactly one value");
             }
@@ -83,13 +85,14 @@ Inputs parse_inputs ()
         pp.query("dz0", in.mesh.dz0);
         in.mesh.stretch_ratio_given = pp.query("stretch_ratio", in.mesh.stretch_ratio) != 0;
         pp.query("zlevels_file", in.mesh.zlevels_file);
+        pp.query("hierarchy_levels", in.mesh.hierarchy_levels);
     }
 
     {
         amrex::ParmParse pp("terrain");
         auto& t = in.terrain;
         for (const char* key : {"type", "file", "smoothing", "gamma_m", "hill_height", "hill_half_width",
-                                "hill_shape", "idw_neighbors", "idw_power"}) {
+                                "hill_shape", "idw_neighbors", "idw_power", "hierarchy_passes"}) {
             if (pp.contains(key)) {
                 t.given.emplace_back(key);
                 if (pp.countval(key) != 1) {
@@ -106,6 +109,7 @@ Inputs parse_inputs ()
         pp.query("hill_shape", t.hill_shape);
         pp.query("idw_neighbors", t.idw_neighbors);
         pp.query("idw_power", t.idw_power);
+        pp.query("hierarchy_passes", t.hierarchy_passes);
     }
 
     {
@@ -128,9 +132,9 @@ Inputs parse_inputs ()
     // A key given twice would silently take its last value.
     for (const auto& [ns, keys] : std::vector<std::pair<std::string, std::vector<std::string>>>{
              {"mesh", {"n_cell", "prob_lo", "prob_hi", "is_periodic", "max_grid_size", "dz0",
-                       "stretch_ratio", "zlevels_file"}},
+                       "stretch_ratio", "zlevels_file", "hierarchy_levels"}},
              {"terrain", {"type", "file", "smoothing", "gamma_m", "hill_height", "hill_half_width",
-                          "hill_shape", "idw_neighbors", "idw_power"}},
+                          "hill_shape", "idw_neighbors", "idw_power", "hierarchy_passes"}},
              {"io", {"plot_file", "chk_file", "restart", "write_plotfile", "write_checkpoint", "turb_plot_file"}}}) {
         amrex::ParmParse pp(ns);
         for (const auto& key : keys) {
@@ -262,6 +266,9 @@ std::vector<std::string> validate (const Inputs& in)
             if (given(k)) { err.emplace_back(std::string("terrain.") + k + " has no effect unless terrain.type = xyz"); }
         }
     }
+
+    // The x/y grid hierarchy (MeshHierarchy.H): levels, divisibility, box sizes, passes.
+    for (auto& e : check_hierarchy_inputs(m, t)) { err.push_back(std::move(e)); }
     return err;
 }
 
@@ -283,7 +290,10 @@ std::vector<std::string> unknown_inputs (const std::vector<InputEntry>& entries,
         const std::string ns = e.name.substr(0, dot);
         if (contains(owned, ns)) {
             if (!e.used) {
-                const bool newton = e.name.rfind("steady.newton_", 0) == 0;
+                // The keys of read_newton_options only: a misspelt
+                // steady.newton_* key gets no hint that it will be read later.
+                const bool newton = std::any_of(std::begin(kNewtonInputKeys), std::end(kNewtonInputKeys),
+                                                [&] (const char* k) { return e.name == std::string("steady.") + k; });
                 msg.emplace_back("unknown input '" + e.name + "': not an input of namespace '" + ns + "' in this version"
                                  + ((ns == "bc" || ns == "solver")
                                     ? " (read with init.first_guess = profile or steady.stage = simplec)" : "")
