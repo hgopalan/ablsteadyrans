@@ -206,6 +206,42 @@ ascending pairs stall (the TKE residual drops 0.04 orders in 20 000 iterations),
 converges in half the ``zjacobi`` iterations. Where the wind keeps one sign it costs 0–4 % more iterations. The
 default stays ``0`` (bit-identical); the per-machine defaults are chosen in a later sub-phase.
 
+**Box count and overlap on CPU.** The conventionally neutral Hill_3D (``inputs_steady_hill3d``, 64 × 64 × 20,
+periodic in x and y) with ``steady.sweep = lusgs``, two sweeps, a cap of 16 and the deck's two-order stop; 1 box on 1
+rank, 4 and 16 boxes on 4 ranks; iterations to the verdict:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 16 21 21 21 21
+
+   * - Boxes
+     - ``lagged``
+     - ``zero``, :math:`n_o = 0`
+     - ``zero``, :math:`n_o = 2`
+     - ``zero``, :math:`n_o = 4`
+   * - 1
+     - 860
+     - 998
+     - 948
+     - 926
+   * - 4
+     - 823
+     - 1205
+     - 1100
+     - 1020
+   * - 16
+     - 974
+     - 1552
+     - 1310
+     - 1270
+
+On CPU the box-local sweeps take 16–59 % more iterations than the lagged ghosts at :math:`n_o = 0` and 8–30 % more
+at :math:`n_o = 4`: δ = 0 at the seams (the periodic seam of a single box included) costs more than the overlap
+recovers. What they save, the ``FillBoundary`` of every pass, matters on a GPU and on many ranks and is measured
+with the per-machine defaults. More boxes cost iterations with either mode (823 on 4 boxes, 974 on 16, lagged). The
+diagonal ordering gives the same iterates as the sequential one and the same wall time on CPU (16 boxes,
+:math:`n_o = 2`: 1310 iterations, 57 s on four ranks).
+
 **Pressure correction.** With the SIMPLEC denominator :math:`d = a_P - \sum a_{nb}`,
 
 .. math::
