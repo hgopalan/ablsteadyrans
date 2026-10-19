@@ -155,7 +155,16 @@ Current tests
      - RT-2.1.1: the 2-D hill with the line LU-SGS sweeps (``inputs_steady_hill2d_lusgs``: two symmetric sweeps,
        CFL cap 16) to the verdict with a two-order drop and ERF's ``check_hill.py --physics``. Measured: 3062
        iterations (23 s on two ranks), every check passing, the steady state within the convergence tolerance of
-       the Jacobi deck's (:doc:`results`). Label ``regression``; double only.
+       the Jacobi deck's (:doc:`results`). Label ``regression``; double only; since 2.1b it runs in the column
+       test's directory (``run/rt_steady_hill2d_column``) so the spin-up check can read both histories.
+   * - ``rt_steady_hill2d_column``, ``rt_column_guess_spinup``
+     - RT-2.1b.1: the 2-D hill LU-SGS deck started from the converged column (``inputs_steady_hill2d_column``) to
+       the verdict with a two-order drop and ERF's ``check_hill.py --physics``; then ``Tests/check_column_guess.py``
+       on the Driver histories of the profile run (``rt_steady_hill2d_lusgs``, now in the same run directory) and
+       the column run: at iteration 300 the column run's u and v residuals at most half the profile run's, and
+       fewer iterations to the verdict. Measured: 1237 iterations (60 under ctest, machine shared s on two ranks) against 3062, residual
+       ratios at iteration 300 of 0.084 (u) and 0.060 (v), every ERF check passing. Label ``regression``;
+       double only.
    * - ``rt_steady_hill3d``
      - RT-1.16.2: ERF's Neutral_Hill_3D (``inputs_steady_hill3d``: 64 × 64 × 20, the hill of revolution, damping
        from 550 m, 16 sweeps, cap 4) to the verdict with ``check_hill3d.py --physics`` (the 3-D checks, speed-up
@@ -669,6 +678,23 @@ GoogleTest suite
        routes by kind (``line_sweeps``); sweeps < 1 and a wrong A are refused; the readers of ``steady.sweep``
        (values, the default, an unknown word refused, ``zline_sweeps`` ≥ 1 with ``lusgs`` and ≥ 2 with
        ``zjacobi``).
+   * - UT-2.1b.1
+     - *Beyond the plan* (``Initializer.ColumnGuessAndProjectionSwitch``). The in-memory table profile evaluates
+       its table (exact at the heights, linear between, constant beyond) and refuses a first height ≠ 0,
+       non-increasing heights, θ ≤ 0, k < 0 and a single row; with the column override the first guess takes u, v
+       and k from the table at the cell-centre heights of a flat mesh (1e-13) and θ from the sounding, and the
+       override is required; ``init.projection = 0`` leaves the first guess untouched (no Poisson solve, divergence
+       before = after) while the projection changes it over a hill; the readers of ``projection``,
+       ``column_tol``, ``column_max_iterations`` (values, defaults, a bad value, no effect without the column, α
+       without the projection) and ``check_column_guess`` (no forcing, no stage, no surface layer, a heat flux, the
+       source wall k, each naming its key).
+   * - UT-2.1b.2
+     - *Beyond the plan* (``Initializer.ColumnGuessRunsTheColumn``). The 1-D column on 16 levels over 1000 m under
+       the flat deck's sounding with the hill decks' Rayleigh layer on w and θ: converges within the limit, the
+       ground row at z = 0, heights strictly increasing, u and v bounded, v > 0 near the ground (the Ekman turning
+       at latitude 90), the geostrophic wind at the top within 0.5 m/s, k at the floor in the inversion and largest
+       near the ground, the first cell's k = u*²/C_μ0² (1e-12), u* in 0.2–0.6 m/s, the table identical on every
+       rank.
    * - UT-1.15.7 (revised in 1.16)
      - The rotation's pin now holds the planar-mean split: :math:`a_P` with :math:`f^2\max(\tau_c, \tau_{\mathrm{own}})`
        and the right-hand side with the unique-face horizontal mean of the other residual per level at :math:`\tau_c`

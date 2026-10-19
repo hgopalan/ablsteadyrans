@@ -62,8 +62,17 @@ namespace ablsteady {
 
 struct InitOptions
 {
-    enum class FirstGuess { none, profile };
+    enum class FirstGuess { none, profile, column };
     FirstGuess first_guess{FirstGuess::none};
+    //! init.projection (0 or 1): the mass-consistent correction of the first
+    //! guess; 0 keeps the first guess as it is (the stage's own pressure
+    //! correction then removes the divergence). Sub-phase 2.1b.
+    bool projection{true};
+    //! init.first_guess = column: the 1-D column's convergence tolerance
+    //! (the largest scaled change over one backward Euler step, > 0) and its
+    //! iteration limit (>= 1); ColumnGuess.H.
+    amrex::Real column_tol{amrex::Real(1.0e-8)};
+    int column_max_iterations{5000};
     amrex::Real z_agl_min{0};
     amrex::Real alpha_h{1};
     amrex::Real alpha_v{1};
@@ -94,8 +103,11 @@ struct InitResult
 //! Steps 1-3 alone: the first guess (u0, v0, w0 = 0 or O'Brien), theta, k
 //! and p' of q (defined on the mesh's layout, z_phys_nd built); returns the
 //! O'Brien top residual (0 without O'Brien). Nothing with first_guess = none.
+//! column, when given (first_guess = column), replaces the inflow profile for
+//! u, v and k (theta stays the sounding at the absolute height).
 amrex::Real first_guess_state (const InitOptions& opt, const BoundaryInputs& bc, const Mesh& mesh,
-                               const amrex::Geometry& geom, State& q, const CoriolisOptions& coriolis = CoriolisOptions{});
+                               const amrex::Geometry& geom, State& q, const CoriolisOptions& coriolis = CoriolisOptions{},
+                               const InflowProfile* column = nullptr);
 
 //! Fill q (defined on the mesh's layout, z_phys_nd built) with the initial
 //! field: the first guess, theta, k and p' as above, then the correction.
@@ -103,10 +115,12 @@ amrex::Real first_guess_state (const InitOptions& opt, const BoundaryInputs& bc,
 //! solver controls. lambda, when given, receives the potential (cell-centred,
 //! one ghost cell, defined here if empty). The state's ghost cells are not
 //! filled (BoundaryConditions::fill_ghosts does that for the solver).
-//! Nothing happens with first_guess = none.
+//! Nothing happens with first_guess = none; with opt.projection = 0 the
+//! correction is skipped (the divergence of the first guess is reported as
+//! both before and after). column: as for first_guess_state.
 InitResult initialize_state (const InitOptions& opt, const BoundaryInputs& bc, const PoissonOptions& popt, const Mesh& mesh,
                              const amrex::Geometry& geom, State& q, amrex::MultiFab* lambda = nullptr,
-                             const CoriolisOptions& coriolis = CoriolisOptions{});
+                             const CoriolisOptions& coriolis = CoriolisOptions{}, const InflowProfile* column = nullptr);
 
 //! The O'Brien pass alone (for its test): Omega on the z-faces of q's layout
 //! from the column continuity of (u, v) with the top residual removed with

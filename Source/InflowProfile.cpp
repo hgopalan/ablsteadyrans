@@ -119,6 +119,42 @@ InflowProfile::InflowProfile (const InflowProfileOptions& opt, const ReferencePr
     amrex::Gpu::copy(amrex::Gpu::hostToDevice, k.begin(), k.end(), m_k.begin());
 }
 
+InflowProfile::InflowProfile (const amrex::Vector<amrex::Real>& z, const amrex::Vector<amrex::Real>& u,
+                              const amrex::Vector<amrex::Real>& v, const amrex::Vector<amrex::Real>& theta,
+                              const amrex::Vector<amrex::Real>& k, const ReferenceProfile& theta_ref)
+{
+    m_opt.kind = InflowProfileOptions::Kind::file;
+    m_opt.file = "(column guess)";
+    for (const auto& e : check_reference_profile(theta_ref)) { amrex::Abort("ablsteady: InflowProfile: " + e); }
+    const amrex::Long n = z.size();
+    if (n < 2 || u.size() != n || v.size() != n || theta.size() != n || k.size() != n) {
+        amrex::Abort("ablsteady: column guess: the table needs at least two rows of equal length");
+    }
+    if (z[0] != 0) { amrex::Abort("ablsteady: column guess: the first height must be 0 (the ground)"); }
+    for (amrex::Long i = 0; i < n; ++i) {
+        for (const amrex::Real x : {z[i], u[i], v[i], theta[i], k[i]}) {
+            if (!std::isfinite(x)) { amrex::Abort("ablsteady: column guess: the table holds a value that is not finite"); }
+        }
+        if (i > 0 && !(z[i] > z[i - 1])) { amrex::Abort("ablsteady: column guess: heights must increase strictly"); }
+        if (!(theta[i] > 0)) { amrex::Abort("ablsteady: column guess: theta must be > 0"); }
+        if (k[i] < 0) { amrex::Abort("ablsteady: column guess: k must be >= 0"); }
+    }
+    m_hrz = theta_ref.z;
+    m_hrt = theta_ref.theta;
+    m_rz.resize(theta_ref.z.size());
+    m_rt.resize(theta_ref.theta.size());
+    amrex::Gpu::copy(amrex::Gpu::hostToDevice, theta_ref.z.begin(), theta_ref.z.end(), m_rz.begin());
+    amrex::Gpu::copy(amrex::Gpu::hostToDevice, theta_ref.theta.begin(), theta_ref.theta.end(), m_rt.begin());
+    m_has_k = true;
+    m_hz = z; m_hu = u; m_hv = v; m_ht = theta; m_hk = k;
+    for (auto* p : {&m_z, &m_u, &m_v, &m_t, &m_k}) { p->resize(n); }
+    amrex::Gpu::copy(amrex::Gpu::hostToDevice, z.begin(), z.end(), m_z.begin());
+    amrex::Gpu::copy(amrex::Gpu::hostToDevice, u.begin(), u.end(), m_u.begin());
+    amrex::Gpu::copy(amrex::Gpu::hostToDevice, v.begin(), v.end(), m_v.begin());
+    amrex::Gpu::copy(amrex::Gpu::hostToDevice, theta.begin(), theta.end(), m_t.begin());
+    amrex::Gpu::copy(amrex::Gpu::hostToDevice, k.begin(), k.end(), m_k.begin());
+}
+
 InflowProfile::View InflowProfile::view () const
 {
     return view_with(m_z.data(), m_u.data(), m_v.data(), m_t.data(), m_k.data(), m_rz.data(), m_rt.data());

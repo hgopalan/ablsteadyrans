@@ -65,6 +65,13 @@ public:
     //! analytic kinds). Aborts, naming bc.inflow_file, on a file that cannot
     //! be read or is not "z u v theta [k]" with z increasing from 0.
     InflowProfile (const InflowProfileOptions& opt, const ReferenceProfile& theta_ref);
+    //! A tabulated profile given in memory (sub-phase 2.1b, the converged
+    //! column of ColumnGuess.H): the file kind with the table z u v theta k
+    //! (z strictly increasing from 0, at least two rows, theta > 0, k >= 0;
+    //! aborts naming "column guess" otherwise) and the sounding.
+    InflowProfile (const amrex::Vector<amrex::Real>& z, const amrex::Vector<amrex::Real>& u,
+                   const amrex::Vector<amrex::Real>& v, const amrex::Vector<amrex::Real>& theta,
+                   const amrex::Vector<amrex::Real>& k, const ReferenceProfile& theta_ref);
 
     //! A device-usable view.
     struct View

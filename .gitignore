@@ -76,3 +76,4 @@ docs/_build/
 # The docs Makefile is source, not CMake output.
 !docs/Makefile
 __pycache__/
+column_guess.dat

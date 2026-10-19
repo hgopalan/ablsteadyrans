@@ -195,6 +195,71 @@ checks pass in both cases.
      - 20 000
      - 405 (not steady)
 
+**The converged-column first guess (sub-phase 2.1b).** With ``init.first_guess = column`` (:doc:`initial_conditions`: the
+deck's column solved as a 1-D problem in 0.02–0.06 s, its u, v, k broadcast by height above the ground) the
+inertial spin-up of the profile guess is gone:
+
+.. list-table:: The first guess and the verdict (LU-SGS decks; two ranks for the 2-D hill and the flat case, four
+   for the 3-D hill; wall times with the machine shared)
+   :header-rows: 1
+   :widths: 30 26 16 16
+
+   * - case
+     - first guess
+     - iterations
+     - wall (s)
+   * - 2-D hill
+     - profile + projection
+     - 3062
+     - 23 (idle)
+   * - 2-D hill
+     - column + projection
+     - 1237
+     - 98 (shared)
+   * - 2-D hill
+     - column alone
+     - 1202
+     - 95 (shared)
+   * - 3-D hill
+     - profile + projection
+     - 823
+     - 51 (idle)
+   * - 3-D hill
+     - column + projection
+     - 402
+     - 1441 (shared, starved)
+   * - Neutral_ABL_Flat
+     - profile + projection
+     - 2839
+     - 13 (idle)
+   * - Neutral_ABL_Flat
+     - column + projection
+     - not steady by 20 000
+     - (:doc:`initial_conditions`)
+
+On the 2-D hill the cross-wind residual's plateau (0.1–0.2 of its reference until iteration 1500 from the profile)
+is gone: at iteration 300 the column run's u and v residuals are an order below the profile run's, and the verdict
+comes at 1237 iterations against 3062; column alone and column with the projection differ by 3 %. The column
+seed's *first* residual is larger than the profile's (u 5.8e-2 against 3.1e-2, v 3.5e-2 against 3.1e-3): the
+lifted spiral carries an advective imbalance :math:`U\,\partial_z v\,h'` on the flanks that the profile guess (v
+= 0) does not have and the projection does not remove; the balance shows after the CFL ramp. On the 3-D hill the verdict comes at 402 iterations against 823. On the flat case the column seed is the 1-D
+steady state of u and v to round-off (first-iteration u residual 3e-11 against 3e-2), but its k at the inversion
+base differs from the 3-D closure's and the run falls into a slow k oscillation there that does not reach the
+verdict (:doc:`initial_conditions`); the flat deck keeps the profile.
+
+**Askervein (RT-1.16.3, the convergence half).** The coarse mesh of RT-1.12.1 (30 × 30 × 18) with the log-law
+inflow, the outflow and slip sides, no Coriolis, four sweeps, cap 2: the verdict after 156 iterations (2 s on two
+ranks). The residual is largest in the two columns next to the outflow (100 times the interior, a checkerboard in
+:math:`R_w`); with ``steady.residual_tol`` 1e-10 it keeps falling there (1e-9 after 706 iterations, the interior at
+1e-13), so the outflow needs neither a sponge nor an outlet drag. The 5 % comparison with ERF's URANS on lines A
+and AA needs the full mesh and the reference run (Kestrel) and is not in this version.
+
+**Time per step** (idle machine). On the 2-D hill one SIMPLEC iteration with 16 sweeps costs 1.3 ERF steps (10.8
+against 8.1 ms on two ranks); the steady state takes 4590 iterations against the 57 600 steps of ERF's 24 h (3.1
+against ERF's 6 h physics run, which is not steady aloft): 49 s against 116 s (6 h) and about 460 s (24 h). On the
+3-D hill one iteration costs 2.8 ERF steps (71 against 25 ms on four ranks) and the steady state 2092 iterations
+against ERF's 9600 steps of 4 h: 148 s against 242 s, with ERF still a quarter of an inertial period from steady.
+
 Newton–Krylov
 -------------
 

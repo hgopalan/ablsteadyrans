@@ -5,6 +5,7 @@
 // alpha_v/alpha_h), UT-1.12.6 (the first guess by height above the ground,
 // theta, k, p', O'Brien, the inputs).
 #include "BoundaryConditions.H"
+#include "ColumnGuess.H"
 #include "Initializer.H"
 #include "MassFlux.H"
 #include "Poisson.H"
@@ -724,6 +725,14 @@ TEST(Initializer, InputsAndPoissonTypes)
         {"init.z_agl_min", [] (InitOptions& b) { b.z_agl_min = std::numeric_limits<amrex::Real>::infinity(); }},
         {"init.alpha_v", [] (InitOptions& b) { b.first_guess = InitOptions::FirstGuess::none; b.given = {"alpha_v"}; }},
         {"init.obrien", [] (InitOptions& b) { b.first_guess = InitOptions::FirstGuess::none; b.given = {"first_guess", "obrien"}; }},
+        // sub-phase 2.1b: the column keys without the column guess, alpha without the projection, the column ranges
+        {"init.column_tol", [] (InitOptions& b) { b.given = {"first_guess", "column_tol"}; }},
+        {"init.column_max_iterations", [] (InitOptions& b) { b.given = {"first_guess", "column_max_iterations"}; }},
+        {"init.alpha_v", [] (InitOptions& b) { b.projection = false; b.given = {"first_guess", "projection", "alpha_v"}; }},
+        {"init.column_tol", [] (InitOptions& b) { b.first_guess = InitOptions::FirstGuess::column; b.column_tol = 0; }},
+        {"init.k_decay_height", [] (InitOptions& b) { b.first_guess = InitOptions::FirstGuess::column; b.given = {"first_guess", "k_decay_height"}; }},
+        {"init.column_tol", [] (InitOptions& b) { b.first_guess = InitOptions::FirstGuess::column; b.column_tol = std::numeric_limits<amrex::Real>::quiet_NaN(); }},
+        {"init.column_max_iterations", [] (InitOptions& b) { b.first_guess = InitOptions::FirstGuess::column; b.column_max_iterations = 0; }},
     };
     for (const Bad& b : bads) {
         InitOptions x = o;
@@ -754,7 +763,8 @@ TEST(Initializer, InputsAndPoissonTypes)
     {
         amrex::ParmParse pp("init");
         auto clear = [&] {
-            for (const char* k : {"first_guess", "z_agl_min", "alpha_h", "alpha_v", "k_decay_height", "obrien"}) { while (pp.remove(k) > 0) {} }
+            for (const char* k : {"first_guess", "z_agl_min", "alpha_h", "alpha_v", "k_decay_height", "obrien", "projection",
+                                  "column_tol", "column_max_iterations"}) { while (pp.remove(k) > 0) {} }
         };
         clear();
         pp.add("first_guess", std::string("profile"));
@@ -829,6 +839,299 @@ TEST(Initializer, InputsAndPoissonTypes)
         define_state(q, c);
         EXPECT_THROW(ablsteady::initialize_state(o, bad, popt, c.mesh, c.geom, q), std::runtime_error);
     }
+}
+
+// ---------------------------------------------------------------------------
+// Sub-phase 2.1b: the converged-column first guess and the projection switch.
+// (a) The in-memory table profile evaluates the table (exact at its heights,
+// linear between, constant beyond) and refuses a bad table; (b) with
+// init.first_guess = column the first guess takes u, v and k from the table at
+// every point's height above the ground (the flat mesh: exact at the cell-centre
+// heights) while theta stays the sounding, and the column is required;
+// (c) init.projection = 0 leaves the first guess untouched (u, v bit for bit,
+// w the no-flux field, no Poisson solve, divergence before = after) while
+// the projection changes it; (d) the readers and check_column_guess name
+// their keys.
+TEST(Initializer, ColumnGuessAndProjectionSwitch)
+{
+    using ablsteady::InflowProfile;
+    ablsteady::ReferenceProfile sounding;
+    sounding.z = {0, 700, 1000};
+    sounding.theta = {300, 300, 309};
+    // (a) the table profile
+    {
+        const amrex::Vector<amrex::Real> z = {0, 10, 50, 200}, u = {0, 3, 6, 8}, v = {0, -1, -2, -2.5}, t = {300, 300, 301, 302},
+                                         k = {amrex::Real(0.5), amrex::Real(0.5), amrex::Real(0.3), amrex::Real(0.1)};
+        const InflowProfile prof(z, u, v, t, k, sounding);
+        EXPECT_EQ(prof.table_size(), 4);
+        EXPECT_TRUE(prof.has_k());
+        const auto view = prof.host_view();
+        amrex::Real pu, pv, pt, pk, pn;
+        view.eval(50, pu, pv, pt, pk, pn);
+        EXPECT_EQ(pu, 6);
+        EXPECT_EQ(pv, -2);
+        EXPECT_EQ(pt, 301);
+        EXPECT_EQ(pk, amrex::Real(0.3));
+        view.eval(30, pu, pv, pt, pk, pn);
+        EXPECT_NEAR(pu, 4.5, tol(1e-14, 1e-6));
+        view.eval(500, pu, pv, pt, pk, pn);
+        EXPECT_EQ(pu, 8);   // constant beyond the table
+        EXPECT_THROW(InflowProfile({5, 10}, {0, 1}, {0, 0}, {300, 300}, {1, 1}, sounding), std::runtime_error);   // first height not 0
+        EXPECT_THROW(InflowProfile({0, 10, 10}, {0, 1, 2}, {0, 0, 0}, {300, 300, 300}, {1, 1, 1}, sounding), std::runtime_error);
+        EXPECT_THROW(InflowProfile({0, 10}, {0, 1}, {0, 0}, {300, -1}, {1, 1}, sounding), std::runtime_error);
+        EXPECT_THROW(InflowProfile({0, 10}, {0, 1}, {0, 0}, {300, 300}, {1, -1}, sounding), std::runtime_error);
+        EXPECT_THROW(InflowProfile({0}, {0}, {0}, {300}, {1}, sounding), std::runtime_error);
+    }
+    // (b), (c) on the flat periodic 8 x 8 x 8 mesh
+    PCase c = square_hill(8, 8, 0, true);
+    BoundaryInputs bin = open_along(c, 0, true);
+    bin.theta_ref = sounding;
+    const auto popt = solver_options();
+    // the cell-centre heights of the mesh (the same in every column of the
+    // flat mesh; every rank learns them through the max) as the table's
+    // heights, a sheared and turned column
+    amrex::Vector<amrex::Real> z = {0}, u = {0}, v = {0}, t = {300}, k = {amrex::Real(0.4)};
+    {
+        std::vector<double> hk(8, 0.0);
+        for (amrex::MFIter mfi(c.z, false); mfi.isValid(); ++mfi) {
+            const auto zn = host_copy(c.z, mfi);
+            const amrex::Box vb = mfi.validbox();
+            const amrex::IntVect lo = vb.smallEnd();
+            for (int kk = 0; kk < 8; ++kk) {
+                double sum = 0;
+                for (int a = 0; a < 2; ++a) { for (int b2 = 0; b2 < 2; ++b2) { for (int e = 0; e < 2; ++e) { sum += zn(amrex::IntVect(lo[0] + a, lo[1] + b2, kk + e)); } } }
+                hk[kk] = sum / 8;
+            }
+        }
+        amrex::ParallelDescriptor::ReduceRealMax(hk.data(), 8);
+        for (int kk = 0; kk < 8; ++kk) {
+            const amrex::Real h = static_cast<amrex::Real>(hk[kk]);
+            z.push_back(h);
+            u.push_back(5 + h / 100);
+            v.push_back(-1 - h / 400);
+            t.push_back(300);
+            k.push_back(amrex::Real(0.4) - h / 10000);
+        }
+    }
+    const InflowProfile column(z, u, v, t, k, sounding);
+    InitOptions co = profile_options();
+    co.first_guess = InitOptions::FirstGuess::column;
+    co.projection = false;
+    ablsteady::State q;
+    define_state(q, c);
+    EXPECT_THROW(ablsteady::first_guess_state(co, bin, c.mesh, c.geom, q), std::runtime_error);   // the column is required
+    const auto r0 = ablsteady::initialize_state(co, bin, popt, c.mesh, c.geom, q, nullptr, ablsteady::CoriolisOptions{}, &column);
+    EXPECT_EQ(r0.poisson.iterations, 0);
+    EXPECT_EQ(r0.divergence_before, r0.divergence_after);
+    EXPECT_LT(r0.divergence_before, tol(1e-12, 1e-4));   // a uniform column has none
+    int seen = 0;
+    for (amrex::MFIter mfi(q.u, false); mfi.isValid(); ++mfi) {
+        const auto uu = host_copy(q.u, mfi), vv = host_copy(q.v, mfi), kk = host_copy(q.tke, mfi), th = host_copy(q.theta, mfi);
+        amrex::LoopOnCpu(mfi.validbox(), [&] (int i, int j, int kq) {
+            EXPECT_NEAR(uu(amrex::IntVect(i, j, kq)), u[kq + 1], tol(1e-13, 1e-5) * 10);
+            ++seen;
+        });
+        amrex::LoopOnCpu(amrex::enclosedCells(mfi.validbox()), [&] (int i, int j, int kq) {
+            EXPECT_NEAR(vv(amrex::IntVect(i, j, kq)), v[kq + 1], tol(1e-13, 1e-5) * 10);
+            EXPECT_NEAR(kk(amrex::IntVect(i, j, kq)), k[kq + 1], tol(1e-13, 1e-5));
+            EXPECT_EQ(th(amrex::IntVect(i, j, kq)), 300);   // the sounding, not the table
+        });
+    }
+    amrex::ParallelDescriptor::ReduceIntSum(seen);
+    EXPECT_EQ(seen, 9 * 8 * 8);
+    // the projection on the same first guess changes nothing on the uniform column but runs the solve
+    ablsteady::State q2;
+    define_state(q2, c);
+    co.projection = true;
+    const auto r1 = ablsteady::initialize_state(co, bin, popt, c.mesh, c.geom, q2, nullptr, ablsteady::CoriolisOptions{}, &column);
+    EXPECT_LT(max_diff(q2.u, q.u), tol(1e-12, 1e-4));
+    // and on a hill the projection does change the first guess
+    {
+        PCase h = square_hill(8, 8, 60, true);
+        BoundaryInputs hb = open_along(h, 0, true);
+        hb.theta_ref = sounding;
+        ablsteady::State a, b;
+        define_state(a, h);
+        define_state(b, h);
+        co.projection = false;
+        ablsteady::initialize_state(co, hb, popt, h.mesh, h.geom, a, nullptr, ablsteady::CoriolisOptions{}, &column);
+        co.projection = true;
+        const auto rb = ablsteady::initialize_state(co, hb, popt, h.mesh, h.geom, b, nullptr, ablsteady::CoriolisOptions{}, &column);
+        EXPECT_GT(max_diff(a.u, b.u), 1e-3);
+        EXPECT_GT(rb.poisson.iterations, 0);
+        EXPECT_LT(rb.divergence_after, rb.divergence_before);
+    }
+    (void)r1;
+    // (d) the readers and the column's own checks
+    {
+        amrex::ParmParse pp("init");
+        auto clear = [&] {
+            for (const char* kk : {"first_guess", "z_agl_min", "alpha_h", "alpha_v", "k_decay_height", "obrien", "projection",
+                                   "column_tol", "column_max_iterations"}) { while (pp.remove(kk) > 0) {} }
+        };
+        clear();
+        pp.add("first_guess", std::string("column"));
+        pp.add("projection", 0);
+        pp.add("column_tol", amrex::Real(1e-6));
+        pp.add("column_max_iterations", 500);
+        const InitOptions ro = ablsteady::read_init_options();
+        EXPECT_EQ(ro.first_guess, InitOptions::FirstGuess::column);
+        EXPECT_FALSE(ro.projection);
+        EXPECT_EQ(ro.column_tol, amrex::Real(1e-6));
+        EXPECT_EQ(ro.column_max_iterations, 500);
+        clear();
+        const InitOptions d = ablsteady::read_init_options();
+        EXPECT_TRUE(d.projection);
+        EXPECT_EQ(d.column_tol, amrex::Real(1e-8));
+        EXPECT_EQ(d.column_max_iterations, 5000);
+        pp.add("first_guess", std::string("profile"));
+        pp.add("projection", 2);
+        EXPECT_THROW(ablsteady::read_init_options(), std::runtime_error);
+        clear();
+        pp.add("first_guess", std::string("profile"));
+        pp.add("column_tol", amrex::Real(1e-6));   // no effect without the column
+        EXPECT_THROW(ablsteady::read_init_options(), std::runtime_error);
+        clear();
+    }
+    {
+        InitOptions o;
+        o.first_guess = InitOptions::FirstGuess::column;
+        ablsteady::SteadyOptions so;
+        so.stage = ablsteady::StageKind::simplec;
+        ablsteady::ForcingOptions forcing_opt;
+        ablsteady::BoundaryInputs cb;
+        cb.face[2] = ablsteady::FaceType::surface_layer;
+        ablsteady::SurfaceLayerOptions cs;
+        auto err = ablsteady::check_column_guess(o, so, forcing_opt, cb, cs, true);   // no forcing
+        ASSERT_FALSE(err.empty());
+        EXPECT_NE(err.front().find("init.first_guess"), std::string::npos);
+        forcing_opt.pressure_gradient = {amrex::Real(1e-4), 0, 0};
+        EXPECT_TRUE(ablsteady::check_column_guess(o, so, forcing_opt, cb, cs, true).empty());
+        so.stage = ablsteady::StageKind::none;
+        err = ablsteady::check_column_guess(o, so, forcing_opt, cb, cs, true);
+        ASSERT_FALSE(err.empty());
+        EXPECT_NE(err.front().find("steady.stage"), std::string::npos);
+        so.stage = ablsteady::StageKind::simplec;
+        EXPECT_FALSE(ablsteady::check_column_guess(o, so, forcing_opt, cb, cs, false).empty());   // no surface layer
+        cs.stability = ablsteady::SurfaceLayerOptions::Stability::heat_flux;
+        EXPECT_FALSE(ablsteady::check_column_guess(o, so, forcing_opt, cb, cs, true).empty());    // a heat flux
+        cs.stability = ablsteady::SurfaceLayerOptions::Stability::neutral;
+        cs.wall_k = ablsteady::SurfaceLayerOptions::WallK::source;
+        EXPECT_FALSE(ablsteady::check_column_guess(o, so, forcing_opt, cb, cs, true).empty());    // the source wall k
+        cs.wall_k = ablsteady::SurfaceLayerOptions::WallK::dirichlet;
+        cs.zref = 10;
+        EXPECT_FALSE(ablsteady::check_column_guess(o, so, forcing_opt, cb, cs, true).empty());    // a reference height
+        cs.zref = 0;
+        // a pressure gradient alone under a stable sounding has no steady column
+        cb.theta_ref.z = {0, 700, 1000};
+        cb.theta_ref.theta = {300, 300, 309};
+        EXPECT_FALSE(ablsteady::check_column_guess(o, so, forcing_opt, cb, cs, true).empty());
+        cb.rayleigh_zdamp = 700;
+        cb.rayleigh_dampcoef = amrex::Real(0.2);
+        EXPECT_TRUE(ablsteady::check_column_guess(o, so, forcing_opt, cb, cs, true).empty());   // u, v held
+        cb.rayleigh_zdamp = 0;
+        forcing_opt.coriolis.enabled = true;
+        forcing_opt.coriolis.geostrophic = true;
+        forcing_opt.coriolis.latitude = 45;
+        EXPECT_TRUE(ablsteady::check_column_guess(o, so, forcing_opt, cb, cs, true).empty());   // Coriolis-driven
+        forcing_opt.coriolis.enabled = false;
+        forcing_opt.coriolis.geostrophic = false;
+        cb.theta_ref.z = {0};
+        cb.theta_ref.theta = {300};
+        o.first_guess = InitOptions::FirstGuess::profile;
+        EXPECT_TRUE(ablsteady::check_column_guess(o, so, forcing_opt, cb, cs, true).empty());
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Sub-phase 2.1b: the 1-D column itself (run_column_guess) on a
+// Coriolis-driven column of 16 levels over 1000 m under the flat deck's
+// sounding (neutral to 700 m, 0.03 K/m above: k collapses to its floor in the
+// inversion, so the convergence measure must take the floor into account):
+// converges in well under the iteration limit, the table has the ground row
+// and the 16 cell-centre heights strictly increasing, u and v are bounded by
+// the geostrophic speed, the wind turns to the left of the geostrophic wind
+// near the ground in the northern hemisphere (v > 0 with u_g > 0, f > 0 at
+// latitude 90), tends to the geostrophic wind aloft, k is at or above the
+// floor, largest near the ground and at the floor in the inversion, the
+// friction velocity is within the log law's range, and the table is identical
+// on every rank; the deck's Rayleigh layer on w and theta alone leaves u, v
+// and k undamped (the geostrophic wind at the top, not the log law).
+TEST(Initializer, ColumnGuessRunsTheColumn)
+{
+    ablsteady::Inputs in;
+    in.mesh.n_cell = amrex::IntVect(8, 8, 16);
+    in.mesh.prob_lo = {0, 0, 0};
+    in.mesh.prob_hi = {3200, 3200, 1000};
+    in.mesh.is_periodic = {1, 1, 0};
+    in.mesh.max_grid_size = {8, 8};
+    in.terrain.type = "flat";
+    InitOptions io;
+    io.first_guess = InitOptions::FirstGuess::column;
+    ablsteady::SteadyOptions so;
+    so.stage = ablsteady::StageKind::simplec;
+    BoundaryInputs bin;
+    bin.face = {FaceType::periodic, FaceType::periodic, FaceType::surface_layer, FaceType::periodic, FaceType::periodic, FaceType::slip_wall};
+    bin.inflow.kind = ablsteady::InflowProfileOptions::Kind::log_law;
+    bin.inflow.ustar = amrex::Real(0.35);
+    bin.inflow.z0 = amrex::Real(0.1);
+    bin.theta_ref.z = {0, 700, 1000};
+    bin.theta_ref.theta = {300, 300, 309};
+    // the hill decks' Rayleigh layer on w and theta alone: u, v and k must
+    // not be pulled towards the log law aloft
+    bin.rayleigh_zdamp = 700;
+    bin.rayleigh_dampcoef = amrex::Real(0.2);
+    bin.rayleigh_fields = {false, false, true, true, false};
+    ablsteady::SurfaceLayerOptions surf;
+    surf.z0 = amrex::Real(0.1);
+    ablsteady::ClosureOptions copt;
+    copt.tke_floor = amrex::Real(1e-6);   // the decks' floor: k reaches it in the inversion
+    ablsteady::ForcingOptions fopt;
+    fopt.coriolis.enabled = true;
+    fopt.coriolis.latitude = 90;
+    fopt.coriolis.three_d = false;
+    fopt.coriolis.geostrophic = true;
+    fopt.coriolis.ug = 10;
+    const auto r = ablsteady::run_column_guess(in, io, so, bin, surf, true, copt, fopt);
+    EXPECT_TRUE(r.steady);
+    EXPECT_LT(r.iterations, 1000);
+    // the tolerance used is init.column_tol lifted to 100 epsilon of Real
+    // (the closure's point kernels run in Real): 1e-8 stays in double, 1.2e-5
+    // in single
+    const double eps100 = 100.0 * static_cast<double>(std::numeric_limits<amrex::Real>::epsilon());
+    EXPECT_EQ(r.tol, std::max(static_cast<double>(io.column_tol), eps100));
+    {
+        InitOptions tight = io;
+        tight.column_tol = amrex::Real(1e-30);
+        const auto rt = ablsteady::run_column_guess(in, tight, so, bin, surf, true, copt, fopt);
+        EXPECT_TRUE(rt.steady);
+        EXPECT_EQ(rt.tol, eps100);
+    }
+    ASSERT_EQ(r.z.size(), 17u);
+    EXPECT_EQ(r.z[0], 0);
+    EXPECT_EQ(r.u[0], 0);
+    EXPECT_EQ(r.v[0], 0);
+    for (int k = 1; k < 17; ++k) {
+        EXPECT_GT(r.z[k], r.z[k - 1]);
+        EXPECT_LE(std::abs(r.u[k]), amrex::Real(12));
+        EXPECT_LE(std::abs(r.v[k]), amrex::Real(12));
+        EXPECT_GE(r.tke[k], 0);
+    }
+    EXPECT_GT(r.v[1], 0);                       // the Ekman turning near the ground
+    EXPECT_NEAR(r.u[16], 10, 0.5);              // the geostrophic wind at the top
+    EXPECT_NEAR(r.v[16], 0, 0.5);
+    EXPECT_GT(r.tke[1], r.tke[16]);
+    EXPECT_LE(r.tke[16], amrex::Real(1e-6));   // at the floor in the inversion
+    EXPECT_GT(r.ustar, amrex::Real(0.2));
+    EXPECT_LT(r.ustar, amrex::Real(0.6));
+    // the wall k of the first cell is u*^2 / Cmu0^2
+    EXPECT_NEAR(r.tke[1], r.ustar * r.ustar / (amrex::Real(0.5562) * amrex::Real(0.5562)), tol(1e-12, 1e-5));
+    // identical on every rank: rank 0's table broadcast and compared
+    std::vector<double> mine, root;
+    for (int k = 0; k < 17; ++k) { for (const amrex::Real x : {r.z[k], r.u[k], r.v[k], r.theta[k], r.tke[k]}) { mine.push_back(x); } }
+    root = mine;
+    amrex::ParallelDescriptor::Bcast(root.data(), root.size(), amrex::ParallelDescriptor::IOProcessorNumber());
+    for (std::size_t i = 0; i < mine.size(); ++i) { EXPECT_EQ(mine[i], root[i]); }
 }
 
 } // namespace
