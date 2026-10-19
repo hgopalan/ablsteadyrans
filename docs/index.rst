@@ -31,7 +31,7 @@ The target machine is NLR Kestrel: CPU nodes with 104 Sapphire Rapids cores, and
 terrain-following mesh and the solution fields, and writes and restarts from plotfiles and checkpoints. The definition
 of a steady solution, the Poisson layer, the convection and diffusion operators, the residual, the surface layer, the
 domain boundary conditions, the k–L closure and the mass-consistent initial field are in place, and the SIMPLEC
-stage (:doc:`simplec`) runs under the steady driver.
+stage (:doc:`solver`) runs under the steady driver.
 
 .. toctree::
    :maxdepth: 2
@@ -44,25 +44,22 @@ stage (:doc:`simplec`) runs under the steady driver.
 
 .. toctree::
    :maxdepth: 2
-   :caption: Method
+   :caption: Model formulation
 
-   mesh
-   poisson
-   initializer
-   walldistance
-   transport
-   residual
-   surface
-   boundary
-   closure
-   steady
-   driver
-   predictor
-   simplec
-   newton
+   governing_cartesian
+   governing_curvilinear
+   discretization
+   boundary_conditions
+   initial_conditions
+   solver
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Verification
+
    cases
+   results
    references
-   numerics
 
 .. toctree::
    :maxdepth: 2

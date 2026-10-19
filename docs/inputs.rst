@@ -44,7 +44,7 @@ All errors are reported together. Each row below matches the range check in ``So
    * - ``mesh.dz0``
      - ``0``
      - Finite, ≥ 0. First layer thickness of a stretched vertical grid; 0 means uniform layers. Without
-       ``stretch_ratio`` it must not exceed prob_hi z / n_cell z (:doc:`mesh`).
+       ``stretch_ratio`` it must not exceed prob_hi z / n_cell z (:doc:`governing_curvilinear`).
    * - ``mesh.stretch_ratio``
      - ``0`` (none)
      - Finite, ≥ 1 (an explicit 0 is refused), needs ``mesh.dz0`` > 0. A fixed ratio between successive layers;
@@ -67,7 +67,7 @@ A key that has no effect for the chosen ``terrain.type`` or ``terrain.smoothing`
      - Range and meaning
    * - ``terrain.type``
      - ``flat``
-     - ``flat``, ``agnesi``, ``xyz`` or ``erf_grid`` (:doc:`mesh`).
+     - ``flat``, ``agnesi``, ``xyz`` or ``erf_grid`` (:doc:`governing_curvilinear`).
    * - ``terrain.file``
      - required for ``xyz``, ``erf_grid``
      - The point file (``x y z`` per line) or ERF's structured terrain file.
@@ -126,9 +126,9 @@ A key that has no effect for the chosen ``terrain.type`` or ``terrain.smoothing`
 ``steady``
 ----------
 
-The steady driver (:doc:`driver`) reads ``steady.*`` through ``read_steady_options()``: the five parameters of the
-definition of a steady solution (:doc:`steady`) and its own. The application runs the driver with
-``steady.stage = simplec`` (:doc:`simplec`); with the default ``none`` it writes the state and stops, and every other
+The steady driver (:doc:`solver`) reads ``steady.*`` through ``read_steady_options()``: the five parameters of the
+definition of a steady solution (:doc:`solver`) and its own. The application runs the driver with
+``steady.stage = simplec`` (:doc:`solver`); with the default ``none`` it writes the state and stops, and every other
 ``steady.*`` key is refused (it would have no effect). Each row matches the check in ``Source/SteadyCriterion.cpp`` or
 ``Source/Driver.cpp``; a repeated key is refused.
 
@@ -186,10 +186,10 @@ definition of a steady solution (:doc:`steady`) and its own. The application run
      - Finite, > 1. Growth of the relative residual over a window that sends the run back a stage.
    * - ``steady.zline_sweeps``
      - ``2``
-     - ≥ 2 and ≤ 100. z-line Jacobi sweeps per momentum predictor step (:doc:`predictor`); one sweep is the
+     - ≥ 2 and ≤ 100. z-line Jacobi sweeps per momentum predictor step (:doc:`solver`); one sweep is the
        configuration the sub-phase 1.5 analysis found unstable at large horizontal CFL, so it is not an input. With
        the second-order residual the lagged sweeps are stable up to a horizontal CFL of 2.4 with 4 sweeps, 3.7 with 8
-       and 6.1 with 16 (:doc:`predictor`, sub-phase 1.16); the terrain decks run 16 with ``steady.cfl_max = 4``. A
+       and 6.1 with 16 (:doc:`solver`, sub-phase 1.16); the terrain decks run 16 with ``steady.cfl_max = 4``. A
        horizontally uniform column has exact lagged neighbours and takes any count.
    * - ``steady.machine``
      - ``local``
@@ -200,10 +200,10 @@ definition of a steady solution (:doc:`steady`) and its own. The application run
      - ≥ 1. Nodes of the run, for the allocation units.
    * - ``steady.newton_gmres_restart``
      - ``30``
-     - Integer, ≥ 5 and ≤ 200. GMRES restart length of the Newton step (:doc:`newton`).
+     - Integer, ≥ 5 and ≤ 200. GMRES restart length of the Newton step (:doc:`solver`).
    * - ``steady.newton_fd_eps_scale``
      - :math:`\sqrt{\epsilon_\mathrm{mach}}` of ``amrex::Real``
-     - > 0 and ≤ 1e-2. Relative step :math:`h` of the Jacobian-vector product (:doc:`newton`).
+     - > 0 and ≤ 1e-2. Relative step :math:`h` of the Jacobian-vector product (:doc:`solver`).
    * - ``steady.newton_krylov_rtol``
      - ``1e-2``
      - > 0 and < 1. Relative tolerance of GMRES in each Newton step.
@@ -219,8 +219,8 @@ until then it refuses these keys as unknown inputs.
 ``solver``
 ----------
 
-The Poisson layer (:doc:`poisson`) reads ``solver.poisson_*`` through ``read_poisson_options()``. The application
-reads them with the initializer (``init.first_guess = profile``, :doc:`initializer`), as do the regression tools
+The Poisson layer (:doc:`solver`) reads ``solver.poisson_*`` through ``read_poisson_options()``. The application
+reads them with the initializer (``init.first_guess = profile``, :doc:`initial_conditions`), as do the regression tools
 ``poisson_projection`` and ``wall_distance``; without the initializer the application has no Poisson solve yet, so
 setting these keys stops the run, like any other key it does not read. Each row matches the range check in
 ``Source/Poisson.cpp``.
@@ -236,7 +236,7 @@ setting these keys stops the run, like any other key it does not read. Each row 
      - ``1e-10`` (``1e-5`` single)
      - ≥ 10 machine epsilon and < 1. Converged when the residual is below this fraction of the initial one: the
        2-norm under GMRES (``gmres_fft``, ``gmres_mlmg``), the maximum norm under ``mlmg``. In single precision
-       rounding sets a floor near :math:`\varepsilon N_z^2/2` (:doc:`poisson`).
+       rounding sets a floor near :math:`\varepsilon N_z^2/2` (:doc:`solver`).
    * - ``solver.poisson_abstol``
      - ``0``
      - Finite, ≥ 0. Or when the residual (in the same norm) is below this value.
@@ -262,25 +262,176 @@ setting these keys stops the run, like any other key it does not read. Each row 
 ``bc``
 ------
 
-The boundary conditions (:doc:`boundary`) read ``bc.*`` through ``read_boundary_inputs()`` and
-``read_surface_layer_options()``; their table is in :doc:`boundary`. The application reads ``bc.*`` with the
+The boundary conditions (:doc:`boundary_conditions`) read ``bc.*`` through ``read_boundary_inputs()`` and
+``read_surface_layer_options()``. The application reads ``bc.*`` with the
 initializer (``init.first_guess = profile``: the face types, the inflow profile and the sounding act on the initial
-field; the damping, top-gradient and surface-layer keys are range-checked only, see :doc:`initializer`) and with the
+field; the damping, top-gradient and surface-layer keys are range-checked only, see :doc:`initial_conditions`) and with the
 SIMPLEC stage (``steady.stage = simplec``, where every key acts), as does the regression tool ``boundary_fluxes``;
 without either, setting them stops the run. The ``bc.inflow_*`` keys are accepted without an inflow face when the
 initializer uses them as the first guess (and on a restart of such a run).
+A key with no effect for the chosen face types stops the run.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 26 12 62
+
+   * - Input
+     - Default
+     - Range and effect
+   * - ``bc.xlo``, ``bc.xhi``, ``bc.ylo``, ``bc.yhi``
+     - ``periodic``
+     - ``periodic`` exactly when ``mesh.is_periodic`` is 1 in that direction; otherwise ``inflow``, ``outflow``,
+       ``slip_wall`` or ``no_slip_wall``.
+   * - ``bc.zlo``
+     - ``surface_layer``
+     - ``surface_layer``, ``slip_wall`` or ``no_slip_wall``.
+   * - ``bc.zhi``
+     - ``slip_wall``
+     - ``slip_wall``, ``no_slip_wall`` or ``geostrophic`` (needs Coriolis with geostrophic forcing).
+   * - ``bc.<face>_wall_velocity``
+     - ``0 0 0``
+     - Three finite values (m/s), the velocity of a ``no_slip_wall`` face (``xlo``, ``xhi``, ``ylo``, ``yhi``,
+       ``zlo``, ``zhi``); the normal component must be 0. Refused on another face type.
+   * - ``bc.inflow_profile``
+     - ``log_law``
+     - ``log_law``, ``power_law`` or ``file``. The inflow keys need an inflow face, a damping layer or the
+       initializer's first guess (``init.first_guess = profile``, which uses them on periodic domains too).
+   * - ``bc.inflow_ustar``
+     - 0.4 m/s
+     - Finite, > 0 (``log_law`` only; refused with the other kinds).
+   * - ``bc.inflow_z0``
+     - 0.1 m
+     - Finite, > 0: the log law's roughness, and the roughness of the equilibrium k and :math:`\nu_t` of every kind.
+       Normally equal to ``bc.surface_z0``.
+   * - ``bc.inflow_speed``, ``bc.inflow_zref``, ``bc.inflow_alpha``
+     - 10 m/s, 10 m, 0.14
+     - Speed finite and ≥ 0; height and exponent finite and > 0 (``power_law`` only; refused with the other kinds).
+       Below :math:`z_0` the law's slope at :math:`z_0` gives the equilibrium k (the slope itself diverges).
+   * - ``bc.inflow_direction``
+     - 0
+     - Finite, degrees from the x axis.
+   * - ``bc.inflow_file``
+     - empty
+     - Required with ``file`` (refused with the other kinds): ``z u v theta [k]`` rows (4 or 5 columns, at least 2),
+       z increasing from 0, θ > 0, k ≥ 0.
+   * - ``bc.theta_profile_z``, ``bc.theta_profile``
+     - ``0``, ``300``
+     - The same number of values, heights increasing from 0, θ > 0: the reference profile.
+   * - ``bc.zhi_theta_grad``
+     - 0
+     - Finite (K/m): θ's gradient through a ``slip_wall`` or ``geostrophic`` top; no effect with ``no_slip_wall``.
+   * - ``bc.rayleigh_zdamp``
+     - 0 (off)
+     - In [0, ``mesh.prob_hi`` z): the Rayleigh layer's start height; > 0 needs ``bc.rayleigh_dampcoef`` > 0.
+   * - ``bc.rayleigh_dampcoef``
+     - 0
+     - Finite, ≥ 0 (1/s); needs ``bc.rayleigh_zdamp`` > 0.
+   * - ``bc.rayleigh_fields``
+     - ``u v w theta tke``
+     - One or more of ``u v w theta tke`` (any other name is refused): the fields the Rayleigh layer damps; needs
+       ``bc.rayleigh_zdamp`` > 0.
+   * - ``bc.rayleigh_height``
+     - ``absolute``
+     - ``absolute`` or ``above_ground``: the height the layer's coefficient and θ's reference use (u, v and k
+       always use the height above the ground); needs ``bc.rayleigh_zdamp`` > 0.
+   * - ``bc.sponge_width``
+     - 0 (off)
+     - Finite, ≥ 0 (m); > 0 needs an inflow or outflow face and ``bc.sponge_strength`` > 0.
+   * - ``bc.sponge_strength``
+     - 0
+     - Finite, ≥ 0 (1/s); needs ``bc.sponge_width`` > 0.
+   * - ``bc.surface_z0``, ``bc.surface_zref``, ``bc.surface_stability``, ``bc.surface_heat_flux``, ``bc.surface_wall_k``
+     - below
+     - The surface layer's options (``read_surface_layer_options``); refused unless ``bc.zlo = surface_layer``.
+
+The surface-layer keys (refused unless ``bc.zlo = surface_layer``), read by ``read_surface_layer_options()``:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 24 22 54
+
+   * - Input
+     - Default
+     - Range and effect
+   * - ``bc.surface_z0``
+     - 0.1 m
+     - > 0, roughness length
+   * - ``bc.surface_zref``
+     - 0
+     - ≤ 0: each column's first cell centre; otherwise a vertical height between the first and last cell-centre
+       heights of every column
+   * - ``bc.surface_stability``
+     - ``neutral``
+     - ``neutral`` or ``heat_flux``
+   * - ``bc.surface_heat_flux``
+     - 0 K m/s
+     - finite; ``heat_flux`` only (refused with ``neutral``, where it would be ignored)
+   * - ``bc.surface_wall_k``
+     - ``dirichlet``
+     - ``dirichlet`` or ``source``
+
+The wall model uses the closure's ``turb.Cmu0`` and ``turb.kappa``.
 
 ``turb``
 --------
 
-The k–L closure (:doc:`closure`) reads ``turb.*`` through ``read_closure_options()``; its table is in :doc:`closure`.
-The application reads them with the SIMPLEC stage (``steady.stage = simplec``, which always runs the closure), as does
-the regression tool ``closure_column``; without the stage, setting them stops the run.
+The k–L closure (:doc:`governing_cartesian`) reads ``turb.*`` through ``read_closure_options()``. The application
+reads them with the SIMPLEC stage (``steady.stage = simplec``, which always runs the closure), as does the
+regression tool ``closure_column``; without the stage, setting them stops the run. Each row matches the check in
+``check_closure_options()``.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 26 12 62
+
+   * - Input
+     - Default
+     - Range and effect
+   * - ``turb.Cmu0``
+     - 0.5562
+     - Finite, > 0: :math:`C_{\mu 0}` (AL01, ERF).
+   * - ``turb.Cb``
+     - 0.35
+     - Finite, > 0: :math:`C_b` of the stable and unstable lengths.
+   * - ``turb.Rt_crit``
+     - −1
+     - Finite, ≤ 0: the smoothing starts below it.
+   * - ``turb.Rt_min``
+     - −3
+     - Finite, < ``turb.Rt_crit`` and > −3.6: the smoothed :math:`R_t` stays above it.
+   * - ``turb.max_geom_lscale``
+     - 30 m
+     - Finite, > 0: the harmonic cap of :math:`l_g` (about :math:`\kappa \times 0.1 z_i`).
+   * - ``turb.tke_floor``
+     - 0
+     - 0 (machine epsilon) or ≥ machine epsilon (m²/s²): the floor of :math:`k`; a value between is refused rather
+       than raised.
+   * - ``turb.sigma_k``
+     - 1
+     - Finite, > 0: :math:`\gamma_k = \nu_{mol} + \nu_t/\sigma_k`.
+   * - ``turb.nu_molecular``, ``turb.alpha_molecular``
+     - 0, 0
+     - Finite, ≥ 0 (m²/s): molecular viscosity and heat diffusivity added to the turbulent ones.
+   * - ``turb.kappa``
+     - 0.41
+     - Finite, > 0: von Kármán's constant in :math:`l_g`.
+   * - ``turb.nut_relax``
+     - 1
+     - Finite, in (0, 1]: the relaxation weight of :math:`\nu_t` (1: none).
+   * - ``turb.frozen_switch``
+     - 0
+     - 0 or 1: freeze the branch decisions at the state before a Jacobian (``Closure::freeze_switches``).
+   * - ``turb.face_mean``
+     - ``arithmetic``
+     - ``arithmetic`` or ``logarithmic`` (above).
+   * - ``turb.wall_distance``
+     - ``terrain_height``
+     - ``terrain_height`` or ``tucker`` (above).
 
 ``forcing``
 -----------
 
-The forcing of a run (:doc:`residual`), read through ``read_forcing_options()`` (``Source/Forcing.cpp``); with the
+The forcing of a run (:doc:`governing_cartesian`), read through ``read_forcing_options()`` (``Source/Forcing.cpp``); with the
 SIMPLEC stage only. Each row matches ``check_forcing_options``; a repeated key and a key with no effect are refused.
 
 .. list-table::
@@ -322,7 +473,7 @@ SIMPLEC stage only. Each row matches ``check_forcing_options``; a repeated key a
 ``convection``
 --------------
 
-The convection options of the momentum and :math:`	heta` equations (:doc:`transport`; :math:`k` is always bounded
+The convection options of the momentum and :math:`\theta` equations (:doc:`discretization`; :math:`k` is always bounded
 upwind), read through ``read_convection_options()`` (``Source/Convection.cpp``); with the SIMPLEC stage only.
 
 .. list-table::
@@ -334,19 +485,19 @@ upwind), read through ``read_convection_options()`` (``Source/Convection.cpp``);
      - Range and meaning
    * - ``convection.limiter``
      - ``van_leer``
-     - ``van_leer``, ``van_albada`` or ``upwind``, for momentum and :math:`	heta`.
+     - ``van_leer``, ``van_albada`` or ``upwind``, for momentum and :math:`\theta`.
    * - ``convection.smooth_eps_velocity``
      - ``1e-5``
      - > 0 m/s with its square a finite normal number: the van Albada eps of the momentum equations. With
        ``limiter = van_albada`` only.
    * - ``convection.smooth_eps_theta``
      - ``1e-5``
-     - The same for :math:`	heta` (K).
+     - The same for :math:`\theta` (K).
 
 ``simplec``
 -----------
 
-The SIMPLEC stage's own keys (:doc:`simplec`), read through ``read_simplec_options()``; with ``steady.stage =
+The SIMPLEC stage's own keys (:doc:`solver`), read through ``read_simplec_options()``; with ``steady.stage =
 simplec`` only. The sweep count is ``steady.zline_sweeps``.
 
 .. list-table::
@@ -359,7 +510,7 @@ simplec`` only. The sweep count is ``steady.zline_sweeps``.
    * - ``simplec.pressure_reltol``
      - ``1e-3``
      - ≥ 10 machine epsilon and < 1: the relative tolerance of the pressure correction's Poisson solve (the plan's 0.1
-       is unstable with a stable stratification: :doc:`simplec`).
+       is unstable with a stable stratification: :doc:`solver`).
    * - ``simplec.alpha_p``
      - ``1``
      - > 0 and ≤ 1: the pressure under-relaxation :math:`p' \leftarrow p' + \alpha_p\phi` (SIMPLEC needs none).
@@ -367,13 +518,13 @@ simplec`` only. The sweep count is ``steady.zline_sweeps``.
      - ``0.3``
      - > 0 and ≤ 1: the step of the predictor's point-implicit rotation in inertial times, :math:`\tau_c =
        1/\max(|f|/r, a_P - \sum a_{nb})`, applied to the horizontal mean of the other component's residual
-       (:doc:`predictor`). Since sub-phase 1.16 the fluctuation about the mean takes the row's own step, and 1 converges
+       (:doc:`solver`). Since sub-phase 1.16 the fluctuation about the mean takes the row's own step, and 1 converges
        as well as 0.3 (Neutral_ABL_Flat: 2507 against 2613 iterations); the default stays 0.3.
 
 ``init``
 --------
 
-The mass-consistent initializer (:doc:`initializer`) reads ``init.*`` through ``read_init_options()``. Each row matches
+The mass-consistent initializer (:doc:`initial_conditions`) reads ``init.*`` through ``read_init_options()``. Each row matches
 the range check in ``Source/Initializer.cpp``; the keys other than ``first_guess`` are refused without
 ``first_guess = profile`` (they would have no effect). A restart with the initializer on is refused.
 
@@ -397,7 +548,7 @@ the range check in ``Source/Initializer.cpp``; the keys other than ``first_guess
    * - ``init.alpha_v``
      - ``1``
      - Finite, > 0. Vertical transmissivity :math:`\alpha_v`; only :math:`\alpha_v/\alpha_h` matters for the velocity.
-       Ratios below 0.1 need more than the default ``solver.poisson_max_iter`` (:doc:`initializer`).
+       Ratios below 0.1 need more than the default ``solver.poisson_max_iter`` (:doc:`initial_conditions`).
    * - ``init.k_decay_height``
      - ``0``
      - Finite, ≥ 0 m. :math:`z_i` of the decay of :math:`k` above :math:`z_i`; 0 for no decay.

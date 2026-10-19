@@ -128,7 +128,7 @@ def table(title, cfls, ms, schemes, **kw):
 def thresholds(schemes=('LUD', 'central'), ms=(2, 4, 8, 16), step=0.05):
     """The first CFL (step 0.05) at which the scalar lagged-sweep factor
     1 - S a exceeds 1 in modulus over theta in (0, pi]: the table of
-    docs/predictor.rst (sub-phase 1.16)."""
+    docs/solver.rst (sub-phase 1.16)."""
     th = np.linspace(0.0, np.pi, 721)[1:]
     print("first CFL with an amplification above 1 (scalar factor, pure advection)")
     print("  m    " + "  ".join(f"{s:>8s}" for s in schemes))

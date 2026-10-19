@@ -68,4 +68,4 @@ The ERF Canonical_RANS set also has stratified flat cases:
 A case run with Coriolis forcing from a uniform geostrophic start oscillates with the inertial period
 :math:`2\pi/f` (17.5 h at :math:`f = 10^{-4}` s\ :sup:`-1`) before it settles; its ERF reference runs 48 h
 (:doc:`references`). A *possibly non-steady* case is still run. If it does not meet the definition of steady
-(:doc:`steady`), it is reported as non-steady, not tuned until it passes.
+(:doc:`solver`), it is reported as non-steady, not tuned until it passes.

@@ -4,7 +4,7 @@
 # given on the command line as terrain.file=ramp2d.txt) with the settings of
 # inputs_steady_hill2d. ERF runs the same ground from the same file
 # (erf.terrain_file_name) with its Neutral_Hill_2D deck minus the prob.*
-# hill keys; the comparison is in docs/simplec.rst.
+# hill keys; the comparison is in docs/results.rst.
 mesh.n_cell        = 128 1 64
 mesh.prob_lo       = -2560. 0. 0.
 mesh.prob_hi       =  2560. 40. 1000.
@@ -44,7 +44,7 @@ steady.stage                   = simplec
 steady.cfl0                    = 1.
 steady.cfl_max                 = 4.
 steady.zline_sweeps            = 16
-simplec.rotation_relax         = 1.   # with the planar-mean split 1 converges in half the iterations of 0.3 (docs/simplec.rst)
+simplec.rotation_relax         = 1.   # with the planar-mean split 1 converges in half the iterations of 0.3 (docs/solver.rst)
 steady.residual_ref_iterations = 100
 steady.residual_drop_orders    = 2
 steady.max_iterations          = 20000

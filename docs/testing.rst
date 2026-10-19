@@ -92,7 +92,7 @@ Current tests
        same ranking of the five values at 40, 80 and 150 m above the ground (at 20 m two values tie within 0.002 in
        both codes), every speed-up above 1 at 20, 40, 80 and 150 m, the two codes within 0.02, 0.01, 0.005 and 0.003
        of each other at those heights (measured 0.011, 0.0057, 0.0020, 0.0008), and ablsteady's own values and
-       iterations pinned (1e-6, 10 %). Double precision only (:doc:`initializer`).
+       iterations pinned (1e-6, 10 %). Double precision only (:doc:`initial_conditions`).
    * - ``rt_bc_neutral_flat``, ``rt_bc_neutral_flat_matches``
      - RT-1.8.1: ``boundary_fluxes`` on ERF's Neutral_ABL_Flat mesh (8 × 8 × 64, 1000 m) with a fixed log-law state
        (u* = 0.35 m/s, z₀ = 0.1 m, 15°), the surface layer on the ground and a slip top: u* recovered at every ground
@@ -139,7 +139,7 @@ Current tests
        u*²/C_μ0², the log law in the lowest four cells within 10 %, K_mv of the second cell within 30 % of κ u* z.
        Measured: the verdict after about 2850 iterations (13 s on two ranks), u* = 0.377 m/s, every ERF check
        passing, on one to three ranks with both compilers (the bursts of an earlier version of the predictor's
-       rotation step are explained and removed in :doc:`simplec`). Label ``regression`` (the run time); double only.
+       rotation step are explained and removed in :doc:`solver`). Label ``regression`` (the run time); double only.
        The 1 % comparison with an ERF reference run is not in this version.
    * - ``rt_steady_hill2d``
      - RT-1.16.1: ERF's Neutral_Hill_2D (``Tests/Decks/inputs_steady_hill2d``: 128 × 1 × 64, the Witch of Agnesi of
@@ -150,7 +150,7 @@ Current tests
        three lowest cells within 0.2–0.8 (Jackson and Hunt's 0.4), the speed-up positive in the lowest ten, the
        upstream u* within 0.25–0.55 m/s, the upstream log law in the lowest three cells within 15 %. Measured: the
        verdict after 4590 iterations (49 s on two ranks), speed-up 0.59/0.50/0.43, u* = 0.354 m/s, every check
-       passing (:doc:`simplec`). Label ``regression``; double only.
+       passing (:doc:`solver`). Label ``regression``; double only.
    * - ``rt_steady_hill3d``
      - RT-1.16.2: ERF's Neutral_Hill_3D (``inputs_steady_hill3d``: 64 × 64 × 20, the hill of revolution, damping
        from 550 m, 16 sweeps, cap 4) to the verdict with ``check_hill3d.py --physics`` (the 3-D checks, speed-up
@@ -383,7 +383,7 @@ GoogleTest suite
    * - UT-1.10.1b
      - *Beyond the plan.* With a tangential gradient at sloped ground: order 2 on flat ground (≥ 1.95), between 0.8 and
        1.2 over a 120 m hill (64 → 128 → 256 cells), and a fine-mesh error 3 to 6 times that over a 60 m hill (slope²).
-       Double precision only. Pins ERF's ground treatment (:doc:`poisson`).
+       Double precision only. Pins ERF's ground treatment (:doc:`solver`).
    * - UT-1.10.2
      - The anisotropic operator with :math:`\beta_v/\beta_h` = 1, 0.5, 0.1 (``z_cross`` set) on flat ground and over
        the hill, and a spatially varying :math:`\beta` over the hill: order ≥ 1.9 (single: 1.8, 1.6). Without
@@ -697,4 +697,4 @@ GoogleTest suite
        count and bytes of a 512 × 512 × 128 box; the budget abort names both keys.
        ``Newton.PreconditionerHookAndOptionsReachTheSolver``: the hook is set up once per step and applied once
        per GMRES iteration, and its output is used; restart and tolerance reach GMRES.
-       ``Newton.ColumnRestartAndToleranceSweep``: GMRES iterations against the restart length (:doc:`newton`).
+       ``Newton.ColumnRestartAndToleranceSweep``: GMRES iterations against the restart length (:doc:`solver`).
