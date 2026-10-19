@@ -8,6 +8,7 @@
 #include <AMReX_GpuLaunch.H>
 
 #include <algorithm>
+#include <limits>
 #include <string>
 
 namespace ablsteady {
@@ -151,8 +152,9 @@ amrex::Real lusgs_zero (Loc loc, const amrex::MultiFab& A, const amrex::MultiFab
     const amrex::MultiFab* As = &A;
     const amrex::MultiFab* aps = &ap;
     const amrex::MultiFab* rs = &rhs;
-    if (overlap > 0) {
-        const amrex::IntVect ng(overlap, overlap, 0);
+    const amrex::IntVect ng = line_overlap_width(overlap, geom.Domain());
+    const amrex::IntVect fold = line_self_axes(geom);
+    if (ng.max() > 0 || fold.max() > 0) {
         Ag.define(ba, dm, A.nComp(), ng);
         apg.define(ba, dm, 1, ng);
         rg.define(ba, dm, 1, ng);
@@ -161,15 +163,32 @@ amrex::Real lusgs_zero (Loc loc, const amrex::MultiFab& A, const amrex::MultiFab
         amrex::MultiFab::Copy(apg, ap, 0, 0, 1, 0);
         amrex::MultiFab::Copy(rg, rhs, 0, 0, 1, 0);
         for (auto* p : {&Ag, &apg, &rg}) { p->FillBoundary(geom.periodicity()); }
+        // Along a periodic axis one cell wide (y in a 2-D deck) both
+        // neighbours are the column itself: their coefficients move to the
+        // diagonal (exact, a_P - a_m - a_p > 0 by the pseudo-time term).
+        for (int d = 0; d < 2; ++d) {
+            if (fold[d] == 0) { continue; }
+            const int cm = (d == 0) ? coef_XM : coef_YM;
+            const int cp = (d == 0) ? coef_XP : coef_YP;
+            for (amrex::MFIter mfi(apg, false); mfi.isValid(); ++mfi) {
+                const auto a = Ag.array(mfi);
+                const auto p = apg.array(mfi);
+                amrex::ParallelFor(mfi.fabbox(), [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
+                {
+                    p(i, j, k) -= a(i, j, k, cm) + a(i, j, k, cp);
+                    a(i, j, k, cm) = 0;
+                    a(i, j, k, cp) = 0;
+                });
+            }
+        }
         As = &Ag;
         aps = &apg;
         rs = &rg;
     }
     // The box-local iterate: zero outside the swept region (the ghost delta).
-    amrex::MultiFab work(ba, dm, 1, amrex::IntVect(overlap + 1, overlap + 1, 1));
+    amrex::MultiFab work(ba, dm, 1, ng + amrex::IntVect(1));
     work.setVal(0.0);
-    const amrex::IntVect ns(overlap, overlap, 0);
-    amrex::MultiFab cprime(ba, dm, 1, ns), dprime(ba, dm, 1, ns), before(ba, dm, 1, 0);
+    amrex::MultiFab cprime(ba, dm, 1, ng), dprime(ba, dm, 1, ng), before(ba, dm, 1, 0);
     amrex::Real change = 0;
     for (int s = 0; s < sweeps; ++s) {
         for (const bool forward : {true, false}) {
@@ -231,15 +250,30 @@ std::vector<std::string> check_line_options (const LineSweepOptions& opt)
     return err;
 }
 
+amrex::IntVect line_self_axes (const amrex::Geometry& geom)
+{
+    const amrex::Box& dom = geom.Domain();
+    return {geom.isPeriodic(0) && dom.length(0) == 1 ? 1 : 0, geom.isPeriodic(1) && dom.length(1) == 1 ? 1 : 0, 0};
+}
+
+amrex::IntVect line_overlap_width (int overlap, const amrex::Box& domain)
+{
+    const amrex::Box cells = amrex::enclosedCells(domain);
+    return {cells.length(0) > 1 ? overlap : 0, cells.length(1) > 1 ? overlap : 0, 0};
+}
+
 std::string check_line_overlap_layout (const amrex::BoxArray& ba, int overlap)
 {
-    int narrowest = 0;
+    if (ba.size() == 0) { return {}; }
+    const amrex::IntVect ng = line_overlap_width(overlap, ba.minimalBox());
+    int narrowest = std::numeric_limits<int>::max();
     for (int b = 0; b < ba.size(); ++b) {
         const amrex::Box bx = amrex::enclosedCells(ba[b]);
-        const int w = std::min(bx.length(0), bx.length(1));
-        narrowest = (b == 0) ? w : std::min(narrowest, w);
+        for (int d = 0; d < 2; ++d) {
+            if (ng[d] > 0) { narrowest = std::min(narrowest, bx.length(d)); }
+        }
     }
-    if (ba.size() > 0 && overlap > narrowest) {
+    if (overlap > 0 && narrowest < std::numeric_limits<int>::max() && overlap > narrowest) {
         return "steady.line_overlap = " + std::to_string(overlap) + ": must be <= the narrowest box's width in x and y ("
                + std::to_string(narrowest) + " cells; mesh.max_grid_size)";
     }
@@ -265,8 +299,9 @@ amrex::Box line_sweep_box (Loc loc, const amrex::Box& owned, int overlap, const 
 {
     amrex::Box S = owned;
     const amrex::Box dom = amrex::convert(geom.Domain(), loc_type(loc));
+    const amrex::IntVect ng = line_overlap_width(overlap, geom.Domain());
     for (int d = 0; d < 2; ++d) {
-        S.grow(d, overlap);
+        S.grow(d, ng[d]);
         if (!geom.isPeriodic(d)) {
             S.setSmall(d, std::max(S.smallEnd(d), dom.smallEnd(d)));
             S.setBig(d, std::min(S.bigEnd(d), dom.bigEnd(d)));

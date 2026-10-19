@@ -193,7 +193,8 @@ double max_diff (const amrex::MultiFab& a, const amrex::MultiFab& b)
 // unless that is the domain's high face, and on a periodic axis the domain's
 // low face (the image of the last box's high face); it sweeps the owned
 // region grown by n_o (clipped to the domain on a non-periodic axis) with
-// zero outside it, j outer and i inner, and keeps the owned points.
+// zero outside it, j outer and i inner, and keeps the owned points. Along a
+// periodic axis one cell wide both neighbours are the point itself.
 // Returns max |delta - replay| over every valid point of delta (a non-owned
 // copy compared with its owner's value) and the largest |replay|.
 std::pair<double, double> replay_error (Loc loc, const amrex::MultiFab& A, const amrex::MultiFab& ap,
@@ -215,6 +216,7 @@ std::pair<double, double> replay_error (Loc loc, const amrex::MultiFab& A, const
             }
             return iv;
         };
+        const bool selfx = c.geom.isPeriodic(0) && cdom.length(0) == 1, selfy = c.geom.isPeriodic(1) && cdom.length(1) == 1;
         amrex::FArrayBox out(gb, 1, amrex::The_Pinned_Arena());
         out.setVal<amrex::RunOn::Host>(0.0);
         const amrex::BoxArray ba = amrex::convert(c.ba, t);
@@ -228,6 +230,7 @@ std::pair<double, double> replay_error (Loc loc, const amrex::MultiFab& A, const
             }
             amrex::Box S = own;
             for (int d = 0; d < 2; ++d) {
+                if (cdom.length(d) == 1) { continue; }   // no overlap along a one-cell axis (a 2-D deck)
                 S.grow(d, n_o);
                 if (!c.geom.isPeriodic(d)) {
                     S.setSmall(d, std::max(S.smallEnd(d), gb.smallEnd(d)));
@@ -242,16 +245,19 @@ std::pair<double, double> replay_error (Loc loc, const amrex::MultiFab& A, const
             auto column = [&] (int i, int j) {
                 for (int k = klo; k <= khi; ++k) {
                     const amrex::IntVect iv(i, j, k), w = wrap(iv);
-                    const amrex::Real rk = r(w) + a(w, ablsteady::coef_XM) * W(amrex::IntVect(i - 1, j, k))
-                                           + a(w, ablsteady::coef_XP) * W(amrex::IntVect(i + 1, j, k))
-                                           + a(w, ablsteady::coef_YM) * W(amrex::IntVect(i, j - 1, k))
-                                           + a(w, ablsteady::coef_YP) * W(amrex::IntVect(i, j + 1, k));
+                    // a periodic one-cell axis: both neighbours are this point (implicit)
+                    amrex::Real pw = p(w), xn = 0, yn = 0;
+                    if (selfx) { pw -= a(w, ablsteady::coef_XM) + a(w, ablsteady::coef_XP); }
+                    else { xn = a(w, ablsteady::coef_XM) * W(amrex::IntVect(i - 1, j, k)) + a(w, ablsteady::coef_XP) * W(amrex::IntVect(i + 1, j, k)); }
+                    if (selfy) { pw -= a(w, ablsteady::coef_YM) + a(w, ablsteady::coef_YP); }
+                    else { yn = a(w, ablsteady::coef_YM) * W(amrex::IntVect(i, j - 1, k)) + a(w, ablsteady::coef_YP) * W(amrex::IntVect(i, j + 1, k)); }
+                    const amrex::Real rk = r(w) + xn + yn;
                     const amrex::Real lower = -a(w, ablsteady::coef_ZM), upper = -a(w, ablsteady::coef_ZP);
                     if (k == klo) {
-                        cc(iv) = upper / p(w);
-                        ee(iv) = rk / p(w);
+                        cc(iv) = upper / pw;
+                        ee(iv) = rk / pw;
                     } else {
-                        const amrex::Real m = p(w) - lower * cc(amrex::IntVect(i, j, k - 1));
+                        const amrex::Real m = pw - lower * cc(amrex::IntVect(i, j, k - 1));
                         cc(iv) = upper / m;
                         ee(iv) = (rk - lower * ee(amrex::IntVect(i, j, k - 1))) / m;
                     }
@@ -283,7 +289,8 @@ std::pair<double, double> replay_error (Loc loc, const amrex::MultiFab& A, const
 // UT-2.2.1. The owned regions (line_owned_box, which the sweep uses) cover
 // every unknown of the domain exactly once, periodic images identified, for
 // cells and the three face locations on 1, 2 and 4 boxes (and an uneven
-// 7 x 6 split into 4 x 3 columns at most), periodic and not. The swept
+// 7 x 6 split into 4 x 3 columns at most, and a 2-D 8 x 1 mesh in two
+// boxes), periodic and not. The swept
 // result equals the host replay of the box-local sweeps of the header's
 // rule (one and two sweeps, n_o = 0 and 2): a face swept by two boxes, or
 // a ghost delta taken from a neighbour, changes the result next to the box
@@ -291,7 +298,7 @@ std::pair<double, double> replay_error (Loc loc, const amrex::MultiFab& A, const
 TEST (LineSweeps, EveryFaceIsOwnedAndSweptOnce)
 {
     struct Layout { int nx, ny, mx, my, boxes; };
-    const Layout layouts[] = {{8, 8, 8, 8, 1}, {8, 8, 4, 8, 2}, {8, 8, 4, 4, 4}, {7, 6, 4, 3, 4}};
+    const Layout layouts[] = {{8, 8, 8, 8, 1}, {8, 8, 4, 8, 2}, {8, 8, 4, 4, 4}, {7, 6, 4, 3, 4}, {8, 1, 4, 1, 2}};
     for (const bool periodic : {false, true}) {
         for (const Layout& L : layouts) {
             PCase c = box_mesh(L.nx, L.ny, 4, periodic, L.mx, L.my);
@@ -332,7 +339,7 @@ TEST (LineSweeps, EveryFaceIsOwnedAndSweptOnce)
                 amrex::MultiFab A, ap, rhs;
                 random_system(c, loc, 11u + static_cast<unsigned>(L.boxes), 0.3, 3.0, A, ap, rhs);
                 for (const int n_o : {0, 2}) {
-                    if (n_o > std::min(L.mx, L.my) && L.boxes > 1) { continue; }
+                    if (!ablsteady::check_line_overlap_layout(c.ba, n_o).empty()) { continue; }
                     for (const int sweeps : {1, 2}) {
                         amrex::MultiFab delta;
                         ablsteady::zline_lusgs(loc, A, ap, rhs, sweeps, c.mesh, c.geom, delta, lusgs(LineGhosts::zero, n_o));
@@ -499,7 +506,8 @@ TEST (LineSweeps, DiagonalOrderingEqualsTheSequentialSweep)
 
 // The refusals: an overlap outside [0, max_line_overlap], an overlap with
 // the lagged ghosts, an overlap wider than the narrowest box; each message
-// names steady.line_overlap. The names of the options.
+// names steady.line_overlap. No overlap along a one-cell axis (a 2-D deck).
+// The names of the options.
 TEST (LineSweeps, RefusalsAndNames)
 {
     PCase c = box_mesh(8, 8, 4, true, 4, 4);
@@ -517,6 +525,17 @@ TEST (LineSweeps, RefusalsAndNames)
     }
     amrex::MultiFab delta;   // the widest the 4 x 4 boxes allow
     EXPECT_NO_THROW(ablsteady::zline_lusgs(Loc::cell, A, ap, rhs, 1, c.mesh, c.geom, delta, lusgs(LineGhosts::zero, 4)));
+    // a 2-D deck (one cell in y): the overlap applies in x alone
+    {
+        PCase c2 = box_mesh(8, 1, 4, true, 4, 1);
+        EXPECT_EQ(ablsteady::line_overlap_width(3, c2.geom.Domain()), amrex::IntVect(3, 0, 0));
+        EXPECT_EQ(ablsteady::line_overlap_width(3, c.geom.Domain()), amrex::IntVect(3, 3, 0));
+        EXPECT_TRUE(ablsteady::check_line_overlap_layout(c2.ba, 4).empty());
+        EXPECT_FALSE(ablsteady::check_line_overlap_layout(c2.ba, 5).empty());
+        amrex::MultiFab A2, ap2, r2, d2;
+        random_system(c2, Loc::xface, 62u, 0.3, 1.0, A2, ap2, r2);
+        EXPECT_NO_THROW(ablsteady::zline_lusgs(Loc::xface, A2, ap2, r2, 1, c2.mesh, c2.geom, d2, lusgs(LineGhosts::zero, 4)));
+    }
     EXPECT_STREQ(ablsteady::line_ghosts_name(LineGhosts::lagged), "lagged");
     EXPECT_STREQ(ablsteady::line_ghosts_name(LineGhosts::zero), "zero");
     EXPECT_STREQ(ablsteady::line_order_name(LineOrder::sequential), "sequential");

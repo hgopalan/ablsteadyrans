@@ -18,7 +18,8 @@
 //
 //  * zero (sub-phase 2.2, box-local): no communication inside the sweeps.
 //    Every box sweeps the region it owns, grown by n_o = steady.line_overlap
-//    cells in x and y (clipped to the domain on a non-periodic axis), with
+//    cells in x and y (clipped to the domain on a non-periodic axis; not
+//    grown along an axis the domain is one cell wide, as y in a 2-D deck), with
 //    delta = 0 outside that region: the ghost delta is zeroed, never lagged.
 //    The system (A, a_P, rhs) on the grown region comes from one
 //    FillBoundary of copies with n_o ghost cells (periodic images through
@@ -26,7 +27,10 @@
 //    This is a restricted additive Schwarz step per pseudo-time iteration
 //    (the outer defect correction recomputes the residual, so the converged
 //    state does not depend on n_o or on the box layout; the iterates do).
-//    With n_o = 0 the sweeps are confined to the owned region.
+//    With n_o = 0 the sweeps are confined to the owned region. Along a
+//    periodic axis one cell wide (y in a 2-D deck) the two neighbours are
+//    the column itself, not another box: their coefficients are moved to
+//    the diagonal (line_self_axes), which solves that coupling exactly.
 //
 // C-grid face ownership (zero): a box owns the faces of its valid box in its
 // nodal direction except its high face, which belongs to the next box (as
@@ -96,8 +100,16 @@ const char* line_order_name (LineOrder o) noexcept;
 //! unless line_ghosts = zero. The kind is not checked here.
 std::vector<std::string> check_line_options (const LineSweepOptions& opt);
 
+//! 1 along x or y when that axis is periodic and the domain one cell wide.
+amrex::IntVect line_self_axes (const amrex::Geometry& geom);
+
+//! The overlap per axis: overlap in x and y, except along an axis the
+//! domain (any index type) is one cell wide; 0 in z.
+amrex::IntVect line_overlap_width (int overlap, const amrex::Box& domain);
+
 //! Empty, or the message naming steady.line_overlap when the overlap is wider
-//! than the narrowest box of ba in x or y (the grown region would reach
+//! than the narrowest box of ba along an axis it applies to
+//! (line_overlap_width of ba's minimal box: the grown region would reach
 //! past the neighbouring box; on a periodic axis past one period).
 std::string check_line_overlap_layout (const amrex::BoxArray& ba, int overlap);
 
@@ -106,7 +118,7 @@ std::string check_line_overlap_layout (const amrex::BoxArray& ba, int overlap);
 amrex::Box line_owned_box (Loc loc, const amrex::Box& vbox, const amrex::Geometry& geom);
 
 //! The region a box sweeps with steady.line_ghosts = zero: owned grown by
-//! overlap in x and y, clipped to the domain (at loc) on a non-periodic axis.
+//! line_overlap_width in x and y, clipped to the domain (at loc) on a non-periodic axis.
 amrex::Box line_sweep_box (Loc loc, const amrex::Box& owned, int overlap, const amrex::Geometry& geom);
 
 //! The checks shared by the line solvers (zline_jacobi, zline_lusgs): sweeps
