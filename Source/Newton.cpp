@@ -418,7 +418,12 @@ KrylovMemory krylov_memory (int restart, const amrex::BoxArray& ba, const amrex:
     return m;
 }
 
-bool newton_update_usable (amrex::Real krylov_relative) { return krylov_relative <= 1; }
+// isfinite first: an ordered comparison with NaN raises the invalid flag
+// (and so the trap of amrex.fpe_trap_invalid); isfinite does not.
+bool newton_update_usable (amrex::Real krylov_relative)
+{
+    return std::isfinite(static_cast<double>(krylov_relative)) && krylov_relative <= 1;
+}
 
 double newton_fd_eps_scale_min ()
 {

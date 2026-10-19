@@ -21,6 +21,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <cfenv>
 #include <cmath>
 #include <iomanip>
 #include <limits>
@@ -310,8 +311,8 @@ TEST(Newton, TerrainWallLawStepsReduceResidual)
 
 // ---------------------------------------------------------------------------
 // The rule that skips an update: applied when the Krylov residual is at most
-// |b| (the edge 1 included), skipped above it and for NaN and inf
-// (StepSkipsUnusableUpdate runs it inside a step).
+// |b| (the edge 1 included), skipped above it and for NaN and inf, and NaN
+// raises no invalid flag (StepSkipsUnusableUpdate runs it inside a step).
 TEST(Newton, UpdateSkippedAboveRhsNorm)
 {
     using ablsteady::newton_update_usable;
@@ -323,6 +324,19 @@ TEST(Newton, UpdateSkippedAboveRhsNorm)
     EXPECT_FALSE(newton_update_usable(amrex::Real(1.9e30)));
     EXPECT_FALSE(newton_update_usable(std::numeric_limits<amrex::Real>::infinity()));
     EXPECT_FALSE(newton_update_usable(std::numeric_limits<amrex::Real>::quiet_NaN()));
+    // NaN must not raise the invalid flag: an ordered comparison does with
+    // gcc (x86 and arm64; AppleClang uses a quiet compare), and the CI's
+    // amrex.fpe_trap_invalid=1 turns that into an abort. The flag is tested
+    // directly, so a gcc build catches it where traps are off (macOS).
+    const auto prev_fpe = amrex::disableFPExcept(amrex::FPExcept::invalid);
+    std::feclearexcept(FE_INVALID);
+    const amrex::Real nan = std::numeric_limits<amrex::Real>::quiet_NaN();
+    const volatile bool usable = newton_update_usable(nan);
+    const bool raised = std::fetestexcept(FE_INVALID) != 0;
+    std::feclearexcept(FE_INVALID);
+    amrex::setFPExcept(prev_fpe);
+    EXPECT_FALSE(usable);
+    EXPECT_FALSE(raised);
 }
 
 // ---------------------------------------------------------------------------
