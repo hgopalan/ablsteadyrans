@@ -19,14 +19,21 @@ namespace ablsteady {
 
 namespace {
 
-constexpr const char* kNewtonKeys[] = {"newton_gmres_restart", "newton_fd_eps_scale", "newton_krylov_rtol",
-                                       "newton_mem_budget_gb"};
 
 //! x with the digits of amrex::Real: a float input prints as it was given.
 std::string num (double x)
 {
     std::ostringstream s;
     s << std::setprecision(std::numeric_limits<amrex::Real>::digits10) << x;
+    return s.str();
+}
+
+//! x with every digit of amrex::Real: a bound printed this way is accepted
+//! when given back.
+std::string num_exact (double x)
+{
+    std::ostringstream s;
+    s << std::setprecision(std::numeric_limits<amrex::Real>::max_digits10) << x;
     return s.str();
 }
 
@@ -160,9 +167,17 @@ std::vector<std::string> check_newton_options (const NewtonOptions& opt)
                          + ": must be an integer >= 5 and <= 200");
     }
     // isnan first: NaN fails every ordered comparison.
+    // The lower bound, machine epsilon to the power 3/4 (1.8e-12 in double,
+    // 6.4e-6 in single): there J v keeps about three digits (relative error
+    // near 1e-3). Below it the round-off grows as 1/h: at machine epsilon J v
+    // has no correct digits and Newton stalls or diverges on the column of
+    // UT-3.1.2, and further down q + eps v rounds back to q until J v is 0
+    // and GMRES reports a converged zero step.
     const auto e = static_cast<double>(opt.fd_eps_scale);
-    if (std::isnan(e) || !(e > 0) || !(e <= 1.0e-2)) {
-        err.emplace_back("steady.newton_fd_eps_scale = " + num(e) + ": must be > 0 and <= 1e-2");
+    const double e_min = newton_fd_eps_scale_min();
+    if (std::isnan(e) || !(e >= e_min) || !(e <= 1.0e-2)) {
+        err.emplace_back("steady.newton_fd_eps_scale = " + num(e) + ": must be >= " + num_exact(e_min)
+                         + " (machine epsilon^(3/4)) and <= 1e-2");
     }
     const auto r = static_cast<double>(opt.krylov_rtol);
     if (std::isnan(r) || !(r > 0) || !(r < 1)) {
@@ -180,7 +195,7 @@ NewtonOptions read_newton_options ()
     NewtonOptions opt;
     std::vector<std::string> err;
     amrex::ParmParse pp("steady");
-    for (const char* key : kNewtonKeys) {
+    for (const char* key : kNewtonInputKeys) {
         if (!pp.contains(key)) { continue; }
         opt.given.emplace_back(key);
         if (pp.countname(key) > 1) { err.emplace_back(std::string("steady.") + key + " is given more than once"); }
@@ -403,6 +418,13 @@ KrylovMemory krylov_memory (int restart, const amrex::BoxArray& ba, const amrex:
     return m;
 }
 
+bool newton_update_usable (amrex::Real krylov_relative) { return krylov_relative <= 1; }
+
+double newton_fd_eps_scale_min ()
+{
+    return std::pow(static_cast<double>(std::numeric_limits<amrex::Real>::epsilon()), 0.75);
+}
+
 NewtonKrylov::NewtonKrylov (const NewtonOptions& opt, const ResidualInputs& in, const Mesh& mesh,
                             const amrex::Geometry& geom, const amrex::BoxArray& ba,
                             const amrex::DistributionMapping& dm, int verbose)
@@ -439,8 +461,26 @@ NewtonKrylov::NewtonKrylov (const NewtonOptions& opt, const ResidualInputs& in, 
 NewtonStepInfo NewtonKrylov::step (State& q, const amrex::MultiFab* dtau, NewtonPreconditioner* pc)
 {
     m_in.bc->fill_ghosts(q, m_in.surface, m_in.buoyancy);
+    // R0 = R(fill(q)), the base point of every jvp (which refills q + eps dq).
+    // On terrain with bc.zlo = surface_layer one fill is not a fixed point
+    // (the surface state reads the ground w face, which the no-flux rule then
+    // resets from the u, v ghosts), so differencing against R(q) would add
+    // (R(fill(q)) - R(q)) / eps to every J v. A second fill of a copy gives
+    // the same function on both sides of the difference. Where the fill is
+    // idempotent (flat ground, the walls) R0 is R(q) bit for bit.
     ResidualFields R0;
-    residual(q, m_in, m_mesh, m_geom, R0);
+    {
+        State qf;
+        qf.define(q.p.boxArray(), q.p.DistributionMap());
+        auto to = qf.fields();
+        const auto from = q.fields();
+        for (std::size_t n = 0; n < to.size(); ++n) {
+            amrex::MultiFab::Copy(*to[n].mf, *from[n].mf, 0, 0, 1, to[n].mf->nGrowVect());
+        }
+        m_in.bc->fill_ghosts(qf, m_in.surface, m_in.buoyancy);
+        residual(qf, m_in, m_mesh, m_geom, R0);
+        amrex::Gpu::streamSynchronize();   // qf goes out of scope
+    }
 
     NewtonStepInfo info;
     {
@@ -465,16 +505,23 @@ NewtonStepInfo NewtonKrylov::step (State& q, const amrex::MultiFab* dtau, Newton
         info.eps_max = op.eps_max();
         info.jvp_calls = op.jvp_calls();
 
-        op.add_update(q, x);
+        // A Krylov residual above |b| (or not finite), or a non-finite |b|,
+        // means x does worse than no step: q's valid points are left as they
+        // are. The same values on every rank (the GMRES norms come from the
+        // all-reduced inner products), so every rank takes the same branch.
+        info.applied = std::isfinite(static_cast<double>(info.residual_norm))
+                       && newton_update_usable(info.krylov_relative);
+        if (info.applied) { op.add_update(q, x); }
         amrex::Gpu::streamSynchronize();   // the Krylov vectors go out of scope
     }
     m_in.bc->fill_ghosts(q, m_in.surface, m_in.buoyancy);
-    if (m_verbose > 0) {
+    if (m_verbose > 0 || !info.applied) {
         amrex::Print() << "ablsteady: Newton step: |R| = " << info.residual_norm << ", GMRES "
                        << info.gmres_iterations << " iterations (status " << info.gmres_status
                        << "), Krylov residual " << info.krylov_residual << " (" << info.krylov_relative
                        << " relative), " << info.jvp_calls << " jvp calls, eps " << info.eps_min << " .. "
-                       << info.eps_max << "\n";
+                       << info.eps_max << (info.applied ? "" : "; the update is not applied (|R| or the Krylov residual not finite, or the Krylov residual above |R|)")
+                       << "\n";
     }
     m_last = info;
     return info;

@@ -156,4 +156,16 @@ Newton–Krylov (:doc:`solver`) needs :math:`Jv` without forming :math:`J`:
 norm would be dominated by :math:`\theta`'s 300 K.
 
 Everything that enters :math:`R` (boundary rows, damping, wall model, closure) is evaluated inside the residual, so
-:math:`Jv` sees it.
+:math:`Jv` sees it. With a closure that includes :math:`\nu_t(q)`; only fixed diffusivities freeze it.
+
+**Ghost fill and base point.** The Newton step refills :math:`q + \epsilon v`, so the difference is of
+:math:`q \mapsto R(\mathrm{fill}(q))`, and the base point must be the same function, :math:`R(\mathrm{fill}(q))`
+(:doc:`solver`).
+
+**Where the error comes from.** The truncation error is :math:`\epsilon B(v, v)`. The round-off error scales
+with the size of the terms that make up :math:`R` (fluxes and sources), not with :math:`|R|`, which goes to 0 at
+convergence. The two balance near :math:`h = \sqrt{\epsilon_\mathrm{mach}}`. The :math:`\theta` rows are 3×
+to 10× less accurate than the others at the default (1.6e-7 against about 2e-8 to 5e-8 in double, on the case of
+UT-3.1.1): the step is set
+relative to :math:`\theta - \theta_\mathrm{ref}`, but :math:`q + \epsilon v` is formed in absolute
+:math:`\theta` near 300 K.

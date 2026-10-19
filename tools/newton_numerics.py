@@ -5,7 +5,9 @@
    R(q) = A q + B(q, q) the forward difference
        J_FD v = (R(q + eps v) - R(q)) / eps
    has the truncation error eps B(v, v) and a round-off error of about
-   eps_mach |R| / eps. The sum is smallest at eps ~ sqrt(eps_mach), so the
+   eps_mach |terms| / eps, with |terms| the size of the terms that make up R
+   (here |A q| and |B(q, q)|), not |R|, which goes to 0 at convergence. The
+   sum is smallest at eps ~ sqrt(eps_mach), so the
    default h = sqrt(machine epsilon) of the working precision sits near the
    bottom of the V for double and for single precision.
 
