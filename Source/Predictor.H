@@ -41,13 +41,12 @@
 // every CFL in 1-D (tools/sweeps_cfl_scan.py --thresholds). For u and v of
 // opposite sign each pass has one upwind neighbour lagged: the per-sweep
 // factor is cu cv / ((1 + cu)(1 + cv)), so one sweep is unstable beyond a
-// CFL of about 2.5 and two sweeps beyond about 33 (the review of 2.1;
-// alternating the ordering is sub-phase 2.2). Across box faces and the
-// periodic seams the neighbours are the previous pass's (a block Jacobi
-// across boxes, whose seam error decays downstream over about CFL cells, so
-// boxes shorter than the CFL limit the solve; sub-phase 2.2 adds the
-// box-local handling, the overlap and the GPU diagonal ordering: here a
-// box is one sequential thread on a GPU).
+// CFL of about 2.5 and two sweeps beyond about 33 (the review of 2.1).
+// Across box faces and the periodic seams the neighbours are the previous
+// pass's by default (a block Jacobi across boxes, whose seam error decays
+// downstream over about CFL cells, so boxes shorter than the CFL limit the
+// solve); sub-phase 2.2 adds the box-local sweeps with an overlap, the C-grid
+// face ownership and the GPU diagonal ordering (LineSweeps.H).
 //
 // Dirichlet rows (the normal velocities on inflow and outflow faces: R = q
 // - V, identity in A1; BoundaryConditions::dirichlet_rows) get no 1/dtau:
@@ -131,6 +130,7 @@
 // the sweeps update them independently from identical inputs (A, R and the
 // lagged reads are periodic images) and delta is OverrideSync'd afterwards.
 
+#include "LineSweeps.H"
 #include "Mesh.H"
 #include "Residual.H"
 #include "State.H"
@@ -148,12 +148,6 @@ namespace ablsteady {
 //! empty). dtau_cc: the mesh's cell layout, any number of ghosts.
 void face_dtau (const amrex::MultiFab& dtau_cc, const Mesh& mesh, const amrex::Geometry& geom,
                 amrex::Array<amrex::MultiFab, AMREX_SPACEDIM>& dtau_faces);
-
-//! The line solver of the sweeps (steady.sweep).
-enum class SweepKind : int { zjacobi = 0, lusgs = 1 };
-
-//! The name of a sweep kind ("zjacobi", "lusgs").
-const char* sweep_name (SweepKind kind) noexcept;
 
 //! Per momentum equation on its faces (per unit volume), for the pressure
 //! correction of 1.15: a_P = 1/dtau + diag(A1), and the SIMPLEC denominator
@@ -196,19 +190,12 @@ MomentumPredictorResult momentum_predictor (State& q, const ResidualFields& R,
                                             const Mesh& mesh, const amrex::Geometry& geom, int sweeps,
                                             PredictorFields& ap, const SurfaceState* surface = nullptr,
                                             const ClosureFields* fields = nullptr, amrex::Real rotation_relax = 1,
-                                            SweepKind sweep = SweepKind::zjacobi);
+                                            const LineSweepOptions& sweep = LineSweepOptions());
 
-//! The line LU-SGS solve (sub-phase 2.1): sweeps symmetric line
-//! Gauss-Seidel passes (forward then backward over the columns of each box,
-//! an exact z-line solve per column, the x/y neighbours already updated in
-//! the pass's direction, in place) of the same system as zline_jacobi, with
-//! the same arguments and the same return value (max |change over the last
-//! sweep|). sweeps >= 1.
-amrex::Real zline_lusgs (Loc loc, const amrex::MultiFab& A, const amrex::MultiFab& ap, const amrex::MultiFab& rhs,
-                         int sweeps, const Mesh& mesh, const amrex::Geometry& geom, amrex::MultiFab& delta);
-
-//! zline_jacobi or zline_lusgs by kind.
-amrex::Real line_sweeps (SweepKind kind, Loc loc, const amrex::MultiFab& A, const amrex::MultiFab& ap,
+//! zline_jacobi or, with opt.kind = lusgs, zline_lusgs (LineSweeps.H, the
+//! line LU-SGS solve of sub-phases 2.1 and 2.2) with opt's ghosts, overlap
+//! and ordering.
+amrex::Real line_sweeps (const LineSweepOptions& opt, Loc loc, const amrex::MultiFab& A, const amrex::MultiFab& ap,
                          const amrex::MultiFab& rhs, int sweeps, const Mesh& mesh, const amrex::Geometry& geom,
                          amrex::MultiFab& delta);
 

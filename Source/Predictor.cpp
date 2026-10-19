@@ -11,6 +11,7 @@
 #include "BoundaryConditions.H"
 #include "CVFluxes.H"
 #include "ImplicitOperator.H"
+#include "LineSolve_K.H"
 
 #include <cmath>
 #include <string>
@@ -22,16 +23,6 @@ namespace {
 Loc loc_of (Equation eq)
 {
     return eq == Equation::u ? Loc::xface : eq == Equation::v ? Loc::yface : eq == Equation::w ? Loc::zface : Loc::cell;
-}
-
-amrex::IntVect index_type (Loc loc)
-{
-    switch (loc) {
-    case Loc::xface: return amrex::IntVect(1, 0, 0);
-    case Loc::yface: return amrex::IntVect(0, 1, 0);
-    case Loc::zface: return amrex::IntVect(0, 0, 1);
-    default: return amrex::IntVect(0);
-    }
 }
 
 } // namespace
@@ -85,125 +76,12 @@ void face_dtau (const amrex::MultiFab& dtau_cc, const Mesh& mesh, const amrex::G
     }
 }
 
-namespace {
-
-//! The checks shared by the line solvers; defines delta if empty and zeroes it.
-void check_line_system (const char* op, Loc loc, const amrex::MultiFab& A, const amrex::MultiFab& ap, const amrex::MultiFab& rhs,
-                        int sweeps, const Mesh& mesh, const amrex::Geometry& geom, amrex::MultiFab& delta)
-{
-    if (sweeps < 1) { amrex::Abort(std::string("ablsteady: ") + op + ": sweeps must be >= 1 (got " + std::to_string(sweeps) + ")"); }
-    check_operator_field(op, "A", A, loc, mesh, 0);
-    {
-        // Every box must span the column, or the line solve would be a block
-        // Jacobi in z (make_box_array never splits z; Mesh::define would take it).
-        const amrex::Box dom = amrex::convert(geom.Domain(), index_type(loc));
-        for (int b = 0; b < A.boxArray().size(); ++b) {
-            if (A.boxArray()[b].smallEnd(2) != dom.smallEnd(2) || A.boxArray()[b].bigEnd(2) != dom.bigEnd(2)) {
-                amrex::Abort(std::string("ablsteady: ") + op + ": every box must span the whole column (mesh.max_grid_size is horizontal)");
-            }
-        }
-    }
-    if (A.nComp() != n_implicit_coefs) { amrex::Abort(std::string("ablsteady: ") + op + ": A needs the implicit operator's components"); }
-    check_operator_field(op, "ap", ap, loc, mesh, 0);
-    check_operator_field(op, "rhs", rhs, loc, mesh, 0);
-    if (delta.empty()) { delta.define(A.boxArray(), A.DistributionMap(), 1, 1); }
-    check_operator_field(op, "delta", delta, loc, mesh, 1);
-    delta.setVal(0.0);   // the ghosts outside the domain stay 0: the couplings are folded
-}
-
-//! The exact z-line solve of column (i, j): the tridiagonal (-a_zm, dg,
-//! -a_zp) with the x/y neighbour terms of d on the right-hand side, the
-//! Thomas recurrences in c, e, the result into out. The in-place sweep
-//! passes the same mutable view as d and out (Array4's pointer is restrict-
-//! qualified, so two views of one array must not be mixed in a kernel); the
-//! column's own values are not read before they are written.
-template <class SourceView>
-AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
-void solve_column (amrex::Array4<amrex::Real const> const& a, amrex::Array4<amrex::Real const> const& dg,
-                   amrex::Array4<amrex::Real const> const& r, SourceView const& d,
-                   amrex::Array4<amrex::Real> const& c, amrex::Array4<amrex::Real> const& e,
-                   amrex::Array4<amrex::Real> const& out, int i, int j, int klo, int khi) noexcept
-{
-    for (int k = klo; k <= khi; ++k) {
-        const amrex::Real rk = r(i, j, k) + a(i, j, k, coef_XM) * d(i - 1, j, k) + a(i, j, k, coef_XP) * d(i + 1, j, k)
-                               + a(i, j, k, coef_YM) * d(i, j - 1, k) + a(i, j, k, coef_YP) * d(i, j + 1, k);
-        const amrex::Real lower = -a(i, j, k, coef_ZM), upper = -a(i, j, k, coef_ZP);
-        if (k == klo) {
-            const amrex::Real m = dg(i, j, k);
-            c(i, j, k) = upper / m;
-            e(i, j, k) = rk / m;
-        } else {
-            const amrex::Real m = dg(i, j, k) - lower * c(i, j, k - 1);
-            c(i, j, k) = upper / m;
-            e(i, j, k) = (rk - lower * e(i, j, k - 1)) / m;
-        }
-    }
-    out(i, j, khi) = e(i, j, khi);
-    for (int k = khi - 1; k >= klo; --k) { out(i, j, k) = e(i, j, k) - c(i, j, k) * out(i, j, k + 1); }
-}
-
-} // namespace
-
-const char* sweep_name (SweepKind kind) noexcept { return kind == SweepKind::lusgs ? "lusgs" : "zjacobi"; }
-
-amrex::Real line_sweeps (SweepKind kind, Loc loc, const amrex::MultiFab& A, const amrex::MultiFab& ap,
+amrex::Real line_sweeps (const LineSweepOptions& opt, Loc loc, const amrex::MultiFab& A, const amrex::MultiFab& ap,
                          const amrex::MultiFab& rhs, int sweeps, const Mesh& mesh, const amrex::Geometry& geom,
                          amrex::MultiFab& delta)
 {
-    return (kind == SweepKind::lusgs) ? zline_lusgs(loc, A, ap, rhs, sweeps, mesh, geom, delta)
-                                      : zline_jacobi(loc, A, ap, rhs, sweeps, mesh, geom, delta);
-}
-
-amrex::Real zline_lusgs (Loc loc, const amrex::MultiFab& A, const amrex::MultiFab& ap, const amrex::MultiFab& rhs,
-                         int sweeps, const Mesh& mesh, const amrex::Geometry& geom, amrex::MultiFab& delta)
-{
-    check_line_system("zline_lusgs", loc, A, ap, rhs, sweeps, mesh, geom, delta);
-    amrex::MultiFab cprime(A.boxArray(), A.DistributionMap(), 1, 0), dprime(A.boxArray(), A.DistributionMap(), 1, 0),
-                    before(A.boxArray(), A.DistributionMap(), 1, 0);
-    amrex::Real change = 0;
-    for (int s = 0; s < sweeps; ++s) {
-        for (const bool forward : {true, false}) {
-            // The reported change is the last sweep's backward pass alone
-            // (with one sweep the whole sweep's change is |delta| itself).
-            if (s == sweeps - 1 && !forward) { amrex::MultiFab::Copy(before, delta, 0, 0, 1, 0); }
-            // The neighbours across box faces and periodic seams: the
-            // previous pass's values (a block Jacobi across boxes; the two
-            // copies of a periodic seam face differ within a pass and
-            // OverrideSync keeps the owner's at the end).
-            delta.FillBoundary(geom.periodicity());
-            for (amrex::MFIter mfi(delta, false); mfi.isValid(); ++mfi) {
-                const amrex::Box bx = mfi.validbox();
-                const int ilo = bx.smallEnd(0), ihi = bx.bigEnd(0), jlo = bx.smallEnd(1), jhi = bx.bigEnd(1);
-                const int klo = bx.smallEnd(2), khi = bx.bigEnd(2);
-                const auto a = A.const_array(mfi);
-                const auto dg = ap.const_array(mfi);
-                const auto r = rhs.const_array(mfi);
-                const auto d = delta.array(mfi);   // one view for the reads and the writes
-                const auto c = cprime.array(mfi);
-                const auto e = dprime.array(mfi);
-                // The columns in order: one sequential thread per box (the
-                // GPU diagonal ordering is sub-phase 2.2).
-                amrex::ParallelFor(1, [=] AMREX_GPU_DEVICE (int) noexcept
-                {
-                    if (forward) {
-                        for (int j = jlo; j <= jhi; ++j) {
-                            for (int i = ilo; i <= ihi; ++i) { solve_column(a, dg, r, d, c, e, d, i, j, klo, khi); }
-                        }
-                    } else {
-                        for (int j = jhi; j >= jlo; --j) {
-                            for (int i = ihi; i >= ilo; --i) { solve_column(a, dg, r, d, c, e, d, i, j, klo, khi); }
-                        }
-                    }
-                });
-            }
-        }
-        if (s == sweeps - 1) {
-            amrex::MultiFab::Subtract(before, delta, 0, 0, 1, 0);
-            change = before.norm0();
-        }
-    }
-    delta.OverrideSync(geom.periodicity());
-    return change;
+    return (opt.kind == SweepKind::lusgs) ? zline_lusgs(loc, A, ap, rhs, sweeps, mesh, geom, delta, opt)
+                                          : zline_jacobi(loc, A, ap, rhs, sweeps, mesh, geom, delta);
 }
 
 amrex::Real zline_jacobi (Loc loc, const amrex::MultiFab& A, const amrex::MultiFab& ap, const amrex::MultiFab& rhs,
@@ -254,7 +132,7 @@ MomentumPredictorResult momentum_predictor (State& q, const ResidualFields& R,
                                             const amrex::Array<amrex::MultiFab, AMREX_SPACEDIM>& dtau_faces,
                                             const Mesh& mesh, const amrex::Geometry& geom, int sweeps,
                                             PredictorFields& ap, const SurfaceState* surface, const ClosureFields* fields,
-                                            amrex::Real rotation_relax, SweepKind sweep)
+                                            amrex::Real rotation_relax, const LineSweepOptions& sweep)
 {
     const char* op = "momentum_predictor";
     if (std::isnan(rotation_relax) || !(rotation_relax > 0 && rotation_relax <= 1)) {

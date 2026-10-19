@@ -209,10 +209,34 @@ definition of a steady solution (:doc:`solver`) and its own. The application run
      - ``zjacobi`` or ``lusgs`` (sub-phase 2.1): the line solver of the sweeps, z-line Jacobi (independent columns,
        the x/y neighbours lagged) or line LU-SGS (a symmetric Gauss–Seidel over the columns of each box with the
        exact z-line solve, exact along a wind whose u and v share a sign and stable at every CFL there; with
-       u and v of opposite sign one sweep is stable only to a CFL of about 2.5 and two to about 33; a sequential
-       thread per box on a GPU until sub-phase 2.2). The sweep's path depends on the box layout
+       u and v of opposite sign the defect correction is stable with one sweep only to a CFL of about 2.5 and with
+       two to about 33 (:doc:`solver`); a sequential
+       thread per box on a GPU unless ``steady.line_order = diagonal``). The sweep's path depends on the box layout
        (``mesh.max_grid_size``); the converged state does not. The LU-SGS hill deck runs two sweeps at
        ``steady.cfl_max = 16`` (two boxes of 64 × 1 columns).
+   * - ``steady.line_ghosts``
+     - ``lagged``
+     - ``lagged`` or ``zero`` (sub-phase 2.2); refused unless ``steady.sweep = lusgs``. ``lagged``: the x/y
+       neighbours across a box face take the previous pass's values (sub-phase 2.1, bit-identical). ``zero``:
+       box-local sweeps with δ = 0 outside the swept region, no communication inside the sweeps, each C-grid
+       face swept by one box (its low face; the domain's high face, and on a periodic axis the seam, by the last
+       box).
+   * - ``steady.line_overlap``
+     - ``0``
+     - An integer ≥ 0 and ≤ 8, and ≤ the narrowest box width along each axis it applies to (not along a
+       one-cell axis); > 0 only with ``steady.line_ghosts = zero``; refused unless ``steady.sweep = lusgs``. Each box sweeps its owned region grown by
+       this many columns and keeps the owned part.
+   * - ``steady.line_order``
+     - ``sequential``
+     - ``sequential`` or ``diagonal``; refused unless ``steady.sweep = lusgs``. ``diagonal`` sweeps the
+       wavefronts i + j = const, one column per thread: the same result as ``sequential``, bit for bit.
+   * - ``steady.line_alternate``
+     - ``0``
+     - ``0`` or ``1`` (beyond the plan of sub-phase 2.2); refused unless ``steady.sweep = lusgs``. ``1``: the odd
+       sweeps (the second, fourth, ...) of each call take the j-reversed pair, (+i, −j) then (−i, +j), so a wind
+       whose u and v have opposite signs is swept along its own direction once per two sweeps (:doc:`solver`).
+       ``1`` is refused with ``steady.zline_sweeps = 1`` (there is no odd sweep to reverse); on a domain one cell
+       wide in y only v (two y faces per column) changes.
    * - ``steady.machine``
      - ``local``
      - ``local``, ``kestrel-cpu`` or ``kestrel-gpu``: the allocation-unit rate of the accounting (0, 10, 100 AU per

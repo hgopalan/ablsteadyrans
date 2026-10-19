@@ -31,6 +31,7 @@ set(ABLSTEADY_SOURCES
     PseudoTime.cpp
     Driver.cpp
     Predictor.cpp
+    LineSweeps.cpp
     Simplec.cpp
     Newton.cpp
     TurbulenceOutput.cpp

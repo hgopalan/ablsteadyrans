@@ -25,6 +25,7 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <cstdint>
 #include <limits>
 #include <memory>
 #include <random>
@@ -962,7 +963,7 @@ TEST (Simplec, WallKRowsAreFolded)
                 amrex::MultiFab::Copy(k2, q.tke, 0, 0, 1, 2);
                 ablsteady::SimplecWorkspace w2;
                 const auto rl = ablsteady::scalar_sweep(Equation::tke, k2, R.tke, {&F[0], &F[1], &F[2]}, q.z_phys_nd, in, dtau,
-                                                        c.mesh, c.geom, 2, 0, &ss, &cf, w2, ablsteady::SweepKind::lusgs);
+                                                        c.mesh, c.geom, 2, 0, &ss, &cf, w2, ablsteady::LineSweepOptions(ablsteady::SweepKind::lusgs));
                 amrex::MultiFab dk2(c.ba, c.dm, 1, 0);
                 amrex::MultiFab::Copy(dk2, k2, 0, 0, 1, 0);
                 amrex::MultiFab::Subtract(dk2, q.tke, 0, 0, 1, 0);
@@ -974,9 +975,32 @@ TEST (Simplec, WallKRowsAreFolded)
                 amrex::MultiFab::Copy(k3, q.tke, 0, 0, 1, 2);
                 ablsteady::SimplecWorkspace w3;
                 const auto rf = ablsteady::scalar_sweep(Equation::tke, k3, R.tke, {&F[0], &F[1], &F[2]}, q.z_phys_nd, in, dtau,
-                                                        c.mesh, c.geom, 2, floor_v, &ss, &cf, w3, ablsteady::SweepKind::lusgs);
+                                                        c.mesh, c.geom, 2, floor_v, &ss, &cf, w3, ablsteady::LineSweepOptions(ablsteady::SweepKind::lusgs));
                 EXPECT_GT(rf.clipped, 0);
                 EXPECT_GE(k3.min(0), floor_v);
+                // Sub-phase 2.2: the line options reach the sweep (the zero
+                // ghosts and the diagonal ordering: zline_lusgs's result with the
+                // same options, one launch per wavefront plane).
+                ablsteady::LineSweepOptions opt(ablsteady::SweepKind::lusgs);
+                opt.ghosts = ablsteady::LineGhosts::zero;
+                opt.order = ablsteady::LineOrder::diagonal;
+                amrex::MultiFab dz;
+                ablsteady::zline_lusgs(Loc::cell, A, ap, rhs, 2, c.mesh, c.geom, dz, opt);
+                std::uint64_t planes = 0;
+                for (amrex::MFIter mfi(dz, false); mfi.isValid(); ++mfi) {
+                    planes += static_cast<std::uint64_t>(mfi.validbox().length(0) + mfi.validbox().length(1) - 1);
+                }
+                amrex::MultiFab k4(c.ba, c.dm, 1, 2);
+                amrex::MultiFab::Copy(k4, q.tke, 0, 0, 1, 2);
+                ablsteady::SimplecWorkspace w4;
+                const auto n0 = ablsteady::line_sweep_launches();
+                ablsteady::scalar_sweep(Equation::tke, k4, R.tke, {&F[0], &F[1], &F[2]}, q.z_phys_nd, in, dtau, c.mesh, c.geom, 2, 0, &ss,
+                                        &cf, w4, opt);
+                EXPECT_EQ(ablsteady::line_sweep_launches() - n0, 2u * 2u * planes);
+                amrex::MultiFab dk4(c.ba, c.dm, 1, 0);
+                amrex::MultiFab::Copy(dk4, k4, 0, 0, 1, 0);
+                amrex::MultiFab::Subtract(dk4, q.tke, 0, 0, 1, 0);
+                EXPECT_LT(max_abs_diff(dk4, dz), tol(1e-13, 1e-4) * max_abs(q.tke));
             }
         }
     }

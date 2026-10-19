@@ -19,6 +19,87 @@ These follow the development plan.
 Every test is first shown to fail on the bug it guards against, or on a one-line mutant of the code it covers.
 Tests the plan does not list are marked *beyond the plan*.
 
+The one-line mutants of sub-phase 2.2 (``Source/LineSweeps.cpp`` and ``Source/Driver.cpp``), each run against
+``LineSweeps.*``, ``Driver.*`` and ``Predictor.Lusgs*`` on two ranks by ``tools/line_sweep_mutants.py``; every one
+is killed:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 6 50 44
+
+   * - Mutant
+     - Change
+     - Failing tests
+   * - M1
+     - Overlap ignored (swept region not grown)
+     - UT-2.2.1, UT-2.2.2
+   * - M2
+     - Face updated twice (box keeps its high face)
+     - UT-2.2.1, UT-2.2.2, UT-2.2.3
+   * - M3
+     - Periodic seam updated twice (first box keeps the domain's low face)
+     - UT-2.2.1, UT-2.2.2, UT-2.2.3
+   * - M4
+     - Forward wavefront skips its last plane
+     - UT-2.2.4
+   * - M5
+     - Backward wavefront skips plane 0
+     - UT-2.2.4
+   * - M6
+     - Ghost δ not zeroed (neighbours' values exchanged between passes)
+     - UT-2.2.1
+   * - M7
+     - Non-owned face copies keep their own value (owner mask all 1)
+     - UT-2.2.1, UT-2.2.2, UT-2.2.3
+   * - M8
+     - One-cell periodic axis not folded into the diagonal
+     - UT-2.2.1
+   * - M9
+     - ``steady.line_overlap`` not read
+     - UT-2.2.5 (``Driver``)
+   * - M10
+     - ``steady.line_ghosts`` not read
+     - UT-2.2.5 (``Driver``)
+   * - M11
+     - ``steady.line_order`` not read
+     - UT-2.2.5 (``Driver``)
+   * - M12
+     - ``steady.line_overlap`` above 8 accepted
+     - UT-2.2.5 (``Driver``)
+   * - M13
+     - A negative ``steady.line_overlap`` accepted
+     - UT-2.2.5 (``Driver`` and ``LineSweeps``)
+   * - M14
+     - Overlap with lagged ghosts accepted
+     - UT-2.2.5 (``Driver`` and ``LineSweeps``)
+   * - M15
+     - Overlap wider than the narrowest box accepted
+     - UT-2.2.5 (``Driver`` and ``LineSweeps``)
+   * - M16
+     - Line key given with ``zjacobi`` accepted
+     - UT-2.2.5 (``Driver``)
+   * - M17
+     - Odd sweeps not reversed (``steady.line_alternate`` ignored)
+     - UT-2.2.6
+   * - M18
+     - Reversed forward wavefront skips its last plane
+     - UT-2.2.6
+   * - M19
+     - Reversed sequential forward pass walks j ascending
+     - UT-2.2.6
+   * - M20
+     - ``steady.line_alternate`` not read
+     - UT-2.2.5 (``Driver``)
+   * - M21
+     - ``steady.line_alternate = 2`` accepted
+     - UT-2.2.5 (``Driver``), UT-2.2.6
+   * - M22
+     - ``steady.line_alternate`` given with ``zjacobi`` accepted
+     - UT-2.2.5 (``Driver``)
+   * - M23
+     - ``steady.line_alternate = 1`` with ``steady.zline_sweeps = 1`` accepted (the option read and ignored)
+     - UT-2.2.5 (``Driver``)
+
 The tests run with the GPU CI flags (see :doc:`running`). Each test runs in its own directory under
 ``<build>/Tests/run/``.
 
@@ -195,6 +276,18 @@ Current tests
        from 550 m, 16 sweeps, cap 4) to the verdict with ``check_hill3d.py --physics`` (the 3-D checks, speed-up
        against 1.6 h/L). Measured: 2092 iterations (148 s on four ranks), every check passing. Label ``nightly``
        (minutes); double only.
+   * - ``rt_steady_hill3d_neutral_zjacobi``, ``rt_steady_hill3d_neutral_lusgs``, ``rt_steady_hill3d_neutral_matches``
+     - RT-2.2.1: a truly neutral Hill_3D (``inputs_steady_hill3d_neutral``: 32 × 32 × 16 over the same domain, θ =
+       300 K, ``forcing.gravity = 0``, damping of w alone, four boxes) run to round-off (every residual below 1e-11
+       and ten orders down) with 16 z-line Jacobi sweeps at a cap of 4 and with the box-local line LU-SGS sweeps
+       (``inputs_steady_hill3d_neutral_lusgs``: zero ghosts, overlap 2, the diagonal ordering, two sweeps, cap 16);
+       ``Tests/check_line_match.py`` compares the two plotfiles at 1e-8 of each field's maximum
+       (``rt_steady_hill3d_neutral_clean`` empties the run directories first, so a stale plotfile cannot be
+       compared, and the checker requires exactly one plotfile per run). The conventionally neutral deck has no
+       fixed point to this tolerance (it keeps entraining the inversion), hence the variant. Measured: 3495
+       iterations (70 s on four ranks) against 1792 (32 s); u, v, w, p and k agree to 9e-10 absolute (at most
+       3e-8 of the tolerance scale). θ has a free constant (no θ condition, no gravity) that drifts by 1e-4 K at
+       round-off, so θ is compared after subtracting each run's mean: 3e-11 K. Label ``nightly``; double only.
    * - ``rt_steady_askervein``
      - RT-1.16.3, the convergence half: Askervein on the ERF grid of RT-1.12.1 (``inputs_steady_askervein``: 30 × 30
        × 18, the log-law inflow, outflow, slip sides, no Coriolis, four sweeps, cap 2) to the steady verdict.
@@ -734,6 +827,47 @@ GoogleTest suite
        at latitude 90), the geostrophic wind at the top within 0.5 m/s, k at the floor in the inversion and largest
        near the ground, the first cell's k = u*²/C_μ0² (1e-12), u* in 0.2–0.6 m/s, the table identical on every
        rank.
+   * - UT-2.2.1
+     - ``LineSweeps.EveryFaceIsOwnedAndSweptOnce``. On 1, 2 and 4 boxes (an uneven 7 × 6 split and a 2-D 8 × 1 mesh
+       too), periodic and not, the owned regions cover every cell and every x, y and z face exactly once (periodic
+       images identified, an image owning nothing); the box-local sweeps (zero ghosts, :math:`n_o` = 0 and 2, one
+       and two sweeps) equal a host replay written from the ownership rule (1e-13 of the largest value); on one
+       non-periodic box the zero and lagged ghosts give the same result, bit for bit.
+   * - UT-2.2.2
+     - ``LineSweeps.OverlapsReachTheSameState``. A 16 × 8 mesh in 4 × 2 boxes with a strong x coupling (cells and x
+       faces, periodic and not): the outer defect correction with two box-local sweeps per step reaches
+       :math:`|r| \le 10^{-12}|b|` for :math:`n_o` = 0, 2 and 4, the three states agree to 1e-10, and the outer
+       iterations fall strictly with :math:`n_o` (122, 54, 49 non-periodic). Two boxes of four columns with
+       :math:`n_o = 4` reproduce the one-box sweep bit for bit, and differ from it with :math:`n_o = 0`.
+   * - UT-2.2.3
+     - ``LineSweeps.ConvergedStateDoesNotDependOnTheLayout``. A 16 × 16 mesh in 1, 4 and 16 boxes (cells, x and y
+       faces, periodic and not; zero ghosts with :math:`n_o` = 0 and 2, and the lagged ghosts): the converged
+       states agree to 1e-10. The box-local sweeps depend on the box shape, so the test is of the converged state,
+       not of the iterates: one step is checked to differ between the layouts.
+   * - UT-2.2.4
+     - ``LineSweeps.DiagonalOrderingEqualsTheSequentialSweep``. The diagonal wavefront ordering equals the
+       sequential sweep bit for bit (the correction and the reported change): every location, 1, 2 and 4 boxes,
+       periodic and not, one and three sweeps, the lagged ghosts and the zero ghosts with :math:`n_o` = 0 and 2.
+       A per-rank launch counter (``line_sweep_launches``) pins which path ran: two launches per box and sweep for
+       the sequential order, two per wavefront plane of the swept region for the diagonal one, so an ordering
+       that is ignored fails. The stage tests (``Predictor.APIsTheDiagonalPlusThePseudoTimeTerm``,
+       ``Simplec.WallKRowsAreFolded``) check the same counts through ``momentum_predictor`` and ``scalar_sweep``, so the options
+       are shown to reach the sweeps.
+   * - UT-2.2.5
+     - *Beyond the plan* (``LineSweeps.RefusalsAndNames`` and ``Driver.DivergenceStopsAndTheChecksNameTheirInput``).
+       The refusals naming ``steady.line_overlap`` (< 0, > 8, with the lagged ghosts, wider than the narrowest box),
+       no overlap along a one-cell axis, the readers of ``steady.line_ghosts``, ``line_overlap`` and ``line_order``
+       (values, defaults, unknown words, a repeated key, a line key with ``zjacobi``), the dispatcher. The reader
+       of ``steady.line_alternate`` (the value, the default 0, 2 and -1 refused, refused with ``zjacobi`` and with one sweep).
+   * - UT-2.2.6
+     - *Beyond the plan* (``LineSweeps.AlternatingOrderingSweepsBothDiagonals``). The alternating ordering
+       (``steady.line_alternate = 1``). On an 8 × 8 × 4 system coupled only to the :math:`(i-1)` and :math:`(j+1)`
+       neighbours (the upwind couplings of :math:`u > 0`, :math:`v < 0`), two alternating sweeps solve it to 1000
+       machine epsilons (the reversed forward pass is an exact solve), while two sweeps of the ascending pairs leave
+       a residual above 1e-3 of the right-hand side. The diagonal ordering equals the sequential one bit for bit with
+       the reversed pairs too, at the launch counts of UT-2.2.4 (three layouts, periodic and not, every location,
+       lagged ghosts and zero ghosts with :math:`n_o = 2`, one to three sweeps). One sweep is unchanged by the option
+       (only the odd sweeps are reversed); two and three sweeps differ. The range check names the key.
    * - UT-2.3.1
      - Three levels of a stretched mesh (dz0 = 40 m, the ratio solved by Newton), flat and over a round STF hill:
        every level's z-levels equal level 0's bit for bit, with the same nz and z extent and x, y halved per level;

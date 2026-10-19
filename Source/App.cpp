@@ -155,6 +155,11 @@ void run ()
     const amrex::Geometry geom = make_geometry(in.mesh);
     // With a grid hierarchy, boxes every level coarsens exactly.
     const amrex::BoxArray ba = hierarchy_box_array(in.mesh);
+    if (solve && sopt.sweep == SweepKind::lusgs) {
+        // The overlap against the layout (LineSweeps.H), before any work.
+        const std::string lay = check_line_overlap_layout(ba, sopt.line_overlap);
+        if (!lay.empty()) { amrex::Abort("ablsteady: invalid inputs:\n  " + lay); }
+    }
     const amrex::DistributionMapping dm(ba);
 
     amrex::Print() << "ablsteady: " << in.mesh.n_cell << " cells, " << ba.size()
@@ -266,7 +271,7 @@ void run ()
         res_in.surface = surface_layer ? &surf : nullptr;
         res_in.bc = &bc;
         auto stage = std::make_unique<SimplecStage>(simplec, sopt.zline_sweeps, res_in, &closure, popt, mesh, geom,
-                                                    state.z_phys_nd, copt.tke_floor, ba, dm, sopt.sweep);
+                                                    state.z_phys_nd, copt.tke_floor, ba, dm, line_sweep_options(sopt));
         const SimplecStage& simplec_stage = *stage;
         std::vector<std::unique_ptr<Stage>> stages;
         stages.push_back(std::move(stage));
@@ -279,7 +284,13 @@ void run ()
             amrex::Print() << "ablsteady: driver history restored: " << driver.history().records.size()
                            << " iterations, cfl " << driver.cfl() << "\n";
         }
-        amrex::Print() << "ablsteady: SIMPLEC stage: " << sopt.zline_sweeps << " " << sweep_name(sopt.sweep) << " sweeps, pressure reltol "
+        amrex::Print() << "ablsteady: SIMPLEC stage: " << sopt.zline_sweeps << " " << sweep_name(sopt.sweep) << " sweeps";
+        if (sopt.sweep == SweepKind::lusgs) {
+            amrex::Print() << " (ghosts " << line_ghosts_name(sopt.line_ghosts) << ", overlap " << sopt.line_overlap << ", "
+                           << line_order_name(sopt.line_order) << " order"
+                           << (sopt.line_alternate != 0 ? ", alternating" : "") << ")";
+        }
+        amrex::Print() << ", pressure reltol "
                        << simplec.pressure_reltol << ", alpha_p " << simplec.alpha_p << ", cfl0 " << sopt.cfl0
                        << ", cfl_max " << sopt.cfl_max << "\n";
         SteadyVerdict v = driver.verdict();

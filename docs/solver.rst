@@ -118,11 +118,129 @@ solve but visits each box's columns in order: a forward pass uses updated lower 
 uses updated upper neighbours. One ``steady.zline_sweeps`` sweep is this symmetric pair, and one is allowed. For a
 wind whose :math:`u` and :math:`v` have the same sign in the ordering, a pass resolves the first-order upwind
 coupling exactly; the pure-advection defect-correction factor stays below one at every CFL, approaching one for the
-odd–even mode as the CFL grows. With opposite signs, each pass leaves one upwind neighbour lagged; one sweep is
-stable only to a CFL of about 2.5 and two to about 33. Couplings across box faces use the previous pass, so the
-iteration path depends on ``mesh.max_grid_size`` and boxes shorter than the CFL limit the solve. The sweeps are
-sequential per box on a GPU until sub-phase 2.2 adds the GPU diagonal ordering. The hill results are in
-:doc:`results`; ``tools/sweeps_cfl_scan.py --thresholds`` prints the scalar stability factors.
+odd–even mode as the CFL grows. With opposite signs, each pass leaves one upwind neighbour lagged. The first-order
+line solve alone still contracts, by :math:`c_u c_v/((1+c_u)(1+c_v)) < 1` per sweep, close to one at a large CFL;
+the defect-correction iteration (the second-order residual) is stable with one sweep only to a CFL of about 2.5,
+and with two to about 33. Couplings across box faces use the previous pass (the
+default ``steady.line_ghosts = lagged``, below), so the iteration path depends on ``mesh.max_grid_size`` and boxes
+shorter than the CFL limit the solve. The hill results
+are in :doc:`results`; ``tools/sweeps_cfl_scan.py --thresholds`` prints the scalar stability factors.
+
+**Box-local sweeps, overlap and face ownership.** Sub-phase 2.2 adds two ways to treat the neighbours across a box
+face (``Source/LineSweeps.H``):
+
+- ``steady.line_ghosts = lagged`` (the default; sub-phase 2.1, bit for bit): ``delta.FillBoundary`` before every
+  pass, so the neighbours across a box face or a periodic seam take the previous pass's values. Both copies of a
+  shared face are solved; ``OverrideSync`` keeps the lowest box index's copy.
+- ``steady.line_ghosts = zero``: no communication inside the sweeps. Each box sweeps the region it owns, grown by
+  :math:`n_o` = ``steady.line_overlap`` columns in x and y, with :math:`\delta = 0` outside it, and keeps only the
+  owned points. The region is clipped to the domain on a non-periodic axis and is not grown along an axis one cell
+  wide. :math:`n_o` is at most 8 and at most the narrowest box width along each axis it applies to, so the grown
+  region never reaches past the neighbouring box (or one period). The system (:math:`A`, :math:`a_P`, the
+  right-hand side) on the grown region comes from one ``FillBoundary`` of copies with :math:`n_o` ghost cells. Along a periodic axis one cell wide (y in a 2-D deck)
+  both neighbours are the column itself; their coefficients move to the diagonal, which solves that coupling
+  exactly.
+
+Each step is a restricted additive Schwarz step with the box-local LU-SGS as the subdomain solve. The outer
+defect correction recomputes the residual, so the converged state does not depend on :math:`n_o` or the box layout;
+the iterates do. Inside a box the error of a seam decays over about :math:`c` columns downstream (:math:`c` the
+CFL); the overlap moves the zero boundary :math:`n_o` columns away from the owned points.
+
+On the C grid (zero ghosts) each box owns the faces of its valid box in its nodal direction except its high face,
+which is the next box's low face. The domain's high face belongs to the last box; on a periodic axis the domain's
+low face is that face's image, so the seam also belongs to the last box. Each face-centred unknown is swept once per
+pass. The non-owned copies take the owner's value through ``OverrideSync`` with this owner mask (AMReX's default
+mask, the lowest box index, would keep a copy that was not swept). Cells and z faces belong to their box.
+
+**GPU diagonal ordering.** ``steady.line_order = diagonal`` visits the planes :math:`(i - i_0) + (j - j_0) = s` in
+increasing :math:`s` (forward) or decreasing (backward), one column per thread inside a plane. A column's lower x/y
+neighbours lie on plane :math:`s - 1` and its upper neighbours on :math:`s + 1`, so each column sees the same
+values as in the lexicographic order: the result is the sequential sweep's, bit for bit (UT-2.2.4), with either
+``steady.line_ghosts``. Each plane is one kernel launch, so a box of :math:`n_x \times n_y` columns takes
+:math:`n_x + n_y - 1` launches per pass instead of one. The GPU timings and the per-machine defaults come in a later
+sub-phase.
+
+**Alternating ordering** (beyond the plan of sub-phase 2.2). With ``steady.line_alternate = 1`` the odd sweeps of
+each call (the second, fourth, ...) take the j-reversed pair, :math:`(+i, -j)` forward then :math:`(-i, +j)`
+backward (with ``steady.line_order = diagonal`` the wavefronts are :math:`(i - i_0) + (j_1 - j) = s`, their own
+kernels). Where :math:`u` and :math:`v` have opposite signs one of the two pairs follows the wind, so its forward
+pass resolves the first-order upwind coupling exactly instead of lagging one neighbour (UT-2.2.6). It needs
+``steady.zline_sweeps`` ≥ 2. Measured on four ranks (the truly neutral Hill_3D deck ``inputs_steady_hill3d_neutral_lusgs``:
+zero ghosts, :math:`n_o = 2`, diagonal, two sweeps; iterations to round-off):
+
+.. list-table::
+   :header-rows: 1
+   :widths: 46 18 18 18
+
+   * - Case
+     - off
+     - on
+     - ``zjacobi``
+   * - :math:`(u_g, v_g) = (10, 0)`, cap 16
+     - 1792
+     - 1813
+     - 3495
+   * - :math:`(u_g, v_g) = (10, 0)`, cap 64
+     - 2997
+     - 2991
+     -
+   * - :math:`(u_g, v_g) = (10, -10)`, cap 16
+     - not converged at 20 000
+     - 3052
+     - 6051
+   * - :math:`(u_g, v_g) = (10, -10)`, cap 64
+     - not converged at 20 000
+     - 3585
+     -
+   * - Conventionally neutral Hill_3D (``inputs_steady_hill3d`` with the same LU-SGS settings, cap 16, two orders)
+     - 1100
+     - 1146
+     -
+   * - 2-D hill (``inputs_steady_hill2d_lusgs``, one cell in y)
+     - 3062
+     - 3061
+     -
+
+The ``zjacobi`` column is the deck's own 16 sweeps at a cap of 4. With an opposite-sign geostrophic wind the
+ascending pairs stall (the TKE residual drops 0.04 orders in 20 000 iterations), while the alternating ordering
+converges in half the ``zjacobi`` iterations. Where the wind keeps one sign it costs 0–4 % more iterations. The
+default stays ``0`` (bit-identical); the per-machine defaults are chosen in a later sub-phase.
+
+**Box count and overlap on CPU.** The conventionally neutral Hill_3D (``inputs_steady_hill3d``, 64 × 64 × 20,
+periodic in x and y) with ``steady.sweep = lusgs``, two sweeps, a cap of 16 and the deck's two-order stop; 1 box on 1
+rank, 4 and 16 boxes on 4 ranks; iterations to the verdict:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 16 21 21 21 21
+
+   * - Boxes
+     - ``lagged``
+     - ``zero``, :math:`n_o = 0`
+     - ``zero``, :math:`n_o = 2`
+     - ``zero``, :math:`n_o = 4`
+   * - 1
+     - 860
+     - 998
+     - 948
+     - 926
+   * - 4
+     - 823
+     - 1205
+     - 1100
+     - 1020
+   * - 16
+     - 974
+     - 1552
+     - 1310
+     - 1270
+
+On CPU the box-local sweeps take 16–59 % more iterations than the lagged ghosts at :math:`n_o = 0` and 8–30 % more
+at :math:`n_o = 4`: δ = 0 at the seams (the periodic seam of a single box included) costs more than the overlap
+recovers. What they save, the ``FillBoundary`` of every pass, matters on a GPU and on many ranks and is measured
+with the per-machine defaults. More boxes cost iterations with either mode (823 on 4 boxes, 974 on 16, lagged). The
+diagonal ordering gives the same iterates as the sequential one and the same wall time on CPU (16 boxes,
+:math:`n_o = 2`: 1310 iterations, 57 s on four ranks).
 
 **Pressure correction.** With the SIMPLEC denominator :math:`d = a_P - \sum a_{nb}`,
 
