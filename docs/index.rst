@@ -59,6 +59,7 @@ stage (:doc:`simplec`) runs under the steady driver.
    driver
    predictor
    simplec
+   newton
    cases
    references
    numerics

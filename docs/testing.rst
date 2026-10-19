@@ -673,3 +673,28 @@ GoogleTest suite
    * - UT-1.3.4
      - The sum gives the same bits on 1, 2 and 4 ranks and within 16 ε Σ\|x\| of the exact sum; the maximum
        handles NaN and −0.
+   * - UT-3.1.1
+     - ``Newton.JvpEpsSweepAgainstQuadraticResidual``: on a residual that is exactly quadratic in q (upwind
+       convection, Coriolis, slip walls), the analytic :math:`Jv` and :math:`B(v,v)` from central differences; the
+       sweep of ``steady.newton_fd_eps_scale`` from 1e-2 to 1e-12 gives the V-shaped error, the truncation branch
+       equal to :math:`\epsilon\|B\|/\|Jv\|` to 1e-3, and the default within a factor 3 of the minimum (1.5×
+       measured); a uniform :math:`\Delta\tau` adds :math:`x/\Delta\tau` on the right rows; Dirichlet rows are
+       identity rows.
+   * - UT-3.1.2
+     - ``Newton.ColumnConvergesQuadratically``: plain Newton on the Ekman column; the reductions 0.403, 0.171,
+       0.0131, 2.09e-4, 9.41e-8 pinned to a factor 2, the last two steps above the round-off floor gain more than
+       three orders each, and :math:`r_{n+1} \le r_n^2` after the first step.
+   * - UT-3.1.3
+     - ``Newton.PoiseuilleInOneStep``: one step gives the discrete Poiseuille profile to 1e-9.
+       ``Newton.GmresSolvesKnownSystemOnAnyLayout``: ``amrex::GMRES<NewtonVector, NewtonOperator>`` recovers a known
+       solution of a non-symmetric system to 1e-5 on one and four boxes (8 × 6 × 8) and on one and nine boxes
+       (9 × 9 × 8); the layouts agree to 1e-7.
+   * - UT-3.1.3 (c)
+     - *Beyond the plan.* ``Newton.VectorOperationsAndBitIdenticalInnerProduct``: the vector operations; the inner
+       product counts shared and periodic faces once and has the same bits on every rank and for two distribution
+       mappings. ``Newton.OptionReadersAndRangeChecks``: the four ``steady.newton_*`` keys are read, and each
+       range check names the key and value. ``Newton.KrylovMemoryEstimateAndBudget``: the :math:`2m + 3` vector
+       count and bytes of a 512 × 512 × 128 box; the budget abort names both keys.
+       ``Newton.PreconditionerHookAndOptionsReachTheSolver``: the hook is set up once per step and applied once
+       per GMRES iteration, and its output is used; restart and tolerance reach GMRES.
+       ``Newton.ColumnRestartAndToleranceSweep``: GMRES iterations against the restart length (:doc:`newton`).

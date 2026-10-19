@@ -72,9 +72,9 @@ void check_inputs (const char* op, const ResidualInputs& in)
     std::vector<std::string> all;
     for (const auto& e : check_reference_profile(in.theta_ref)) { all.push_back(e); }
     const auto& js = in.jvp_scales;
-    for (amrex::Real x : {js.velocity, js.theta, js.tke, js.pressure}) {
+    for (amrex::Real x : {js.velocity, js.theta, js.tke, js.pressure, js.step}) {
         if (std::isnan(x) || !(x > 0 && std::isfinite(x))) {
-            all.emplace_back("jvp_scales: every scale must be finite and > 0");
+            all.emplace_back("jvp_scales: every scale and the step must be finite and > 0");
             break;
         }
     }
@@ -285,8 +285,11 @@ void line_jacobian (const amrex::Array<const amrex::MultiFab*, AMREX_SPACEDIM>& 
 }
 
 amrex::Real jvp (const State& q, const State& v, const ResidualInputs& in, const Mesh& mesh,
-                 const amrex::Geometry& geom, ResidualFields& Jv, const ResidualFields* R0)
+                 const amrex::Geometry& geom, ResidualFields& Jv, const ResidualFields* R0, bool refill)
 {
+    if (refill && in.bc == nullptr) {
+        amrex::Abort("ablsteady: jvp: refill needs ResidualInputs::bc (the ghost fill of q + eps v)");
+    }
     if (Jv.u.empty()) { Jv.define(q.p.boxArray(), q.p.DistributionMap()); }
     const auto qf = solution_fields(q);
     const auto vf = solution_fields(v);
@@ -317,7 +320,7 @@ amrex::Real jvp (const State& q, const State& v, const ResidualInputs& in, const
     }
     const double mean_q = sums[0] / sums[2];
     const double rms_v = std::sqrt(sums[1] / sums[2]);
-    const double eps = std::sqrt(static_cast<double>(std::numeric_limits<amrex::Real>::epsilon())) * (1 + mean_q) / rms_v;
+    const double eps = static_cast<double>(js.step) * (1 + mean_q) / rms_v;
 
     ResidualFields base;
     if (R0 == nullptr) {
@@ -331,6 +334,7 @@ amrex::Real jvp (const State& q, const State& v, const ResidualInputs& in, const
     for (int n = 0; n < static_cast<int>(qf.size()); ++n) {
         amrex::MultiFab::LinComb(*pf[n], 1, *qf[n], 0, static_cast<amrex::Real>(eps), *vf[n], 0, 0, 1, qf[n]->nGrow());
     }
+    if (refill) { in.bc->fill_ghosts(qp, in.surface, in.buoyancy); }
     residual(qp, in, mesh, geom, Jv);
     auto jf = Jv.fields();
     const auto rf = R0->fields();

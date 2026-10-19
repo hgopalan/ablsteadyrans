@@ -158,4 +158,6 @@ over every owned point of every field (shared faces once), on scaled variables :
 :math:`\tilde v = v/s` with θ taken as :math:`\theta - \theta_\mathrm{ref}`. The scales are ``JvpScales`` (10 m/s,
 10 K, 0.1 m²/s², 100 m²/s²). A perturbation along a typical v moves each value by about
 :math:`\sqrt{\epsilon_\mathrm{mach}}` times its own scale, whatever the field and the mesh size; a plain norm would be
-dominated by θ's 300 K and grow with the number of cells. The step is the same on any box layout.
+dominated by θ's 300 K and grow with the number of cells. The step is the same on any box layout. The factor
+:math:`\sqrt{\epsilon_\mathrm{mach}}` is ``JvpScales::step`` (its default); the Newton core (:doc:`newton`) sets it
+from ``steady.newton_fd_eps_scale``.
