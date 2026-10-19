@@ -283,7 +283,10 @@ std::vector<std::string> unknown_inputs (const std::vector<InputEntry>& entries,
         const std::string ns = e.name.substr(0, dot);
         if (contains(owned, ns)) {
             if (!e.used) {
-                const bool newton = e.name.rfind("steady.newton_", 0) == 0;
+                // The keys of read_newton_options only: a misspelt
+                // steady.newton_* key gets no hint that it will be read later.
+                const bool newton = std::any_of(std::begin(kNewtonInputKeys), std::end(kNewtonInputKeys),
+                                                [&] (const char* k) { return e.name == std::string("steady.") + k; });
                 msg.emplace_back("unknown input '" + e.name + "': not an input of namespace '" + ns + "' in this version"
                                  + ((ns == "bc" || ns == "solver")
                                     ? " (read with init.first_guess = profile or steady.stage = simplec)" : "")

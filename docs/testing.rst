@@ -750,25 +750,44 @@ GoogleTest suite
    * - UT-3.1.1
      - ``Newton.JvpEpsSweepAgainstQuadraticResidual``: on a residual that is exactly quadratic in q (upwind
        convection, Coriolis, slip walls), the analytic :math:`Jv` and :math:`B(v,v)` from central differences; the
-       sweep of ``steady.newton_fd_eps_scale`` from 1e-2 to 1e-12 gives the V-shaped error, the truncation branch
+       sweep of ``steady.newton_fd_eps_scale`` from 1e-2 to 3.2e-12 (its lower bound is 1.8e-12) gives the V-shaped error, the truncation branch
        equal to :math:`\epsilon\|B\|/\|Jv\|` to 1e-3, and the default within a factor 3 of the minimum (1.5×
        measured); a uniform :math:`\Delta\tau` adds :math:`x/\Delta\tau` on the right rows; Dirichlet rows are
        identity rows.
    * - UT-3.1.2
      - ``Newton.ColumnConvergesQuadratically``: plain Newton on the Ekman column; the reductions 0.403, 0.171,
-       0.0131, 2.09e-4, 9.41e-8 pinned to a factor 2, the last two steps above the round-off floor gain more than
-       three orders each, and :math:`r_{n+1} \le r_n^2` after the first step.
+       0.0131, 2.09e-4, 8.26e-8 pinned to a factor 2, the last two steps above the round-off floor gain more than
+       three orders each, and :math:`r_{n+1} \le r_n^2` after the first step. In single precision the first three
+       reductions are pinned and the last two steps sit on the forward difference's floor (they depend on FMA
+       contraction); the single-precision CI job compiles only, so this branch runs on request.
    * - UT-3.1.3
      - ``Newton.PoiseuilleInOneStep``: one step gives the discrete Poiseuille profile to 1e-9.
        ``Newton.GmresSolvesKnownSystemOnAnyLayout``: ``amrex::GMRES<NewtonVector, NewtonOperator>`` recovers a known
        solution of a non-symmetric system to 1e-5 on one and four boxes (8 × 6 × 8) and on one and nine boxes
-       (9 × 9 × 8); the layouts agree to 1e-7.
+       (9 × 9 × 8); the layouts agree to 1e-6, a quarter of either solve's error (two box layouts add their sums
+       in different orders and GMRES carries the rounding through its restarts; 6.5e-8 and 1.5e-8 measured, 1.4e-8
+       to 3.1e-7 before jvp's step sums were made independent of the distribution), and
+       the four boxes give the same iteration count and the same solution bits with every box on rank 0.
    * - UT-3.1.3 (c)
      - *Beyond the plan.* ``Newton.VectorOperationsAndBitIdenticalInnerProduct``: the vector operations; the inner
        product counts shared and periodic faces once and has the same bits on every rank and for two distribution
-       mappings. ``Newton.OptionReadersAndRangeChecks``: the four ``steady.newton_*`` keys are read, and each
+       mappings. ``Newton.JvpBitIdenticalForAnyDistribution``: jvp's step and :math:`Jv` have the same bits with
+       every box on rank 0 as on the distributed layout, for 16 rough perturbations on twelve boxes (on 2 and 4 ranks;
+       the identity on one). ``Newton.OptionReadersAndRangeChecks``: the four ``steady.newton_*`` keys are read, and each
        range check names the key and value. ``Newton.KrylovMemoryEstimateAndBudget``: the :math:`2m + 3` vector
        count and bytes of a 512 × 512 × 128 box; the budget abort names both keys.
        ``Newton.PreconditionerHookAndOptionsReachTheSolver``: the hook is set up once per step and applied once
        per GMRES iteration, and its output is used; restart and tolerance reach GMRES.
-       ``Newton.ColumnRestartAndToleranceSweep``: GMRES iterations against the restart length (:doc:`solver`).
+       ``Newton.ColumnRestartAndToleranceSweep``: GMRES iterations against the restart length (:doc:`results`).
+   * - UT-3.1.3 (d)
+     - *Beyond the plan* (test_NewtonCoverage.cpp, from the post-merge review of #19).
+       ``Newton.TerrainWallLawOperatorMatchesCentralDifference``: on a 30 m hill under the wall law, where one ghost
+       fill is not a fixed point, the operator matches a central difference of :math:`q \mapsto R(\mathrm{fill}(q))`
+       to 1e-5 on one and six boxes (2.6e-8 to 4.8e-8 measured), and is off by more than 1 with the base point
+       :math:`R(q)`. ``Newton.TerrainWallLawStepsReduceResidual``: four default steps there reduce :math:`|R|` at
+       every step. ``Newton.UpdateSkippedAboveRhsNorm``: the rule that skips an update. ``Newton.KrylovBudgetIsPerRank``:
+       one box per rank fits a budget the total exceeds. ``Newton.InnerProductSameBitsWithAllBoxesOnRankZero``: the
+       inner product with every box on rank 0 has the bits of the distributed layout (on 2 and 4 ranks).
+       ``Newton.StepDiagnosticsAndEpsRange``: the step's Krylov residual and eps range.
+       ``Newton.NonUniformDtauOnFaces``: a non-uniform :math:`\Delta\tau` gives :math:`x/\Delta\tau_f` with the
+       face mean of the two cells.

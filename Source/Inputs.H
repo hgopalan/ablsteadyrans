@@ -125,6 +125,12 @@ std::vector<std::string> unknown_inputs (const std::vector<InputEntry>& entries)
 std::vector<std::string> unknown_inputs (const std::vector<InputEntry>& entries,
                                          const std::vector<std::string>& owned);
 
+//! The Newton–Krylov keys of read_newton_options (Newton.H), without the
+//! "steady." prefix. The application does not read them before sub-phase
+//! 3.5; unknown_inputs names that sub-phase for these keys only.
+inline constexpr const char* kNewtonInputKeys[] = {"newton_gmres_restart", "newton_fd_eps_scale",
+                                                   "newton_krylov_rtol", "newton_mem_budget_gb"};
+
 //! The current ParmParse table as InputEntry records.
 std::vector<InputEntry> parmparse_entries ();
 

@@ -10,6 +10,7 @@
 #include "Forcing.H"
 #include "Inputs.H"
 #include "Newton.H"
+#include "Reductions.H"
 #include "Residual.H"
 #include "SurfaceLayer.H"
 #include "TransportTestHelpers.H"
@@ -56,6 +57,22 @@ PCase flat_case (int nx, int ny, int nz, double Lx, double Ly, double H, int max
     c.mesh.build_from_ground(c.in, c.geom, c.z);
     ablsteady::trtest::smooth_vertical_ghost_nodes(c);
     return c;
+}
+
+// The same case with every box on rank 0 (the identity on one rank): the
+// grouping of the boxes into per-rank partial sums differs from the
+// distributed layout, as between a one-rank and a many-rank run.
+void boxes_on_rank0 (PCase& c)
+{
+    const amrex::Vector<int> pmap(c.ba.size(), 0);
+    const amrex::DistributionMapping dm2(pmap);
+    amrex::MultiFab z2(c.z.boxArray(), dm2, 1, c.z.nGrow());
+    z2.ParallelCopy(c.z, 0, 0, 1, c.z.nGrow(), c.z.nGrow());
+    c.dm = dm2;
+    c.z = std::move(z2);
+    c.mesh.define(c.ba, dm2);
+    c.mesh.build_from_ground(c.in, c.geom, c.z);
+    ablsteady::trtest::smooth_vertical_ghost_nodes(c);   // as flat_case: build_from_ground rewrites the top ghost node
 }
 
 void define_state (ablsteady::State& q, const PCase& c)
@@ -191,9 +208,10 @@ struct QuadraticCase
     CaseInputs su;
     ablsteady::State q, v;
     static constexpr double Lx = 800, Ly = 600, H = 400;
-    explicit QuadraticCase (int max_grid, int nx = 8, int ny = 6)
+    explicit QuadraticCase (int max_grid, int nx = 8, int ny = 6, bool on_rank0 = false)
         : c(flat_case(nx, ny, 8, Lx, Ly, H, max_grid))
     {
+        if (on_rank0) { boxes_on_rank0(c); }
         su.make(c, 2.0, FaceType::slip_wall, FaceType::slip_wall);
         su.in.momentum.limiter = ablsteady::Limiter::upwind;
         su.in.theta.limiter = ablsteady::Limiter::upwind;
@@ -334,10 +352,13 @@ void known_solution (const QuadraticCase& qc, const NewtonOperator& op, NewtonVe
     to_vector(v, op, xs);
 }
 
-// Remove the cell mean of p (the null space of the continuity rows).
+// Remove the cell mean of p (the null space of the continuity rows). The
+// sum is deterministic_sum, so the mean has the same bits on any rank count
+// (MultiFab::sum adds the ranks' partial sums in rank order).
 void remove_p_mean (NewtonVector& x, const PCase& c)
 {
-    const amrex::Real mean = x.f[ablsteady::nf_p].sum(0) / static_cast<amrex::Real>(c.geom.Domain().numPts());
+    const amrex::Real mean = ablsteady::deterministic_sum(x.f[ablsteady::nf_p], 0)
+                             / static_cast<amrex::Real>(c.geom.Domain().numPts());
     x.f[ablsteady::nf_p].plus(-mean, 0, 1, 0);
 }
 
@@ -350,9 +371,9 @@ struct KnownSolve
     int status{-1};
 };
 KnownSolve solve_known (int max_grid, int nx, int ny, NewtonVector* out, const amrex::BoxArray* ref_ba,
-                        const amrex::DistributionMapping* ref_dm)
+                        const amrex::DistributionMapping* ref_dm, bool on_rank0 = false)
 {
-    QuadraticCase qc(max_grid, nx, ny);
+    QuadraticCase qc(max_grid, nx, ny, on_rank0);
     ablsteady::ResidualFields R0;
     ablsteady::residual(qc.q, qc.su.in, qc.c.mesh, qc.c.geom, R0);
     amrex::MultiFab dtau(qc.c.ba, qc.c.dm, 1, 0);
@@ -395,8 +416,8 @@ KnownSolve solve_known (int max_grid, int nx, int ny, NewtonVector* out, const a
 // and B(v, v) = (R(q + v) + R(q - v) - 2 R(q)) / 2 in closed form (the third
 // difference is zero to round-off, checked), and the forward difference of
 // NewtonOperator::apply (plain Newton, no dtau) has the truncation error
-// eps B(v, v) exactly. The sweep of steady.newton_fd_eps_scale over ten
-// decades (five in single precision) shows the V: the truncation branch
+// eps B(v, v) exactly. The sweep of steady.newton_fd_eps_scale over nine
+// and a half decades (three in single precision) shows the V: the truncation branch
 // (error = eps |B| / |J v|, to 1e-3 of itself) at large h, the round-off
 // branch (growing as 1/h) at small h, both ends at least 10 times (5 in
 // single precision) the minimum, and the default sqrt(machine epsilon)
@@ -441,7 +462,9 @@ TEST(Newton, JvpEpsSweepAgainstQuadraticResidual)
     to_vector(qc.v, op0, x);
 
     std::vector<double> hs;
-    for (double h = 1e-2; h > (kDouble ? 0.9e-12 : 0.9e-7); h /= std::sqrt(10.0)) { hs.push_back(h); }
+    // Down to 3.2e-12 (1e-5 in single): steady.newton_fd_eps_scale is at
+    // least machine epsilon^(3/4), 1.8e-12 (6.4e-6 in single).
+    for (double h = 1e-2; h > (kDouble ? 1.9e-12 : 6.5e-6); h /= std::sqrt(10.0)) { hs.push_back(h); }
     const double hdef = std::sqrt(static_cast<double>(std::numeric_limits<amrex::Real>::epsilon()));
     std::vector<double> err;
     double err_def = 0;
@@ -532,16 +555,22 @@ TEST(Newton, JvpEpsSweepAgainstQuadraticResidual)
 
 // ---------------------------------------------------------------------------
 // UT-3.1.2. Plain Newton (no dtau) on the Ekman column under the wall law,
-// from the geostrophic wind, GMRES(200) to a relative 1e-10 per step. The
-// scaled residual |R| goes 0.760, 0.306, 0.0525, 6.88e-4, 1.44e-7, 1.4e-14
-// (round-off). The reductions r_{n+1} / r_n are pinned to a factor 2:
-// 0.403, 0.171, 0.0131, 2.09e-4, 9.41e-8. The last two steps above the
-// round-off floor gain more than three orders each, and every step after
-// the first has r_{n+1} <= r_n^2 (the measured constants r_{n+1} / r_n^2
-// are 0.56, 0.25, 0.30, 0.65): quadratic convergence. In single precision
-// (four steps, GMRES to 1e-5) the reductions 0.401, 0.171, 0.0170, 7.37e-4
-// are pinned to a factor 2, the last gains three orders and r_{n+1} <=
-// 2 r_n^2 (measured constants 0.56, 0.32, 0.83).
+// from the geostrophic wind, GMRES(200) to a relative 1e-10 per step (in
+// practice to the forward difference's floor near 1e-8: GMRES reports
+// convergence there, see docs/solver.rst). The scaled residual |R| goes
+// 0.760, 0.306, 0.0525, 6.88e-4, 1.44e-7, 1.19e-14 (round-off). The
+// reductions r_{n+1} / r_n are pinned to a factor 2: 0.403, 0.171, 0.0131,
+// 2.09e-4, 8.26e-8. The last two steps above the round-off floor gain more
+// than three orders each, and every step after the first has r_{n+1} <=
+// r_n^2 (the measured constants r_{n+1} / r_n^2 are 0.56, 0.25, 0.30,
+// 0.57): quadratic convergence. In single precision (four steps, GMRES to
+// 1e-5) the forward difference's error is about 1.6e-3 at the default h,
+// so the last steps sit on that floor and depend on the compiler's FMA
+// contraction (0.0159 and 3.2e-3 with Apple clang's default, 0.0170 and
+// 7.4e-4 with -ffp-contract=off): the first three reductions 0.401, 0.171,
+// 0.0165 are pinned to a factor 2, the last gains two orders, and r_{n+1}
+// <= 2 r_n^2 for the second and third step. The single-precision CI job
+// compiles only, so this branch runs on request.
 TEST(Newton, ColumnConvergesQuadratically)
 {
     NewtonOptions opt;
@@ -557,11 +586,11 @@ TEST(Newton, ColumnConvergesQuadratically)
     amrex::Print() << "  final " << r.back() << "\n";
     const double floor = tol(1e-12, 1e-5) * r[0];
     const std::vector<double> pinned =
-        kDouble ? std::vector<double>{0.403, 0.171, 0.0131, 2.09e-4, 9.41e-8} : std::vector<double>{0.401, 0.171, 0.0170, 7.37e-4};
+        kDouble ? std::vector<double>{0.403, 0.171, 0.0131, 2.09e-4, 8.26e-8} : std::vector<double>{0.401, 0.171, 0.0165};
     std::vector<double> red;
     for (std::size_t n = 0; n + 1 < r.size() && r[n] > floor; ++n) { red.push_back(r[n + 1] / r[n]); }
-    ASSERT_EQ(red.size(), pinned.size());
-    for (std::size_t n = 0; n < red.size(); ++n) {
+    ASSERT_EQ(red.size(), kDouble ? pinned.size() : pinned.size() + 1);
+    for (std::size_t n = 0; n < pinned.size(); ++n) {
         EXPECT_GT(red[n], pinned[n] / 2) << n;
         EXPECT_LT(red[n], pinned[n] * 2) << n;
         if (n >= 1) { EXPECT_LE(r[n + 1], tol(1, 2) * r[n] * r[n]) << n; }
@@ -570,7 +599,7 @@ TEST(Newton, ColumnConvergesQuadratically)
         EXPECT_LT(red[red.size() - 2], 1e-3);
         EXPECT_LT(red[red.size() - 1], 1e-3);
     } else {
-        EXPECT_LT(red.back(), 1e-3);
+        EXPECT_LT(red.back(), 1e-2);   // the step that ends at the single-precision floor
     }
     EXPECT_LT(r.back(), floor);
 }
@@ -628,13 +657,15 @@ TEST(Newton, PoiseuilleInOneStep)
 // known solution: the operator of UT-3.1.1 (upwind convection, Coriolis)
 // with a uniform dtau = 5 s, b = A x* for a smooth x* of every field. GMRES
 // converges (status 0) and recovers x* (p up to its mean, the null space of
-// the continuity rows) to 1e-5 (4e-6 measured: the forward difference is
-// linear in v only up to its truncation term eps B(v, v), so b = A x* and
-// the Krylov combination differ at that level), on one box and on four boxes
+// the continuity rows) to 1e-5 (4e-6 measured: about 40 times rtol, the
+// conditioning of A; the forward difference's own error, near 1e-8, is
+// below it: the error goes 4.1e-4, 4.0e-6, 2.8e-8, 1.1e-8 at rtol 1e-5,
+// 1e-7, 1e-9, 1e-11), on one box and on four boxes
 // of an 8 x 6 x 8 mesh, and on one box and nine boxes of a 9 x 9 x 8 mesh
 // (uneven over 2 and 4 ranks); the answers of the two layouts of each mesh
-// agree to 1e-7 of |x*| (3e-8 measured). Single precision: 1e-1 and 1e-2
-// (rtol 1e-3).
+// agree to 1e-6 of |x*| (1.4e-8 to 3.1e-7 measured, see below), and the four
+// boxes give the same bits with every box on rank 0. Single precision: 1e-1
+// and 1e-2 (rtol 1e-3).
 TEST(Newton, GmresSolvesKnownSystemOnAnyLayout)
 {
     // One box and four boxes (8 x 6 in 4 x 3); one box and nine (9 x 9 in 3 x 3).
@@ -642,6 +673,11 @@ TEST(Newton, GmresSolvesKnownSystemOnAnyLayout)
     NewtonVector x1, x4;
     const auto r1 = solve_known(64, 8, 6, &x1, &ref1.c.ba, &ref1.c.dm);
     const auto r4 = solve_known(4, 8, 6, &x4, &ref1.c.ba, &ref1.c.dm);
+    // The four boxes again with every box on rank 0: the same iterates to the
+    // last bit (the inner product and J v sum per box in box order), so the
+    // same iteration count and the same solution (on one rank the identity).
+    NewtonVector x4r0;
+    const auto r4r0 = solve_known(4, 8, 6, &x4r0, &ref1.c.ba, &ref1.c.dm, true);
     const QuadraticCase ref9(64, 9, 9);
     NewtonVector y1, y9;
     const auto s1 = solve_known(64, 9, 9, &y1, &ref9.c.ba, &ref9.c.dm);
@@ -652,11 +688,22 @@ TEST(Newton, GmresSolvesKnownSystemOnAnyLayout)
         EXPECT_EQ(r.status, 0);
         EXPECT_LT(r.err, tol(1e-5, 1e-1));
     }
+    // Two box layouts add the inner products and jvp's step sums in different
+    // orders, and GMRES carries the different rounding through its restarts:
+    // the two solutions differed by 1.4e-8 to 3.1e-7 (this mesh pair and the
+    // 9 x 9 pair, double, Apple clang, 1 to 4 ranks before the step sums were
+    // made layout-independent; 6.5e-8 and 1.5e-8 after). The bound 1e-6 is
+    // empirical: a quarter of either solve's own error (4e-6). For a fixed
+    // BoxArray the iterates are bit-identical on any rank count (checked
+    // above).
     ablsteady::ResidualFields R;
     NewtonOperator op1(ref1.q, R, ref1.su.in, ref1.c.mesh, ref1.c.geom, nullptr);
-    EXPECT_LT(rel_diff(op1, x4, x1), tol(1e-7, 1e-2));
+    EXPECT_EQ(r4r0.its, r4.its);
+    EXPECT_EQ(r4r0.err, r4.err);
+    EXPECT_EQ(rel_diff(op1, x4r0, x4), 0);
+    EXPECT_LT(rel_diff(op1, x4, x1), tol(1e-6, 1e-2));
     NewtonOperator op9(ref9.q, R, ref9.su.in, ref9.c.mesh, ref9.c.geom, nullptr);
-    EXPECT_LT(rel_diff(op9, y9, y1), tol(1e-7, 1e-2));
+    EXPECT_LT(rel_diff(op9, y9, y1), tol(1e-6, 1e-2));
 }
 
 // ---------------------------------------------------------------------------
@@ -720,10 +767,57 @@ TEST(Newton, VectorOperationsAndBitIdenticalInnerProduct)
 }
 
 // ---------------------------------------------------------------------------
+// Beyond the plan. jvp's step comes from sums over every owned point; they
+// are summed per box (one thread per column, the columns in storage order)
+// and the boxes added in index order, as dotProduct does. So the step and J v
+// have the same bits for any DistributionMapping of a BoxArray, and the GMRES
+// iterates of UT-3.1.3 (b) do not depend on the rank count. The second layout
+// puts every box on rank 0, so the per-rank partial sums group the boxes
+// differently (a cyclic shift would not: it moves each rank's group whole).
+// On one rank it is the identity; the CI runs the unit tests on 2 and 4 ranks.
+TEST(Newton, JvpBitIdenticalForAnyDistribution)
+{
+    // Twelve boxes; rough perturbations (a hash of the position, as rough as
+    // a Krylov vector), whose sums round differently under a regrouping. One
+    // perturbation catches a rank-order sum only sometimes (three double sums
+    // must differ in their last bit): over these 16 phases the old
+    // ReduceOps sum failed 3 on 2 ranks, 2 on 3 and 1 on 4.
+    QuadraticCase qa(2);
+    QuadraticCase qb(2, 8, 6, true);
+    ASSERT_EQ(qa.c.ba, qb.c.ba);
+    for (int seed = 0; seed < 16; ++seed) {
+        const auto rough = [=] (int f, double x, double y, double z) {
+            const double h = std::sin(12.9898 * x + 78.233 * y + 37.719 * z + 4.1 * f + 0.37 * seed) * 43758.5453;
+            return h - std::floor(h) - 0.5;
+        };
+        for (QuadraticCase* qc : {&qa, &qb}) {
+            fill_fields(qc->v, qc->c, rough);
+            qc->su.bc->fill_ghosts(qc->v, qc->su.in.surface, qc->su.in.buoyancy, true);
+        }
+        ablsteady::ResidualFields Ja, Jb;
+        const amrex::Real ea = ablsteady::jvp(qa.q, qa.v, qa.su.in, qa.c.mesh, qa.c.geom, Ja);
+        const amrex::Real eb = ablsteady::jvp(qb.q, qb.v, qb.su.in, qb.c.mesh, qb.c.geom, Jb);
+        EXPECT_GT(ea, 0) << seed;
+        EXPECT_EQ(ea, eb) << seed;
+        const auto fa = Ja.fields();
+        const auto fb = Jb.fields();
+        ASSERT_EQ(fa.size(), fb.size());
+        for (std::size_t n = 0; n < fa.size(); ++n) {
+            amrex::MultiFab back(fa[n].mf->boxArray(), fa[n].mf->DistributionMap(), 1, 0);
+            back.ParallelCopy(*fb[n].mf, 0, 0, 1, 0, 0);
+            amrex::MultiFab::Subtract(back, *fa[n].mf, 0, 0, 1, 0);
+            EXPECT_EQ(back.norm0(0, 0, false), 0) << fa[n].name << " " << seed;
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Beyond the plan. The readers of steady.newton_*: the defaults (the eps
 // scale is sqrt(machine epsilon) of amrex::Real: 1.49e-8 in double, 3.45e-4
 // in single), every key read into its option, each range check refusing a
-// value just outside it (and NaN) with a message naming the key and the value,
+// value just outside it (and NaN) with a message naming the key and the value
+// (the eps scale at least machine epsilon^(3/4), 1.8e-12 in double, below
+// which J v loses its last digits and Newton stalls),
 // the reader aborting on those, on a repeated key and on two values, and the
 // application's unknown-input message naming the sub-phase that reads the keys.
 TEST(Newton, OptionReadersAndRangeChecks)
@@ -738,12 +832,12 @@ TEST(Newton, OptionReadersAndRangeChecks)
     {
         amrex::ParmParse pp("steady");
         pp.add("newton_gmres_restart", 45);
-        pp.add("newton_fd_eps_scale", amrex::Real(1e-6));
+        pp.add("newton_fd_eps_scale", static_cast<amrex::Real>(tol(1e-6, 1e-5)));
         pp.add("newton_krylov_rtol", amrex::Real(1e-3));
         pp.add("newton_mem_budget_gb", amrex::Real(12.5));
         const NewtonOptions o = ablsteady::read_newton_options();
         EXPECT_EQ(o.gmres_restart, 45);
-        EXPECT_EQ(o.fd_eps_scale, amrex::Real(1e-6));
+        EXPECT_EQ(o.fd_eps_scale, static_cast<amrex::Real>(tol(1e-6, 1e-5)));
         EXPECT_EQ(o.krylov_rtol, amrex::Real(1e-3));
         EXPECT_EQ(o.mem_budget_gb, amrex::Real(12.5));
         EXPECT_EQ(o.given.size(), 4U);
@@ -761,12 +855,26 @@ TEST(Newton, OptionReadersAndRangeChecks)
         {"steady.newton_gmres_restart", "= 4", [] (NewtonOptions& o) { o.gmres_restart = 4; }},
         {"steady.newton_gmres_restart", "= 201", [] (NewtonOptions& o) { o.gmres_restart = 201; }},
         {"steady.newton_fd_eps_scale", "= 0", [] (NewtonOptions& o) { o.fd_eps_scale = 0; }},
+        {"steady.newton_fd_eps_scale", "= ", [] (NewtonOptions& o) {
+             o.fd_eps_scale = static_cast<amrex::Real>(ablsteady::newton_fd_eps_scale_min() / 2); }},
+        {"steady.newton_fd_eps_scale", "= 2.2e-16", [] (NewtonOptions& o) { o.fd_eps_scale = amrex::Real(2.2e-16); }},
+        {"steady.newton_fd_eps_scale", kDouble ? "= 1e-12" : "= 5e-06", [] (NewtonOptions& o) {
+             o.fd_eps_scale = static_cast<amrex::Real>(kDouble ? 1e-12 : 5e-6); }},
         {"steady.newton_fd_eps_scale", "= 0.0101", [] (NewtonOptions& o) { o.fd_eps_scale = amrex::Real(0.0101); }},
         {"steady.newton_krylov_rtol", "= 0", [] (NewtonOptions& o) { o.krylov_rtol = 0; }},
         {"steady.newton_krylov_rtol", "= 1", [] (NewtonOptions& o) { o.krylov_rtol = 1; }},
         {"steady.newton_mem_budget_gb", "= -1", [] (NewtonOptions& o) { o.mem_budget_gb = -1; }},
         {"steady.newton_mem_budget_gb", "= 80.5", [] (NewtonOptions& o) { o.mem_budget_gb = amrex::Real(80.5); }},
     };
+    // The bound in the message is accepted when given back (every digit).
+    {
+        NewtonOptions x = def;
+        x.fd_eps_scale = 0;
+        const std::string m = ablsteady::check_newton_options(x).front();
+        const std::string bound = m.substr(m.find(">= ") + 3, m.find(" (machine") - m.find(">= ") - 3);
+        x.fd_eps_scale = static_cast<amrex::Real>(std::stod(bound));
+        EXPECT_TRUE(ablsteady::check_newton_options(x).empty()) << m;
+    }
     for (const Bad& b : bads) {
         NewtonOptions x = def;
         b.mutate(x);
@@ -784,6 +892,10 @@ TEST(Newton, OptionReadersAndRangeChecks)
         x = def;
         x.gmres_restart = 5;
         x.fd_eps_scale = amrex::Real(1e-2);
+        x.mem_budget_gb = 80;
+        EXPECT_TRUE(ablsteady::check_newton_options(x).empty());
+        x.fd_eps_scale = static_cast<amrex::Real>(ablsteady::newton_fd_eps_scale_min());
+        EXPECT_NEAR(ablsteady::newton_fd_eps_scale_min(), kDouble ? 1.82e-12 : 6.4e-6, kDouble ? 1e-14 : 1e-7);
         x.mem_budget_gb = 80;
         EXPECT_TRUE(ablsteady::check_newton_options(x).empty());
         x.gmres_restart = 200;
@@ -812,23 +924,31 @@ TEST(Newton, OptionReadersAndRangeChecks)
         while (pp.remove("newton_gmres_restart") > 0) {}
         EXPECT_NO_THROW(ablsteady::read_newton_options());
     }
-    const auto msg = ablsteady::unknown_inputs({{"steady.newton_gmres_restart", false}}, {"steady"});
-    ASSERT_EQ(msg.size(), 1U);
-    EXPECT_NE(msg.front().find("sub-phase 3.5"), std::string::npos) << msg.front();
-    const auto other = ablsteady::unknown_inputs({{"steady.newtonish", false}}, {"steady"});
-    ASSERT_EQ(other.size(), 1U);
-    EXPECT_EQ(other.front().find("sub-phase 3.5"), std::string::npos) << other.front();
+    for (const char* key : ablsteady::kNewtonInputKeys) {
+        const auto msg = ablsteady::unknown_inputs({{std::string("steady.") + key, false}}, {"steady"});
+        ASSERT_EQ(msg.size(), 1U);
+        EXPECT_NE(msg.front().find("sub-phase 3.5"), std::string::npos) << msg.front();
+    }
+    // A misspelt key (or another name) gets no hint that it is read later.
+    for (const char* k : {"steady.newtonish", "steady.newton_gmres_restar", "steady.newton_rtol"}) {
+        const auto other = ablsteady::unknown_inputs({{k, false}}, {"steady"});
+        ASSERT_EQ(other.size(), 1U);
+        EXPECT_EQ(other.front().find("sub-phase 3.5"), std::string::npos) << other.front();
+    }
 }
 
 // ---------------------------------------------------------------------------
 // Beyond the plan. The Krylov memory estimate against its closed form, and
 // the budget: FGMRES(m) keeps 2 m + 3 vectors; a vector of an nx x ny x nz
 // box holds 3 N cell values and (nx+1) ny nz + nx (ny+1) nz + nx ny (nz+1)
-// face values. On one 512 x 512 x 128 box (an H100-sized run, 1.6 GB per
-// vector in double) restart 30 (63 vectors) exceeds the 70 GB default
-// budget and NewtonKrylov aborts naming steady.newton_mem_budget_gb and
-// steady.newton_gmres_restart; restart 20 (43 vectors) fits. Nothing is
-// allocated by the check.
+// face values. On one 512 x 512 x 128 box (1.6 GB per vector in double)
+// restart 30 (63 vectors, 101.7 GB) exceeds the 70 GB default budget and
+// NewtonKrylov aborts naming steady.newton_mem_budget_gb and
+// steady.newton_gmres_restart; restart 20 (43 vectors, 69.4 GB) passes the
+// check. The check counts the Krylov vectors only: with the step's own
+// buffers (about 9 vectors more, Newton.H) restart 20 on that box needs
+// about 84 GB, more than one 80 GB GPU. Nothing is allocated by the check.
+// KrylovBudgetIsPerRank (test_NewtonCoverage.cpp) checks several boxes.
 TEST(Newton, KrylovMemoryEstimateAndBudget)
 {
     const amrex::Box big(amrex::IntVect(0), amrex::IntVect(511, 511, 127));
@@ -925,9 +1045,13 @@ TEST(Newton, PreconditionerHookAndOptionsReachTheSolver)
 // the column of UT-3.1.2 against the restart length (5, 10, 20, 30, 60, 100,
 // 200) at rtol 1e-2 and 1e-6 (1e-4 in single precision), three plain Newton
 // steps each, printed as a table. At rtol 1e-2 every restart >= 10 needs
-// 3, 5, 8 iterations; at 1e-6 restarts 5 and 10 stall at the 2000-iteration
-// cap and restart >= 20 converges (94-96 iterations once m >= 100, the
-// Krylov dimension of the column).
+// 3, 5, 8 iterations (restart 5 reaches the 2000-iteration cap on the third
+// step); at 1e-6 restarts 5 and 10 stall at the cap and restart >= 20
+// converges (about 620-870 iterations per step at 20 and 30, 94-96 once
+// m >= 100, the Krylov dimension of the column; the counts below m = 100
+// shift by tens between builds, as 1e-6 is near the forward difference's
+// floor). Three steps only: over ten steps restart 30 needs about four times
+// the iterations of restart 200 (docs/results.rst).
 TEST(Newton, ColumnRestartAndToleranceSweep)
 {
     amrex::Print() << "Restart sweep: rtol, restart, GMRES iterations per step (status), |R3|/|R0|\n";

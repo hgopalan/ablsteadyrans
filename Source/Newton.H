@@ -51,8 +51,12 @@
 // Memory: FGMRES(m) keeps m + 1 Arnoldi vectors, m preconditioned vectors
 // and two work vectors, all of state size: 2m + 3 vectors. The estimate is
 // printed at construction and checked against steady.newton_mem_budget_gb
-// on the rank that holds the most points; the residual evaluations of apply
-// and jvp allocate their own temporaries outside it.
+// on the rank that holds the most points. The step's own buffers are outside
+// the estimate: b and x, R0, apply's perturbation (with ghost cells) and
+// J v, jvp's perturbed state, 1/dtau and the Dirichlet and owner masks
+// (about 8 vectors more while GMRES runs; R0's base state is freed before),
+// plus 2 with a hook, and the residual's temporaries. Leave that margin
+// under the budget.
 //
 // Inputs (steady.*, read by read_newton_options): newton_gmres_restart,
 // newton_fd_eps_scale, newton_krylov_rtol, newton_mem_budget_gb. The
@@ -79,8 +83,12 @@ namespace ablsteady {
 struct NewtonOptions
 {
     int gmres_restart{30};                    //!< steady.newton_gmres_restart (5..200)
-    //! steady.newton_fd_eps_scale (> 0, <= 1e-2): jvp's relative step h,
-    //! sqrt(machine epsilon) of amrex::Real by default.
+    //! steady.newton_fd_eps_scale (>= newton_fd_eps_scale_min(), machine
+    //! epsilon of amrex::Real to the power 3/4: 1.8e-12 in double, 6.4e-6 in
+    //! single; <= 1e-2): jvp's relative step h, sqrt(machine epsilon) by
+    //! default. The relative error of J v grows away from the default, to
+    //! 9e-3 at 1e-2 and about 1e-3 at the lower bound. Below the bound it
+    //! grows as 1/h, and Newton stalls or diverges.
     amrex::Real fd_eps_scale{std::sqrt(std::numeric_limits<amrex::Real>::epsilon())};
     amrex::Real krylov_rtol{amrex::Real(1.0e-2)};   //!< steady.newton_krylov_rtol (> 0, < 1)
     amrex::Real mem_budget_gb{70};            //!< steady.newton_mem_budget_gb (> 0, <= 80), 1 GB = 1e9 bytes
@@ -119,7 +127,10 @@ public:
 //! A = T^-1 (D + J) S with the interface amrex::GMRES<NewtonVector,
 //! NewtonOperator> needs. It references q, R0, in, mesh and geom, which must
 //! outlive it and keep their layout; q's ghost cells must be filled and R0
-//! must be R(q).
+//! must be R(fill(q)), the residual of a copy of q after one more ghost fill
+//! (apply differences R(fill(q + eps dq)) against it). Where the fill is
+//! idempotent (flat ground, walls, inflow and outflow) that is R(q); on
+//! terrain with bc.zlo = surface_layer it is not (NewtonKrylov::step).
 class NewtonOperator
 {
 public:
@@ -208,7 +219,24 @@ struct NewtonStepInfo
     amrex::Real krylov_relative{0};           //!< krylov_residual / residual_norm (0 for R = 0)
     amrex::Real eps_min{0}, eps_max{0};       //!< the jvp steps used
     int jvp_calls{0};
+    //! false when residual_norm is not finite, or krylov_relative > 1 or is
+    //! not finite: q's valid points are then unchanged, except what the
+    //! closing ghost fill resets (the ground w face on terrain under the
+    //! wall law)
+    bool applied{false};
 };
+
+//! Whether a GMRES result is applied: its Krylov residual is at most |b|
+//! (krylov_relative <= 1; false for NaN and inf). FGMRES's least-squares
+//! residual does not exceed |b| in exact arithmetic, so a larger value comes
+//! from round-off at a stagnated solve (1 plus a few ulps: x is then about
+//! 0, and skipping it changes nothing) or from a breakdown of the operator
+//! (an inconsistent J v, an overflow).
+bool newton_update_usable (amrex::Real krylov_relative);
+
+//! The lower bound of steady.newton_fd_eps_scale: machine epsilon of
+//! amrex::Real to the power 3/4.
+double newton_fd_eps_scale_min ();
 
 //! One Newton step at a time. mesh, geom and in are referenced: they must
 //! outlive the object. Prints the Krylov memory estimate at construction and
@@ -224,7 +252,10 @@ public:
                   const amrex::BoxArray& ba, const amrex::DistributionMapping& dm, int verbose = 1);
 
     //! q += dq from (D + J) dq = -R(q), with q's ghost cells filled by
-    //! in.bc before R(q) and after the update. dtau: cell-centred (> 0), or
+    //! in.bc before R(q) and after the update; R is R(fill(q))
+    //! (NewtonOperator). The update is skipped (applied false, a printed
+    //! line) when |R| is not finite, or the Krylov residual is above |R| or
+    //! not finite. dtau: cell-centred (> 0), or
     //! null for plain Newton. pc: null for the identity.
     NewtonStepInfo step (State& q, const amrex::MultiFab* dtau, NewtonPreconditioner* pc = nullptr);
 
