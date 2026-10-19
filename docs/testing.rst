@@ -103,6 +103,10 @@ is killed:
 The tests run with the GPU CI flags (see :doc:`running`). Each test runs in its own directory under
 ``<build>/Tests/run/``.
 
+Each case has its own folder ``Tests/<group>/<case>/`` with a ``README.md``, its input decks, its check script and
+its gold files (``Gold/``); ``Tests/README.md`` lists the groups. Check scripts used by more than one case and the
+test-only drivers are in ``Tests/Supporting_Files/``.
+
 Current tests
 -------------
 
@@ -124,7 +128,7 @@ Current tests
      - Decks that must stop, with the input named in the message.
    * - ``rt_askervein_mesh``
      - RT-1.4.1 and RT-1.4.2: ERF's Askervein mesh coarsened to 60 × 60 × 18 (20 m × 1.08 layers, BTF, ERF's terrain
-       file): statistics of ``z`` and ``detJ`` and the quality report against ``Tests/Gold/askervein_mesh.json``.
+       file): statistics of ``z`` and ``detJ`` and the quality report against ``Tests/Discretization/Terrain_Mesh/Gold/askervein_mesh.json``.
        Double-precision builds only: the statistics use ERF's plotfile reader, which reads double-precision
        plotfiles.
    * - ``rt_steep_ridge_quality``
@@ -132,30 +136,30 @@ Current tests
        not flat). Double-precision builds only.
    * - ``rt_hill2d_run``, ``rt_hill2d_matches``
      - RT-1.4.3: a run without a solve writes the mapped-grid plotfile of the 2-D hill; ``amrex_fcompare`` against
-       ``Tests/Gold/hill2d_plt00000`` at relative tolerance 1e-12 (1e-5 in single precision). The plotfile holds
+       ``Tests/Discretization/Terrain_Mesh/Gold/hill2d_plt00000`` at relative tolerance 1e-12 (1e-5 in single precision). The plotfile holds
        cell fields only, so the nodal heights are not compared here; UT-1.4.7 compares them with ERF.
 
-       The golds of the three mesh tests above were written by ablsteady itself (``Tests/check_mesh.py --write``):
+       The golds of the three mesh tests above were written by ablsteady itself (``Tests/Supporting_Files/check_mesh.py --write``):
        they detect changes, they do not show correctness. Correctness of the same code paths comes from UT-1.4.7
        (ERF's own output) and the closed-form unit tests.
    * - ``rt_askervein_hierarchy``, ``rt_askervein_hierarchy_level1_matches``, ``rt_askervein_hierarchy_level2_matches``
      - RT-2.3.1 and RT-2.3.2: the Askervein mesh of ``rt_askervein_mesh`` with STF and a three-level hierarchy
        (``inputs_mesh_askervein_hierarchy``: 60, 30 and 15 cells a side, the same 18 layers, 1 and 3 ground passes).
        In double precision, level 0's ``z`` and ``detJ`` statistics and every level's quality report against
-       ``Tests/Gold/askervein_hierarchy_mesh.json`` (the per-level headers and the summary table included); in both
+       ``Tests/Discretization/Grid_Hierarchy/Gold/askervein_hierarchy_mesh.json`` (the per-level headers and the summary table included); in both
        precisions, ``z`` and ``detJ`` of levels 1 and 2 against
-       ``Tests/Gold/askervein_hierarchy_level{1,2}_plt00000`` (relative 1e-12; 1e-5 in single precision). The golds
+       ``Tests/Discretization/Grid_Hierarchy/Gold/askervein_hierarchy_level{1,2}_plt00000`` (relative 1e-12; 1e-5 in single precision). The golds
        were written by ablsteady: they detect changes. The coarse grounds were checked against an independent
        rebuild (UT-2.3.2).
    * - ``rt_steep_ridge_hierarchy_quality``
      - RT-2.3.2: the steep ridge of ``rt_steep_ridge_quality`` on 32 × 4 × 16 cells with three levels: the report
-       of every level against ``Tests/Gold/steep_ridge_hierarchy_mesh.json``, with the STF and top warnings (no
+       of every level against ``Tests/Discretization/Grid_Hierarchy/Gold/steep_ridge_hierarchy_mesh.json``, with the STF and top warnings (no
        coarse-level hint: levels 1 and 2 cap no more than level 0), and the per-level headers and summary table. Double precision only. The gold was written
        by ablsteady: it detects changes.
    * - ``rt_askervein_hierarchy_hint``
      - RT-2.3.2: the Askervein hierarchy with unsmoothed coarse grounds (``terrain.hierarchy_passes = 0``): levels 1
        and 2 cap STF at 9 and 10 z-levels against level 0's 8, so the report gives the coarse-level hint; against
-       ``Tests/Gold/askervein_hierarchy_p0_mesh.json`` (written by ablsteady). Double precision only.
+       ``Tests/Discretization/Grid_Hierarchy/Gold/askervein_hierarchy_p0_mesh.json`` (written by ablsteady). Double precision only.
    * - ``rt_hierarchy_restart_first``, ``rt_hierarchy_restart``, ``rt_hierarchy_restart_level{1,2}_matches``
      - A checkpoint of the Askervein mesh written without a hierarchy (2 ranks), restarted with three levels on 3
        ranks: the rebuilt levels 1 and 2 against the golds of ``rt_askervein_hierarchy``.
@@ -168,33 +172,33 @@ Current tests
        (``abort_unknown_key`` checks that the application refuses ``solver.poisson_reltol``.)
    * - ``rt_poisson_askervein``, ``rt_poisson_askervein_matches``
      - RT-1.10.1: ``poisson_projection`` projects a fixed wind on the Askervein mesh (30 × 30 × 18). Iterations at
-       most 10 % above ``Tests/Gold/poisson_askervein.json``, divergence after below 10 × the printed tolerance of
+       most 10 % above ``Tests/Discretization/Poisson_Askervein/Gold/poisson_askervein.json``, divergence after below 10 × the printed tolerance of
        before, and
-       :math:`\phi` against ``Tests/Gold/poisson_askervein_plt00000`` at relative 1e-8. Double precision only (the
+       :math:`\phi` against ``Tests/Discretization/Poisson_Askervein/Gold/poisson_askervein_plt00000`` at relative 1e-8. Double precision only (the
        golds are double-precision runs); the gold was written by ablsteady, so it detects changes.
    * - ``rt_poisson_askervein_mlmg``, ``rt_poisson_askervein_mlmg_matches``
      - RT-1.11.1: the same projection with back end B (MLMG, 6 iterations): iterations at most 10 % above
-       ``Tests/Gold/poisson_askervein_mlmg.json`` (written by ablsteady's first run) and the divergence check, and
+       ``Tests/Discretization/Poisson_Askervein/Gold/poisson_askervein_mlmg.json`` (written by ablsteady's first run) and the divergence check, and
        :math:`\phi` against back end A's gold
-       ``Tests/Gold/poisson_askervein_plt00000`` at relative 1e-8, since both solve the same operator.
+       ``Tests/Discretization/Poisson_Askervein/Gold/poisson_askervein_plt00000`` at relative 1e-8, since both solve the same operator.
    * - ``rt_walldist_hill2d``, ``rt_walldist_hill2d_matches``
-     - RT-1.11.2: ``wall_distance`` on ERF's Neutral_Hill_2D mesh: ERF's wall-distance checks (``Tests/check_walldist.py``:
+     - RT-1.11.2: ``wall_distance`` on ERF's Neutral_Hill_2D mesh: ERF's wall-distance checks (``Tests/Discretization/Wall_Distance/check_walldist.py``:
        max relative ≤ 0.15, mean ≤ 0.03, ≤ 0.2 cells below 100 m, all finite), and the field against
-       ``Tests/Gold/walldist_hill2d_plt00000`` at relative 1e-8 (a gold written by ablsteady). Double precision only.
+       ``Tests/Discretization/Wall_Distance/Gold/walldist_hill2d_plt00000`` at relative 1e-8 (a gold written by ablsteady). Double precision only.
    * - ``rt_init_askervein``, ``rt_init_askervein_matches``
-     - RT-1.12.1: the mass-consistent initial field on the Askervein mesh (30 × 30 × 18; ``Tests/Decks/inputs_init_askervein``:
+     - RT-1.12.1: the mass-consistent initial field on the Askervein mesh (30 × 30 × 18; ``Tests/Initialization/Mass_Consistent_Askervein/inputs_init_askervein``:
        log law u* = 0.6 m/s, z₀ = 0.03 m along x, inflow at xlo, outflow at xhi, :math:`\alpha_h = 1`,
-       :math:`\alpha_v = 0.5`; divergence 4.05e-1 → 6.1e-12 1/s). ``Tests/check_init.py askervein``: iterations at most 10 % above the gold's 13,
+       :math:`\alpha_v = 0.5`; divergence 4.05e-1 → 6.1e-12 1/s). ``Tests/Supporting_Files/check_init.py askervein``: iterations at most 10 % above the gold's 13,
        divergence after at most 10 × ``solver.poisson_reltol`` times before, divergence before (the printed 10 digits),
        max :math:`|w|` and the largest horizontal speed at the gold's values (1e-6), :math:`\theta` = 300 K everywhere, :math:`p' = 0`,
-       :math:`k > 0` (``Tests/Gold/init_askervein.json``); the state against ``Tests/Gold/init_askervein_plt00000``
+       :math:`k > 0` (``Tests/Initialization/Mass_Consistent_Askervein/Gold/init_askervein.json``); the state against ``Tests/Initialization/Mass_Consistent_Askervein/Gold/init_askervein_plt00000``
        at relative 1e-8. Two ranks; double precision only. :math:`\lambda` is not in the plotfile (a variation from
        the plan): the state plotfile is the regression artefact, and the unit tests pin :math:`\lambda`.
    * - ``rt_init_bump_trend``
-     - RT-1.12.2: the hilltop speed-up over FastWindTerrain's bump (``Tests/Decks/inputs_init_bump``,
-       ``Tests/Decks/terrain_bump_fwt.txt``: its ``regtests/phase6_solve_correction`` hill and power-law inflow) for
+     - RT-1.12.2: the hilltop speed-up over FastWindTerrain's bump (``Tests/Initialization/Bump_Speedup_Trend/inputs_init_bump``,
+       ``Tests/Initialization/Bump_Speedup_Trend/terrain_bump_fwt.txt``: its ``regtests/phase6_solve_correction`` hill and power-law inflow) for
        :math:`\alpha_v` = 1, 0.7, 0.5, 0.3, 0.1 (five runs on two ranks), against FastWindTerrain's own at commit
-       648f8f1 (``Tests/Gold/init_bump_trend.json``, written from its plotfiles by ``Tests/fwt_bump_speedup.py``): the
+       648f8f1 (``Tests/Initialization/Bump_Speedup_Trend/Gold/init_bump_trend.json``, written from its plotfiles by ``Tests/Initialization/Bump_Speedup_Trend/fwt_bump_speedup.py``): the
        same ranking of the five values at 40, 80 and 150 m above the ground (at 20 m two values tie within 0.002 in
        both codes), every speed-up above 1 at 20, 40, 80 and 150 m, the two codes within 0.02, 0.01, 0.005 and 0.003
        of each other at those heights (measured 0.011, 0.0057, 0.0020, 0.0008), and ablsteady's own values and
@@ -203,26 +207,26 @@ Current tests
      - RT-1.8.1: ``boundary_fluxes`` on ERF's Neutral_ABL_Flat mesh (8 × 8 × 64, 1000 m) with a fixed log-law state
        (u* = 0.35 m/s, z₀ = 0.1 m, 15°), the surface layer on the ground and a slip top: u* recovered at every ground
        cell to 1e-10, the ground stress :math:`u_*^2(\cos, \sin)` to 1e-10, :math:`k_w = u_*^2/C_{\mu 0}^2`; the
-       residual of every cell equals its closed form (``Tests/check_bc.py``: arithmetic face ν times the log law's
+       residual of every cell equals its closed form (``Tests/Discretization/Boundary_Fluxes/check_bc.py``: arithmetic face ν times the log law's
        differences, the wall flux below, no stress through the slip top) to 1e-6 of :math:`u_*^2/\Delta z` for u and
        v (1e-13 measured) and 1e-9 K/s for θ (the sounding's diffusion with the top gradient), with the first cell's
        truncation −0.0971 and the top cell's lost flux +1.000 of :math:`u_*^2\cos/\Delta z` pinned; R_k and R_w zero;
-       every field finite. The plotfile against ``Tests/Gold/bc_neutral_flat_plt00000`` at relative 1e-10 (a gold
+       every field finite. The plotfile against ``Tests/Discretization/Boundary_Fluxes/Gold/bc_neutral_flat_plt00000`` at relative 1e-10 (a gold
        written by ablsteady). Double precision only.
    * - ``rt_closure_column``, ``rt_closure_column_matches``
      - RT-1.9.1: ``closure_column`` on ERF's Neutral_ABL_Flat mesh (8 × 8 × 64, neutral) with the wall law's
        equilibrium state (u* = 0.35 m/s, z₀ = 0.1 m, k = u*²/C_μ0²), the uncapped geometric length and the
-       logarithmic face mean (``Tests/check_closure.py``): ν_t = κ u* (z + z₀) and L = κ (z + z₀) at every cell
+       logarithmic face mean (``Tests/Discretization/Closure_Column/check_closure.py``): ν_t = κ u* (z + z₀) and L = κ (z + z₀) at every cell
        (1e-9), u* recovered (1e-10), R_u and R_v zero below the top cell (1e-10 of u*²/Δz; the top cell loses
        u*²/Δz through the slip top, 1e-8), P_s, ε and R_k = −(P_s − ε) equal to their closed forms from the discrete
        strain (1e-9 of ε; the second cell's P_s/ε = 1.45 is the centred difference of ln over 2Δz), R_θ and R_w zero.
-       The plotfile against ``Tests/Gold/closure_column_plt00000`` at relative 1e-10 (a gold written by ablsteady).
+       The plotfile against ``Tests/Discretization/Closure_Column/Gold/closure_column_plt00000`` at relative 1e-10 (a gold written by ablsteady).
        Double precision only.
    * - ``rt_steady_column``
-     - RT-1.15.1: the application on the 1-D neutral column (``Tests/Decks/inputs_steady_column``: 4 × 4 × 64,
+     - RT-1.15.1: the application on the 1-D neutral column (``Tests/Canonical_RANS/Neutral_Column/inputs_steady_column``: 4 × 4 × 64,
        1000 m, surface layer z₀ = 0.1 m, slip top, uniform θ, the force F = u*²/H with u* = 0.35 m/s, the log law with
        u* = 0.25 m/s as the first guess, CFL cap 50) to the steady verdict (6 orders, 1e-8).
-       ``Tests/check_steady_column.py``: the verdict; the residual of u down 6 orders from its reference (the
+       ``Tests/Canonical_RANS/Neutral_Column/check_steady_column.py``: the verdict; the residual of u down 6 orders from its reference (the
        ``Driver`` history of the checkpoint); mean u* = √(FH) to 1e-4 (the force balance); the first cell's speed the
        wall law's (1e-6); the second cell within 1 % of the log law and the lowest eight within 2 % (the stress of the
        force-driven column is u*²(1 − z/H) and the discrete strain overshoots, RT-1.9.1); the wall k = u*²/C_μ0²
@@ -235,10 +239,10 @@ Current tests
        of the deck accepted on the restart) against 80 straight on the same two ranks: the plotfiles identical under
        ``amrex_fcompare`` at relative 1e-14.
    * - ``rt_steady_neutral_flat``
-     - RT-1.15.2: the application on ERF's Neutral_ABL_Flat (``Tests/Decks/inputs_steady_neutral_flat``: 8 × 8 × 64,
+     - RT-1.15.2: the application on ERF's Neutral_ABL_Flat (``Tests/Canonical_RANS/Neutral_ABL_Flat/inputs_steady_neutral_flat``: 8 × 8 × 64,
        geostrophic wind 10 m/s at latitude 90°, f = 1e-4 1/s, the sounding's inversion from 700 m, slip top with
        0.03 K/m, z₀ = 0.1 m, ERF's closure defaults; four sweeps, CFL cap 2, the log law with u* = 0.35 m/s as the
-       first guess) to the steady verdict. ``Tests/check_steady_neutral.py``: the verdict, then ERF's own
+       first guess) to the steady verdict. ``Tests/Canonical_RANS/Neutral_ABL_Flat/check_steady_neutral.py``: the verdict, then ERF's own
        ``check_neutral.py --physics`` (``extern_erf/``) on the turbulence plotfile: every field finite, k ≥ 0, the
        capped κ(z + z₀) length (1e-3), the AL01 stability functions of R_t (1e-6), K_mv = c_μ √k L (5 %), ε =
        C_μ0³ k^1.5/L (5 %), the wall cell's k balance (1 %), u* within 0.35 ± 0.15 m/s, the wall k within 5 % of
@@ -248,9 +252,9 @@ Current tests
        rotation step are explained and removed in :doc:`solver`). Label ``regression`` (the run time); double only.
        The 1 % comparison with an ERF reference run is not in this version.
    * - ``rt_steady_hill2d``
-     - RT-1.16.1: ERF's Neutral_Hill_2D (``Tests/Decks/inputs_steady_hill2d``: 128 × 1 × 64, the Witch of Agnesi of
+     - RT-1.16.1: ERF's Neutral_Hill_2D (``Tests/Canonical_RANS/Neutral_Hill_2D/inputs_steady_hill2d``: 128 × 1 × 64, the Witch of Agnesi of
        100 m and 500 m, the flat deck's sounding and forcing, Rayleigh damping of w and θ from 700 m, 16 sweeps, CFL
-       cap 4) to the steady verdict with a two-order drop of the u residual; ``Tests/check_steady_hill.py`` then runs
+       cap 4) to the steady verdict with a two-order drop of the u residual; ``Tests/Supporting_Files/check_steady_hill.py`` then runs
        ERF's ``check_hill.py --physics`` on the turbulence plotfile: the wall distance against the exact distance to
        the ridge, finite fields, k ≥ 0, the length-scale bound, the wall cell's k balance, the crest speed-up in the
        three lowest cells within 0.2–0.8 (Jackson and Hunt's 0.4), the speed-up positive in the lowest ten, the
@@ -265,7 +269,7 @@ Current tests
        test's directory (``run/rt_steady_hill2d_column``) so the spin-up check can read both histories.
    * - ``rt_steady_hill2d_column``, ``rt_column_guess_spinup``
      - RT-2.1b.1: the 2-D hill LU-SGS deck started from the converged column (``inputs_steady_hill2d_column``) to
-       the verdict with a two-order drop and ERF's ``check_hill.py --physics``; then ``Tests/check_column_guess.py``
+       the verdict with a two-order drop and ERF's ``check_hill.py --physics``; then ``Tests/Canonical_RANS/Neutral_Hill_2D/check_column_guess.py``
        on the Driver histories of the profile run (``rt_steady_hill2d_lusgs``, now in the same run directory) and
        the column run: at iteration 300 the column run's u and v residuals at most half the profile run's, and
        fewer iterations to the verdict. Measured: 1237 iterations (60 under ctest, machine shared s on two ranks) against 3062, residual
@@ -281,7 +285,7 @@ Current tests
        300 K, ``forcing.gravity = 0``, damping of w alone, four boxes) run to round-off (every residual below 1e-11
        and ten orders down) with 16 z-line Jacobi sweeps at a cap of 4 and with the box-local line LU-SGS sweeps
        (``inputs_steady_hill3d_neutral_lusgs``: zero ghosts, overlap 2, the diagonal ordering, two sweeps, cap 16);
-       ``Tests/check_line_match.py`` compares the two plotfiles at 1e-8 of each field's maximum
+       ``Tests/Canonical_RANS/Truly_Neutral_Hill_3D/check_line_match.py`` compares the two plotfiles at 1e-8 of each field's maximum
        (``rt_steady_hill3d_neutral_clean`` empties the run directories first, so a stale plotfile cannot be
        compared, and the checker requires exactly one plotfile per run). The conventionally neutral deck has no
        fixed point to this tolerance (it keeps entraining the inversion), hence the variant. Measured: 3495
@@ -300,7 +304,7 @@ Current tests
        ``rt_precursor_askervein_cnbl_fixed`` runs the same deck to the step in the table's header (11087), with an
        unreachable drop criterion (the deck is written at configure time; a regenerated table carries its step). ``tools/make_inflow_table.py --check`` on
        that run: the plotfile step equal to the table's, the 10 m wind within 0.01° of +x, u* within 1e-3 of
-       0.6 m/s, and ``Tests/Decks/askervein_cnbl_inflow.txt`` within 1e-3 of the planar means (u, v relative to the
+       0.6 m/s, and ``Tests/Real_Terrain/Askervein_CNBL/askervein_cnbl_inflow.txt`` within 1e-3 of the planar means (u, v relative to the
        geostrophic speed, θ in K, k relative to its maximum). **Why a fixed step.** Under the capping inversion θ
        has no fixed point: the inversion base cools by 1.35e-4 K per iteration as it rises, and the mixed layer
        warms by 1.5e-5 K. The verdict comes when the k residual leaves a limit cycle of about 600 iterations (the

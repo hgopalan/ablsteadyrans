@@ -3,7 +3,7 @@
 
     python3 tools/poisson_ms_check.py        (needs sympy; not run by CI)
 
-Tests/Unit/test_Poisson.cpp builds phi on the terrain-following domain over the
+Tests/Unit_Tests/test_Poisson.cpp builds phi on the terrain-following domain over the
 ground h(x, y) = H0 X(x) Y(y), with s = (z - h)/(z_top - h):
 
   general:              phi = f P(s) + s q Q(s),  q = (z_top - h)(h_x f_x + h_y f_y)/(1 + |grad h|^2)

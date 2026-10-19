@@ -1,4 +1,4 @@
 # Files copied from ERF, and gold outputs, stay byte-identical to their
 # source; whitespace checks do not apply to them.
 extern_erf/** -whitespace
-Tests/Gold/** -whitespace
+Tests/**/Gold/** -whitespace

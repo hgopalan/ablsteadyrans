@@ -1,0 +1,13 @@
+# Real_Terrain
+
+## Purpose
+Askervein hill run to steady on ERF's grid (`extern_erf/askervein.txt`). The folder name follows ERF's
+`Exec/CanonicalTests/Real_Terrain/Askervein`.
+
+## Cases
+| Folder | Plan ID | Description |
+|---|---|---|
+| `Askervein` | RT-1.16.3 (convergence half) | Log-law inflow, outflow and slip sides, no Coriolis, to the steady verdict. |
+| `Askervein_CNBL` | beyond the plan | A conventionally neutral boundary layer: a precursor column writes the inflow table, then the 3-D case runs on it. |
+
+Both use `Supporting_Files/expect_abort.py --success "ablsteady: steady after"` to require the verdict.

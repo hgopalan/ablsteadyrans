@@ -1,0 +1,42 @@
+# RT-1.12.2: the mass-consistent initial field over FastWindTerrain's bump
+# (regtests/phase6_solve_correction/inputs_bump at commit 648f8f1): the same
+# 1000 m x 1000 m domain, the same hill (Tests/Initialization/Bump_Speedup_Trend/terrain_bump_fwt.txt,
+# given on the command line), the same power-law inflow (8, 6) m/s at 10 m
+# with exponent 0.14, alpha_h = 1; alpha_v is given on the command line.
+# ablsteady's mesh is terrain-following (FastWindTerrain's is a Cartesian
+# immersed-boundary one): 40 x 40 cells of 25 m, 48 layers from 2.5 m
+# growing by 1.07 (physical top 883.2 m; FastWindTerrain's is 961 m). The wind enters
+# through xlo and ylo and leaves through xhi and yhi; lambda = 0 on all four.
+mesh.n_cell        = 40 40 48
+mesh.prob_lo       = 0. 0. 0.
+mesh.prob_hi       = 1000. 1000. 883.
+mesh.max_grid_size = 20
+mesh.dz0           = 2.5
+mesh.stretch_ratio = 1.07
+
+terrain.type      = xyz
+terrain.smoothing = 0
+
+bc.xlo = inflow
+bc.xhi = outflow
+bc.ylo = inflow
+bc.yhi = outflow
+bc.zlo = surface_layer
+bc.zhi = slip_wall
+bc.inflow_profile   = power_law
+bc.inflow_speed     = 10.
+bc.inflow_zref      = 10.
+bc.inflow_alpha     = 0.14
+bc.inflow_direction = 36.86989764584402
+bc.theta_profile_z  = 0.
+bc.theta_profile    = 300.
+
+init.first_guess = profile
+init.alpha_h     = 1.0
+
+solver.poisson_reltol   = 1.e-10
+solver.poisson_max_iter = 200
+solver.poisson_precond  = fft
+
+io.plot_file        = init_bump_plt
+io.write_checkpoint = 0

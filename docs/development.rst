@@ -38,8 +38,8 @@ Layout
 
    Source/          application and ablsteady_refavg: inputs, state, I/O, reductions,
                     steady criterion, reference archives
-   Tests/Unit/      GoogleTest unit tests
-   Tests/Decks/     input decks for the smoke and abort tests
+   Tests/           one folder per test case (Tests/README.md), the GoogleTest suite
+                    (Tests/Unit_Tests/) and shared check scripts (Tests/Supporting_Files/)
    docs/            this documentation (Sphinx)
    extern_erf/      files copied from ERF, listed in EXTRACTED.md
    tools/           drift check, VERSIONS check, Kestrel scripts (tools/kestrel/)

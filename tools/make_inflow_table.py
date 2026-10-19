@@ -5,7 +5,7 @@
                          [--ustar U] [--zref Z] [--out TABLE]
 
 PLOTFILE is the precursor's steady plotfile (u, v, theta, tke, z; a flat
-doubly periodic column such as Tests/Decks/inputs_precursor_askervein_cnbl),
+doubly periodic column such as Tests/Real_Terrain/Askervein_CNBL/inputs_precursor_askervein_cnbl),
 TURB_PLOTFILE its turbulence plotfile (surf_hist.dat gives u*), UG and VG the
 geostrophic wind the precursor ran with.
 

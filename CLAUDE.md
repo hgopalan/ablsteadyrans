@@ -81,7 +81,7 @@ and every finding is resolved.
 - Detail goes in the Sphinx documentation (`docs/`); `README.md` stays short and points there.
 - An input-table row in `docs/inputs.rst` for every new key, matching its range check.
 - `make -C docs html` builds without warnings (`-W`) before pushing.
-- `codespell`, no trailing whitespace, `git diff --check` clean (`extern_erf/` and `Tests/Gold/` are exempt in
+- `codespell`, no trailing whitespace, `git diff --check` clean (`extern_erf/` and `Tests/**/Gold/` are exempt in
   `.gitattributes`: they stay byte-identical to their source).
 - Never commit `docs/notes/`, plotfiles or checkpoints.
 

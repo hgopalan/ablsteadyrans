@@ -3,7 +3,7 @@ Running
 
 .. code-block:: bash
 
-   mpirun -n 2 build-rel/ablsteady Tests/Decks/inputs_smoke
+   mpirun -n 2 build-rel/ablsteady Tests/Infrastructure/Smoke_Restart/inputs_smoke
 
 The first argument is the inputs file; further ``key=value`` arguments override it. A run today:
 
@@ -19,8 +19,8 @@ For example, the 1-D neutral column of RT-1.15.1 and ERF's Neutral_ABL_Flat:
 
 .. code-block:: bash
 
-   mpirun -n 2 build-rel/ablsteady Tests/Decks/inputs_steady_column
-   mpirun -n 2 build-rel/ablsteady Tests/Decks/inputs_steady_neutral_flat
+   mpirun -n 2 build-rel/ablsteady Tests/Canonical_RANS/Neutral_Column/inputs_steady_column
+   mpirun -n 2 build-rel/ablsteady Tests/Canonical_RANS/Neutral_ABL_Flat/inputs_steady_neutral_flat
 
 A key the deck already sets cannot be overridden on the command line: a repeated key is refused.
 
