@@ -118,6 +118,53 @@ slope, the largest aspect ratio, the lowest first-cell centre, the largest top-n
 STF levels capped by :math:`\gamma_m`. A restart checks that the node heights rebuilt from the inputs match the
 checkpoint.
 
+Grid hierarchy
+--------------
+
+``mesh.hierarchy_levels`` = L > 1 adds L − 1 coarser meshes of the same domain (``Source/MeshHierarchy.H``). They
+are for grid sequencing and nonlinear multigrid (later sub-phases); in this version they are built, reported and
+written, and the solver runs on level 0.
+
+- Level l has :math:`n_x / 2^l \times n_y / 2^l` cells: x and y are coarsened by 2 per level, **z never**. Every
+  level has the z-levels of level 0, bit for bit, so the first cell and the wall treatment are the same on all of
+  them.
+- The ground of level l is level 0's ground at its nodes (node :math:`(I, J)` is level 0's node
+  :math:`(2^l I, 2^l J)`), smoothed on level l's own grid by :math:`n_l = p\,(2^l - 1)` passes of the STF stencil
+
+  .. math::
+
+     h \leftarrow h + \beta\,(h_{i+1,j} + h_{i-1,j} + h_{i,j+1} + h_{i,j-1} - 4h), \qquad \beta = \tfrac18,
+
+  with :math:`p` = ``terrain.hierarchy_passes``. Level 0 is not smoothed. A Fourier mode
+  :math:`\cos(k_x x)\cos(k_y y)` is multiplied per pass by :math:`1 - \beta(4 - 2\cos k_x\Delta x - 2\cos k_y\Delta
+  y) = \tfrac12[\cos^2(k_x\Delta x/2) + \cos^2(k_y\Delta y/2)] \in [0, 1]`: no mode changes sign, the 2-D
+  checkerboard of the level's grid is removed in one pass and a 1-D odd-even mode is halved. After :math:`n_l`
+  passes the filter is close to a Gaussian of width :math:`\sigma_l = \Delta x_0\,2^l\sqrt{p(2^l-1)/4}` (1.0, 3.5
+  and 10.6 :math:`\Delta x_0` on levels 1–3 for p = 1), so the coarse grounds keep less relief per level: on the
+  Askervein test mesh 124, 108 and 63 m on levels 0–2. The ground is sampled before it is smoothed, so fine scales
+  above the coarse Nyquist wavenumber fold onto coarse ones; on Askervein this differs from smoothing on the fine
+  grid first by 0.3 m RMS. A constant ground is unchanged.
+- Aloft, each level follows its own ground with the run's ``terrain.smoothing`` and ``terrain.gamma_m``, and its
+  metrics come from its own node heights, never from a finer level's. Each level is a full-domain mesh with its own
+  Poisson solvers.
+- Level l's boxes are level 0's coarsened by :math:`(2^l, 2^l, 1)`, on the same ranks. With L > 1, level 0's boxes
+  are laid out so that this is exact: the coarsest domain cut into boxes of at most ``max_grid_size`` /
+  :math:`2^{L-1}` cells, refined (``max_grid_size`` must be a multiple of :math:`2^{L-1}`). This layout can differ
+  from the one without a hierarchy, so a level-0 solve can differ from an L = 1 run in the last bits. A level can also be gathered onto one box (``MeshHierarchy``'s ``gather_from``;
+  no input yet), its node heights copied there with ``ParallelCopy``; the gathered level equals the distributed one
+  bit for bit.
+- A restart rebuilds the coarse levels from level 0's checkpointed node heights; nothing more is checkpointed, and
+  ``mesh.hierarchy_levels`` and ``terrain.hierarchy_passes`` may change across a restart.
+
+**Coarse cells over steep terrain.** The horizontal size doubles per level while the layers do not, so the aspect
+ratio doubles too (on the Askervein test mesh: 8.5, 15.6, 31 on levels 0, 1, 2). The report prints every level's
+quality and a summary table. When STF stops early on a coarse level at more z-levels than on level 0, it adds a
+hint: raise ``terrain.hierarchy_passes``, lower ``terrain.gamma_m`` or use fewer levels. (Capping that level 0
+shares is level 0's, and its own warning names it.) More passes reduce capping and slopes but raise the aspect
+ratio, since STF then leaves thinner layers near the ground (Askervein level 2: aspect 25, 31, 34 for p = 0, 1,
+2). A level of 1 × 1 cells is refused (the FFT preconditioner needs two directions longer than one cell). ERF's STF note, printed while each
+level is built, names its own level 0 for every hierarchy level.
+
 References
 ----------
 

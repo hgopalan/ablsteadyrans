@@ -44,6 +44,20 @@ void smooth_surface (amrex::MultiFab& h, const amrex::Geometry& geom, int passes
             });
         }
     }
+    fill_surface_ghosts(h, geom);
+}
+
+void fill_surface_ghosts (amrex::MultiFab& h, const amrex::Geometry& geom)
+{
+    const amrex::Box& domain = geom.Domain();
+    const int k0 = domain.smallEnd(2);
+    const int domlo_x = domain.smallEnd(0);
+    const int domhi_x = domain.bigEnd(0) + 1;   // nodal
+    const int domlo_y = domain.smallEnd(1);
+    const int domhi_y = domain.bigEnd(1) + 1;
+    const bool per_x = geom.isPeriodic(0);
+    const bool per_y = geom.isPeriodic(1);
+
     h.FillBoundary(geom.periodicity());
 
     // Ghost nodes outside a non-periodic face: the nearest domain node

@@ -70,6 +70,12 @@ public:
     void check_restart (const Inputs& in, const amrex::Geometry& geom,
                         amrex::MultiFab& z_phys_nd);
 
+    //! For node heights built by another Mesh (from) and copied onto this
+    //! mesh's layout, ghost nodes included (a hierarchy level gathered onto
+    //! one box with ParallelCopy): take from's z-levels and STF count, then
+    //! compute the metrics and the quality report from z_phys_nd.
+    void adopt (const Mesh& from, const amrex::Geometry& geom, amrex::MultiFab& z_phys_nd);
+
     [[nodiscard]] const amrex::Vector<amrex::Real>& zlevels () const { return m_zlevels; }
     [[nodiscard]] const MeshQuality& quality () const { return m_quality; }
 

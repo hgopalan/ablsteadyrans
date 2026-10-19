@@ -151,6 +151,15 @@ void Mesh::build_from_ground (const Inputs& in, const amrex::Geometry& geom, amr
     }
 }
 
+void Mesh::adopt (const Mesh& from, const amrex::Geometry& geom, amrex::MultiFab& z_phys_nd)
+{
+    m_zlevels = from.m_zlevels;
+    m_smoothing = from.m_smoothing;
+    m_quality.stf_capped_levels = from.m_quality.stf_capped_levels;
+    make_metrics(geom, z_phys_nd);
+    make_quality(geom, z_phys_nd);
+}
+
 void Mesh::check_restart (const Inputs& in, const amrex::Geometry& geom, amrex::MultiFab& z_phys_nd)
 {
     amrex::MultiFab rebuilt(z_phys_nd.boxArray(), z_phys_nd.DistributionMap(), 1, z_phys_nd.nGrowVect());

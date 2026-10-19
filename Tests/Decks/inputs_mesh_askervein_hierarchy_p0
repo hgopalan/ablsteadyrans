@@ -1,0 +1,20 @@
+# ERF's Askervein mesh of inputs_mesh_askervein (60 x 60 x 18 cells, 100 m
+# horizontal cells, 18 layers from 20 m growing by 1.08) with STF and a
+# three-level x/y grid hierarchy: 60 x 60, 30 x 30 and 15 x 15 cells, the
+# same 18 layers on each, with unsmoothed coarse grounds (terrain.hierarchy_passes = 0).
+# RT-2.3.2: levels 1 and 2 cap the STF smoothing at more z-levels than level 0 (9 and 10 against 8), so the report gives the coarse-level hint.
+# terrain.file is given on the command line (extern_erf/askervein.txt).
+mesh.n_cell           = 60 60 18
+mesh.prob_lo          = -3000. -3000. 0.
+mesh.prob_hi          =  3000.  3000. 440.
+mesh.max_grid_size    = 32
+mesh.dz0              = 20.
+mesh.stretch_ratio    = 1.08
+mesh.hierarchy_levels = 3
+
+terrain.type             = erf_grid
+terrain.smoothing        = 1
+terrain.hierarchy_passes = 0
+
+io.plot_file        = askervein_hier0_plt
+io.write_checkpoint = 0

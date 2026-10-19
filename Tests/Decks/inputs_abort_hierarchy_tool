@@ -1,0 +1,8 @@
+# Must abort: the test-only tools (here wall_distance) work on level 0 alone,
+# so a grid hierarchy would be ignored; they refuse mesh.hierarchy_levels > 1.
+mesh.n_cell           = 32 4 16
+mesh.prob_hi          = 3200. 400. 1000.
+mesh.is_periodic      = 1 1 0
+mesh.hierarchy_levels = 2
+
+io.plot_file = abort_tool_plt
