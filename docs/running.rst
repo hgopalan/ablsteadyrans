@@ -8,9 +8,9 @@ Running
 The first argument is the inputs file; further ``key=value`` arguments override it. A run today:
 
 #. reads and checks the inputs (:doc:`inputs`), and stops with every error listed if any check fails;
-#. builds the mesh and the solution fields (the first guess of :doc:`initializer` with ``init.first_guess =
+#. builds the mesh and the solution fields (the first guess of :doc:`initial_conditions` with ``init.first_guess =
    profile``), or reads them from ``io.restart``;
-#. with ``steady.stage = simplec``, runs the SIMPLEC stage (:doc:`simplec`) under the steady driver (:doc:`driver`) to
+#. with ``steady.stage = simplec``, runs the SIMPLEC stage under the steady driver (:doc:`solver`) to
    its verdict or ``steady.max_iterations``, printing one line per iteration (the first ten, then every tenth);
 #. writes a plotfile, the turbulence diagnostics plotfile if ``io.turb_plot_file`` is set, and a checkpoint
    (:doc:`output`).

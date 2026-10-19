@@ -2,7 +2,7 @@
 # sweeps (steady.sweep = lusgs, two symmetric sweeps, CFL cap 16): the same
 # steady state as inputs_steady_hill2d (16 z-line Jacobi sweeps at a cap of
 # 4) in fewer iterations and less time; ERF's check_hill.py --physics on the
-# turbulence plotfile as for the Jacobi deck. See docs/simplec.rst.
+# turbulence plotfile as for the Jacobi deck. See docs/solver.rst and docs/results.rst.
 mesh.n_cell        = 128 1 64
 mesh.prob_lo       = -2560. 0. 0.
 mesh.prob_hi       =  2560. 40. 1000.
@@ -46,7 +46,7 @@ steady.cfl0                    = 1.
 steady.cfl_max                 = 16.
 steady.zline_sweeps            = 2
 steady.sweep                   = lusgs
-simplec.rotation_relax         = 1.   # with the planar-mean split 1 converges in half the iterations of 0.3 (docs/simplec.rst)
+simplec.rotation_relax         = 1.   # with the planar-mean split 1 converges in half the iterations of 0.3 (docs/solver.rst)
 steady.residual_ref_iterations = 100
 steady.residual_drop_orders    = 2
 steady.max_iterations          = 20000
