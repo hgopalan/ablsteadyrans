@@ -288,8 +288,11 @@ setting these keys stops the run, like any other key it does not read. Each row 
    * - ``solver.poisson_reltol``
      - ``1e-10`` (``1e-5`` single)
      - ≥ 10 machine epsilon and < 1. Converged when the residual is below this fraction of the initial one: the
-       2-norm under GMRES (``gmres_fft``, ``gmres_mlmg``), the maximum norm under ``mlmg``. In single precision
-       rounding sets a floor near :math:`\varepsilon N_z^2/2` (:doc:`solver`).
+       2-norm under GMRES (``gmres_fft``, ``gmres_mlmg``), the maximum norm under ``mlmg``. Back end B measures
+       the :math:`J`-weighted residual (the cell-volume norm), back end A the plain one, so the same value is not
+       the same divergence where :math:`J` varies (:doc:`solver`). In single precision rounding sets a floor near
+       :math:`\varepsilon N_z^2/2`; pure ``mlmg`` (maximum norm) may not reach the single-precision default on
+       large meshes, ``gmres_mlmg`` does.
    * - ``solver.poisson_abstol``
      - ``0``
      - Finite, ≥ 0. Or when the residual (in the same norm) is below this value.
@@ -301,12 +304,16 @@ setting these keys stops the run, like any other key it does not read. Each row 
      - ≥ 1. GMRES restart length (ERF's value); ``gmres_fft`` and ``gmres_mlmg`` only (an error with ``mlmg``).
    * - ``solver.poisson_precond``
      - ``fft``
-     - ``fft`` (ERF's FFT preconditioner on the flat stretched grid) or ``none``; ``gmres_fft`` only (an error with
-       back end B).
+     - ``fft`` (ERF's FFT preconditioner on the flat stretched grid) or ``none``; given only with
+       ``solver.poisson_backend = gmres_fft`` (an error with back end B, which includes the default). The
+       initializer's ``gmres_fft`` fallback below uses the default ``fft``; to change it, set
+       ``solver.poisson_backend = gmres_fft``, which moves the SIMPLEC stage to back end A too.
    * - ``solver.poisson_backend``
-     - ``gmres_fft``
-     - ``gmres_fft`` (back end A: ERF's operator, GMRES, FFT preconditioner), ``mlmg`` or ``gmres_mlmg`` (back end
-       B: AMReX's ``MLTerrainPoisson`` with multigrid, alone or under GMRES).
+     - ``gmres_mlmg``
+     - ``gmres_mlmg`` (back end B under GMRES), ``mlmg`` (back end B: AMReX's ``MLTerrainPoisson`` with multigrid)
+       or ``gmres_fft`` (back end A: ERF's operator, GMRES, FFT preconditioner). Back end B has no split z-face
+       coefficient, so with ``init.alpha_v`` ≠ ``init.alpha_h`` the initializer's projection uses ``gmres_fft``
+       whatever this says, and logs it; the SIMPLEC stage keeps this value (:doc:`solver`).
    * - ``solver.poisson_verbose``
      - ``0``
      - ≥ 0. 1 prints each solve's iterations, residuals and (singular problems) removed mean, and AMReX GMRES's solve
@@ -619,7 +626,8 @@ the range check in ``Source/Initializer.cpp``; the keys other than ``first_guess
    * - ``init.alpha_v``
      - ``1``
      - Finite, > 0. Vertical transmissivity :math:`\alpha_v`; only :math:`\alpha_v/\alpha_h` matters for the velocity.
-       Ratios below 0.1 need more than the default ``solver.poisson_max_iter`` (:doc:`initial_conditions`).
+       Ratios below 0.1 need more than the default ``solver.poisson_max_iter`` (:doc:`initial_conditions`). With
+       ``alpha_v`` ≠ ``alpha_h`` the projection runs on ``gmres_fft`` (``solver.poisson_backend``).
    * - ``init.k_decay_height``
      - ``0``
      - Finite, ≥ 0 m. :math:`z_i` of the decay of :math:`k` above :math:`z_i`; 0 for no decay.

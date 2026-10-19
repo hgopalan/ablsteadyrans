@@ -16,5 +16,6 @@ terrain.smoothing = 0
 solver.poisson_reltol   = 1.e-10
 solver.poisson_max_iter = 200
 solver.poisson_precond  = fft
+solver.poisson_backend  = gmres_fft   # back end A: this test characterises it (the default is gmres_mlmg)
 
 io.plot_file = poisson_askervein_plt

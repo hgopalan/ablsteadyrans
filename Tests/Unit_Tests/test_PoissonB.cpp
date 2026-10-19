@@ -150,7 +150,7 @@ TEST (PoissonB, UnsupportedCombinationsAreRefused)
     split.z_cross = &bz;
     ablsteady::PoissonOptions mg;
     mg.backend = "mlmg";
-    ablsteady::PoissonSolver sb(c.mesh, c.geom, c.z, mg), sa(c.mesh, c.geom, c.z, {});
+    ablsteady::PoissonSolver sb(c.mesh, c.geom, c.z, mg), sa(c.mesh, c.geom, c.z, back_end_a());
     const auto bc = make_bc(PoissonFace::neumann, PoissonFace::periodic, PoissonFace::dirichlet);
     const auto bcd = make_bc(PoissonFace::neumann, PoissonFace::periodic, PoissonFace::dirichlet, PoissonFace::dirichlet);
     EXPECT_NE(thrown([&] { sb.solve(rhs, phi, split, bc); }).find("FaceCoeffs::z_cross needs solver.poisson_backend = gmres_fft"),
@@ -167,6 +167,13 @@ TEST (PoissonB, UnsupportedCombinationsAreRefused)
     unused.given = {"poisson_precond"};
     EXPECT_NE(ablsteady::check_poisson_options(unused).front().find("solver.poisson_precond has no effect"),
               std::string::npos);
+    // solver.poisson_precond with the default back end (the key not given):
+    // the message says how to fix the deck; given explicitly, it does not.
+    ablsteady::PoissonOptions dflt;
+    dflt.given = {"poisson_precond"};
+    EXPECT_NE(ablsteady::check_poisson_options(dflt).front().find("gmres_mlmg is the default"), std::string::npos);
+    dflt.given = {"poisson_precond", "poisson_backend"};
+    EXPECT_EQ(ablsteady::check_poisson_options(dflt).front().find("gmres_mlmg is the default"), std::string::npos);
     unused.given = {"poisson_restart"};
     EXPECT_NE(ablsteady::check_poisson_options(unused).front().find("solver.poisson_restart has no effect"),
               std::string::npos);

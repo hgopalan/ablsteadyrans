@@ -55,7 +55,7 @@ init.alpha_v     = 0.5
 
 solver.poisson_reltol   = 1.e-10
 solver.poisson_max_iter = 200
-solver.poisson_precond  = fft
+# solver.poisson_precond: not set; init.alpha_v != init.alpha_h, so the projection uses gmres_fft with its default FFT preconditioner (the SIMPLEC stage keeps the default gmres_mlmg).
 
 forcing.coriolis        = 1
 forcing.coriolis_3d     = 0

@@ -257,9 +257,18 @@ struct SolveOut
 
 // Solve the manufactured problem; beta (if given) is a scalar field on all
 // faces, or (aniso) beta_h on x/y-faces and beta_v on z-faces.
+//! Back end A's options (gmres_fft): the tests of ERF's operator, its FFT
+//! preconditioner and its split coefficient (the default is gmres_mlmg).
+inline ablsteady::PoissonOptions back_end_a ()
+{
+    ablsteady::PoissonOptions o;
+    o.backend = "gmres_fft";
+    return o;
+}
+
 inline SolveOut solve_ms (PCase& c, Manufactured ms, const ablsteady::PoissonBC& bc, const Fn* beta = nullptr,
                    double beta_h = 1, double beta_v = 1, bool aniso = false,
-                   ablsteady::PoissonOptions opt = {}, double precond_ratio = 1, bool z_cross = true)
+                   ablsteady::PoissonOptions opt = back_end_a(), double precond_ratio = 1, bool z_cross = true)
 {
     ms.ztop = c.ztop;
     const Fn phi = [ms] (double x, double y, double z) { return ms.phi(x, y, z); };

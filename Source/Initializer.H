@@ -95,6 +95,10 @@ PoissonBC initializer_poisson_bc (const BoundaryInputs& in, const amrex::Geometr
 struct InitResult
 {
     PoissonResult poisson;
+    //! The back end the projection used: solver.poisson_backend, or gmres_fft
+    //! when the split coefficient (alpha_v != alpha_h) needs it.
+    std::string poisson_backend;
+    bool backend_fallback{false};   //!< true when gmres_fft replaced solver.poisson_backend
     amrex::Real divergence_before{0};   //!< 2-norms of velocity_divergence (1/s)
     amrex::Real divergence_after{0};
     amrex::Real obrien_top_residual{0}; //!< max |Omega_top| the O'Brien pass removed (m/s)
@@ -105,6 +109,10 @@ struct InitResult
 //! O'Brien top residual (0 without O'Brien). Nothing with first_guess = none.
 //! column, when given (first_guess = column), replaces the inflow profile for
 //! u, v and k (theta stays the sounding at the absolute height).
+//! The Poisson controls of the projection: popt, with backend gmres_fft when
+//! alpha_v != alpha_h (back end B has no split z-face coefficient).
+PoissonOptions initializer_poisson_options (const InitOptions& opt, const PoissonOptions& popt);
+
 amrex::Real first_guess_state (const InitOptions& opt, const BoundaryInputs& bc, const Mesh& mesh,
                                const amrex::Geometry& geom, State& q, const CoriolisOptions& coriolis = CoriolisOptions{},
                                const InflowProfile* column = nullptr);

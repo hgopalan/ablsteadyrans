@@ -281,6 +281,13 @@ amrex::Real first_guess_state (const InitOptions& opt, const BoundaryInputs& bc,
     return residual;
 }
 
+PoissonOptions initializer_poisson_options (const InitOptions& opt, const PoissonOptions& popt)
+{
+    PoissonOptions p = popt;
+    if (opt.alpha_v != opt.alpha_h && p.backend != "gmres_fft") { p.backend = "gmres_fft"; }
+    return p;
+}
+
 InitResult initialize_state (const InitOptions& opt, const BoundaryInputs& bc, const PoissonOptions& popt, const Mesh& mesh,
                              const amrex::Geometry& geom, State& q, amrex::MultiFab* lambda, const CoriolisOptions& coriolis,
                              const InflowProfile* column)
@@ -308,7 +315,10 @@ InitResult initialize_state (const InitOptions& opt, const BoundaryInputs& bc, c
     if (lam->empty()) { lam->define(q.p.boxArray(), q.p.DistributionMap(), 1, 1); }
     lam->setVal(0.0);
     const PoissonBC pbc = initializer_poisson_bc(bc, geom);
-    PoissonSolver solver(mesh, geom, z, popt);
+    const PoissonOptions ip = initializer_poisson_options(opt, popt);
+    res.poisson_backend = ip.backend;
+    res.backend_fallback = (ip.backend != popt.backend);
+    PoissonSolver solver(mesh, geom, z, ip);
     amrex::Array<amrex::MultiFab, AMREX_SPACEDIM> F;
     {
         const amrex::MultiFab* areas[3] = {&mesh.ax, &mesh.ay, &mesh.az};
@@ -333,7 +343,9 @@ InitResult initialize_state (const InitOptions& opt, const BoundaryInputs& bc, c
         coeffs.x = &bx;
         coeffs.y = &by;
         coeffs.z = &bz;
-        coeffs.z_cross = &bzc;
+        // With alpha_v = alpha_h the cross part takes the same coefficient as
+        // the z part, so the split is not needed (and back end B can solve it).
+        if (opt.alpha_v != opt.alpha_h) { coeffs.z_cross = &bzc; }
         coeffs.precond_ratio = av2 / ah2;
     }
     res.poisson = solver.solve(rhs, *lam, coeffs, pbc, &F);

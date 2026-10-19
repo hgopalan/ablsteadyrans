@@ -8,7 +8,7 @@
 # and has no fixed point to that tolerance (docs/results.rst). Coarser than
 # the original (32 x 32 x 16 cells over the same 5120 m x 5120 m x 800 m) to
 # keep the run short; 4 boxes of 16 x 16 columns. Steady to round-off: every
-# residual 1e-11 and ten orders below its reference. The test runs it with
+# residual 1e-11 and eight orders below its reference. The test runs it with
 # the z-line Jacobi sweeps (this deck) and with the box-local line LU-SGS
 # sweeps (steady.sweep = lusgs, steady.line_ghosts = zero, overlap 2, the
 # diagonal ordering) and compares the two states to 1e-8 (Tests/
@@ -63,7 +63,11 @@ steady.line_order              = diagonal
 simplec.rotation_relax         = 1.
 steady.residual_ref_iterations = 100
 steady.residual_tol            = 1.e-11
-steady.residual_drop_orders    = 10
+# Eight orders: theta (uniform, no gravity) and p carry only the divergence, so
+# their early peak is set by the correction's leftover divergence; ten orders
+# below it lies under the rounding floor (1.6e-14 for theta) with gmres_mlmg,
+# which leaves less. steady.residual_tol = 1e-11 binds for u, v, w, k.
+steady.residual_drop_orders    = 8
 steady.monitor_rel_tol         = 1.e-10
 steady.max_iterations          = 20000
 

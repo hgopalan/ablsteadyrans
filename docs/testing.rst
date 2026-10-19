@@ -19,6 +19,40 @@ These follow the development plan.
 Every test is first shown to fail on the bug it guards against, or on a one-line mutant of the code it covers.
 Tests the plan does not list are marked *beyond the plan*.
 
+The one-line mutants of the ``gmres_mlmg`` default (``Source/Poisson.H``, ``Source/Initializer.cpp``,
+``Source/App.cpp``), each run against ``unit_np2``, ``rt_steady_askervein`` and (M1) ``rt_init_askervein``; every one
+is killed:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 6 50 44
+
+   * - Mutant
+     - Change
+     - Failing tests
+   * - P1
+     - No fallback: the projection with ``alpha_v != alpha_h`` keeps ``gmres_mlmg``
+     - ``Initializer.ProjectionBackEndFollowsTheAlphaRatio`` and others in ``unit_np2``, ``rt_steady_askervein``,
+       ``rt_init_askervein``
+   * - P2
+     - The old default ``gmres_fft``
+     - ``unit_np2``, ``rt_steady_askervein`` (its log pattern ``pressure gmres_mlmg``)
+   * - P3
+     - The split coefficient set for every :math:`\alpha \ne 1`, also :math:`\alpha_v = \alpha_h`
+     - ``Initializer.EqualAlphasAreThePlainProjection`` (``unit_np2``)
+   * - P4
+     - The fallback not reported
+     - ``unit_np2``, ``rt_steady_askervein`` (its log line)
+   * - P5
+     - The stage's log line without the back end
+     - ``rt_steady_askervein``
+   * - P6
+     - The fallback to ``mlmg`` instead of ``gmres_fft``
+     - ``unit_np2``, ``rt_steady_askervein``
+   * - P7
+     - The ``solver.poisson_precond`` refusal without its hint about the default
+     - ``PoissonB.UnsupportedCombinationsAreRefused`` (``unit_np2``)
+
 The one-line mutants of sub-phase 2.2 (``Source/LineSweeps.cpp`` and ``Source/Driver.cpp``), each run against
 ``LineSweeps.*``, ``Driver.*`` and ``Predictor.Lusgs*`` on two ranks by ``tools/line_sweep_mutants.py``; every one
 is killed:
@@ -282,8 +316,9 @@ Current tests
        (minutes); double only.
    * - ``rt_steady_hill3d_neutral_zjacobi``, ``rt_steady_hill3d_neutral_lusgs``, ``rt_steady_hill3d_neutral_matches``
      - RT-2.2.1: a truly neutral Hill_3D (``inputs_steady_hill3d_neutral``: 32 × 32 × 16 over the same domain, θ =
-       300 K, ``forcing.gravity = 0``, damping of w alone, four boxes) run to round-off (every residual below 1e-11
-       and ten orders down) with 16 z-line Jacobi sweeps at a cap of 4 and with the box-local line LU-SGS sweeps
+       300 K, ``forcing.gravity = 0``, damping of w alone, four boxes) run to near round-off (every residual below 1e-11
+       and eight orders down; ten orders put the θ and p residuals, which carry only the divergence, under the
+       rounding floor once ``gmres_mlmg`` became the default) with 16 z-line Jacobi sweeps at a cap of 4 and with the box-local line LU-SGS sweeps
        (``inputs_steady_hill3d_neutral_lusgs``: zero ghosts, overlap 2, the diagonal ordering, two sweeps, cap 16);
        ``Tests/Canonical_RANS/Truly_Neutral_Hill_3D/check_line_match.py`` compares the two plotfiles at 1e-8 of each field's maximum
        (``rt_steady_hill3d_neutral_clean`` empties the run directories first, so a stale plotfile cannot be
@@ -292,11 +327,18 @@ Current tests
        iterations (70 s on four ranks) against 1792 (32 s); u, v, w, p and k agree to 9e-10 absolute (at most
        3e-8 of the tolerance scale). θ has a free constant (no θ condition, no gravity) that drifts by 1e-4 K at
        round-off, so θ is compared after subtracting each run's mean: 3e-11 K. Label ``nightly``; double only.
+   * - ``rt_poisson_default_gmres_fft``, ``rt_poisson_default_matches``
+     - The default ``solver.poisson_backend = gmres_mlmg`` against the previous default: the line LU-SGS deck of
+       RT-2.2.1 run again with ``gmres_fft`` (``run/rt_steady_hill3d_neutral/lusgs_fft``) to round-off;
+       ``check_line_match.py`` (the case folder) compares it with ``rt_steady_hill3d_neutral_lusgs`` (now ``gmres_mlmg``, the log
+       pattern ``pressure gmres_mlmg`` checked) at 1e-8 of each field's maximum. Measured: both stop at 1789 iterations; u, v, w, p and k agree to 2.2e-13 absolute or better, θ − mean to 2.4e-11 K. Label
+       ``nightly``; double only.
    * - ``rt_steady_askervein``
      - RT-1.16.3, the convergence half: Askervein on the ERF grid of RT-1.12.1 (``inputs_steady_askervein``: 30 × 30
        × 18, the log-law inflow, outflow, slip sides, no Coriolis, four sweeps, cap 2) to the steady verdict.
-       Measured: 156 iterations (2 s on two ranks). The 5 % comparison with ERF's URANS on lines A and AA is not in
-       this version (Kestrel). Labels ``regression;smoke``; double only.
+       Measured: 156 iterations, unchanged by the ``gmres_mlmg`` default. ``init.alpha_v = 0.5``, so the log
+       must show the projection on ``gmres_fft`` and the stage on ``gmres_mlmg``. The 5 % comparison with ERF's URANS
+       on lines A and AA is not in this version (Kestrel). Labels ``regression;smoke``; double only.
    * - ``rt_precursor_askervein_cnbl``, ``rt_precursor_askervein_cnbl_fixed``, ``rt_precursor_askervein_cnbl_table``
      - Beyond the plan: the precursor column of the conventionally neutral Askervein case
        (``inputs_precursor_askervein_cnbl``: 4 × 4 × 26 on Askervein's 20 m × 1.08 levels, z0 = 0.03 m, the flat

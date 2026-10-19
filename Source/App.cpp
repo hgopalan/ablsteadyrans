@@ -196,14 +196,19 @@ void run ()
             char line[256];
             if (iopt.projection) {
                 std::snprintf(line, sizeof(line),
-                              "ablsteady: initializer: %d Poisson iterations (reltol %.3e), divergence %.9e before, %.9e after\n",
-                              r.poisson.iterations, static_cast<double>(popt.reltol), static_cast<double>(r.divergence_before),
-                              static_cast<double>(r.divergence_after));
+                              "ablsteady: initializer: %d Poisson iterations (%s, reltol %.3e), divergence %.9e before, %.9e after\n",
+                              r.poisson.iterations, r.poisson_backend.c_str(), static_cast<double>(popt.reltol),
+                              static_cast<double>(r.divergence_before), static_cast<double>(r.divergence_after));
             } else {
                 std::snprintf(line, sizeof(line), "ablsteady: initializer: no projection (init.projection = 0), divergence %.9e\n",
                               static_cast<double>(r.divergence_before));
             }
             amrex::Print() << line;
+            if (r.backend_fallback) {
+                amrex::Print() << "ablsteady: initializer: init.alpha_v / init.alpha_h = " << iopt.alpha_v / iopt.alpha_h
+                               << " needs the split z-face coefficient, which only solver.poisson_backend = gmres_fft has;"
+                               << " the projection used gmres_fft, the SIMPLEC stage keeps " << popt.backend << "\n";
+            }
             if (iopt.obrien) {
                 std::snprintf(line, sizeof(line), "ablsteady: initializer: O'Brien removed a top residual of %.6e m/s\n",
                               static_cast<double>(r.obrien_top_residual));
@@ -253,7 +258,7 @@ void run ()
         amrex::MultiFab dist;
         if (copt.wall_distance == WallDistanceKind::tucker) {
             dist.define(ba, dm, 1, 1);
-            const PoissonResult wd = tucker_wall_distance(mesh, geom, state.z_phys_nd, dist);
+            const PoissonResult wd = tucker_wall_distance(mesh, geom, state.z_phys_nd, dist, popt);
             amrex::Print() << "ablsteady: Tucker wall distance: " << wd.iterations << " Poisson iterations\n";
             extend_by_zero_gradient(dist, geom);
         } else {
@@ -290,7 +295,7 @@ void run ()
                            << line_order_name(sopt.line_order) << " order"
                            << (sopt.line_alternate != 0 ? ", alternating" : "") << ")";
         }
-        amrex::Print() << ", pressure reltol "
+        amrex::Print() << ", pressure " << popt.backend << " reltol "
                        << simplec.pressure_reltol << ", alpha_p " << simplec.alpha_p << ", cfl0 " << sopt.cfl0
                        << ", cfl_max " << sopt.cfl_max << "\n";
         SteadyVerdict v = driver.verdict();

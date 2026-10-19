@@ -55,11 +55,14 @@ struct PoissonOptions
     //! back end A only.
     std::string precond{"fft"};
     int verbose{0};
-    //! "gmres_fft" (back end A: ERF's TerrainPoisson, GMRES, FFT
-    //! preconditioner), "mlmg" (back end B: AMReX's MLTerrainPoisson with
-    //! geometric multigrid) or "gmres_mlmg" (back end B under GMRES, one
-    //! multigrid cycle as the preconditioner).
-    std::string backend{"gmres_fft"};
+    //! "gmres_mlmg" (the default: back end B under GMRES, one multigrid
+    //! cycle as the preconditioner), "mlmg" (back end B: AMReX's
+    //! MLTerrainPoisson with geometric multigrid) or "gmres_fft" (back end A:
+    //! ERF's TerrainPoisson, GMRES, FFT preconditioner). Back end B has no
+    //! split z-face coefficient, so the initializer's projection with
+    //! alpha_v != alpha_h runs on back end A whatever this says
+    //! (initializer_poisson_options).
+    std::string backend{"gmres_mlmg"};
     //! The solver.poisson_* keys given in the inputs (read_poisson_options
     //! fills it): a key the chosen back end does not use is an error.
     std::vector<std::string> given;
@@ -113,8 +116,10 @@ struct PoissonResult
     amrex::Real removed_mean{0};
 };
 
-//! The Poisson layer, back end A (sub-phase 1.10): ERF's TerrainPoisson
-//! operator (extern_erf/) solved by amrex::GMRES with ERF's FFT preconditioner.
+//! The Poisson layer: back end A (sub-phase 1.10), ERF's TerrainPoisson
+//! operator (extern_erf/) solved by amrex::GMRES with ERF's FFT preconditioner,
+//! or back end B (sub-phase 1.11, the default gmres_mlmg), AMReX's
+//! MLTerrainPoisson with multigrid; PoissonOptions::backend chooses.
 //!
 //! Solves  A phi = rhs  with
 //!   A phi = (1/J) [ d_xi (a_x beta_x f_x) + d_eta (a_y beta_y f_y) + d_zeta (a_z g_z) ],
