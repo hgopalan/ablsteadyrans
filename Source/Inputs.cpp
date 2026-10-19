@@ -283,9 +283,11 @@ std::vector<std::string> unknown_inputs (const std::vector<InputEntry>& entries,
         const std::string ns = e.name.substr(0, dot);
         if (contains(owned, ns)) {
             if (!e.used) {
+                const bool newton = e.name.rfind("steady.newton_", 0) == 0;
                 msg.emplace_back("unknown input '" + e.name + "': not an input of namespace '" + ns + "' in this version"
                                  + ((ns == "bc" || ns == "solver")
-                                    ? " (read with init.first_guess = profile or steady.stage = simplec)" : ""));
+                                    ? " (read with init.first_guess = profile or steady.stage = simplec)" : "")
+                                 + (newton ? " (the Newton-Krylov inputs are read once the run can switch to Newton, sub-phase 3.5)" : ""));
             }
         } else if (!contains(amrex_namespaces(), ns)) {
             msg.emplace_back("unknown input '" + e.name + "': unknown namespace '" + ns + "'");

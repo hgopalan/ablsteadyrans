@@ -37,6 +37,7 @@ add_executable(unit_tests
     Unit/test_Driver.cpp
     Unit/test_Predictor.cpp
     Unit/test_Simplec.cpp
+    Unit/test_Newton.cpp
     Unit/test_Terrain.cpp
 )
 target_include_directories(unit_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Unit)

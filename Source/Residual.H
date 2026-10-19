@@ -49,6 +49,9 @@
 #include <AMReX_Geometry.H>
 #include <AMReX_MultiFab.H>
 
+#include <cmath>
+#include <limits>
+
 namespace ablsteady {
 
 class BoundaryConditions;
@@ -63,13 +66,19 @@ struct ResidualFields
     [[nodiscard]] amrex::Vector<const amrex::MultiFab*> fields () const;
 };
 
-//! Typical magnitudes of the fields, for jvp's step (> 0, finite).
+//! Typical magnitudes of the fields, for jvp's step (> 0, finite), and the
+//! step's relative size.
 struct JvpScales
 {
     amrex::Real velocity{10};      //!< m/s
     amrex::Real theta{10};         //!< K, for theta - theta_ref
     amrex::Real tke{amrex::Real(0.1)};  //!< m^2/s^2
     amrex::Real pressure{100};     //!< m^2/s^2 (velocity squared)
+    //! The relative step h of jvp's eps (> 0, finite): sqrt(machine epsilon)
+    //! of amrex::Real by default, the step that balances the truncation and
+    //! rounding errors of a forward difference. The Newton core sets it
+    //! from steady.newton_fd_eps_scale (Newton.H).
+    amrex::Real step{std::sqrt(std::numeric_limits<amrex::Real>::epsilon())};
 };
 
 //! What the residual needs besides the state. Diffusivities are cell-centred
@@ -157,11 +166,11 @@ void line_jacobian (const amrex::Array<const amrex::MultiFab*, AMREX_SPACEDIM>& 
                     amrex::MultiFab& tri, const SurfaceState* surface = nullptr, const ClosureFields* fields = nullptr);
 
 //! Jv = (R(q + eps v) - R(q)) / eps, with
-//!   eps = sqrt(machine epsilon) (1 + mean |q~|) / rms(v~)
+//!   eps = h (1 + mean |q~|) / rms(v~),   h = in.jvp_scales.step (sqrt(machine epsilon) by default)
 //! over every owned point of every field (shared faces counted once), on
 //! scaled variables q~ = q / s, v~ = v / s with s from in.jvp_scales and theta
 //! taken as theta - theta_ref. A perturbation along a typical v then moves
-//! each value by about sqrt(machine epsilon) times its own scale, whatever
+//! each value by about h times its own scale, whatever
 //! the field and the mesh size (a plain |q| would be dominated by theta's
 //! 300 K and grow with the number of cells). Jv = 0 for v = 0. v is a state on
 //! q's layout with its ghost cells filled; its z_phys_nd is not used. R0, when
