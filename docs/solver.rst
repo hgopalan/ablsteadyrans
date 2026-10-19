@@ -120,9 +120,38 @@ wind whose :math:`u` and :math:`v` have the same sign in the ordering, a pass re
 coupling exactly; the pure-advection defect-correction factor stays below one at every CFL, approaching one for the
 odd–even mode as the CFL grows. With opposite signs, each pass leaves one upwind neighbour lagged; one sweep is
 stable only to a CFL of about 2.5 and two to about 33. Couplings across box faces use the previous pass, so the
-iteration path depends on ``mesh.max_grid_size`` and boxes shorter than the CFL limit the solve. The sweeps are
-sequential per box on a GPU until sub-phase 2.2 adds the GPU diagonal ordering. The hill results are in
-:doc:`results`; ``tools/sweeps_cfl_scan.py --thresholds`` prints the scalar stability factors.
+iteration path depends on ``mesh.max_grid_size`` and boxes shorter than the CFL limit the solve. The hill results
+are in :doc:`results`; ``tools/sweeps_cfl_scan.py --thresholds`` prints the scalar stability factors.
+
+**Box-local sweeps, overlap and face ownership.** Sub-phase 2.2 adds two ways to treat the neighbours across a box
+face (``Source/LineSweeps.H``):
+
+- ``steady.line_ghosts = lagged`` (the default; sub-phase 2.1, bit for bit): ``delta.FillBoundary`` before every
+  pass, so the neighbours across a box face or a periodic seam take the previous pass's values. Both copies of a
+  shared face are solved; ``OverrideSync`` keeps the lowest box index's copy.
+- ``steady.line_ghosts = zero``: no communication inside the sweeps. Each box sweeps the region it owns, grown by
+  :math:`n_o` = ``steady.line_overlap`` columns in x and y, with :math:`\delta = 0` outside it, and keeps only the
+  owned points. The system (:math:`A`, :math:`a_P`, the right-hand side) on the grown region comes from one
+  ``FillBoundary`` of copies with :math:`n_o` ghost cells. Along a periodic axis one cell wide (y in a 2-D deck)
+  both neighbours are the column itself; their coefficients move to the diagonal, which solves that coupling
+  exactly.
+
+Each step is a restricted additive Schwarz step with the box-local LU-SGS as the subdomain solve. The outer
+defect correction recomputes the residual, so the converged state does not depend on :math:`n_o` or the box layout;
+the iterates do. Inside a box the error of a seam decays over about :math:`c` columns downstream (:math:`c` the
+CFL); the overlap moves the zero boundary :math:`n_o` columns away from the owned points.
+
+On the C grid (zero ghosts) each box owns the faces of its valid box in its nodal direction except its high face,
+which is the next box's low face. The domain's high face belongs to the last box; on a periodic axis the domain's
+low face is that face's image, so the seam also belongs to the last box. Each face-centred unknown is swept once per
+pass. The non-owned copies take the owner's value through ``OverrideSync`` with this owner mask (AMReX's default
+mask, the lowest box index, would keep a copy that was not swept). Cells and z faces belong to their box.
+
+**GPU diagonal ordering.** ``steady.line_order = diagonal`` visits the planes :math:`(i - i_0) + (j - j_0) = s` in
+increasing :math:`s` (forward) or decreasing (backward), one column per thread inside a plane. A column's lower x/y
+neighbours lie on plane :math:`s - 1` and its upper neighbours on :math:`s + 1`, so each column sees the same
+values as in the lexicographic order: the result is the sequential sweep's, bit for bit (UT-2.2.4). The GPU
+timings and the per-machine defaults come in a later sub-phase.
 
 **Pressure correction.** With the SIMPLEC denominator :math:`d = a_P - \sum a_{nb}`,
 

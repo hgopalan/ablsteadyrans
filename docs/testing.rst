@@ -19,6 +19,47 @@ These follow the development plan.
 Every test is first shown to fail on the bug it guards against, or on a one-line mutant of the code it covers.
 Tests the plan does not list are marked *beyond the plan*.
 
+The one-line mutants of sub-phase 2.2 (``Source/LineSweeps.cpp`` and ``Source/Driver.cpp``), each run against
+``LineSweeps.*``, ``Driver.*``, ``Predictor.*`` and ``Simplec.*`` on one and two ranks; every one is killed:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 6 44 50
+
+   * - Mutant
+     - Change
+     - Failing tests
+   * - M1
+     - The overlap ignored (the swept region not grown)
+     - UT-2.2.1, UT-2.2.2
+   * - M2
+     - A face updated twice (a box keeps its high face)
+     - UT-2.2.1, UT-2.2.2, UT-2.2.3
+   * - M3
+     - The periodic seam swept by both end boxes
+     - UT-2.2.1, UT-2.2.2, UT-2.2.3
+   * - M4
+     - A wavefront skipping a plane (the last of the forward pass)
+     - UT-2.2.4
+   * - M5
+     - The ghost δ not zeroed (``FillBoundary`` of the iterate before each pass)
+     - UT-2.2.1
+   * - M6
+     - The non-owned face copies keep AMReX's default owner
+     - UT-2.2.1, UT-2.2.2, UT-2.2.3
+   * - M7
+     - ``steady.line_overlap`` not read
+     - UT-2.2.5 (``Driver``)
+   * - M8
+     - ``steady.line_overlap`` above 8 accepted
+     - UT-2.2.5 (``Driver``)
+   * - M9
+     - An overlap wider than the narrowest box accepted
+     - UT-2.2.5 (``Driver`` and ``LineSweeps``)
+   * - M10
+     - A one-cell periodic axis not folded into the diagonal
+     - UT-2.2.1
+
 The tests run with the GPU CI flags (see :doc:`running`). Each test runs in its own directory under
 ``<build>/Tests/run/``.
 
@@ -170,6 +211,16 @@ Current tests
        from 550 m, 16 sweeps, cap 4) to the verdict with ``check_hill3d.py --physics`` (the 3-D checks, speed-up
        against 1.6 h/L). Measured: 2092 iterations (148 s on four ranks), every check passing. Label ``nightly``
        (minutes); double only.
+   * - ``rt_steady_hill3d_neutral_zjacobi``, ``rt_steady_hill3d_neutral_lusgs``, ``rt_steady_hill3d_neutral_matches``
+     - RT-2.2.1: a truly neutral Hill_3D (``inputs_steady_hill3d_neutral``: 32 × 32 × 16 over the same domain, θ =
+       300 K, ``forcing.gravity = 0``, damping of w alone, four boxes) run to round-off (every residual below 1e-11
+       and ten orders down) with 16 z-line Jacobi sweeps at a cap of 4 and with the box-local line LU-SGS sweeps
+       (``inputs_steady_hill3d_neutral_lusgs``: zero ghosts, overlap 2, the diagonal ordering, two sweeps, cap 16);
+       ``amrex_fcompare`` compares the two plotfiles. The conventionally neutral deck has no fixed point to this
+       tolerance (it keeps entraining the inversion), hence the variant. Measured: 3495 iterations (76 s on four
+       ranks) against 1792 (34 s); u, v, w, p and k agree to 3e-10. θ has a free constant (no θ condition, no
+       gravity) that drifts by 1e-4 K at round-off, so the comparison is at 1e-7 (θ at 1.6e-8). Label
+       ``nightly``; double only.
    * - ``rt_steady_askervein``
      - RT-1.16.3, the convergence half: Askervein on the ERF grid of RT-1.12.1 (``inputs_steady_askervein``: 30 × 30
        × 18, the log-law inflow, outflow, slip sides, no Coriolis, four sweeps, cap 2) to the steady verdict.
@@ -695,6 +746,32 @@ GoogleTest suite
        at latitude 90), the geostrophic wind at the top within 0.5 m/s, k at the floor in the inversion and largest
        near the ground, the first cell's k = u*²/C_μ0² (1e-12), u* in 0.2–0.6 m/s, the table identical on every
        rank.
+   * - UT-2.2.1
+     - ``LineSweeps.EveryFaceIsOwnedAndSweptOnce``. On 1, 2 and 4 boxes (an uneven 7 × 6 split and a 2-D 8 × 1 mesh
+       too), periodic and not, the owned regions cover every cell and every x, y and z face exactly once (periodic
+       images identified, an image owning nothing); the box-local sweeps (zero ghosts, :math:`n_o` = 0 and 2, one
+       and two sweeps) equal a host replay written from the ownership rule (1e-13 of the largest value); on one
+       non-periodic box the zero and lagged ghosts give the same result, bit for bit.
+   * - UT-2.2.2
+     - ``LineSweeps.OverlapsReachTheSameState``. A 16 × 8 mesh in 4 × 2 boxes with a strong x coupling (cells and x
+       faces, periodic and not): the outer defect correction with two box-local sweeps per step reaches
+       :math:`|r| \le 10^{-12}|b|` for :math:`n_o` = 0, 2 and 4, the three states agree to 1e-10, and the outer
+       iterations fall strictly with :math:`n_o` (122, 54, 49 non-periodic). Two boxes of four columns with
+       :math:`n_o = 4` reproduce the one-box sweep bit for bit, and differ from it with :math:`n_o = 0`.
+   * - UT-2.2.3
+     - ``LineSweeps.ConvergedStateDoesNotDependOnTheLayout``. A 16 × 16 mesh in 1, 4 and 16 boxes (cells, x and y
+       faces, periodic and not; zero ghosts with :math:`n_o` = 0 and 2, and the lagged ghosts): the converged
+       states agree to 1e-10. The box-local sweeps depend on the box shape, so the test is of the converged state,
+       not of the iterates: one step is checked to differ between the layouts.
+   * - UT-2.2.4
+     - ``LineSweeps.DiagonalOrderingEqualsTheSequentialSweep``. The diagonal wavefront ordering equals the
+       sequential sweep bit for bit (the correction and the reported change): every location, 1, 2 and 4 boxes,
+       periodic and not, one and three sweeps, the lagged ghosts and the zero ghosts with :math:`n_o` = 0 and 2.
+   * - UT-2.2.5
+     - *Beyond the plan* (``LineSweeps.RefusalsAndNames`` and ``Driver.DivergenceStopsAndTheChecksNameTheirInput``).
+       The refusals naming ``steady.line_overlap`` (< 0, > 8, with the lagged ghosts, wider than the narrowest box),
+       no overlap along a one-cell axis, the readers of ``steady.line_ghosts``, ``line_overlap`` and ``line_order``
+       (values, defaults, unknown words, a repeated key, a line key with ``zjacobi``), the dispatcher.
    * - UT-1.15.7 (revised in 1.16)
      - The rotation's pin now holds the planar-mean split: :math:`a_P` with :math:`f^2\max(\tau_c, \tau_{\mathrm{own}})`
        and the right-hand side with the unique-face horizontal mean of the other residual per level at :math:`\tau_c`
