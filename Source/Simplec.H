@@ -135,7 +135,7 @@ ScalarSweepResult scalar_sweep (Equation eq, amrex::MultiFab& field, const amrex
                                 const amrex::Array<const amrex::MultiFab*, AMREX_SPACEDIM>& F, const amrex::MultiFab& z_nd,
                                 const ResidualInputs& in, const amrex::MultiFab& dtau, const Mesh& mesh,
                                 const amrex::Geometry& geom, int sweeps, amrex::Real floor, const SurfaceState* surface,
-                                const ClosureFields* fields, SimplecWorkspace& w, SweepKind sweep = SweepKind::zjacobi);
+                                const ClosureFields* fields, SimplecWorkspace& w, const LineSweepOptions& sweep = LineSweepOptions());
 
 //! What one iteration did (the application's log line).
 struct SimplecIterationInfo
@@ -160,7 +160,7 @@ public:
     SimplecStage (const SimplecOptions& opt, int sweeps, const ResidualInputs& in, Closure* closure,
                   const PoissonOptions& popt, const Mesh& mesh, const amrex::Geometry& geom, const amrex::MultiFab& z_nd,
                   amrex::Real tke_floor, const amrex::BoxArray& ba, const amrex::DistributionMapping& dm,
-                  SweepKind sweep = SweepKind::zjacobi);
+                  const LineSweepOptions& sweep = LineSweepOptions());
 
     [[nodiscard]] std::string name () const override { return "simplec"; }
     void init (State& q) override;
@@ -186,7 +186,7 @@ private:
 
     SimplecOptions m_opt;
     int m_sweeps;
-    SweepKind m_sweep;   //!< steady.sweep: the line solver of every sweep
+    LineSweepOptions m_sweep;   //!< steady.sweep and steady.line_*: the line solver of every sweep
     ResidualInputs m_in;
     Closure* m_closure;
     const Mesh& m_mesh;

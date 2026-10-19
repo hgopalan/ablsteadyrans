@@ -64,10 +64,20 @@ struct SteadyOptions
     amrex::Real switch_back_growth{10};  //!< steady.switch_back_growth (> 1): growth of r_n over a window that sends back
     int zline_sweeps{2};                 //!< steady.zline_sweeps (zjacobi 2..100, lusgs 1..100): line sweeps per predictor step, for the SIMPLEC stage of 1.15 (Predictor.H)
     SweepKind sweep{SweepKind::zjacobi}; //!< steady.sweep (zjacobi | lusgs): the line solver of the sweeps (sub-phase 2.1, Predictor.H)
+    //! steady.line_ghosts (lagged | zero), line_overlap (0..max_line_overlap,
+    //! 0 unless zero) and line_order (sequential | diagonal): the LU-SGS
+    //! sweeps' box coupling, overlap and column ordering (sub-phase 2.2,
+    //! LineSweeps.H); lusgs only.
+    LineGhosts line_ghosts{LineGhosts::lagged};
+    int line_overlap{0};
+    LineOrder line_order{LineOrder::sequential};
     Machine machine{Machine::Local};     //!< steady.machine (local | kestrel-cpu | kestrel-gpu): the AU rate
     int nodes{1};                        //!< steady.nodes (>= 1): for the AU
     std::vector<std::string> given;      //!< the steady.* keys given (for the application's has-no-effect checks, 1.15)
 };
+
+//! The line solver options of opt (steady.sweep and steady.line_*).
+LineSweepOptions line_sweep_options (const SteadyOptions& opt);
 
 //! Read steady.*; aborts, naming the key, on a bad value or a repeated key.
 SteadyOptions read_steady_options ();

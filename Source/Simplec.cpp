@@ -203,7 +203,7 @@ ScalarSweepResult scalar_sweep (Equation eq, amrex::MultiFab& field, const amrex
                                 const amrex::Array<const amrex::MultiFab*, AMREX_SPACEDIM>& F, const amrex::MultiFab& z_nd,
                                 const ResidualInputs& in, const amrex::MultiFab& dtau, const Mesh& mesh,
                                 const amrex::Geometry& geom, int sweeps, amrex::Real floor, const SurfaceState* surface,
-                                const ClosureFields* fields, SimplecWorkspace& w, SweepKind sweep)
+                                const ClosureFields* fields, SimplecWorkspace& w, const LineSweepOptions& sweep)
 {
     const char* op = "scalar_sweep";
     if (eq != Equation::theta && eq != Equation::tke) { amrex::Abort("ablsteady: scalar_sweep: eq must be theta or tke"); }
@@ -273,7 +273,7 @@ PoissonOptions with_reltol (PoissonOptions popt, amrex::Real reltol)
 SimplecStage::SimplecStage (const SimplecOptions& opt, int sweeps, const ResidualInputs& in, Closure* closure,
                             const PoissonOptions& popt, const Mesh& mesh, const amrex::Geometry& geom,
                             const amrex::MultiFab& z_nd, amrex::Real tke_floor, const amrex::BoxArray& ba,
-                            const amrex::DistributionMapping& dm, SweepKind sweep)
+                            const amrex::DistributionMapping& dm, const LineSweepOptions& sweep)
     : m_opt(opt), m_sweeps(sweeps), m_sweep(sweep), m_in(in), m_closure(closure), m_mesh(mesh), m_geom(geom), m_z(z_nd),
       m_tke_floor(tke_floor), m_popt(with_reltol(popt, opt.pressure_reltol)),
       m_pbc(in.bc != nullptr ? poisson_bc_from_faces(in.bc->inputs(), geom) : PoissonBC{}),

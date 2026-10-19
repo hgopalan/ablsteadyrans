@@ -36,6 +36,7 @@ add_executable(unit_tests
     Unit/test_Initializer.cpp
     Unit/test_Driver.cpp
     Unit/test_Predictor.cpp
+    Unit/test_LineSweeps.cpp
     Unit/test_Simplec.cpp
     Unit/test_Newton.cpp
     Unit/test_Terrain.cpp

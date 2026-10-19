@@ -21,7 +21,8 @@ namespace {
 
 const char* const kKeys[] = {"residual_tol", "residual_drop_orders", "residual_ref_iterations", "monitor_rel_tol",
                              "monitor_window", "max_iterations", "cfl0", "cfl_max", "ser_exponent", "ser_max_growth",
-                             "switch_window", "switch_residual", "switch_back_growth", "zline_sweeps", "sweep", "machine", "nodes", "stage"};
+                             "switch_window", "switch_residual", "switch_back_growth", "zline_sweeps", "sweep", "line_ghosts", "line_overlap",
+                             "line_order", "machine", "nodes", "stage"};
 
 constexpr int kDriverVersion = 1;
 const char* const kDriverMagic = "ablsteady-driver";
@@ -77,7 +78,24 @@ std::vector<std::string> check_steady_options (const SteadyOptions& opt)
     } else if (opt.zline_sweeps < 2 || opt.zline_sweeps > 100) {
         err.emplace_back("steady.zline_sweeps must be >= 2 and <= 100 (one lagged sweep is unstable at large horizontal CFL)");
     }
+    for (auto& e : check_line_options(line_sweep_options(opt))) { err.push_back(std::move(e)); }
+    if (opt.sweep != SweepKind::lusgs) {
+        for (const char* key : {"line_ghosts", "line_overlap", "line_order"}) {
+            if (std::find(opt.given.begin(), opt.given.end(), key) != opt.given.end()) {
+                err.emplace_back(std::string("steady.") + key + " has no effect unless steady.sweep = lusgs");
+            }
+        }
+    }
     return err;
+}
+
+LineSweepOptions line_sweep_options (const SteadyOptions& opt)
+{
+    LineSweepOptions o(opt.sweep);
+    o.ghosts = opt.line_ghosts;
+    o.overlap = opt.line_overlap;
+    o.order = opt.line_order;
+    return o;
 }
 
 SteadyOptions read_steady_options ()
@@ -116,6 +134,18 @@ SteadyOptions read_steady_options ()
         if (sweep == "zjacobi") { opt.sweep = SweepKind::zjacobi; }
         else if (sweep == "lusgs") { opt.sweep = SweepKind::lusgs; }
         else { amrex::Abort("ablsteady: steady.sweep = " + sweep + ": must be zjacobi or lusgs"); }
+    }
+    std::string word;
+    if (pp.query("line_ghosts", word)) {
+        if (word == "lagged") { opt.line_ghosts = LineGhosts::lagged; }
+        else if (word == "zero") { opt.line_ghosts = LineGhosts::zero; }
+        else { amrex::Abort("ablsteady: steady.line_ghosts = " + word + ": must be lagged or zero"); }
+    }
+    pp.query("line_overlap", opt.line_overlap);
+    if (pp.query("line_order", word)) {
+        if (word == "sequential") { opt.line_order = LineOrder::sequential; }
+        else if (word == "diagonal") { opt.line_order = LineOrder::diagonal; }
+        else { amrex::Abort("ablsteady: steady.line_order = " + word + ": must be sequential or diagonal"); }
     }
     std::string stage;
     if (pp.query("stage", stage)) {
