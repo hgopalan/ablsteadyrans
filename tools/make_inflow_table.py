@@ -22,13 +22,18 @@ With --check TABLE (regression test of the committed table), the exit code
 is the verdict of: the --zref wind within --dir-tol degrees of +x, u* within
 --ustar-tol (relative) of --ustar, and every row of TABLE within 1e-3 of the
 precursor's (u and v relative to the geostrophic speed, theta in K, k
-relative to the largest k). A PLOTFILE or TURB_PLOTFILE that does not exist
-is taken as a prefix, and the last such file (highest step) is read.
+relative to the largest k), and PLOTFILE's step equal to the step in TABLE's
+header. Under a capping inversion theta has no fixed point (the inversion
+entrains without end), so the step at the steady verdict, which depends on
+rounding, moves theta; the check therefore reads a run stopped at the
+table's own step. A PLOTFILE or TURB_PLOTFILE that does not exist is taken
+as a prefix, and the last such file (highest step) is read.
 """
 import argparse
 import glob
 import math
 import os
+import re
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -56,6 +61,24 @@ def latest(path):
     if not hits:
         raise SystemExit("make_inflow_table: no %s or %s<step>" % (path, path))
     return max(hits, key=lambda p: int(p[len(path):]))
+
+
+def step_of(name):
+    """The step number at the end of a plotfile name, or None."""
+    m = re.search(r"(\d+)$", os.path.basename(os.path.normpath(name)))
+    return int(m.group(1)) if m else None
+
+
+def table_step(path):
+    """The plotfile step named in a table's header ("planar means of NAME ("), or None."""
+    with open(path) as fh:
+        for ln in fh:
+            if not ln.startswith("#"):
+                return None
+            m = re.search(r"planar means of (\S+) \(", ln)
+            if m:
+                return step_of(m.group(1))
+    return None
 
 
 def read_table(path):
@@ -124,6 +147,10 @@ def main(argv):
             ok = ok and good
             print("  %-34s %12.4e  (tol %.1e)  %s" % (name, value, tol, "ok" if good else "FAIL"))
 
+        tstep, pstep = table_step(a.check), step_of(a.plotfile)
+        same_step = tstep is not None and tstep == pstep
+        ok = ok and same_step
+        print("  %-34s %12s  (table %s)  %s" % ("plotfile step", pstep, tstep, "ok" if same_step else "FAIL"))
         check("10 m direction (deg)", alpha, a.dir_tol)
         check("u*/target - 1", us / a.ustar - 1, a.ustar_tol)
         if len(rows) != len(mine) or any(len(r) != 5 for r in rows):

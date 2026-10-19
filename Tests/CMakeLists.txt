@@ -458,9 +458,10 @@ if(ABLSTEADY_PRECISION STREQUAL "DOUBLE")
                                terrain.file=${PROJECT_SOURCE_DIR}/extern_erf/askervein.txt
                                ${ABLSTEADY_TEST_AMREX_FLAGS})
     # Beyond the plan: Askervein in a conventionally neutral boundary layer.
-    # The precursor column runs to steady, then tools/make_inflow_table.py
-    # checks its 10 m wind is along +x (0.01 deg), u* = 0.6 m/s (1e-3) and the
-    # committed inflow table matches it (1e-3). The 3-D case runs on that
+    # The precursor column runs to steady; a companion run of the same deck
+    # stops at the table's step, and tools/make_inflow_table.py checks its
+    # 10 m wind is along +x (0.01 deg), u* = 0.6 m/s (1e-3) and the committed
+    # inflow table matches it (1e-3, the same step). The 3-D case runs on that
     # table to the steady verdict.
     set(CNBL_DIR ${CMAKE_CURRENT_BINARY_DIR}/run/rt_precursor_askervein_cnbl)
     ablsteady_add_test(NAME rt_precursor_askervein_cnbl NP 2 LABELS "regression" RUN_DIR ${CNBL_DIR}
@@ -468,13 +469,51 @@ if(ABLSTEADY_PRECISION STREQUAL "DOUBLE")
                        PREFIX ${EXPECT_ABORT} --success "ablsteady: steady after" --
                        COMMAND $<TARGET_FILE:ablsteady> ${DECKS}/inputs_precursor_askervein_cnbl
                                ${ABLSTEADY_TEST_AMREX_FLAGS})
+    # The table check reads a companion run stopped at the table's own step
+    # (read from the table's header, so a regenerated table carries its step
+    # here), not the run above. Under the capping inversion theta has no
+    # fixed point: the inversion base cools by 1.35e-4 K per iteration as it
+    # rises and the mixed layer warms by 1.5e-5 K. The verdict comes when the
+    # k residual leaves a limit cycle of about 600 iterations (the Poisson
+    # iteration count switching between 5 and 6), at an iteration that depends
+    # on the compiler's rounding: 11087 with Apple clang, 11073 with gcc-16,
+    # theta 1.7e-3 K apart. At the fixed step the two builds agree to 2e-4 K,
+    # so theta keeps 1e-3 K like u, v and k. A build that left the cycle one
+    # cycle later would fail here, and the verdict run would show its step.
+    # The deck is the precursor's with only the step limit and an unreachable
+    # drop criterion changed, written at configure time.
+    file(STRINGS ${DECKS}/askervein_cnbl_inflow.txt _cnbl_header LIMIT_COUNT 1 REGEX "planar means of")
+    string(REGEX MATCH "_plt([0-9]+) " _cnbl_step_match "${_cnbl_header}")
+    if(NOT _cnbl_step_match)
+        message(FATAL_ERROR "askervein_cnbl_inflow.txt: no \"planar means of <plotfile><step> (\" header line")
+    endif()
+    set(CNBL_TABLE_STEP ${CMAKE_MATCH_1})
+    file(READ ${DECKS}/inputs_precursor_askervein_cnbl _cnbl_deck)
+    foreach(_kv "max_iterations          = ${CNBL_TABLE_STEP}" "residual_drop_orders    = 9")
+        string(REGEX MATCH "^[a-z_]+" _k "${_kv}")
+        string(REGEX MATCHALL "\nsteady\\.${_k} [^\n]*" _hits "${_cnbl_deck}")
+        list(LENGTH _hits _n)
+        if(NOT _n EQUAL 1)
+            message(FATAL_ERROR "inputs_precursor_askervein_cnbl must set steady.${_k} exactly once (found ${_n})")
+        endif()
+        string(REGEX REPLACE "\nsteady\\.${_k} [^\n]*" "\nsteady.${_kv}" _cnbl_deck "${_cnbl_deck}")
+    endforeach()
+    file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/inputs_precursor_askervein_cnbl_fixed "${_cnbl_deck}")
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+                 ${DECKS}/inputs_precursor_askervein_cnbl ${DECKS}/askervein_cnbl_inflow.txt)
+    set(CNBL_FIXED_DIR ${CMAKE_CURRENT_BINARY_DIR}/run/rt_precursor_askervein_cnbl_fixed)
+    ablsteady_add_test(NAME rt_precursor_askervein_cnbl_fixed NP 2 LABELS "regression" RUN_DIR ${CNBL_FIXED_DIR}
+                       FIXTURES_SETUP precursor_askervein_cnbl_fixed
+                       PREFIX ${EXPECT_ABORT} --success "ablsteady: not steady after ${CNBL_TABLE_STEP} iterations" --
+                       COMMAND $<TARGET_FILE:ablsteady> ${CMAKE_CURRENT_BINARY_DIR}/inputs_precursor_askervein_cnbl_fixed
+                               ${ABLSTEADY_TEST_AMREX_FLAGS})
     add_test(NAME rt_precursor_askervein_cnbl_table
              COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/make_inflow_table.py
                      precursor_askervein_cnbl_plt precursor_askervein_cnbl_turb
                      --ug 17.028798 --vg -7.380863 --check ${DECKS}/askervein_cnbl_inflow.txt
-             WORKING_DIRECTORY ${CNBL_DIR})
+             WORKING_DIRECTORY ${CNBL_FIXED_DIR})
     set_tests_properties(rt_precursor_askervein_cnbl_table PROPERTIES LABELS "regression"
-                         FIXTURES_REQUIRED precursor_askervein_cnbl)
+                         FIXTURES_REQUIRED precursor_askervein_cnbl_fixed)
     ablsteady_add_test(NAME rt_steady_askervein_cnbl NP 2 LABELS "regression"
                        PREFIX ${EXPECT_ABORT} --success "ablsteady: steady after" --
                        COMMAND $<TARGET_FILE:ablsteady> ${DECKS}/inputs_steady_askervein_cnbl

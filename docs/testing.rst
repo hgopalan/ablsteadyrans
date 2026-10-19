@@ -175,14 +175,21 @@ Current tests
        × 18, the log-law inflow, outflow, slip sides, no Coriolis, four sweeps, cap 2) to the steady verdict.
        Measured: 156 iterations (2 s on two ranks). The 5 % comparison with ERF's URANS on lines A and AA is not in
        this version (Kestrel). Labels ``regression;smoke``; double only.
-   * - ``rt_precursor_askervein_cnbl``, ``rt_precursor_askervein_cnbl_table``
+   * - ``rt_precursor_askervein_cnbl``, ``rt_precursor_askervein_cnbl_fixed``, ``rt_precursor_askervein_cnbl_table``
      - Beyond the plan: the precursor column of the conventionally neutral Askervein case
        (``inputs_precursor_askervein_cnbl``: 4 × 4 × 26 on Askervein's 20 m × 1.08 levels, z0 = 0.03 m, the flat
        case's sounding, Coriolis at 57.2 N, geostrophic wind (17.028798, −7.380863) m/s) to the steady verdict.
-       ``tools/make_inflow_table.py --check``: the 10 m wind within 0.01° of +x, u* within 1e-3 of 0.6 m/s, and
-       ``Tests/Decks/askervein_cnbl_inflow.txt`` within 1e-3 of the precursor's planar means (u, v relative to the
-       geostrophic speed, θ in K, k relative to its maximum). Measured: 11087 iterations on one rank. Label
-       ``regression``; double only.
+       ``rt_precursor_askervein_cnbl_fixed`` runs the same deck to the step in the table's header (11087), with an
+       unreachable drop criterion (the deck is written at configure time; a regenerated table carries its step). ``tools/make_inflow_table.py --check`` on
+       that run: the plotfile step equal to the table's, the 10 m wind within 0.01° of +x, u* within 1e-3 of
+       0.6 m/s, and ``Tests/Decks/askervein_cnbl_inflow.txt`` within 1e-3 of the planar means (u, v relative to the
+       geostrophic speed, θ in K, k relative to its maximum). **Why a fixed step.** Under the capping inversion θ
+       has no fixed point: the inversion base cools by 1.35e-4 K per iteration as it rises, and the mixed layer
+       warms by 1.5e-5 K. The verdict comes when the k residual leaves a limit cycle of about 600 iterations (the
+       Poisson iteration count switching between 5 and 6), at an iteration that depends on the compiler's
+       rounding: 11087 with Apple clang and 11073 with gcc-16, 1.7e-3 K apart in θ. At step 11087 the two builds
+       agree to 2e-4 K. A build that left the cycle one cycle later would fail the table check, and the verdict
+       run would show its step. Label ``regression``; double only.
    * - ``rt_steady_askervein_cnbl``
      - Beyond the plan: Askervein in a conventionally neutral boundary layer (``inputs_steady_askervein_cnbl``: 30 ×
        30 × 26 to 1599 m, the precursor's table as inflow on xlo and yhi, outflow on xhi and ylo, Rayleigh damping
