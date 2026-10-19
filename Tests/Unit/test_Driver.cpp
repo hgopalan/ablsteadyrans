@@ -722,6 +722,9 @@ TEST (Driver, DivergenceStopsAndTheChecksNameTheirInput)
         {"steady.line_ghosts", [] (SteadyOptions& b) { b.given.emplace_back("line_ghosts"); }},
         {"steady.line_overlap", [] (SteadyOptions& b) { b.given.emplace_back("line_overlap"); }},
         {"steady.line_order", [] (SteadyOptions& b) { b.given.emplace_back("line_order"); }},
+        {"steady.line_alternate", [] (SteadyOptions& b) { b.given.emplace_back("line_alternate"); }},
+        {"steady.line_alternate", [] (SteadyOptions& b) { b.sweep = ablsteady::SweepKind::lusgs; b.line_alternate = 2; }},
+        {"steady.line_alternate", [] (SteadyOptions& b) { b.sweep = ablsteady::SweepKind::lusgs; b.line_alternate = -1; }},
         {"steady.residual_tol", [] (SteadyOptions& b) { b.criterion.residual_tol = 0; }},
         {"steady.monitor_window", [] (SteadyOptions& b) { b.criterion.monitor_window = 1; }},
     };
@@ -770,7 +773,7 @@ TEST (Driver, DivergenceStopsAndTheChecksNameTheirInput)
         const char* keys[] = {"residual_tol", "residual_drop_orders", "residual_ref_iterations", "monitor_rel_tol", "monitor_window",
                               "max_iterations", "cfl0", "cfl_max", "ser_exponent", "ser_max_growth", "switch_window",
                               "switch_residual", "switch_back_growth", "zline_sweeps", "sweep", "machine", "nodes",
-                              "line_ghosts", "line_overlap", "line_order"};
+                              "line_ghosts", "line_overlap", "line_order", "line_alternate"};
         auto clear = [&] { for (const char* k : keys) { while (pp.remove(k) > 0) {} } };
         clear();
         pp.add("residual_tol", amrex::Real(1e-4));
@@ -793,16 +796,19 @@ TEST (Driver, DivergenceStopsAndTheChecksNameTheirInput)
         pp.add("line_ghosts", std::string("zero"));
         pp.add("line_overlap", 3);
         pp.add("line_order", std::string("diagonal"));
+        pp.add("line_alternate", 1);
         const SteadyOptions r = ablsteady::read_steady_options();
         EXPECT_EQ(r.sweep, ablsteady::SweepKind::lusgs);
         EXPECT_EQ(r.line_ghosts, ablsteady::LineGhosts::zero);
         EXPECT_EQ(r.line_overlap, 3);
         EXPECT_EQ(r.line_order, ablsteady::LineOrder::diagonal);
+        EXPECT_EQ(r.line_alternate, 1);
         const ablsteady::LineSweepOptions lo = ablsteady::line_sweep_options(r);
         EXPECT_EQ(lo.kind, ablsteady::SweepKind::lusgs);
         EXPECT_EQ(lo.ghosts, ablsteady::LineGhosts::zero);
         EXPECT_EQ(lo.overlap, 3);
         EXPECT_EQ(lo.order, ablsteady::LineOrder::diagonal);
+        EXPECT_EQ(lo.alternate, 1);
         EXPECT_EQ(r.criterion.residual_tol, amrex::Real(1e-4));
         EXPECT_EQ(r.criterion.residual_drop_orders, 3);
         EXPECT_EQ(r.criterion.residual_ref_iterations, 7);
@@ -819,7 +825,7 @@ TEST (Driver, DivergenceStopsAndTheChecksNameTheirInput)
         EXPECT_EQ(r.machine, ablsteady::Machine::KestrelGpu);
         EXPECT_EQ(r.nodes, 3);
         EXPECT_EQ(r.zline_sweeps, 4);
-        EXPECT_EQ(r.given.size(), 20u);
+        EXPECT_EQ(r.given.size(), 21u);
         clear();
         const SteadyOptions d = ablsteady::read_steady_options();
         EXPECT_EQ(d.cfl0, 1);
@@ -830,6 +836,7 @@ TEST (Driver, DivergenceStopsAndTheChecksNameTheirInput)
         EXPECT_EQ(d.line_ghosts, ablsteady::LineGhosts::lagged);
         EXPECT_EQ(d.line_overlap, 0);
         EXPECT_EQ(d.line_order, ablsteady::LineOrder::sequential);
+        EXPECT_EQ(d.line_alternate, 0);
         EXPECT_TRUE(d.given.empty());
         // the line keys: unknown words, the overlap without the zero ghosts,
         // the keys without lusgs, an out-of-range overlap, a repeated key
@@ -852,6 +859,13 @@ TEST (Driver, DivergenceStopsAndTheChecksNameTheirInput)
         EXPECT_THROW(ablsteady::read_steady_options(), std::runtime_error);
         clear();
         pp.add("line_order", std::string("sequential"));   // zjacobi
+        EXPECT_THROW(ablsteady::read_steady_options(), std::runtime_error);
+        clear();
+        pp.add("line_alternate", 1);   // zjacobi
+        EXPECT_THROW(ablsteady::read_steady_options(), std::runtime_error);
+        clear();
+        pp.add("sweep", std::string("lusgs"));
+        pp.add("line_alternate", 2);
         EXPECT_THROW(ablsteady::read_steady_options(), std::runtime_error);
         clear();
         pp.add("sweep", std::string("gauss"));

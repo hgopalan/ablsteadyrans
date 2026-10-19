@@ -5,8 +5,8 @@
 // fewer outer iterations; an overlap that covers the domain reproduces the
 // one-box sweep bit for bit), UT-2.2.3 (the converged state does not depend
 // on the layout: 1, 4 and 16 boxes; the iterates do), UT-2.2.4 (the
-// diagonal wavefront ordering equals the sequential sweep bit for bit), and
-// the refusals.
+// diagonal wavefront ordering equals the sequential sweep bit for bit),
+// UT-2.2.6 (beyond the plan: the alternating ordering) and the refusals.
 #include "ImplicitOperator.H"
 #include "LineSweeps.H"
 #include "Predictor.H"
@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <cmath>
+#include <limits>
 #include <random>
 #include <stdexcept>
 #include <string>
@@ -529,6 +530,90 @@ TEST (LineSweeps, DiagonalOrderingEqualsTheSequentialSweep)
 // the lagged ghosts, an overlap wider than the narrowest box; each message
 // names steady.line_overlap. No overlap along a one-cell axis (a 2-D deck).
 // The names of the options.
+// Beyond the plan (UT-2.2.6): the alternating ordering (steady.line_alternate).
+// (a) On a system coupled only to the (i - 1) and (j + 1) neighbours (the
+// upwind couplings of u > 0, v < 0) the j-reversed forward pass is an exact
+// solve, so two alternating sweeps reach the solution to round-off; two
+// sweeps of the ascending pairs do not. (b) The diagonal ordering equals the
+// sequential one bit for bit with the j-reversed pairs too (the wavefronts
+// i - j = const), at the launch counts of UT-2.2.4. (c) One sweep is not
+// changed (only the odd sweeps are reversed); two sweeps are.
+TEST (LineSweeps, AlternatingOrderingSweepsBothDiagonals)
+{
+    const amrex::Real eps = std::numeric_limits<amrex::Real>::epsilon();
+    {   // (a)
+        PCase c = box_mesh(8, 8, 4, false, 8, 8);
+        amrex::MultiFab A, ap, rhs;
+        random_system(c, Loc::cell, 71u, 0.2, 3.0, A, ap, rhs);
+        A.setVal(0.0, ablsteady::coef_XP, 1);
+        A.setVal(0.0, ablsteady::coef_YM, 1);
+        LineSweepOptions alt = lusgs(LineGhosts::lagged);
+        alt.alternate = 1;
+        amrex::MultiFab d0, d1, r0, r1;
+        ablsteady::zline_lusgs(Loc::cell, A, ap, rhs, 2, c.mesh, c.geom, d0, lusgs(LineGhosts::lagged));
+        ablsteady::zline_lusgs(Loc::cell, A, ap, rhs, 2, c.mesh, c.geom, d1, alt);
+        residual_of(A, ap, rhs, d0, c.geom, r0);
+        residual_of(A, ap, rhs, d1, c.geom, r1);
+        const amrex::Real scale = rhs.norm0();
+        EXPECT_LE(r1.norm0(), 1000 * eps * scale) << "alternating";
+        EXPECT_GT(r0.norm0(), amrex::Real(1e-3) * scale) << "ascending pairs";
+    }
+    struct Layout { int nx, ny, mx, my; };
+    const Layout layouts[] = {{8, 8, 8, 8}, {8, 8, 4, 4}, {7, 6, 4, 3}};
+    for (const bool periodic : {false, true}) {
+        for (const Layout& L : layouts) {
+            PCase c = box_mesh(L.nx, L.ny, 4, periodic, L.mx, L.my);
+            for (const Loc loc : kLocs) {
+                amrex::MultiFab A, ap, rhs;
+                random_system(c, loc, 73u, 0.2, 3.0, A, ap, rhs);
+                for (const LineSweepOptions& plain : {lusgs(LineGhosts::lagged), lusgs(LineGhosts::zero, 2)}) {
+                    LineSweepOptions seq = plain;
+                    seq.alternate = 1;
+                    LineSweepOptions diag = seq;
+                    diag.order = LineOrder::diagonal;
+                    for (const int sweeps : {1, 2, 3}) {
+                        amrex::MultiFab dp, ds, dd;
+                        ablsteady::zline_lusgs(loc, A, ap, rhs, sweeps, c.mesh, c.geom, dp, plain);
+                        const auto n0 = ablsteady::line_sweep_launches();
+                        const amrex::Real cs = ablsteady::zline_lusgs(loc, A, ap, rhs, sweeps, c.mesh, c.geom, ds, seq);
+                        const auto n1 = ablsteady::line_sweep_launches();
+                        const amrex::Real cd = ablsteady::zline_lusgs(loc, A, ap, rhs, sweeps, c.mesh, c.geom, dd, diag);
+                        const auto n2 = ablsteady::line_sweep_launches();
+                        std::uint64_t planes = 0, boxes = 0;
+                        for (amrex::MFIter mfi(ds, false); mfi.isValid(); ++mfi) {
+                            const amrex::Box S = plain.ghosts == LineGhosts::lagged
+                                                 ? mfi.validbox()
+                                                 : ablsteady::line_sweep_box(loc, ablsteady::line_owned_box(loc, mfi.validbox(), c.geom),
+                                                                             plain.overlap, c.geom);
+                            planes += static_cast<std::uint64_t>(S.length(0) + S.length(1) - 1);
+                            ++boxes;
+                        }
+                        EXPECT_EQ(n1 - n0, 2u * static_cast<unsigned>(sweeps) * boxes) << loc_name(loc);
+                        EXPECT_EQ(n2 - n1, 2u * static_cast<unsigned>(sweeps) * planes) << loc_name(loc);
+                        EXPECT_EQ(max_diff(ds, dd), 0) << loc_name(loc) << " periodic " << periodic << " boxes " << c.ba.size()
+                                                       << " ghosts " << ablsteady::line_ghosts_name(plain.ghosts) << " sweeps " << sweeps;
+                        EXPECT_EQ(cs, cd);
+                        const double gap = max_diff(dp, ds);
+                        if (sweeps == 1) {
+                            EXPECT_EQ(gap, 0) << loc_name(loc);
+                        } else {
+                            EXPECT_GT(gap, 1e-6) << loc_name(loc) << " sweeps " << sweeps;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    // the range check names its key
+    LineSweepOptions bad = lusgs(LineGhosts::lagged);
+    for (const int v : {-1, 2}) {
+        bad.alternate = v;
+        const auto err = ablsteady::check_line_options(bad);
+        ASSERT_EQ(err.size(), 1u) << v;
+        EXPECT_NE(err.front().find("steady.line_alternate"), std::string::npos) << err.front();
+    }
+}
+
 TEST (LineSweeps, RefusalsAndNames)
 {
     PCase c = box_mesh(8, 8, 4, true, 4, 4);
