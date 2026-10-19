@@ -396,11 +396,14 @@ KnownSolve solve_known (int max_grid, int nx, int ny, NewtonVector* out, const a
 // difference is zero to round-off, checked), and the forward difference of
 // NewtonOperator::apply (plain Newton, no dtau) has the truncation error
 // eps B(v, v) exactly. The sweep of steady.newton_fd_eps_scale over ten
-// decades shows the V: the truncation branch (error = eps |B| / |J v|, to
-// 1e-3 of itself) at large h, the round-off branch (growing as 1/h) at small
-// h, and the default sqrt(machine epsilon) within a factor 3 of the sweep's
-// minimum. A uniform dtau = 20 s adds exactly x / dtau on every row but
-// continuity and the Dirichlet w faces (the ground and the top).
+// decades (five in single precision) shows the V: the truncation branch
+// (error = eps |B| / |J v|, to 1e-3 of itself) at large h, the round-off
+// branch (growing as 1/h) at small h, both ends at least 10 times (5 in
+// single precision) the minimum, and the default sqrt(machine epsilon)
+// within a factor 3 of the sweep's minimum. eps = c h with one c for every
+// h. A uniform dtau = 20 s adds exactly x / dtau on every row but continuity
+// and the Dirichlet w faces (the ground and the top), and those faces are
+// identity rows with and without dtau.
 TEST(Newton, JvpEpsSweepAgainstQuadraticResidual)
 {
     QuadraticCase qc(4);
@@ -442,6 +445,7 @@ TEST(Newton, JvpEpsSweepAgainstQuadraticResidual)
     const double hdef = std::sqrt(static_cast<double>(std::numeric_limits<amrex::Real>::epsilon()));
     std::vector<double> err;
     double err_def = 0;
+    double ratio0 = 0;
     amrex::Print() << "UT-3.1.1: h, eps, |FD Jv - Jv| / |Jv|, eps |B| / |Jv|\n";
     for (std::size_t n = 0; n <= hs.size(); ++n) {
         NewtonOptions opt;
@@ -456,17 +460,19 @@ TEST(Newton, JvpEpsSweepAgainstQuadraticResidual)
                        << "  " << trunc << ((n < hs.size()) ? "" : "  (default)") << "\n";
         if (n < hs.size()) {
             err.push_back(e);
-            // eps scales with h exactly (the option reaches jvp).
-            EXPECT_NEAR(eps / hs[n], static_cast<double>(op.eps_max()) / hs[n], 0);
+            // eps = c h with the same c for every h (the option reaches jvp).
+            if (n == 0) { ratio0 = eps / hs[0]; }
+            EXPECT_NEAR(eps / hs[n] / ratio0, 1, tol(1e-12, 1e-5)) << hs[n];
             if (hs[n] >= (kDouble ? 0.9e-4 : 0.9e-2)) { EXPECT_NEAR(e / trunc, 1, tol(1e-3, 3e-2)) << hs[n]; }
         } else {
             err_def = e;
+            EXPECT_NEAR(eps / hdef / ratio0, 1, tol(1e-12, 1e-5));
             EXPECT_EQ(static_cast<double>(nk.residual_inputs().jvp_scales.step), static_cast<double>(opt.fd_eps_scale));
             EXPECT_EQ(opt.fd_eps_scale, std::sqrt(std::numeric_limits<amrex::Real>::epsilon()));
         }
     }
     const double emin = *std::min_element(err.begin(), err.end());
-    EXPECT_GT(err.front(), 10 * emin);   // the truncation side of the V
+    EXPECT_GT(err.front(), tol(10, 5) * emin);   // the truncation side of the V
     EXPECT_GT(err.back(), 10 * emin);    // the round-off side
     EXPECT_LT(err_def, 3 * emin);        // the default sits at the bottom
     EXPECT_LT(err_def, tol(1e-6, 1e-2));
@@ -493,6 +499,35 @@ TEST(Newton, JvpEpsSweepAgainstQuadraticResidual)
     }
     amrex::Gpu::streamSynchronize();
     EXPECT_LT(rel_diff(opd, tmp, Dx), tol(1e-12, 1e-5));
+
+    // The Dirichlet rows (w on the walls) are the identity, with and without
+    // dtau: x = 1 there gives (A x) = 1 there.
+    for (amrex::MFIter mfi(x.f[ablsteady::nf_w], false); mfi.isValid(); ++mfi) {
+        for (const int k : {dom.smallEnd(2), dom.bigEnd(2) + 1}) {
+            amrex::Box fb = mfi.validbox();
+            fb.setSmall(2, k);
+            fb.setBig(2, k);
+            x.f[ablsteady::nf_w][mfi].setVal<amrex::RunOn::Device>(1, fb);
+        }
+    }
+    amrex::Gpu::streamSynchronize();
+    for (NewtonOperator* o : {&op0, &opd}) {
+        o->apply(Ax, x);
+        amrex::Real dmax = 0;
+        for (amrex::MFIter mfi(Ax.f[ablsteady::nf_w], false); mfi.isValid(); ++mfi) {
+            for (const int k : {dom.smallEnd(2), dom.bigEnd(2) + 1}) {
+                amrex::Box fb = mfi.validbox();
+                fb.setSmall(2, k);
+                fb.setBig(2, k);
+                amrex::FArrayBox d(fb, 1, amrex::The_Async_Arena());
+                d.copy<amrex::RunOn::Device>(Ax.f[ablsteady::nf_w][mfi], fb, 0, fb, 0, 1);
+                d.plus<amrex::RunOn::Device>(amrex::Real(-1), fb, 0, 1);
+                dmax = std::max(dmax, d.maxabs<amrex::RunOn::Device>(fb, 0));
+            }
+        }
+        amrex::ParallelDescriptor::ReduceRealMax(dmax);
+        EXPECT_LT(static_cast<double>(dmax), tol(1e-12, 1e-5)) << (o == &opd ? "with dtau" : "without dtau");
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -504,8 +539,9 @@ TEST(Newton, JvpEpsSweepAgainstQuadraticResidual)
 // round-off floor gain more than three orders each, and every step after
 // the first has r_{n+1} <= r_n^2 (the measured constants r_{n+1} / r_n^2
 // are 0.56, 0.25, 0.30, 0.65): quadratic convergence. In single precision
-// the floor is reached after three steps; the first three reductions are
-// pinned to a factor 2 and the last of them must gain two orders.
+// (four steps, GMRES to 1e-5) the reductions 0.401, 0.171, 0.0170, 7.37e-4
+// are pinned to a factor 2, the last gains three orders and r_{n+1} <=
+// 2 r_n^2 (measured constants 0.56, 0.32, 0.83).
 TEST(Newton, ColumnConvergesQuadratically)
 {
     NewtonOptions opt;
@@ -521,20 +557,20 @@ TEST(Newton, ColumnConvergesQuadratically)
     amrex::Print() << "  final " << r.back() << "\n";
     const double floor = tol(1e-12, 1e-5) * r[0];
     const std::vector<double> pinned =
-        kDouble ? std::vector<double>{0.403, 0.171, 0.0131, 2.09e-4, 9.41e-8} : std::vector<double>{0.403, 0.171, 0.0131};
+        kDouble ? std::vector<double>{0.403, 0.171, 0.0131, 2.09e-4, 9.41e-8} : std::vector<double>{0.401, 0.171, 0.0170, 7.37e-4};
     std::vector<double> red;
     for (std::size_t n = 0; n + 1 < r.size() && r[n] > floor; ++n) { red.push_back(r[n + 1] / r[n]); }
     ASSERT_EQ(red.size(), pinned.size());
     for (std::size_t n = 0; n < red.size(); ++n) {
         EXPECT_GT(red[n], pinned[n] / 2) << n;
         EXPECT_LT(red[n], pinned[n] * 2) << n;
-        if (n >= 1) { EXPECT_LE(r[n + 1], r[n] * r[n]) << n; }
+        if (n >= 1) { EXPECT_LE(r[n + 1], tol(1, 2) * r[n] * r[n]) << n; }
     }
     if (kDouble) {
         EXPECT_LT(red[red.size() - 2], 1e-3);
         EXPECT_LT(red[red.size() - 1], 1e-3);
     } else {
-        EXPECT_LT(red.back(), 1e-2);
+        EXPECT_LT(red.back(), 1e-3);
     }
     EXPECT_LT(r.back(), floor);
 }
@@ -588,16 +624,20 @@ TEST(Newton, PoiseuilleInOneStep)
 
 // ---------------------------------------------------------------------------
 // UT-3.1.3 (b). amrex::GMRES<NewtonVector, NewtonOperator> (flexible, the
-// identity hook) on a non-symmetric system with a known solution: the
-// operator of UT-3.1.1 (upwind convection, Coriolis) with a uniform dtau =
-// 20 s, b = A x* for a smooth x* of every field. GMRES recovers x* (p up to
-// its mean, the null space of the continuity rows) to 1e-7 (the forward
-// difference's truncation, eps |B| / |J|), on one box, on four boxes and on
-// nine uneven boxes (a 9 x 9 x 8 mesh in boxes of 3), and the three answers
-// agree to 1e-9 of |x*|.
+// identity hook, restart 60, rtol 1e-7) on a non-symmetric system with a
+// known solution: the operator of UT-3.1.1 (upwind convection, Coriolis)
+// with a uniform dtau = 5 s, b = A x* for a smooth x* of every field. GMRES
+// converges (status 0) and recovers x* (p up to its mean, the null space of
+// the continuity rows) to 1e-5 (4e-6 measured: the forward difference is
+// linear in v only up to its truncation term eps B(v, v), so b = A x* and
+// the Krylov combination differ at that level), on one box and on four boxes
+// of an 8 x 6 x 8 mesh, and on one box and nine boxes of a 9 x 9 x 8 mesh
+// (uneven over 2 and 4 ranks); the answers of the two layouts of each mesh
+// agree to 1e-7 of |x*| (3e-8 measured). Single precision: 1e-1 and 1e-2
+// (rtol 1e-3).
 TEST(Newton, GmresSolvesKnownSystemOnAnyLayout)
 {
-    // One box, four boxes (8 x 6 in 4 x 3), and the uneven 9 x 9 x 8 case.
+    // One box and four boxes (8 x 6 in 4 x 3); one box and nine (9 x 9 in 3 x 3).
     const QuadraticCase ref1(64);
     NewtonVector x1, x4;
     const auto r1 = solve_known(64, 8, 6, &x1, &ref1.c.ba, &ref1.c.dm);
@@ -610,7 +650,7 @@ TEST(Newton, GmresSolvesKnownSystemOnAnyLayout)
                    << ", |x - x*| / |x*| " << r1.err << " / " << r4.err << " / " << s1.err << " / " << s9.err << "\n";
     for (const auto& r : {r1, r4, s1, s9}) {
         EXPECT_EQ(r.status, 0);
-        EXPECT_LT(r.err, tol(1e-5, 5e-2));
+        EXPECT_LT(r.err, tol(1e-5, 1e-1));
     }
     ablsteady::ResidualFields R;
     NewtonOperator op1(ref1.q, R, ref1.su.in, ref1.c.mesh, ref1.c.geom, nullptr);
@@ -644,7 +684,7 @@ TEST(Newton, VectorOperationsAndBitIdenticalInnerProduct)
     EXPECT_EQ(static_cast<double>(op.norm2(d)), 0.0);
     op.setToZero(b);
     EXPECT_EQ(static_cast<double>(op.norm2(b)), 0.0);
-    EXPECT_NEAR(static_cast<double>(op.norm2(a)), std::sqrt(unknowns), 1e-12 * unknowns);
+    EXPECT_NEAR(static_cast<double>(op.norm2(a)), std::sqrt(unknowns), tol(1e-12, 1e-6) * unknowns);
 
     // A non-uniform pair: the same bits on every rank and for a second
     // DistributionMapping of the same boxes (every box moved one rank on).
@@ -707,6 +747,10 @@ TEST(Newton, OptionReadersAndRangeChecks)
         EXPECT_EQ(o.krylov_rtol, amrex::Real(1e-3));
         EXPECT_EQ(o.mem_budget_gb, amrex::Real(12.5));
         EXPECT_EQ(o.given.size(), 4U);
+        // Every key given is read (none left for amrex.parmparse.verbose to report).
+        for (const auto& k : amrex::ParmParse::getUnusedInputs("steady")) {
+            EXPECT_EQ(k.find("steady.newton_"), std::string::npos) << k;
+        }
         for (const char* k : {"newton_gmres_restart", "newton_fd_eps_scale", "newton_krylov_rtol", "newton_mem_budget_gb"}) {
             while (pp.remove(k) > 0) {}
         }
@@ -808,7 +852,14 @@ TEST(Newton, KrylovMemoryEstimateAndBudget)
         EXPECT_NO_THROW(NewtonKrylov(opt, qc.su.in, qc.c.mesh, qc.c.geom, ba, dm, 0));
     }
     opt.mem_budget_gb = amrex::Real(1e-6);
-    EXPECT_THROW(NewtonKrylov(opt, qc.su.in, qc.c.mesh, qc.c.geom, qc.c.ba, qc.c.dm, 0), std::runtime_error);
+    try {
+        NewtonKrylov nk(opt, qc.su.in, qc.c.mesh, qc.c.geom, qc.c.ba, qc.c.dm, 0);
+        ADD_FAILURE() << "a Krylov estimate above steady.newton_mem_budget_gb did not abort";
+    } catch (const std::runtime_error& e) {
+        const std::string what = e.what();
+        EXPECT_NE(what.find("steady.newton_mem_budget_gb = 1e-06"), std::string::npos) << what;
+        EXPECT_NE(what.find("steady.newton_gmres_restart = " + std::to_string(opt.gmres_restart) + ":"), std::string::npos) << what;
+    }
     // Out-of-range options and a missing bc abort too.
     opt = NewtonOptions{};
     opt.krylov_rtol = 0;

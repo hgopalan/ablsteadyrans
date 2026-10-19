@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <cmath>
 #include <iomanip>
+#include <limits>
 #include <sstream>
 
 namespace ablsteady {
@@ -21,10 +22,11 @@ namespace {
 constexpr const char* kNewtonKeys[] = {"newton_gmres_restart", "newton_fd_eps_scale", "newton_krylov_rtol",
                                        "newton_mem_budget_gb"};
 
+//! x with the digits of amrex::Real: a float input prints as it was given.
 std::string num (double x)
 {
     std::ostringstream s;
-    s << std::setprecision(10) << x;
+    s << std::setprecision(std::numeric_limits<amrex::Real>::digits10) << x;
     return s.str();
 }
 

@@ -198,6 +198,23 @@ definition of a steady solution (:doc:`steady`) and its own. The application run
    * - ``steady.nodes``
      - ``1``
      - ≥ 1. Nodes of the run, for the allocation units.
+   * - ``steady.newton_gmres_restart``
+     - ``30``
+     - Integer, ≥ 5 and ≤ 200. GMRES restart length of the Newton step (:doc:`newton`).
+   * - ``steady.newton_fd_eps_scale``
+     - :math:`\sqrt{\epsilon_\mathrm{mach}}` of ``amrex::Real``
+     - > 0 and ≤ 1e-2. Relative step :math:`h` of the Jacobian-vector product (:doc:`newton`).
+   * - ``steady.newton_krylov_rtol``
+     - ``1e-2``
+     - > 0 and < 1. Relative tolerance of GMRES in each Newton step.
+   * - ``steady.newton_mem_budget_gb``
+     - ``70``
+     - > 0 and ≤ 80. Krylov memory per rank in GB (10\ :sup:`9` bytes); the run aborts when the estimate of
+       ``2 steady.newton_gmres_restart + 3`` state-size vectors exceeds it.
+
+The four ``steady.newton_*`` rows are read by ``read_newton_options()`` (sub-phase 3.1). Their defaults are
+provisional until sub-phase 3.6 (PR-28) tunes them. The application runs no Newton step before sub-phase 3.5, so
+until then it refuses these keys as unknown inputs.
 
 ``solver``
 ----------
