@@ -278,7 +278,7 @@ std::vector<std::string> check_boundary_inputs (const BoundaryInputs& in, const 
                               "inflow_alpha", "inflow_direction", "inflow_file"}) {
             if (given(k)) {
                 err.emplace_back(std::string("bc.") + k
-                                 + " has no effect without an inflow face, a damping layer or init.first_guess = profile");
+                                 + " has no effect without an inflow face, a damping layer or init.first_guess = profile or column");
             }
         }
     }

@@ -16,7 +16,8 @@ namespace ablsteady {
 
 namespace {
 
-const char* const kKeys[] = {"first_guess", "z_agl_min", "alpha_h", "alpha_v", "k_decay_height", "obrien"};
+const char* const kKeys[] = {"first_guess", "z_agl_min", "alpha_h", "alpha_v", "k_decay_height", "obrien", "projection",
+                             "column_tol", "column_max_iterations"};
 
 //! A profile component at every point (ghosts included) of a field of type
 //! T, at the point's height above its column's ground floored at h_min.
@@ -64,7 +65,14 @@ InitOptions read_init_options ()
     pp.query("first_guess", fg);
     if (fg == "none") { opt.first_guess = InitOptions::FirstGuess::none; }
     else if (fg == "profile") { opt.first_guess = InitOptions::FirstGuess::profile; }
-    else { amrex::Abort("ablsteady: init.first_guess = " + fg + ": must be none or profile"); }
+    else if (fg == "column") { opt.first_guess = InitOptions::FirstGuess::column; }
+    else { amrex::Abort("ablsteady: init.first_guess = " + fg + ": must be none, profile or column"); }
+    int proj = 1;
+    pp.query("projection", proj);
+    if (proj != 0 && proj != 1) { amrex::Abort("ablsteady: init.projection must be 0 or 1"); }
+    opt.projection = (proj == 1);
+    pp.query("column_tol", opt.column_tol);
+    pp.query("column_max_iterations", opt.column_max_iterations);
     pp.query("z_agl_min", opt.z_agl_min);
     pp.query("alpha_h", opt.alpha_h);
     pp.query("alpha_v", opt.alpha_v);
@@ -96,9 +104,25 @@ std::vector<std::string> check_init_options (const InitOptions& opt)
     bad(opt.alpha_h, "alpha_h", "finite and > 0", [&] { return opt.alpha_h > 0; });
     bad(opt.alpha_v, "alpha_v", "finite and > 0", [&] { return opt.alpha_v > 0; });
     bad(opt.k_decay_height, "k_decay_height", "finite and >= 0 (m; 0: no decay)", [&] { return opt.k_decay_height >= 0; });
+    bad(opt.column_tol, "column_tol", "finite and > 0", [&] { return opt.column_tol > 0; });
+    if (opt.column_max_iterations < 1) { err.emplace_back("init.column_max_iterations must be >= 1"); }
+    auto given = [&] (const char* k) { for (const auto& g : opt.given) { if (g == k) { return true; } } return false; };
     if (opt.first_guess == InitOptions::FirstGuess::none) {
         for (const auto& k : opt.given) {
-            if (k != "first_guess") { err.emplace_back("init." + k + " has no effect without init.first_guess = profile"); }
+            if (k != "first_guess") { err.emplace_back("init." + k + " has no effect without init.first_guess = profile or column"); }
+        }
+    } else {
+        if (opt.first_guess != InitOptions::FirstGuess::column) {
+            for (const char* k : {"column_tol", "column_max_iterations"}) {
+                if (given(k)) { err.emplace_back(std::string("init.") + k + " has no effect without init.first_guess = column"); }
+            }
+        } else if (given("k_decay_height")) {
+            err.emplace_back("init.k_decay_height would decay the column's converged k again: not with init.first_guess = column");
+        }
+        if (!opt.projection) {
+            for (const char* k : {"alpha_h", "alpha_v"}) {
+                if (given(k)) { err.emplace_back(std::string("init.") + k + " has no effect with init.projection = 0"); }
+            }
         }
     }
     return err;
@@ -193,7 +217,8 @@ amrex::Real obrien_omega (const amrex::MultiFab& u, const amrex::MultiFab& v, co
 }
 
 amrex::Real first_guess_state (const InitOptions& opt, const BoundaryInputs& bc, const Mesh& mesh,
-                               const amrex::Geometry& geom, State& q, const CoriolisOptions& coriolis)
+                               const amrex::Geometry& geom, State& q, const CoriolisOptions& coriolis,
+                               const InflowProfile* column)
 {
     {
         const auto err = check_init_options(opt);
@@ -205,7 +230,10 @@ amrex::Real first_guess_state (const InitOptions& opt, const BoundaryInputs& bc,
     check_operator_field(op, "theta", q.theta, Loc::cell, mesh, 2);
     check_nodal_heights(op, q.z_phys_nd, mesh);
     const BoundaryConditions bcs(bc, geom, mesh, coriolis);   // checks bc for this geometry (a geostrophic top needs the run's Coriolis)
-    const InflowProfile::View prof = bcs.profile().view();
+    if (opt.first_guess == InitOptions::FirstGuess::column && column == nullptr) {
+        amrex::Abort("ablsteady: first_guess_state: init.first_guess = column needs the column's profile");
+    }
+    const InflowProfile::View prof = (column != nullptr) ? column->view() : bcs.profile().view();
     const int klo = geom.Domain().smallEnd(2);
     const amrex::MultiFab& z = q.z_phys_nd;
 
@@ -249,16 +277,26 @@ amrex::Real first_guess_state (const InitOptions& opt, const BoundaryInputs& bc,
         residual = obrien_omega(q.u, q.v, z, mesh, geom, omega0);
         w_from_omega(q.u, q.v, omega0, z, mesh, geom, q.w);
     }
+    amrex::Gpu::streamSynchronize();   // the profile's device tables may go out of scope in the caller
     return residual;
 }
 
 InitResult initialize_state (const InitOptions& opt, const BoundaryInputs& bc, const PoissonOptions& popt, const Mesh& mesh,
-                             const amrex::Geometry& geom, State& q, amrex::MultiFab* lambda, const CoriolisOptions& coriolis)
+                             const amrex::Geometry& geom, State& q, amrex::MultiFab* lambda, const CoriolisOptions& coriolis,
+                             const InflowProfile* column)
 {
     InitResult res;
-    res.obrien_top_residual = first_guess_state(opt, bc, mesh, geom, q, coriolis);
+    res.obrien_top_residual = first_guess_state(opt, bc, mesh, geom, q, coriolis, column);
     if (opt.first_guess == InitOptions::FirstGuess::none) { return res; }
     const amrex::MultiFab& z = q.z_phys_nd;
+    if (!opt.projection) {
+        // The first guess as it is: the stage's own pressure correction removes
+        // the divergence (reported here as before = after).
+        amrex::MultiFab div(q.p.boxArray(), q.p.DistributionMap(), 1, 0);
+        velocity_divergence(q.u, q.v, q.w, z, mesh, geom, div);
+        res.divergence_before = res.divergence_after = div.norm2();
+        return res;
+    }
 
     // 4. The correction. The transport fluxes are Omega-based, so the
     // correction is applied to (u, v, Omega) and w follows.

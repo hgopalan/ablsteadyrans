@@ -326,6 +326,58 @@ error decays downstream over about :math:`c` cells). The stage reached the verdi
 at 128 with two sweeps it was still converging after 20 000 iterations. The cost per iteration of two LU-SGS
 sweeps is below that of sixteen Jacobi sweeps, so the time per iteration falls as well.
 
+**The converged-column first guess (sub-phase 2.1b).** With ``init.first_guess = column`` (:doc:`initializer`: the
+deck's column solved as a 1-D problem in 0.02–0.06 s, its u, v, k broadcast by height above the ground) the
+inertial spin-up of the profile guess is gone:
+
+.. list-table:: The first guess and the verdict (LU-SGS decks; two ranks for the 2-D hill and the flat case, four
+   for the 3-D hill; wall times with the machine shared)
+   :header-rows: 1
+   :widths: 30 26 16 16
+
+   * - case
+     - first guess
+     - iterations
+     - wall (s)
+   * - 2-D hill
+     - profile + projection
+     - 3062
+     - 23 (idle)
+   * - 2-D hill
+     - column + projection
+     - 1237
+     - 98 (shared)
+   * - 2-D hill
+     - column alone
+     - 1202
+     - 95 (shared)
+   * - 3-D hill
+     - profile + projection
+     - 823
+     - 51 (idle)
+   * - 3-D hill
+     - column + projection
+     - 402
+     - 1441 (shared, starved)
+   * - Neutral_ABL_Flat
+     - profile + projection
+     - 2839
+     - 13 (idle)
+   * - Neutral_ABL_Flat
+     - column + projection
+     - not steady by 20 000
+     - (:doc:`initializer`)
+
+On the 2-D hill the cross-wind residual's plateau (0.1–0.2 of its reference until iteration 1500 from the profile)
+is gone: at iteration 300 the column run's u and v residuals are an order below the profile run's, and the verdict
+comes at 1237 iterations against 3062; column alone and column with the projection differ by 3 %. The column
+seed's *first* residual is larger than the profile's (u 5.8e-2 against 3.1e-2, v 3.5e-2 against 3.1e-3): the
+lifted spiral carries an advective imbalance :math:`U\,\partial_z v\,h'` on the flanks that the profile guess (v
+= 0) does not have and the projection does not remove; the balance shows after the CFL ramp. On the 3-D hill the verdict comes at 402 iterations against 823. On the flat case the column seed is the 1-D
+steady state of u and v to round-off (first-iteration u residual 3e-11 against 3e-2), but its k at the inversion
+base differs from the 3-D closure's and the run falls into a slow k oscillation there that does not reach the
+verdict (:doc:`initializer`); the flat deck keeps the profile.
+
 **Askervein (RT-1.16.3, the convergence half).** The coarse mesh of RT-1.12.1 (30 × 30 × 18) with the log-law
 inflow, the outflow and slip sides, no Coriolis, four sweeps, cap 2: the verdict after 156 iterations (2 s on two
 ranks). The residual is largest in the two columns next to the outflow (100 times the interior, a checkerboard in

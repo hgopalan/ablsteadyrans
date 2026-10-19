@@ -25,6 +25,7 @@ set(ABLSTEADY_SOURCES
     InflowProfile.cpp
     BoundaryConditions.cpp
     Closure.cpp
+    ColumnGuess.cpp
     Initializer.cpp
     PseudoTime.cpp
     Driver.cpp

@@ -379,8 +379,26 @@ the range check in ``Source/Initializer.cpp``; the keys other than ``first_guess
      - Range and meaning
    * - ``init.first_guess``
      - ``none``
-     - ``none`` (the state starts at rest) or ``profile`` (the inflow profile by height above the ground, corrected
-       to a divergence-free field).
+     - ``none`` (the state starts at rest), ``profile`` (the inflow profile by height above the ground) or
+       ``column`` (sub-phase 2.1b: the deck's horizontally uniform column solved as a 1-D problem first, in a
+       fraction of a second, its u, v and k broadcast by height above the ground; the requirements it refuses
+       otherwise, naming this key, are in :doc:`initializer`: the stage, a horizontal forcing, the neutral surface
+       layer with the Dirichlet wall k at the first cell, the top type, the Rayleigh fields, no ``k_decay_height``),
+       each corrected to a divergence-free field unless ``init.projection = 0`` (:doc:`initializer`).
+   * - ``init.projection``
+     - ``1``
+     - 0 or 1: the mass-consistent correction of the first guess; 0 keeps the first guess as it is (the stage's own
+       pressure correction then removes its divergence). ``alpha_h`` and ``alpha_v`` have no effect with 0 (refused).
+   * - ``init.column_tol``
+     - ``1e-8``
+     - Finite, > 0: the 1-D column's convergence tolerance, the largest change of u, v (scaled by the geostrophic
+       or first-cell speed) and k (by its maximum) over one backward Euler step. Lifted to 100 epsilon of ``Real``
+       (1.2e-5 in single precision, logged) since the closure's point kernels run in ``Real``. With
+       ``first_guess = column`` only (refused otherwise).
+   * - ``init.column_max_iterations``
+     - ``5000``
+     - ≥ 1: the column's step limit; the run aborts, naming the key and the last change, if the column has not
+       converged by then. With ``first_guess = column`` only.
    * - ``init.z_agl_min``
      - ``0``
      - Finite, ≥ 0 m. Floor on the height above the ground the profile is evaluated at.

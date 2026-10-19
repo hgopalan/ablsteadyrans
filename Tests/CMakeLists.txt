@@ -420,10 +420,26 @@ if(ABLSTEADY_PRECISION STREQUAL "DOUBLE")
                        COMMAND $<TARGET_FILE:ablsteady> ${DECKS}/inputs_steady_hill2d ${ABLSTEADY_TEST_AMREX_FLAGS})
     # RT-2.1.1: the same case with the line LU-SGS sweeps (two symmetric
     # sweeps, CFL cap 16): the verdict, the residual drop and ERF's checks.
-    ablsteady_add_test(NAME rt_steady_hill2d_lusgs NP 2 LABELS "regression"
+    set(HILL_COL_DIR ${CMAKE_CURRENT_BINARY_DIR}/run/rt_steady_hill2d_column)
+    ablsteady_add_test(NAME rt_steady_hill2d_lusgs NP 2 LABELS "regression" RUN_DIR ${HILL_COL_DIR}
+                       FIXTURES_SETUP hill2d_lusgs
                        PREFIX ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/check_steady_hill.py
                               --erf-check check_hill.py --orders 2 --
                        COMMAND $<TARGET_FILE:ablsteady> ${DECKS}/inputs_steady_hill2d_lusgs ${ABLSTEADY_TEST_AMREX_FLAGS})
+    # RT-2.1b.1: the same case from the converged column (init.first_guess =
+    # column): the verdict, the drop and ERF's checks; then the spin-up check
+    # against the profile run's history (both checkpoints in HILL_COL_DIR).
+    ablsteady_add_test(NAME rt_steady_hill2d_column NP 2 LABELS "regression" RUN_DIR ${HILL_COL_DIR}
+                       FIXTURES_SETUP hill2d_column
+                       PREFIX ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/check_steady_hill.py
+                              --erf-check check_hill.py --orders 2 --
+                       COMMAND $<TARGET_FILE:ablsteady> ${DECKS}/inputs_steady_hill2d_column ${ABLSTEADY_TEST_AMREX_FLAGS})
+    add_test(NAME rt_column_guess_spinup
+             COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/check_column_guess.py
+                     steady_hill2d_lusgs_chk steady_hill2d_column_chk
+             WORKING_DIRECTORY ${HILL_COL_DIR})
+    set_tests_properties(rt_column_guess_spinup PROPERTIES LABELS "regression"
+                         FIXTURES_REQUIRED "hill2d_lusgs;hill2d_column" ENVIRONMENT PYTHONDONTWRITEBYTECODE=1)
     # RT-1.16.2: ERF's Neutral_Hill_3D (64 x 64 x 20) to steady with
     # check_hill3d.py; minutes on four ranks, so label nightly (not in
     # ctest -L regression).

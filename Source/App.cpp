@@ -2,6 +2,7 @@
 
 #include "BoundaryConditions.H"
 #include "Closure.H"
+#include "ColumnGuess.H"
 #include "Convection.H"
 #include "Driver.H"
 #include "Forcing.H"
@@ -137,12 +138,13 @@ void run ()
         if (!reported) { err.push_back(e); }
     }
     if (solve && !initialize && in.io.restart.empty()) {
-        err.emplace_back("steady.stage = simplec needs a first guess: init.first_guess = profile or io.restart "
-                         "(the state would start at rest with theta = 0)");
+        err.emplace_back("steady.stage = simplec needs a first guess: init.first_guess = profile, init.first_guess = column "
+                         "or io.restart (the state would start at rest with theta = 0)");
     }
     if (initialize && !in.io.restart.empty()) {
-        err.emplace_back("init.first_guess = profile and io.restart are exclusive (a restart keeps its state)");
+        err.emplace_back("init.first_guess and io.restart are exclusive (a restart keeps its state)");
     }
+    for (const auto& e : check_column_guess(iopt, sopt, fopt, bin, surf, surface_layer)) { err.push_back(e); }
     if (!err.empty()) {
         std::string all = "ablsteady: invalid inputs:";
         for (const auto& e : err) { all += "\n  " + e; }
@@ -164,13 +166,36 @@ void run ()
     if (!restart) {
         mesh.build(in, geom, state.z_phys_nd);
         if (initialize) {
-            // The mass-consistent initial field (Initializer.H).
-            const InitResult r = initialize_state(iopt, bin, popt, mesh, geom, state, nullptr, fopt.coriolis);
+            // The converged column as the profile (ColumnGuess.H), then the
+            // mass-consistent initial field (Initializer.H) or the first
+            // guess alone (init.projection = 0).
+            std::unique_ptr<InflowProfile> column;
+            if (iopt.first_guess == InitOptions::FirstGuess::column) {
+                const ColumnGuessResult cg = run_column_guess(in, iopt, sopt, bin, surf, surface_layer, copt, fopt, "column_guess.dat");
+                char cl[256];
+                std::snprintf(cl, sizeof(cl), "ablsteady: column guess: converged after %d steps (%.3f s), %d levels, "
+                              "u* %.4f m/s, u %.4f v %.4f m/s at the top\n", cg.iterations, cg.wall_seconds,
+                              static_cast<int>(cg.z.size()) - 1, static_cast<double>(cg.ustar), static_cast<double>(cg.u.back()),
+                              static_cast<double>(cg.v.back()));
+                amrex::Print() << cl;
+                if (cg.tol > static_cast<double>(iopt.column_tol)) {
+                    std::snprintf(cl, sizeof(cl), "ablsteady: column guess: init.column_tol = %.3e lifted to %.3e (100 epsilon of Real)\n",
+                                  static_cast<double>(iopt.column_tol), cg.tol);
+                    amrex::Print() << cl;
+                }
+                column = std::make_unique<InflowProfile>(cg.z, cg.u, cg.v, cg.theta, cg.tke, bin.theta_ref);
+            }
+            const InitResult r = initialize_state(iopt, bin, popt, mesh, geom, state, nullptr, fopt.coriolis, column.get());
             char line[256];
-            std::snprintf(line, sizeof(line),
-                          "ablsteady: initializer: %d Poisson iterations (reltol %.3e), divergence %.9e before, %.9e after\n",
-                          r.poisson.iterations, static_cast<double>(popt.reltol), static_cast<double>(r.divergence_before),
-                          static_cast<double>(r.divergence_after));
+            if (iopt.projection) {
+                std::snprintf(line, sizeof(line),
+                              "ablsteady: initializer: %d Poisson iterations (reltol %.3e), divergence %.9e before, %.9e after\n",
+                              r.poisson.iterations, static_cast<double>(popt.reltol), static_cast<double>(r.divergence_before),
+                              static_cast<double>(r.divergence_after));
+            } else {
+                std::snprintf(line, sizeof(line), "ablsteady: initializer: no projection (init.projection = 0), divergence %.9e\n",
+                              static_cast<double>(r.divergence_before));
+            }
             amrex::Print() << line;
             if (iopt.obrien) {
                 std::snprintf(line, sizeof(line), "ablsteady: initializer: O'Brien removed a top residual of %.6e m/s\n",

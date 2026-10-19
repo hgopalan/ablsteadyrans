@@ -146,6 +146,83 @@ immersed boundary, four passes of an approximate nodal projection; ablsteady: te
 exact projection). The test pins the ranking at 40 m and above, the sign, the per-height spread (0.02, 0.01, 0.005,
 0.003) and ablsteady's own numbers to 1e-6.
 
+The converged column as the first guess
+---------------------------------------
+
+``init.first_guess = column`` (sub-phase 2.1b, ``Source/ColumnGuess.H``) solves the deck's horizontally uniform
+column as a 1-D problem first: on the cells of the deck's vertical grid (its nodal heights from the mesh builder
+over flat ground), with :math:`u + iv`, :math:`k` at the cell centres and :math:`\theta` held at the sounding,
+
+.. math::
+
+   \frac{\partial (u + iv)}{\partial t} = \frac{\partial}{\partial z}\Bigl(\nu\,\frac{\partial (u + iv)}{\partial z}\Bigr)
+   - i f\,\bigl((u + iv) - (u_g + i v_g)\bigr) + F_x + i F_y, \qquad
+   \frac{\partial k}{\partial t} = \frac{\partial}{\partial z}\Bigl(\gamma_k\,\frac{\partial k}{\partial z}\Bigr)
+   + P_s + P_b - \varepsilon ,
+
+by backward Euler steps of growing size (10 s to :math:`10^5` s): the diffusion, the Coriolis term (implicit through
+the complex unknown), the wall drag and the Rayleigh layer implicit (a complex and a real tridiagonal solve per
+step), the :math:`k` sinks point-implicit (Patankar), the closure's point kernels (:doc:`closure`, the same algebra as
+the 3-D closure with :math:`N^2` from the sounding and :math:`S^2` from the cell's two faces) lagged one step and
+:math:`\nu_t` relaxed by a half against the previous step. The ground is the neutral wall law (:math:`u_* = \kappa
+|U_1| / \ln((d_1 + z_0)/z_0)`, the stress :math:`u_*^2` along :math:`U_1` as an implicit drag, the first cell's
+:math:`k = u_*^2/C_{\mu 0}^2`), the top the deck's (slip: zero flux; geostrophic: :math:`u_g, v_g`; no slip: 0),
+the Rayleigh layer the deck's on the fields ``bc.rayleigh_fields`` selects (:math:`\nu_t` is relaxed by a half
+between steps and the face diffusivities are arithmetic means whatever ``turb.nut_relax`` and ``turb.face_mean``
+say: the column is a first guess). The asymptotic contraction is about 0.88 per step, set by the lagged
+:math:`k`–:math:`\nu_t`–:math:`S^2` loop (the review's Jacobian of the step map), not by the step size. The column
+converges when the largest
+change of :math:`u, v` (scaled by the geostrophic or first-cell speed) and :math:`k` (by its maximum) over a step
+is below ``init.column_tol`` (1e-8; lifted to 100 epsilon of ``Real``, 1.2e-5 in single precision, since the closure's
+point kernels run in ``Real``), typically in 100–200 steps and a few hundredths of a second; it aborts, naming
+``init.column_max_iterations`` and the last change, otherwise. The converged :math:`u, v, k` per level with a
+ground row (:math:`u = v = 0`, the first cell's :math:`k`) become the first guess's profile in place of the inflow
+profile, applied by height above the local ground exactly as the inflow profile is (``init.z_agl_min`` and
+``init.obrien`` act as for the profile; ``init.k_decay_height`` is refused, it would decay the converged k again;
+below the first cell centre the table is linear from the ground row, where the log law is logarithmic, a
+difference confined to a crest's thinnest cells); :math:`\theta` stays the sounding at the absolute height. The
+projection then runs as for ``profile`` unless ``init.projection = 0``. An inflow face keeps the deck's inflow
+profile on the face while the interior starts from the column; the stage reconciles the two as it does for any
+first guess. The application writes the table to ``column_guess.dat`` in the run directory.
+
+**Why.** The inflow profile has u along the geostrophic wind and v = 0 at every height, and the mass-consistent
+correction knows nothing of the Coriolis balance, so a Coriolis-driven case starts out of Ekman balance and the
+stage spends the inertial adjustment in pseudo-time: the point-implicit rotation damps that mode by about
+:math:`f\Delta\tau` per iteration, and on ERF's 2-D hill the cross-wind residual sits on a plateau for the first
+1500 of 3062 iterations (:doc:`simplec`). The column has the balance (and the closure's equilibrium k) built in,
+to round-off on the flat case. The two switches are independent: ``profile`` with the projection (the earlier
+default), ``column`` alone (the balanced profile on the terrain-following mesh, the stage's first pressure correction
+removing the divergence) and ``column`` with the projection (the balanced profile bent over the terrain by the
+α-weighted correction). Over a hill the lifted spiral carries an advective imbalance on the flanks that neither the
+projection nor the profile guess has, so the first iteration's residual is larger than the profile guess's; the
+balance shows after the CFL ramp (:doc:`testing`, the spin-up check).
+
+**Where it does not help.** On the flat Neutral_ABL_Flat deck the column seed is the 1-D steady state of u and v to
+round-off, but its k, equilibrated with the sounding's sharp inversion base, differs from the 3-D closure's at the
+two cells there (the first iteration's k residual is 8e-2), and the 3-D run then falls into a slow oscillation of
+k at the inversion (the k residual swinging between 1e-5 and 5e-4 with a period of about 2500 iterations, the mean
+speed between 11.03 and 11.16 m/s) that neither the rotation relaxation, the LU-SGS sweeps nor skipping the
+projection removes, and the verdict is not reached in 20 000 iterations where the profile start takes 2839. The
+flat deck therefore keeps ``profile``; the terrain cases, whose residual is set by the hill rather than by the
+inversion base, converge in a third of the iterations (:doc:`simplec`). Seeding k at the inversion base is left
+for a later sub-phase.
+
+**Why θ stays the sounding.** A column with an inversion warms without end (the entrainment of :doc:`simplec`), so
+its θ has no fixed point; the Rayleigh layer and the top condition reference the sounding; and the column's θ
+applied by height above the ground would lift the inversion over a crest against them. The price is a
+:math:`k`–θ mismatch in the two cells at the inversion base, where the column's k equilibrated with the sounding's
+sharper base, gone within about a hundred iterations.
+
+The column needs a horizontal forcing (``forcing.geostrophic = 1`` or a non-zero ``forcing.pressure_gradient``),
+the stage (``steady.stage = simplec``, whose closure and forcing it uses), the neutral surface layer with the
+Dirichlet wall k at the first cell centre (``bc.surface_zref`` is not supported), a slip, geostrophic or no-slip
+top, and ``bc.rayleigh_fields`` holding u and v together or neither; a pressure gradient without Coriolis is allowed
+only with a neutral sounding or a Rayleigh layer holding u and v, because above an inversion the stress
+:math:`F(H - z)` falls on a layer whose :math:`k` sits at the floor and the column has no steady state (the review's
+finding); ``check_column_guess`` refuses the option otherwise, naming ``init.first_guess``, and a column whose
+change stops decreasing aborts after 200 stalled steps. An inflow face in the deck is no obstacle: the column is a
+profile by height. A surface heat flux and the source wall k are not in this version.
+
 Inputs
 ------
 
