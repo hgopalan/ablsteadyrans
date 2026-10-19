@@ -84,7 +84,10 @@ times the count, for the rank with the most points) and aborts, naming ``steady.
 ``steady.newton_gmres_restart``, when it exceeds the budget (1 GB = 10\ :sup:`9` bytes). On one 80 GB H100 a
 512 × 512 × 128 box needs 1.61 GB per vector in double: restart 30 (63 vectors, 102 GB) is refused under the 70 GB
 default and restart 20 (43 vectors, 69.4 GB) fits (UT-3.1.3, beyond the plan). The residual
-evaluations allocate their own temporaries outside the estimate.
+evaluations allocate their own temporaries outside the estimate. The estimate is the memory GMRES allocates
+internally; the step also holds the right-hand side and the solution (2 vectors), :math:`R(q)`, the perturbation
+with ghost cells and :math:`Jv` (about 3 more), :math:`1/\Delta\tau` and, with a hook, its two work vectors, so
+leave a margin of about 8 vectors under the device memory.
 
 Inputs
 ------

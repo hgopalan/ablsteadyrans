@@ -175,8 +175,15 @@ void line_jacobian (const amrex::Array<const amrex::MultiFab*, AMREX_SPACEDIM>& 
 //! 300 K and grow with the number of cells). Jv = 0 for v = 0. v is a state on
 //! q's layout with its ghost cells filled; its z_phys_nd is not used. R0, when
 //! given, must hold R(q) and saves one evaluation. Returns eps.
+//! refill (needs in.bc): the ghost cells of q + eps v come from the full
+//! fill of that state (BoundaryConditions::fill_ghosts) instead of q's
+//! ghosts plus eps times v's. The fill is nonlinear in q where the wall law
+//! sets the ground gradient, so only the refill differentiates it; the
+//! Newton core (Newton.H) uses it. Without refill, v's ghosts (the
+//! homogeneous fill) give the Jacobian with that gradient frozen.
 amrex::Real jvp (const State& q, const State& v, const ResidualInputs& in, const Mesh& mesh,
-                 const amrex::Geometry& geom, ResidualFields& Jv, const ResidualFields* R0 = nullptr);
+                 const amrex::Geometry& geom, ResidualFields& Jv, const ResidualFields* R0 = nullptr,
+                 bool refill = false);
 
 } // namespace ablsteady
 

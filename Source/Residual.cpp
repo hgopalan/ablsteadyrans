@@ -285,8 +285,11 @@ void line_jacobian (const amrex::Array<const amrex::MultiFab*, AMREX_SPACEDIM>& 
 }
 
 amrex::Real jvp (const State& q, const State& v, const ResidualInputs& in, const Mesh& mesh,
-                 const amrex::Geometry& geom, ResidualFields& Jv, const ResidualFields* R0)
+                 const amrex::Geometry& geom, ResidualFields& Jv, const ResidualFields* R0, bool refill)
 {
+    if (refill && in.bc == nullptr) {
+        amrex::Abort("ablsteady: jvp: refill needs ResidualInputs::bc (the ghost fill of q + eps v)");
+    }
     if (Jv.u.empty()) { Jv.define(q.p.boxArray(), q.p.DistributionMap()); }
     const auto qf = solution_fields(q);
     const auto vf = solution_fields(v);
@@ -331,6 +334,7 @@ amrex::Real jvp (const State& q, const State& v, const ResidualInputs& in, const
     for (int n = 0; n < static_cast<int>(qf.size()); ++n) {
         amrex::MultiFab::LinComb(*pf[n], 1, *qf[n], 0, static_cast<amrex::Real>(eps), *vf[n], 0, 0, 1, qf[n]->nGrow());
     }
+    if (refill) { in.bc->fill_ghosts(qp, in.surface, in.buoyancy); }
     residual(qp, in, mesh, geom, Jv);
     auto jf = Jv.fields();
     const auto rf = R0->fields();

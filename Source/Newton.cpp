@@ -262,14 +262,17 @@ NewtonOperator::NewtonOperator (const State& q, const ResidualFields& R0, const 
 void NewtonOperator::apply (NewtonVector& Ax, const NewtonVector& x)
 {
     // dq = S x on the valid points, then its ghost cells (and Dirichlet face
-    // points) from the homogeneous fill, before jvp reads them.
+    // points) from the homogeneous fill, before jvp reads them (its step
+    // reads the valid points). jvp then refills q + eps dq in full, so the
+    // ghost fill's own dependence on q (the wall law's ground gradient) is
+    // differentiated too.
     for (int f = 0; f < n_newton_fields; ++f) {
         amrex::MultiFab& d = state_field(m_dq, f);
         amrex::MultiFab::Copy(d, x.f[f], 0, 0, 1, 0);
         d.mult(m_s[f], 0, 1, 0);
     }
     m_in.bc->fill_ghosts(m_dq, m_in.surface, m_in.buoyancy, true);
-    const amrex::Real eps = jvp(m_q, m_dq, m_in, m_mesh, m_geom, m_Jv, &m_R0);
+    const amrex::Real eps = jvp(m_q, m_dq, m_in, m_mesh, m_geom, m_Jv, &m_R0, true);
     if (eps > 0) {
         m_eps_min = (m_eps_min > 0) ? std::min(m_eps_min, eps) : eps;
         m_eps_max = std::max(m_eps_max, eps);

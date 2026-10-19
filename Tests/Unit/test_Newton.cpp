@@ -891,7 +891,6 @@ TEST(Newton, PreconditionerHookAndOptionsReachTheSolver)
     DiagonalHook hook;
     nk.step(a.q, &dtau);
     const auto ib = nk.step(qb, &dtau, &hook);
-    EXPECT_EQ(nk.last().gmres_iterations, ib.gmres_iterations);
     EXPECT_EQ(hook.setups, 1);
     EXPECT_GE(hook.applies, ib.gmres_iterations);
     EXPECT_EQ(hook.inv_dtau, amrex::Real(1) / 50);
@@ -903,6 +902,8 @@ TEST(Newton, PreconditionerHookAndOptionsReachTheSolver)
     const auto iz = nk.step(qz, &dtau, &zero);
     EXPECT_EQ(zero.applies, 1);
     EXPECT_EQ(iz.gmres_iterations, 1);
+    EXPECT_EQ(nk.last().gmres_iterations, 1);   // last() follows the latest step
+    EXPECT_NE(nk.last().gmres_iterations, ib.gmres_iterations);
     EXPECT_EQ(state_diff(qz, q0), 0);
     EXPECT_GT(state_diff(a.q, q0), 1e-3);
 
