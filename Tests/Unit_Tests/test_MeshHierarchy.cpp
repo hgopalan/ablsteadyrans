@@ -279,6 +279,7 @@ struct ColumnModel
                     ablsteady::FaceType::periodic, ablsteady::FaceType::periodic, ablsteady::FaceType::slip_wall};
         bin.theta_ref = ref;
         bin.zhi_theta_grad = amrex::Real(0.003);
+        popt.backend = "gmres_fft";   // exact column symmetry on flat ground (see test (a) below)
     }
 };
 
@@ -484,7 +485,11 @@ TEST (MeshHierarchy, FlatTerrainColumnsAgree)
     {
         std::vector<double> col_ref;
         for (int l = 0; l < L; ++l) {
+            // Back end A: its FFT preconditioner is exact on flat ground, so the
+            // columns agree to round-off; MLMG's red-black smoother breaks the
+            // column symmetry at its tolerance (this test is of the hierarchy).
             ablsteady::PoissonOptions popt;
+            popt.backend = "gmres_fft";
             auto solver = c.h->make_poisson(l, popt);
             amrex::MultiFab rhs(c.h->boxArray(l), c.h->DistributionMap(l), 1, 0);
             amrex::MultiFab phi(c.h->boxArray(l), c.h->DistributionMap(l), 1, 1);

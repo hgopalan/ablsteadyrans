@@ -150,7 +150,7 @@ TEST (PoissonB, UnsupportedCombinationsAreRefused)
     split.z_cross = &bz;
     ablsteady::PoissonOptions mg;
     mg.backend = "mlmg";
-    ablsteady::PoissonSolver sb(c.mesh, c.geom, c.z, mg), sa(c.mesh, c.geom, c.z, {});
+    ablsteady::PoissonSolver sb(c.mesh, c.geom, c.z, mg), sa(c.mesh, c.geom, c.z, back_end_a());
     const auto bc = make_bc(PoissonFace::neumann, PoissonFace::periodic, PoissonFace::dirichlet);
     const auto bcd = make_bc(PoissonFace::neumann, PoissonFace::periodic, PoissonFace::dirichlet, PoissonFace::dirichlet);
     EXPECT_NE(thrown([&] { sb.solve(rhs, phi, split, bc); }).find("FaceCoeffs::z_cross needs solver.poisson_backend = gmres_fft"),

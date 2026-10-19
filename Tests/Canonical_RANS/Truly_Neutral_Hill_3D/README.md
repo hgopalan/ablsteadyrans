@@ -15,16 +15,21 @@ Rayleigh damping of w alone, 32 x 32 x 16 over the same domain, four boxes.
 
 The two runs require the steady verdict through `Supporting_Files/expect_abort.py --success` (shared).
 
+It also carries the old-against-new test of the default `solver.poisson_backend`: the LU-SGS deck runs a second time
+with `solver.poisson_backend = gmres_fft` (the default before `gmres_mlmg`), and `check_line_match.py` compares it
+with `rt_steady_hill3d_neutral_lusgs` (the default, `gmres_mlmg`, checked in its log) at 1e-8.
+
 ## CTest
-`rt_steady_hill3d_neutral_clean`, `rt_steady_hill3d_neutral_zjacobi`, `rt_steady_hill3d_neutral_lusgs` (four
-ranks each), `rt_steady_hill3d_neutral_matches`. Label `nightly`, double precision only. The clean step empties
+`rt_steady_hill3d_neutral_clean`, `rt_steady_hill3d_neutral_zjacobi`, `rt_steady_hill3d_neutral_lusgs`,
+`rt_poisson_default_gmres_fft` (four ranks each), `rt_steady_hill3d_neutral_matches`, `rt_poisson_default_matches`. Label `nightly`, double precision only. The clean step empties
 the run directories first, so a stale plotfile cannot be compared, and the checker requires exactly one plotfile
 per run.
 
 ## Expected Results
-- Both runs reach round-off: every residual below 1e-11 and ten orders down.
+- Both runs reach near round-off: every residual below 1e-11 and six orders down (ten orders put theta and p under the rounding floor; see the deck).
 - Measured: 3495 iterations (70 s on four ranks) for z-line Jacobi against 1792 (32 s) for LU-SGS.
 - u, v, w, p and k agree to 9e-10 absolute (at most 3e-8 of the tolerance scale).
+- `gmres_mlmg` against `gmres_fft` on the LU-SGS deck: both stop at 1789 iterations; u, v, w, p and k agree to 2.2e-13 absolute or better, theta minus its mean to 2.4e-11 K.
 - theta has a free constant (no theta condition, no gravity) that drifts by 1e-4 K at round-off. After subtracting
   each run's mean the two agree to 3e-11 K.
 

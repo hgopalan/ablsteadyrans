@@ -555,7 +555,7 @@ if(ABLSTEADY_PRECISION STREQUAL "DOUBLE")
     set(RT221_DIR ${CMAKE_CURRENT_BINARY_DIR}/run/rt_steady_hill3d_neutral)
     add_test(NAME rt_steady_hill3d_neutral_clean
              COMMAND ${Python3_EXECUTABLE} -c
-                     "import shutil, os, sys; shutil.rmtree(sys.argv[1], ignore_errors=True); [os.makedirs(os.path.join(sys.argv[1], d)) for d in ('zjacobi', 'lusgs')]"
+                     "import shutil, os, sys; shutil.rmtree(sys.argv[1], ignore_errors=True); [os.makedirs(os.path.join(sys.argv[1], d)) for d in ('zjacobi', 'lusgs', 'lusgs_fft')]"
                      ${RT221_DIR})
     set_tests_properties(rt_steady_hill3d_neutral_clean PROPERTIES LABELS "nightly" FIXTURES_SETUP hill3d_neutral_clean)
     ablsteady_add_test(NAME rt_steady_hill3d_neutral_zjacobi NP 4 LABELS "nightly" RUN_DIR ${RT221_DIR}/zjacobi
@@ -563,9 +563,10 @@ if(ABLSTEADY_PRECISION STREQUAL "DOUBLE")
                        PREFIX ${EXPECT_ABORT} --success "ablsteady: steady after" --
                        COMMAND $<TARGET_FILE:ablsteady> ${HILL3D_NEUTRAL_CASE}/inputs_steady_hill3d_neutral
                                ${ABLSTEADY_TEST_AMREX_FLAGS})
+    # The default pressure correction is gmres_mlmg (checked in the log).
     ablsteady_add_test(NAME rt_steady_hill3d_neutral_lusgs NP 4 LABELS "nightly" RUN_DIR ${RT221_DIR}/lusgs
                        FIXTURES_REQUIRED hill3d_neutral_clean FIXTURES_SETUP hill3d_neutral_lusgs
-                       PREFIX ${EXPECT_ABORT} --success "ablsteady: steady after" --
+                       PREFIX ${EXPECT_ABORT} --success "ablsteady: steady after" "pressure gmres_mlmg reltol" --
                        COMMAND $<TARGET_FILE:ablsteady> ${HILL3D_NEUTRAL_CASE}/inputs_steady_hill3d_neutral_lusgs
                                ${ABLSTEADY_TEST_AMREX_FLAGS})
     add_test(NAME rt_steady_hill3d_neutral_matches
@@ -575,12 +576,31 @@ if(ABLSTEADY_PRECISION STREQUAL "DOUBLE")
     set_tests_properties(rt_steady_hill3d_neutral_matches PROPERTIES LABELS "nightly"
                          FIXTURES_REQUIRED "hill3d_neutral_zjacobi;hill3d_neutral_lusgs"
                          ENVIRONMENT PYTHONDONTWRITEBYTECODE=1)
+    # Old against new default of solver.poisson_backend: the same deck with
+    # gmres_fft (the default before) reaches the gmres_mlmg run's steady state
+    # to 1e-8 of each field's maximum (both run to round-off).
+    ablsteady_add_test(NAME rt_poisson_default_gmres_fft NP 4 LABELS "nightly" RUN_DIR ${RT221_DIR}/lusgs_fft
+                       FIXTURES_REQUIRED hill3d_neutral_clean FIXTURES_SETUP hill3d_neutral_lusgs_fft
+                       PREFIX ${EXPECT_ABORT} --success "ablsteady: steady after" "pressure gmres_fft reltol" --
+                       COMMAND $<TARGET_FILE:ablsteady> ${HILL3D_NEUTRAL_CASE}/inputs_steady_hill3d_neutral_lusgs
+                               solver.poisson_backend=gmres_fft ${ABLSTEADY_TEST_AMREX_FLAGS})
+    add_test(NAME rt_poisson_default_matches
+             COMMAND ${Python3_EXECUTABLE} ${HILL3D_NEUTRAL_CASE}/check_line_match.py lusgs lusgs_fft
+                     steady_hill3d_neutral_plt --rel_tol 1e-8
+             WORKING_DIRECTORY ${RT221_DIR})
+    set_tests_properties(rt_poisson_default_matches PROPERTIES LABELS "nightly"
+                         FIXTURES_REQUIRED "hill3d_neutral_lusgs;hill3d_neutral_lusgs_fft"
+                         ENVIRONMENT PYTHONDONTWRITEBYTECODE=1)
     # RT-1.16.3 (the convergence half): Askervein on the ERF grid with an
     # inflow and an outflow face to the steady verdict (about 2 s on two
     # ranks). The comparison with ERF's URANS on lines A and AA needs the
     # ERF reference run and is not in this version.
+    # alpha_v != alpha_h: the projection falls back to gmres_fft (logged), the
+    # stage keeps the default gmres_mlmg.
     ablsteady_add_test(NAME rt_steady_askervein NP 2 LABELS "regression;smoke"
-                       PREFIX ${EXPECT_ABORT} --success "ablsteady: steady after" --
+                       PREFIX ${EXPECT_ABORT} --success "ablsteady: steady after"
+                              "Poisson iterations \\(gmres_fft," "the projection used gmres_fft, the SIMPLEC stage keeps gmres_mlmg"
+                              "pressure gmres_mlmg reltol" --
                        COMMAND $<TARGET_FILE:ablsteady> ${ASKERVEIN_CASE}/inputs_steady_askervein
                                terrain.file=${PROJECT_SOURCE_DIR}/extern_erf/askervein.txt
                                ${ABLSTEADY_TEST_AMREX_FLAGS})

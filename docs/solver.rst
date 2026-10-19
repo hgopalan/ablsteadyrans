@@ -287,10 +287,50 @@ The initializer, the pressure correction and the Tucker wall distance solve
 where :math:`f` are ERF's face gradients with the terrain cross terms and :math:`\beta` are face coefficients
 (:math:`1/d` for SIMPLEC, :math:`\Sigma` for the initializer). ``solver.poisson_backend`` selects:
 
-- ``gmres_fft`` (default): ERF's ``TerrainPoisson`` with ``amrex::GMRES`` and ERF's FFT preconditioner (the flat
-  stretched Laplacian, FFT in x and y, tridiagonal in z);
-- ``mlmg``, ``gmres_mlmg``: AMReX's ``MLTerrainPoisson`` with geometric multigrid, alone or under GMRES. It gives the
-  same solution to 1e-9.
+- ``gmres_mlmg`` (default) and ``mlmg``: AMReX's ``MLTerrainPoisson`` with geometric multigrid, under GMRES or
+  alone. It coarsens only in x and y and solves each column exactly, the usual treatment of cells much thinner
+  than they are wide. It gives the same solution as back end A to 1e-9 and needs no FFT;
+- ``gmres_fft``: ERF's ``TerrainPoisson`` with ``amrex::GMRES`` and ERF's FFT preconditioner (the flat
+  stretched Laplacian, FFT in x and y, tridiagonal in z).
+
+**Why gmres_mlmg is the default.** On the Askervein terrain at 43 m horizontal spacing, the two back ends give the
+same SIMPLEC iterations to the steady verdict when started from the same field, but the column solves keep back end
+B's work per pressure correction nearly flat as the first layer thins (mean Poisson iterations per correction):
+
+.. list-table::
+   :header-rows: 1
+   :widths: 25 15 30 30
+
+   * - First layer (m)
+     - dx/dz
+     - ``gmres_fft``
+     - ``gmres_mlmg``
+   * - 8
+     - 5
+     - 196 iterations, 6.6
+     - 196 iterations, 2.6
+   * - 4
+     - 11
+     - 203 iterations, 7.7
+     - 203 iterations, 2.6
+   * - 2
+     - 21
+     - 230 iterations, 9.6
+     - 230 iterations, 2.5
+   * - 1
+     - 43
+     - 324 iterations, 12.8
+     - 324 iterations, 2.1
+
+(140 × 140 cells, the layers stretched by 1.08 to about 750 m, line LU-SGS with two sweeps at a CFL cap of 16,
+``init.alpha_v = init.alpha_h = 1``.) At the same ``simplec.pressure_reltol`` back end B also leaves 10–30 times
+less divergence after the correction, since it stops on the :math:`J`-scaled residual.
+
+**The initializer's split coefficient.** With :math:`\alpha_v \ne \alpha_h` the initializer's operator is
+:math:`\nabla\cdot(\mathrm{diag}(\alpha_h^2, \alpha_h^2, \alpha_v^2)\nabla\lambda)`, whose z-face flux needs a
+separate coefficient on the cross part (``FaceCoeffs::z_cross``). Back end B has none, so that one projection runs
+on back end A, and the log says so; the SIMPLEC stage keeps ``solver.poisson_backend``. With
+:math:`\alpha_v = \alpha_h` the cross part takes the z coefficient and no split is used.
 
 The solve stops at ``solver.poisson_reltol`` or ``solver.poisson_abstol``. With no Dirichlet face the mean of the
 right-hand side is removed first. In single precision the rounding floor is about :math:`\varepsilon N_z^2/2`, so

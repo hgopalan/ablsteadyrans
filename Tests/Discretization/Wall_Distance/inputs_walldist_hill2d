@@ -14,3 +14,6 @@ terrain.hill_half_width = 500.
 terrain.smoothing       = 0
 
 io.plot_file = walldist_hill2d_plt
+
+# Back end A, as the gold walldist_hill2d_plt00000 was written (the default is gmres_mlmg).
+solver.poisson_backend = gmres_fft

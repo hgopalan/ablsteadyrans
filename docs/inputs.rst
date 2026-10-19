@@ -301,12 +301,15 @@ setting these keys stops the run, like any other key it does not read. Each row 
      - ≥ 1. GMRES restart length (ERF's value); ``gmres_fft`` and ``gmres_mlmg`` only (an error with ``mlmg``).
    * - ``solver.poisson_precond``
      - ``fft``
-     - ``fft`` (ERF's FFT preconditioner on the flat stretched grid) or ``none``; ``gmres_fft`` only (an error with
-       back end B).
+     - ``fft`` (ERF's FFT preconditioner on the flat stretched grid) or ``none``; given only with
+       ``solver.poisson_backend = gmres_fft`` (an error with back end B). The initializer's ``gmres_fft`` fallback
+       below uses the default ``fft``.
    * - ``solver.poisson_backend``
-     - ``gmres_fft``
-     - ``gmres_fft`` (back end A: ERF's operator, GMRES, FFT preconditioner), ``mlmg`` or ``gmres_mlmg`` (back end
-       B: AMReX's ``MLTerrainPoisson`` with multigrid, alone or under GMRES).
+     - ``gmres_mlmg``
+     - ``gmres_mlmg`` (back end B under GMRES), ``mlmg`` (back end B: AMReX's ``MLTerrainPoisson`` with multigrid)
+       or ``gmres_fft`` (back end A: ERF's operator, GMRES, FFT preconditioner). Back end B has no split z-face
+       coefficient, so with ``init.alpha_v`` ≠ ``init.alpha_h`` the initializer's projection uses ``gmres_fft``
+       whatever this says, and logs it; the SIMPLEC stage keeps this value (:doc:`solver`).
    * - ``solver.poisson_verbose``
      - ``0``
      - ≥ 0. 1 prints each solve's iterations, residuals and (singular problems) removed mean, and AMReX GMRES's solve

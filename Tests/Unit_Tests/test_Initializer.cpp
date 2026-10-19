@@ -142,6 +142,41 @@ double xface_height (const amrex::FArrayBox& z, int i, int j, int k)
 }
 
 // ---------------------------------------------------------------------------
+// The projection's back end: solver.poisson_backend (default gmres_mlmg), or
+// gmres_fft when alpha_v != alpha_h needs the split z-face coefficient, which
+// back end B does not have; the result reports which, and the fallback.
+TEST(Initializer, ProjectionBackEndFollowsTheAlphaRatio)
+{
+    const ablsteady::PoissonOptions dflt;
+    EXPECT_EQ(dflt.backend, "gmres_mlmg");
+    EXPECT_EQ(ablsteady::initializer_poisson_options(profile_options(1, 1), dflt).backend, "gmres_mlmg");
+    EXPECT_EQ(ablsteady::initializer_poisson_options(profile_options(2, 2), dflt).backend, "gmres_mlmg");
+    EXPECT_EQ(ablsteady::initializer_poisson_options(profile_options(0.5, 1), dflt).backend, "gmres_fft");
+    EXPECT_EQ(ablsteady::initializer_poisson_options(profile_options(1, 2), dflt).backend, "gmres_fft");
+    ablsteady::PoissonOptions mg;
+    mg.backend = "mlmg";
+    EXPECT_EQ(ablsteady::initializer_poisson_options(profile_options(0.5), mg).backend, "gmres_fft");
+    EXPECT_EQ(ablsteady::initializer_poisson_options(profile_options(1), mg).backend, "mlmg");
+    ablsteady::PoissonOptions fft;
+    fft.backend = "gmres_fft";
+    EXPECT_EQ(ablsteady::initializer_poisson_options(profile_options(1), fft).backend, "gmres_fft");
+
+    PCase c = square_hill(16, 8, 120, false);
+    const BoundaryInputs bin = open_along(c, 0, true);
+    const auto popt = solver_options();   // the default back end
+    ablsteady::State qa, qb;
+    define_state(qa, c);
+    define_state(qb, c);
+    const auto ra = ablsteady::initialize_state(profile_options(0.5), bin, popt, c.mesh, c.geom, qa);
+    EXPECT_EQ(ra.poisson_backend, "gmres_fft");
+    EXPECT_TRUE(ra.backend_fallback);
+    EXPECT_LT(ra.divergence_after, 10 * popt.reltol * ra.divergence_before);
+    const auto rb = ablsteady::initialize_state(profile_options(1), bin, popt, c.mesh, c.geom, qb);
+    EXPECT_EQ(rb.poisson_backend, "gmres_mlmg");
+    EXPECT_FALSE(rb.backend_fallback);
+    EXPECT_LT(rb.divergence_after, 10 * popt.reltol * rb.divergence_before);
+}
+
 // UT-1.12.1 and UT-1.12.2. With alpha_h = alpha_v = 1 the initial field is the
 // plain projection of the first guess bit for bit (the Poisson layer's solve
 // without coefficients on the same first guess, applied the same way); with

@@ -130,7 +130,7 @@ TEST (Poisson, VariableCoefficientsSecondOrder)
             int n = 0;
             for (const int nx : {16, 32, 64}) {
                 PCase c = make_case(nx, 1, nx / 2, PoissonFace::neumann, PoissonFace::periodic, ms, 1, true);
-                err[n++] = solve_ms(c, ms, bc_nd, nullptr, 1.0, bv, true, {}, bv).err;
+                err[n++] = solve_ms(c, ms, bc_nd, nullptr, 1.0, bv, true, back_end_a(), bv).err;
             }
             EXPECT_GE(order_of(err, 0), tol(1.9, 1.8)) << "H0 " << H0 << " beta_v " << bv << ": " << err[0] << " " << err[1];
             EXPECT_GE(order_of(err, 1), tol(1.9, 1.6)) << "H0 " << H0 << " beta_v " << bv << ": " << err[1] << " " << err[2];
@@ -141,8 +141,8 @@ TEST (Poisson, VariableCoefficientsSecondOrder)
         ms.flat_y = true;
         ms.zero_gradient_ground = true;
         PCase c = make_case(64, 1, 32, PoissonFace::neumann, PoissonFace::periodic, ms, 1, true);
-        const double with = solve_ms(c, ms, bc_nd, nullptr, 1.0, 0.1, true, {}, 0.1, true).err;
-        const double without = solve_ms(c, ms, bc_nd, nullptr, 1.0, 0.1, true, {}, 0.1, false).err;
+        const double with = solve_ms(c, ms, bc_nd, nullptr, 1.0, 0.1, true, back_end_a(), 0.1, true).err;
+        const double without = solve_ms(c, ms, bc_nd, nullptr, 1.0, 0.1, true, back_end_a(), 0.1, false).err;
         EXPECT_GT(without, 5 * with) << "without z_cross " << without << ", with " << with;
     }
     const Fn beta = [] (double x, double, double z) {
@@ -182,7 +182,7 @@ TEST (Poisson, UnitCoefficientsAreThePlainOperator)
         b[d].setVal(1.0);
     }
     const auto bc = make_bc(PoissonFace::neumann, PoissonFace::periodic, PoissonFace::dirichlet);
-    ablsteady::PoissonSolver s0(c.mesh, c.geom, c.z, {}), s1(c.mesh, c.geom, c.z, {});
+    ablsteady::PoissonSolver s0(c.mesh, c.geom, c.z, back_end_a()), s1(c.mesh, c.geom, c.z, back_end_a());
     const auto r0 = s0.solve(rhs, p0, {}, bc, &f0);
     ablsteady::FaceCoeffs ones;
     ones.x = &b[0];
@@ -208,7 +208,7 @@ TEST (Poisson, UnitCoefficientsAreThePlainOperator)
     amrex::Array<amrex::MultiFab, 3> f2;
     for (int d = 0; d < 3; ++d) { f2[d].define(areas[d]->boxArray(), c.dm, 1, 0); }
     fill_cells(rhs2, c, [ms] (double x, double y, double z) { return ms.phi(x, y, z) * 1e-5; });
-    ablsteady::PoissonSolver s2(c.mesh, c.geom, c.z, {});
+    ablsteady::PoissonSolver s2(c.mesh, c.geom, c.z, back_end_a());
     s2.solve(rhs2, p2, cs, bc, &f2);
     p2.mult(cval);
     EXPECT_LE(l2_diff(p2, p0, c.mesh.detJ, false), tol(1e-9, 1e-4) * p0.norm2() / std::sqrt(double(c.ba.numPts())));
@@ -240,7 +240,7 @@ void ramp_solve (RampSolve& r)
     });
     const amrex::MultiFab* areas[3] = {&r.c.mesh.ax, &r.c.mesh.ay, &r.c.mesh.az};
     for (int d = 0; d < 3; ++d) { r.flux[d].define(areas[d]->boxArray(), r.c.dm, 1, 0); }
-    ablsteady::PoissonSolver s(r.c.mesh, r.c.geom, r.c.z, {});
+    ablsteady::PoissonSolver s(r.c.mesh, r.c.geom, r.c.z, back_end_a());
     r.res = s.solve(r.rhs, r.phi, {}, make_bc(PoissonFace::neumann, PoissonFace::neumann, PoissonFace::dirichlet),
                     &r.flux);
 }
@@ -346,7 +346,7 @@ TEST (Poisson, OperatorMatchesFluxDivergence)
         });
         amrex::Array<amrex::MultiFab, 3> F;
         for (int d = 0; d < 3; ++d) { F[d].define(areas[d]->boxArray(), c.dm, 1, 0); }
-        ablsteady::PoissonSolver s(c.mesh, c.geom, c.z, {});
+        ablsteady::PoissonSolver s(c.mesh, c.geom, c.z, back_end_a());
         s.solve(rhs, phi, fc, bc, &F);
         s.apply(Aphi, phi, fc, bc);
         ablsteady::face_divergence(c.mesh, c.geom, {&F[0], &F[1], &F[2]}, div);
@@ -378,7 +378,7 @@ TEST (Poisson, ProjectedFieldIsDivergenceFree)
     amrex::MultiFab rhs(c.ba, c.dm, 1, 0), phi(c.ba, c.dm, 1, 1), div(c.ba, c.dm, 1, 0);
     ablsteady::face_divergence(c.mesh, c.geom, {&U[0], &U[1], &U[2]}, rhs);
     const double div0 = rhs.norm2();
-    ablsteady::PoissonSolver s(c.mesh, c.geom, c.z, {});
+    ablsteady::PoissonSolver s(c.mesh, c.geom, c.z, back_end_a());
     const auto res = s.solve(rhs, phi, {}, make_bc(PoissonFace::neumann, PoissonFace::periodic, PoissonFace::dirichlet), &F);
     for (int d = 0; d < 3; ++d) { amrex::MultiFab::Add(U[d], F[d], 0, 0, 1, 0); }
     ablsteady::face_divergence(c.mesh, c.geom, {&U[0], &U[1], &U[2]}, div);
@@ -403,7 +403,7 @@ TEST (Poisson, MirrorSymmetry)
         fill_cells(rhs, c, [] (double x, double y, double z) {
             return 1e-5 * std::cos(2 * M_PI * (x - 500) / 1000) * (1 + 0.5 * std::sin(2 * M_PI * y / 800)) * (1 - z / 600);
         });
-        ablsteady::PoissonSolver s(c.mesh, c.geom, c.z, {});
+        ablsteady::PoissonSolver s(c.mesh, c.geom, c.z, back_end_a());
         s.solve(rhs, phi, {}, make_bc(kx, PoissonFace::periodic, PoissonFace::dirichlet));
         amrex::FArrayBox a(c.geom.Domain(), 1, amrex::The_Pinned_Arena());
         phi.copyTo(a);
@@ -451,7 +451,7 @@ TEST (Poisson, SplitOperatorKeepsTheMirrorSymmetries)
     fc.z = &bz;
     fc.z_cross = &bzc;
     fc.precond_ratio = amrex::Real(0.36);
-    ablsteady::PoissonOptions opt;
+    ablsteady::PoissonOptions opt = back_end_a();
     opt.reltol = tol(3e-15, 2e-6);   // >= 10 machine epsilon
     opt.max_iter = 2000;
     ablsteady::PoissonSolver s(c.mesh, c.geom, c.z, opt);
@@ -485,7 +485,7 @@ TEST (Poisson, PreconditionerCutsIterations)
     ms.zero_gradient_ground = true;
     PCase c = make_case(32, 24, 16, PoissonFace::neumann, PoissonFace::periodic, ms, 1, true);
     const auto bc = make_bc(PoissonFace::neumann, PoissonFace::periodic, PoissonFace::dirichlet);
-    ablsteady::PoissonOptions none;
+    ablsteady::PoissonOptions none = back_end_a();
     none.precond = "none";
     none.max_iter = 5000;
     const auto with = solve_ms(c, ms, bc);
@@ -494,8 +494,8 @@ TEST (Poisson, PreconditionerCutsIterations)
     EXPECT_GT(without.res.iterations, 10 * with.res.iterations) << without.res.iterations;
     EXPECT_NEAR(with.err, without.err, tol(1e-6, 1e-2) * with.err);
 
-    const auto told = solve_ms(c, ms, bc, nullptr, 1, 0.1, true, {}, 0.1);
-    const auto untold = solve_ms(c, ms, bc, nullptr, 1, 0.1, true, {}, 1.0);
+    const auto told = solve_ms(c, ms, bc, nullptr, 1, 0.1, true, back_end_a(), 0.1);
+    const auto untold = solve_ms(c, ms, bc, nullptr, 1, 0.1, true, back_end_a(), 1.0);
     EXPECT_LE(told.res.iterations, 18);
     EXPECT_LE(told.res.iterations, with.res.iterations + 3);
     EXPECT_GT(untold.res.iterations, told.res.iterations * 3 / 2) << told.res.iterations << " vs " << untold.res.iterations;
@@ -520,7 +520,7 @@ TEST (Poisson, SingularProblemRemovesTheMean)
     fill_cells(rhs, c, [ms] (double x, double y, double z) { return 1e-5 * ms.phi(x, y, z); });
     const double mean = amrex::MultiFab::Dot(c.mesh.detJ, 0, rhs, 0, 1, 0) / c.mesh.detJ.sum(0);
     rhs.plus(3e-6, 0, 1, 0);
-    ablsteady::PoissonSolver s(c.mesh, c.geom, c.z, {});
+    ablsteady::PoissonSolver s(c.mesh, c.geom, c.z, back_end_a());
     const auto res = s.solve(rhs, phi, {}, bc);
     EXPECT_TRUE(res.singular);
     EXPECT_NEAR(res.removed_mean, mean + 3e-6, tol(1e-12, 1e-5) * 3e-6);
@@ -566,7 +566,7 @@ TEST (Poisson, ChecksNameTheInput)
         return "";
     };
     const auto bc = make_bc(PoissonFace::neumann, PoissonFace::periodic, PoissonFace::dirichlet);
-    ablsteady::PoissonOptions one;
+    ablsteady::PoissonOptions one = back_end_a();
     one.max_iter = 1;
     EXPECT_NE(thrown([&] { solve_ms(c, ms, bc, nullptr, 1, 1, false, one); }).find("solver.poisson_max_iter"),
               std::string::npos);
@@ -581,7 +581,7 @@ TEST (Poisson, ChecksNameTheInput)
     other.maxSize(4);
     amrex::MultiFab rhs(other, amrex::DistributionMapping(other), 1, 0), phi(c.ba, c.dm, 1, 1);
     rhs.setVal(0);
-    ablsteady::PoissonSolver s(c.mesh, c.geom, c.z, {});
+    ablsteady::PoissonSolver s(c.mesh, c.geom, c.z, back_end_a());
     EXPECT_NE(thrown([&] { s.solve(rhs, phi, {}, bc); }).find("rhs must be on the mesh's BoxArray"), std::string::npos);
 }
 

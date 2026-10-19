@@ -33,6 +33,11 @@ bc.inflow_ustar     = 0.6
 bc.inflow_z0        = 0.03
 bc.inflow_direction = 0.
 
+# Back end A, as the committed table askervein_cnbl_inflow.txt was written: the
+# column's theta has no fixed point (the inversion drifts), so a run stopped at
+# the table's step depends on the pressure solver's path (0.25 K with
+# gmres_mlmg, the default). The 3-D case runs on the table with the default.
+solver.poisson_backend = gmres_fft
 init.first_guess = profile
 
 forcing.coriolis        = 1

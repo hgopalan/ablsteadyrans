@@ -39,6 +39,12 @@ adjustment, so the flow goes around steep terrain rather than over it. Only the 
 notation :math:`\alpha_v/\alpha_h` is :math:`\alpha_1/\alpha_2`, WindNinja's stability parameter. Ratios of 0.1 and
 above are practical; smaller ratios need more Poisson iterations.
 
+**Which Poisson back end.** With :math:`\alpha_v \ne \alpha_h` the z-face flux needs a separate coefficient on its
+terrain cross part, which only back end A has, so the projection runs on ``gmres_fft`` whatever
+``solver.poisson_backend`` says, and the log prints a line saying so; the SIMPLEC stage keeps
+``solver.poisson_backend`` (default ``gmres_mlmg``, :doc:`solver`). With :math:`\alpha_v = \alpha_h` the projection
+uses ``solver.poisson_backend``.
+
 O'Brien column correction
 -------------------------
 

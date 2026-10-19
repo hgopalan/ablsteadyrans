@@ -54,7 +54,8 @@ def run(cmd):
 
 
 def measure(out):
-    m = re.search(r"ablsteady: initializer: (\d+) Poisson iterations \(reltol (\S+)\), divergence (\S+) before, (\S+) after", out)
+    # "(<back end>, reltol R)": the back end the projection used (gmres_fft when alpha_v != alpha_h).
+    m = re.search(r"ablsteady: initializer: (\d+) Poisson iterations \((?:\w+, )?reltol (\S+)\), divergence (\S+) before, (\S+) after", out)
     w = re.search(r"ablsteady: wrote (\S+)", out)
     if not m or not w:
         raise SystemExit("check_init: the run did not print the initializer report and the plotfile name")
