@@ -78,6 +78,24 @@ is killed:
    * - M16
      - Line key given with ``zjacobi`` accepted
      - UT-2.2.5 (``Driver``)
+   * - M17
+     - Odd sweeps not reversed (``steady.line_alternate`` ignored)
+     - UT-2.2.6
+   * - M18
+     - Reversed forward wavefront skips its last plane
+     - UT-2.2.6
+   * - M19
+     - Reversed sequential forward pass walks j ascending
+     - UT-2.2.6
+   * - M20
+     - ``steady.line_alternate`` not read
+     - UT-2.2.5 (``Driver``)
+   * - M21
+     - ``steady.line_alternate = 2`` accepted
+     - UT-2.2.5 (``Driver``), UT-2.2.6
+   * - M22
+     - ``steady.line_alternate`` given with ``zjacobi`` accepted
+     - UT-2.2.5 (``Driver``)
 
 The tests run with the GPU CI flags (see :doc:`running`). Each test runs in its own directory under
 ``<build>/Tests/run/``.
@@ -797,7 +815,17 @@ GoogleTest suite
      - *Beyond the plan* (``LineSweeps.RefusalsAndNames`` and ``Driver.DivergenceStopsAndTheChecksNameTheirInput``).
        The refusals naming ``steady.line_overlap`` (< 0, > 8, with the lagged ghosts, wider than the narrowest box),
        no overlap along a one-cell axis, the readers of ``steady.line_ghosts``, ``line_overlap`` and ``line_order``
-       (values, defaults, unknown words, a repeated key, a line key with ``zjacobi``), the dispatcher.
+       (values, defaults, unknown words, a repeated key, a line key with ``zjacobi``), the dispatcher. The reader
+       of ``steady.line_alternate`` (the value, the default 0, 2 and -1 refused, refused with ``zjacobi``).
+   * - UT-2.2.6
+     - *Beyond the plan* (``LineSweeps.AlternatingOrderingSweepsBothDiagonals``). The alternating ordering
+       (``steady.line_alternate = 1``). On an 8 × 8 × 4 system coupled only to the :math:`(i-1)` and :math:`(j+1)`
+       neighbours (the upwind couplings of :math:`u > 0`, :math:`v < 0`), two alternating sweeps solve it to 1000
+       machine epsilons (the reversed forward pass is an exact solve), while two sweeps of the ascending pairs leave
+       a residual above 1e-3 of the right-hand side. The diagonal ordering equals the sequential one bit for bit with
+       the reversed pairs too, at the launch counts of UT-2.2.4 (three layouts, periodic and not, every location,
+       lagged ghosts and zero ghosts with :math:`n_o = 2`, one to three sweeps). One sweep is unchanged by the option
+       (only the odd sweeps are reversed); two and three sweeps differ. The range check names the key.
    * - UT-1.15.7 (revised in 1.16)
      - The rotation's pin now holds the planar-mean split: :math:`a_P` with :math:`f^2\max(\tau_c, \tau_{\mathrm{own}})`
        and the right-hand side with the unique-face horizontal mean of the other residual per level at :math:`\tau_c`

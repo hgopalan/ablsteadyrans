@@ -218,6 +218,12 @@ definition of a steady solution (:doc:`solver`) and its own. The application run
      - ``sequential``
      - ``sequential`` or ``diagonal``; refused unless ``steady.sweep = lusgs``. ``diagonal`` sweeps the
        wavefronts i + j = const, one column per thread: the same result as ``sequential``, bit for bit.
+   * - ``steady.line_alternate``
+     - ``0``
+     - ``0`` or ``1`` (beyond the plan of sub-phase 2.2); refused unless ``steady.sweep = lusgs``. ``1``: the odd
+       sweeps (the second, fourth, ...) of each call take the j-reversed pair, (+i, −j) then (−i, +j), so a wind
+       whose u and v have opposite signs is swept along its own direction once per two sweeps (:doc:`solver`). No
+       effect with ``steady.zline_sweeps = 1`` or a domain one cell wide in y.
    * - ``steady.machine``
      - ``local``
      - ``local``, ``kestrel-cpu`` or ``kestrel-gpu``: the allocation-unit rate of the accounting (0, 10, 100 AU per
