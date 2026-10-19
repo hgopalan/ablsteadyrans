@@ -18,6 +18,7 @@
 
 #include <cmath>
 #include <cstdint>
+#include <initializer_list>
 #include <limits>
 #include <random>
 #include <stdexcept>
@@ -292,8 +293,11 @@ TEST (Predictor, APIsTheDiagonalPlusThePseudoTimeTerm)
         // region with the zero ghosts), not only steady.sweep.
         ablsteady::State q2;
         define_state(q2, c);
-        for (auto [d, s] : {std::pair{&q2.u, &q.u}, {&q2.v, &q.v}, {&q2.w, &q.w}, {&q2.p, &q.p}, {&q2.theta, &q.theta},
-                            {&q2.tke, &q.tke}}) {
+        // The element type is spelt out: nvcc cannot deduce a braced list
+        // whose first element is a deduced std::pair{...}.
+        using CopyPair = std::pair<amrex::MultiFab*, const amrex::MultiFab*>;
+        for (auto [d, s] : std::initializer_list<CopyPair>{{&q2.u, &q.u}, {&q2.v, &q.v}, {&q2.w, &q.w}, {&q2.p, &q.p},
+                                                           {&q2.theta, &q.theta}, {&q2.tke, &q.tke}}) {
             amrex::MultiFab::Copy(*d, *s, 0, 0, 1, 2);
         }
         ablsteady::LineSweepOptions opt(ablsteady::SweepKind::lusgs);
