@@ -60,8 +60,9 @@
 // (-i, +j) (the diagonal ordering's wavefronts are then i - j = const). A
 // wind whose u and v have opposite signs is then swept exactly by one of
 // the two pairs. With one sweep per call (steady.zline_sweeps = 1) it has
-// no effect. Its own kernels; the wavefront argument holds as for the
-// ascending pair.
+// no effect; on a domain one cell wide in y it changes the y-face field
+// alone (two faces per column). Its own kernels; the wavefront argument
+// holds as for the ascending pair.
 
 #include "CVFluxes.H"
 #include "Mesh.H"

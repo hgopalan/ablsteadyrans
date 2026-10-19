@@ -160,6 +160,52 @@ values as in the lexicographic order: the result is the sequential sweep's, bit 
 :math:`n_x + n_y - 1` launches per pass instead of one. The GPU timings and the per-machine defaults come in a later
 sub-phase.
 
+**Alternating ordering** (beyond the plan of sub-phase 2.2). With ``steady.line_alternate = 1`` the odd sweeps of
+each call (the second, fourth, ...) take the j-reversed pair, :math:`(+i, -j)` forward then :math:`(-i, +j)`
+backward (with ``steady.line_order = diagonal`` the wavefronts are :math:`(i - i_0) + (j_1 - j) = s`, their own
+kernels). Where :math:`u` and :math:`v` have opposite signs one of the two pairs follows the wind, so its forward
+pass resolves the first-order upwind coupling exactly instead of lagging one neighbour (UT-2.2.6). It needs
+``steady.zline_sweeps`` ≥ 2. Measured on four ranks (the truly neutral Hill_3D deck ``inputs_steady_hill3d_neutral_lusgs``:
+zero ghosts, :math:`n_o = 2`, diagonal, two sweeps; iterations to round-off):
+
+.. list-table::
+   :header-rows: 1
+   :widths: 46 18 18 18
+
+   * - Case
+     - off
+     - on
+     - ``zjacobi``
+   * - :math:`(u_g, v_g) = (10, 0)`, cap 16
+     - 1792
+     - 1813
+     - 3495
+   * - :math:`(u_g, v_g) = (10, 0)`, cap 64
+     - 2997
+     - 2991
+     -
+   * - :math:`(u_g, v_g) = (10, -10)`, cap 16
+     - not converged at 20 000
+     - 3052
+     - 6051
+   * - :math:`(u_g, v_g) = (10, -10)`, cap 64
+     - not converged at 20 000
+     - 3585
+     -
+   * - Conventionally neutral Hill_3D (``inputs_steady_hill3d`` with the same LU-SGS settings, cap 16, two orders)
+     - 1100
+     - 1146
+     -
+   * - 2-D hill (``inputs_steady_hill2d_lusgs``, one cell in y)
+     - 3062
+     - 3061
+     -
+
+The ``zjacobi`` column is the deck's own 16 sweeps at a cap of 4. With an opposite-sign geostrophic wind the
+ascending pairs stall (the TKE residual drops 0.04 orders in 20 000 iterations), while the alternating ordering
+converges in half the ``zjacobi`` iterations. Where the wind keeps one sign it costs 0–4 % more iterations. The
+default stays ``0`` (bit-identical); the per-machine defaults are chosen in a later sub-phase.
+
 **Pressure correction.** With the SIMPLEC denominator :math:`d = a_P - \sum a_{nb}`,
 
 .. math::
