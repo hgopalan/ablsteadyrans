@@ -267,6 +267,15 @@ Current tests
        (1e-6); ν_t of the second cell within 6 % of κ u* (z + z₀); every column identical (1e-10); every field finite.
        Measured: 2231 iterations, u* = 0.3499999, second cell 0.9 % low, cells 2–7 1.3–1.9 % low. Double precision
        only (six orders and 1e-8 are below single's floor); the restart chain below runs in both.
+   * - ``rt_steady_column_rough``, ``rt_steady_column_rough_floor_one``
+     - *Beyond the plan.* The column on rough ground (``inputs_steady_column_rough``: 4 × 4 × 64, 1 m layers, 64 m,
+       z₀ = 0.5 m, F = u*²/H with u* = √0.125 = 0.354 m/s). The first centre, 0.5 m, is below (e − 1) z₀, where
+       ln((d + z₀)/z₀) = ln 2 < 1. With the default ``bc.surface_denominator_floor = log_law``: the checks of
+       ``rt_steady_column``, with the cells above the first measured against the profile of the shallow column's
+       stress u*²(1 − z/H) (``--stress-profile``, a closed form). With ``one``: the first cell's speed is
+       (u*/κ) max(ln((z + z₀)/z₀), 1) to 1e-6, 1/ln 2 = 1.44 times the log law's. Measured: 347 and 411 iterations;
+       log_law second cell 0.70 % low, lowest eight within 0.92 %. Sub-phase 1.7's code fails the first
+       (first cell 0.862 m/s against 0.598). Double precision only.
    * - ``rt_steady_column_restart_first``, ``…_continued``, ``…_straight``, ``…_matches``
      - *Beyond the plan.* 40 iterations of the column (``inputs_steady_column_restart``, the first guess on the
        command line), continued to 80 from the checkpoint (the driver and closure histories restored, the inflow keys
@@ -516,7 +525,10 @@ GoogleTest suite
    * - UT-1.7.3
      - u* from a log-law state (u* = 0.45, z₀ = 0.1 m) on that column: within 2e-5 at the first centre, at 10 m, at 55.3 m
        and on a centre. *Beyond the plan:* with a heat flux, u* matches an independent bisection to 1e-10 for unstable,
-       stable and low-wind convective cases, and is positive.
+       stable and low-wind convective cases, and is positive. On rough ground (z₀ = 0.5 m, 1 m first layer,
+       ln((d + z₀)/z₀) = ln 2): u* from the log law at the first centre and at 0.8 m with
+       ``bc.surface_denominator_floor = log_law``, 0.45 ln 2 with ``one``; with a heat flux both floors match the
+       bisection with their floor to 1e-10. An unknown floor stops the run, naming the key.
    * - UT-1.7.4
      - :math:`k_w = u_*^2/C_{\mu0}^2` exactly (neutral); Axell's buoyant form with a heat flux; the wall eddy viscosity
        equals :math:`C_{\mu0}\sqrt{k_w}\,\kappa(d+z_0)`.

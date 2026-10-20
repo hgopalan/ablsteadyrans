@@ -1,0 +1,44 @@
+# The rough column (beyond the plan): the neutral column of
+# inputs_steady_column with z0 = 0.5 m over 1 m layers (4 x 4 x 64, 64 m):
+# the first cell centre, 0.5 m, is below (e - 1) z0 = 0.86 m, where
+# ln((d + z0)/z0) = ln 2 < 1. Driven by F = u*^2 / H with u* = sqrt(0.125)
+# = 0.354 m/s and H = 64 m. With bc.surface_denominator_floor = log_law (the
+# default) the steady first cell follows the log law of the inflow profile;
+# rt_steady_column_rough_floor_one runs it with one (sub-phase 1.7's floor),
+# where the first cell is 1/ln 2 = 1.44 times the log law's speed. Two boxes
+# (max_grid_size 2 4), one per rank on two ranks.
+# Tests/Canonical_RANS/Neutral_Column/check_steady_column.py.
+mesh.n_cell        = 4 4 64
+mesh.prob_hi       = 256. 256. 64.
+mesh.is_periodic   = 1 1 0
+mesh.max_grid_size = 2 4
+
+terrain.type = flat
+
+bc.zlo = surface_layer
+bc.zhi = slip_wall
+bc.surface_z0 = 0.5
+bc.theta_profile_z = 0.
+bc.theta_profile   = 300.
+bc.inflow_profile  = log_law
+bc.inflow_ustar    = 0.3
+bc.inflow_z0       = 0.5
+bc.inflow_direction = 0.
+
+init.first_guess = profile
+
+turb.max_geom_lscale = 1.0e12
+turb.face_mean       = logarithmic
+
+forcing.pressure_gradient = 1.953125e-3 0. 0.
+
+steady.stage                = simplec
+steady.cfl0                 = 1.
+steady.cfl_max              = 50.
+steady.max_iterations       = 20000
+steady.residual_drop_orders = 6
+steady.residual_tol         = 1.e-8
+
+io.plot_file      = steady_column_rough_plt
+io.turb_plot_file = steady_column_rough_turb
+io.chk_file       = steady_column_rough_chk

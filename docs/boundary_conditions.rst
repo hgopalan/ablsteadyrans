@@ -83,7 +83,7 @@ The ground uses Monin–Obukhov similarity (MOST) on every column:
 
 .. math::
 
-   u_* = \frac{\kappa\,U}{\max\left(\ln\dfrac{d + z_0}{z_0} - \psi_m(d/L),\; 1\right)}, \qquad
+   u_* = \frac{\kappa\,U}{\max\left(\ln\dfrac{d + z_0}{z_0} - \psi_m(d/L),\; m\right)}, \qquad
    \frac1L = -\frac{\kappa\,g\,q}{u_*^3\,\theta_0} .
 
 - :math:`U = \max(|\mathbf U_t|, 0.1)` m/s is the wind parallel to the ground at the reference height
@@ -92,6 +92,22 @@ The ground uses Monin–Obukhov similarity (MOST) on every column:
 - :math:`z_0` is ``bc.surface_z0``, :math:`q` the kinematic heat flux ``bc.surface_heat_flux`` and :math:`\psi_m`
   ERF's Businger–Dyer function.
 - ``bc.surface_stability = heat_flux`` solves :math:`u_*` by Newton's method to round-off.
+- :math:`m` is the floor of the denominator. Strong convection at low wind would otherwise give :math:`u_* < 0`.
+  ``bc.surface_denominator_floor = log_law`` (the default) uses :math:`m = \min(\ln((d + z_0)/z_0),\, 1)`;
+  ``one`` uses :math:`m = 1`.
+
+**Why the floor is** :math:`\min(\ln((d+z_0)/z_0), 1)`. For neutral flow (:math:`\psi_m = 0`) the floor then never
+acts, and :math:`u_*` is the log law's at every height, as in the inflow profile and the column guess. The floor
+:math:`m = 1` acts on neutral flow when the reference point is below :math:`(e-1)\,z_0 \approx 1.72\,z_0`, i.e. a
+first layer thinner than :math:`3.44\,z_0`. Then :math:`u_*` is :math:`\ln((d+z_0)/z_0)` times the log law's value.
+For example, :math:`z_0 = 0.5` m over a 1 m first layer gives 0.69 of the log law's :math:`u_*` and 0.48 of its
+stress. The range is a first layer under 1.72 m for :math:`z_0 = 0.5` m, under 1.03 m for :math:`z_0 = 0.3` m and
+under 0.34 m for :math:`z_0 = 0.1` m. With a heat flux and :math:`\ln((d+z_0)/z_0) < 1`, an unstable
+:math:`\psi_m > 0` meets either floor at once, so :math:`u_*` takes no convective increase there (with ``log_law``
+it is the neutral value; with ``one`` it is :math:`\kappa U`, below the neutral value). On the stable side
+(:math:`\psi_m < 0`) ``log_law`` never binds, while ``one`` also bound weakly stable cases there. Where
+:math:`\ln((d+z_0)/z_0) \ge 1` the two floors give the same answer, bit for bit. ``one`` keeps the form of
+sub-phase 1.7.
 
 **Why Newton.** ERF iterates a relaxed fixed point to 1e-5. That makes :math:`u_*` a step function of the wind,
 which spoils a finite-difference Jacobian.

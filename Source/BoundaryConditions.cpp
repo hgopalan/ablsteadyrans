@@ -125,7 +125,8 @@ FaceType face_type_from_name (const std::string& name, const std::string& key)
     return FaceType::periodic;
 }
 
-const char* const kSurfaceKeys[] = {"surface_z0", "surface_zref", "surface_stability", "surface_heat_flux", "surface_wall_k"};
+const char* const kSurfaceKeys[] = {"surface_z0", "surface_zref", "surface_stability", "surface_heat_flux", "surface_wall_k",
+                                    "surface_denominator_floor"};
 
 BoundaryInputs read_boundary_inputs ()
 {

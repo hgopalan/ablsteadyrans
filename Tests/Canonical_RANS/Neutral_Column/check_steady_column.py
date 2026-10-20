@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Run ablsteady on the 1-D neutral column deck and check the steady state (RT-1.15.1).
 
-    check_steady_column.py --ustar U --z0 Z0 --force F --height H --dz DZ --orders N -- COMMAND [ARGS ...]
+    check_steady_column.py --ustar U --z0 Z0 --force F --height H --dz DZ --orders N [--floor log_law|one]
+                           [--stress-profile] -- COMMAND [ARGS ...]
 
 Runs COMMAND (the application on Tests/Canonical_RANS/Neutral_Column/inputs_steady_column) and checks:
   * the driver reached the steady verdict ("ablsteady: steady after" in its output);
@@ -15,6 +16,16 @@ Runs COMMAND (the application on Tests/Canonical_RANS/Neutral_Column/inputs_stea
   * the layer thickness of the plotfile is --dz;
   * the first cell's speed is the wall law's, (u*/kappa) ln((z + z0)/z0), to
     1e-6 relative, the second cell's within 1 %, the lowest eight within 2 %
+    (--floor one, the run's bc.surface_denominator_floor = one: the first
+    cell's speed is (u*/kappa) max(ln((z + z0)/z0), 1) to 1e-6, and the log-law
+    checks above the first cell are left out: that wall law is not the log
+    law's when ln((z + z0)/z0) < 1; --stress-profile: the second cell and the
+    lowest eight are measured against the profile of the column's stress
+    u*^2 (1 - z/H) with nu_t = kappa u*_l (z + z0), u*_l = u* sqrt(1 - z/H):
+    U(z) = U(z_1) + (u*/kappa) [G(z + z0) - G(z_1 + z0)],
+    G(x) = (2 r + sqrt(a) ln|(r - sqrt(a))/(r + sqrt(a))|) / sqrt(H),
+    r = sqrt(a - x), a = H + z0, from the first cell centre z_1; for a
+    shallow column, where 1 - z/H departs from 1 in the lowest cells)
     (the stress of the force-driven column is u*^2 (1 - z/H), not constant,
     and the discrete strain overshoots the log law's in the lowest cells,
     RT-1.9.1: both move the profile below the log law by about 1 % above the
@@ -61,9 +72,17 @@ def read_history(path):
 
 def main(argv):
     opts = {"--ustar": None, "--z0": None, "--force": None, "--height": None, "--dz": None, "--orders": None}
+    floor = "log_law"
+    stress_profile = False
     i = 1
     while i < len(argv) and argv[i] != "--":
-        if argv[i] in opts:
+        if argv[i] == "--floor" and i + 1 < len(argv) and argv[i + 1] in ("log_law", "one"):
+            floor = argv[i + 1]
+            i += 2
+        elif argv[i] == "--stress-profile":
+            stress_profile = True
+            i += 1
+        elif argv[i] in opts:
             opts[argv[i]] = float(argv[i + 1])
             i += 2
         else:
@@ -114,10 +133,25 @@ def main(argv):
     z0 = opts["--z0"]
     def ulog(k):
         return us / KAPPA * math.log((z[k] + z0) / z0)
-    check("|U|(k=0) vs wall law", math.hypot(prof["x_velocity"][0], prof["y_velocity"][0]), ulog(0), 1e-6, "rel")
-    check("|U|(k=1) vs log law", math.hypot(prof["x_velocity"][1], prof["y_velocity"][1]), ulog(1), 1e-2, "rel")
-    worst = max(abs(math.hypot(prof["x_velocity"][k], prof["y_velocity"][k]) - ulog(k)) / ulog(k) for k in range(8))
-    check("max rel |U - log law| over k < 8", worst, 0.0, 2e-2, "abs")
+    if stress_profile:
+        a = opts["--height"] + z0
+        def g(x):
+            r = math.sqrt(a - x)
+            return (2 * r + math.sqrt(a) * math.log(abs((r - math.sqrt(a)) / (r + math.sqrt(a))))) / math.sqrt(opts["--height"])
+        def uprof(k):
+            return ulog(0) + us / KAPPA * (g(z[k] + z0) - g(z[0] + z0))
+        prof_name = "stress profile"
+    else:
+        uprof = ulog
+        prof_name = "log law"
+    if floor == "one":
+        uwall = us / KAPPA * max(math.log((z[0] + z0) / z0), 1.0)
+        check("|U|(k=0) vs wall law, floor one", math.hypot(prof["x_velocity"][0], prof["y_velocity"][0]), uwall, 1e-6, "rel")
+    else:
+        check("|U|(k=0) vs wall law", math.hypot(prof["x_velocity"][0], prof["y_velocity"][0]), ulog(0), 1e-6, "rel")
+        check("|U|(k=1) vs " + prof_name, math.hypot(prof["x_velocity"][1], prof["y_velocity"][1]), uprof(1), 1e-2, "rel")
+        worst = max(abs(math.hypot(prof["x_velocity"][k], prof["y_velocity"][k]) - uprof(k)) / uprof(k) for k in range(8))
+        check("max rel |U - " + prof_name + "| over k < 8", worst, 0.0, 2e-2, "abs")
     check("KE(k=0) vs u*^2/Cmu0^2", prof["KE"][0], us * us / CMU0 ** 2, 1e-6, "rel")
     check("Kmv(k=1) vs kappa u* (z + z0)", prof["Kmv"][1], KAPPA * us * (z[1] + z0), 6e-2, "rel")
     nx, ny, nz = len(full["x_velocity"]), len(full["x_velocity"][0]), len(full["x_velocity"][0][0])

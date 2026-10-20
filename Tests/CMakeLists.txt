@@ -482,6 +482,22 @@ if(ABLSTEADY_PRECISION STREQUAL "DOUBLE")
                        PREFIX ${Python3_EXECUTABLE} ${COLUMN_CASE}/check_steady_column.py
                               --ustar 0.35 --z0 0.1 --force 1.225e-4 --height 1000 --dz 15.625 --orders 6 --
                        COMMAND $<TARGET_FILE:ablsteady> ${COLUMN_CASE}/inputs_steady_column ${ABLSTEADY_TEST_AMREX_FLAGS})
+    # Beyond the plan: the rough column (z0 = 0.5 m, 1 m layers, the first
+    # centre below (e - 1) z0). The default floor follows the log law in the
+    # first cell, and the profile of the shallow column's stress u*^2 (1 - z/H)
+    # above it; the floor one (sub-phase 1.7's form) gives 1/ln 2 = 1.44 times
+    # the log law's speed in the first cell.
+    ablsteady_add_test(NAME rt_steady_column_rough NP 2 LABELS "regression;smoke"
+                       PREFIX ${Python3_EXECUTABLE} ${COLUMN_CASE}/check_steady_column.py
+                              --ustar 0.3535533905932738 --z0 0.5 --force 1.953125e-3 --height 64 --dz 1 --orders 6
+                              --stress-profile --
+                       COMMAND $<TARGET_FILE:ablsteady> ${COLUMN_CASE}/inputs_steady_column_rough ${ABLSTEADY_TEST_AMREX_FLAGS})
+    ablsteady_add_test(NAME rt_steady_column_rough_floor_one NP 2 LABELS "regression;smoke"
+                       PREFIX ${Python3_EXECUTABLE} ${COLUMN_CASE}/check_steady_column.py
+                              --ustar 0.3535533905932738 --z0 0.5 --force 1.953125e-3 --height 64 --dz 1 --orders 6
+                              --floor one --
+                       COMMAND $<TARGET_FILE:ablsteady> ${COLUMN_CASE}/inputs_steady_column_rough
+                               bc.surface_denominator_floor=one ${ABLSTEADY_TEST_AMREX_FLAGS})
 endif()
 # A restart continues the stage bit for bit: 40 iterations, continued to 80
 # from the checkpoint (the driver and closure histories), against 80 straight.

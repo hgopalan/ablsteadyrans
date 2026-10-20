@@ -834,7 +834,8 @@ TEST(BoundaryInputs, KeysAreReadAndChecked)
         "bc.inflow_profile = power_law\nbc.inflow_speed = 9\nbc.inflow_zref = 20\nbc.inflow_alpha = 0.15\nbc.inflow_direction = 10\n"
         "bc.theta_profile_z = 0 500\nbc.theta_profile = 290 295\nbc.zhi_theta_grad = 0.003\n"
         "bc.rayleigh_zdamp = 400\nbc.rayleigh_dampcoef = 0.1\nbc.sponge_width = 100\nbc.sponge_strength = 0.05\n"
-        "bc.surface_z0 = 0.3\nbc.surface_zref = 12\nbc.surface_stability = heat_flux\nbc.surface_heat_flux = 0.02\nbc.surface_wall_k = source\n";
+        "bc.surface_z0 = 0.3\nbc.surface_zref = 12\nbc.surface_stability = heat_flux\nbc.surface_heat_flux = 0.02\nbc.surface_wall_k = source\n"
+        "bc.surface_denominator_floor = one\n";
     const std::string fname = "ut_bc_inputs_tmp";
     if (amrex::ParallelDescriptor::IOProcessor()) {
         std::ofstream os(fname);
@@ -855,7 +856,7 @@ TEST(BoundaryInputs, KeysAreReadAndChecked)
         for (const char* k : {"xlo", "xhi", "ylo", "yhi", "zlo", "zhi", "inflow_profile", "inflow_speed", "inflow_zref", "inflow_alpha",
                               "inflow_direction", "theta_profile_z", "theta_profile", "zhi_theta_grad", "rayleigh_zdamp", "rayleigh_dampcoef",
                               "sponge_width", "sponge_strength", "surface_z0", "surface_zref", "surface_stability", "surface_heat_flux",
-                              "surface_wall_k"}) {
+                              "surface_wall_k", "surface_denominator_floor"}) {
             while (pp.remove(k) > 0) {}
         }
     }
@@ -882,6 +883,7 @@ TEST(BoundaryInputs, KeysAreReadAndChecked)
     EXPECT_EQ(so.heat_flux, amrex::Real(0.02));
     EXPECT_EQ(so.stability, ablsteady::SurfaceLayerOptions::Stability::heat_flux);
     EXPECT_EQ(so.wall_k, ablsteady::SurfaceLayerOptions::WallK::source);
+    EXPECT_EQ(so.denominator_floor, ablsteady::SurfaceLayerOptions::DenominatorFloor::one);
 
     ablsteady::MeshInputs m;
     m.n_cell = amrex::IntVect(8, 8, 8);
@@ -909,6 +911,7 @@ TEST(BoundaryInputs, KeysAreReadAndChecked)
         {"bc.inflow_file", [] (BoundaryInputs& b) { b.given = {"inflow_file"}; }},
         {"bc.inflow_speed", [] (BoundaryInputs& b) { b.inflow.kind = InflowProfileOptions::Kind::log_law; b.given = {"inflow_speed"}; }},
         {"bc.surface_z0", [] (BoundaryInputs& b) { b.face[2] = FaceType::slip_wall; b.given = {"surface_z0"}; }},
+        {"bc.surface_denominator_floor", [] (BoundaryInputs& b) { b.face[2] = FaceType::slip_wall; b.given = {"surface_denominator_floor"}; }},
         {"bc.rayleigh_dampcoef", [] (BoundaryInputs& b) { b.rayleigh_dampcoef = 0; b.given = {}; }},
         {"bc.sponge_strength", [] (BoundaryInputs& b) { b.sponge_strength = 0; b.given = {}; }},
         {"bc.inflow_z0", [] (BoundaryInputs& b) { b.inflow.z0 = -1; }},

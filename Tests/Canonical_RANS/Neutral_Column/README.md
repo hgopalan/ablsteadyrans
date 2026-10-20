@@ -13,10 +13,11 @@ A second deck runs the same column for 40 iterations, continues it to 80 from th
 |---|---|
 | `inputs_steady_column` | The column to steady. |
 | `inputs_steady_column_restart` | The restart chain (iterations and first guess on the command line). |
+| `inputs_steady_column_rough` | *Beyond the plan.* The column on rough ground: z0 = 0.5 m, 1 m layers, 64 m. |
 | `check_steady_column.py` | Runs the application and checks the verdict, residual drop, force balance and wall law. |
 
 ## CTest
-`rt_steady_column` (double precision only); `rt_steady_column_restart_first`, `rt_steady_column_restart_continued`,
+`rt_steady_column`, `rt_steady_column_rough`, `rt_steady_column_rough_floor_one` (double precision only); `rt_steady_column_restart_first`, `rt_steady_column_restart_continued`,
 `rt_steady_column_restart_straight`, `rt_steady_column_restart_matches` (both precisions).
 
 ## Expected Results
@@ -26,6 +27,11 @@ A second deck runs the same column for 40 iterations, continues it to 80 from th
   nu_t of the second cell within 6 % of kappa u* (z + z0); every column identical (1e-10); every field finite.
 - Measured: 2231 iterations, u* = 0.3499999, second cell 0.9 % low, cells 2-7 1.3-1.9 % low.
 - Restart: the continued and straight plotfiles identical under `amrex_fcompare` at relative 1e-14.
+- Rough column, `log_law` floor (default): the same checks, with the cells above the first measured against the
+  profile of the shallow column's stress u*^2 (1 - z/H) (`--stress-profile`). Measured: 347 iterations, first cell
+  0.5977 m/s on the wall law, second cell 0.70 % low, lowest eight within 0.92 %.
+- Rough column, `bc.surface_denominator_floor = one`: the first cell 1/ln 2 = 1.44 times the log law's speed
+  ((u*/kappa) max(ln((z + z0)/z0), 1), 1e-6). Measured: 411 iterations, 0.8623 m/s.
 
 ## How to run
 ```bash

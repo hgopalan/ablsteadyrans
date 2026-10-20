@@ -400,7 +400,8 @@ A key with no effect for the chosen face types stops the run.
    * - ``bc.sponge_strength``
      - 0
      - Finite, ≥ 0 (1/s); needs ``bc.sponge_width`` > 0.
-   * - ``bc.surface_z0``, ``bc.surface_zref``, ``bc.surface_stability``, ``bc.surface_heat_flux``, ``bc.surface_wall_k``
+   * - ``bc.surface_z0``, ``bc.surface_zref``, ``bc.surface_stability``, ``bc.surface_heat_flux``, ``bc.surface_wall_k``,
+       ``bc.surface_denominator_floor``
      - below
      - The surface layer's options (``read_surface_layer_options``); refused unless ``bc.zlo = surface_layer``.
 
@@ -429,6 +430,12 @@ The surface-layer keys (refused unless ``bc.zlo = surface_layer``), read by ``re
    * - ``bc.surface_wall_k``
      - ``dirichlet``
      - ``dirichlet`` or ``source``
+   * - ``bc.surface_denominator_floor``
+     - ``log_law``
+     - ``log_law`` or ``one``: the floor :math:`m` of the MOST denominator (:doc:`boundary_conditions`).
+       ``log_law``: :math:`m = \min(\ln((d + z_0)/z_0), 1)`, the neutral log law at every height. ``one``:
+       :math:`m = 1`, sub-phase 1.7's form, which lowers the neutral :math:`u_*` below :math:`d = 1.72\,z_0`.
+       The two are identical where :math:`\ln((d + z_0)/z_0) \ge 1`. ``init.first_guess = column`` uses the same floor.
 
 The wall model uses the closure's ``turb.Cmu0`` and ``turb.kappa``.
 

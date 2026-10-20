@@ -6,7 +6,7 @@
 // Each ground column gets a friction velocity u* from Monin-Obukhov
 // similarity (MOST) at a reference height above the ground:
 //
-//   u* = kappa U / max(ln((d + z0) / z0) - psi_m(d / L), 1),   1/L = -kappa g q / (u*^3 theta_0),
+//   u* = kappa U / max(ln((d + z0) / z0) - psi_m(d / L), m),   1/L = -kappa g q / (u*^3 theta_0),
 //
 // - U = max(|U_t|, 0.1 m/s), U_t the wind parallel to the ground at the
 //   reference height (ERF's 0.1 m/s floor);
@@ -17,8 +17,16 @@
 // - z0 the roughness, q the kinematic surface heat flux (K m/s, upward > 0),
 //   g and theta_0 the buoyancy options' (Forcing.H), psi_m the Businger-Dyer
 //   function of ERF (extern_erf/ERF_MOSTUtils.H, unchanged), z/L clamped to
-//   [-100, 100] and the denominator kept >= 1 (strong convection at low wind
-//   would otherwise give u* < 0);
+//   [-100, 100] and the denominator kept >= m (strong convection at low wind
+//   would otherwise give u* < 0). bc.surface_denominator_floor sets m:
+//   log_law (default) m = min(ln((d + z0)/z0), 1), so the neutral u* is the
+//   log law's at every height, as in the inflow profile and the column guess;
+//   one, m = 1 (sub-phase 1.7): the neutral u* is then below the log law's when
+//   the reference point is below (e - 1) z0 = 1.72 z0. Both are the same
+//   where ln((d + z0)/z0) >= 1. Below that, with either floor, an unstable
+//   psi_m > 0 meets the floor at once and u* stays at its floor value, and
+//   on the stable side m = 1 also bound weakly stable cases that log_law
+//   leaves to the MOST relation;
 // - neutral: the log law; heat_flux: solved by Newton's method to round-off
 //   (so the residual is a smooth function of the state, as jvp needs), from
 //   the neutral value, u* >= 0.001 m/s in L.
@@ -94,6 +102,9 @@ struct SurfaceLayerOptions
 {
     enum class Stability { neutral, heat_flux };
     enum class WallK { dirichlet, source };
+    //! The floor m of the MOST denominator: log_law m = min(ln((d + z0)/z0), 1),
+    //! one m = 1 (the earlier form).
+    enum class DenominatorFloor { log_law, one };
 
     //! Roughness length z0 (m, > 0).
     amrex::Real z0{amrex::Real(0.1)};
@@ -105,6 +116,7 @@ struct SurfaceLayerOptions
     //! Kinematic surface heat flux q (K m/s, positive upward), heat_flux only.
     amrex::Real heat_flux{0};
     WallK wall_k{WallK::dirichlet};
+    DenominatorFloor denominator_floor{DenominatorFloor::log_law};
     //! Axell's Cmu0 (> 0), ERF's default.
     amrex::Real Cmu0{amrex::Real(0.5562)};
     //! von Karman constant (> 0), ERF's KAPPA.
@@ -116,7 +128,8 @@ std::vector<std::string> check_surface_layer_options (const SurfaceLayerOptions&
 
 //! Read the ground's keys, bc.surface_z0, bc.surface_zref,
 //! bc.surface_stability (neutral | heat_flux), bc.surface_heat_flux and
-//! bc.surface_wall_k (dirichlet | source), and range-check them; aborts
+//! bc.surface_wall_k (dirichlet | source), bc.surface_denominator_floor
+//! (log_law | one), and range-check them; aborts
 //! naming the key. Cmu0 and kappa stay the closure's (sub-phase 1.9).
 SurfaceLayerOptions read_surface_layer_options ();
 
