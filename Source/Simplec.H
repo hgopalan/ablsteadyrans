@@ -81,6 +81,10 @@ struct SimplecOptions
     amrex::Real alpha_p{1};                          //!< simplec.alpha_p, in (0, 1]
     amrex::Real rotation_relax{amrex::Real(0.3)};    //!< simplec.rotation_relax, in (0, 1]: the rotation's step in inertial times (Predictor.H)
     amrex::Real w_vnn_cap{0};                        //!< simplec.w_vnn_cap, 0 (off) or >= 16: the w rows' VNN cap (Predictor.H)
+    //! simplec.w_vnn_cap_slope_margin, 0 (off: #32's cap) or finite and >= 1:
+    //! the cap is lowered on sloping ground so the pressure operator stays
+    //! definite with this safety factor (Predictor.H).
+    amrex::Real w_vnn_cap_slope_margin{4};
     std::vector<std::string> given;                  //!< the simplec.* keys given
 };
 

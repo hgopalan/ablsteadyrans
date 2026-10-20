@@ -101,7 +101,7 @@ def main(argv):
     print("  steady verdict without and with the cap: %s, %s: %s" % (n_off, n_on, "pass" if good else "FAIL"))
     if not good:
         raise SystemExit("check_w_vnn_cap: FAIL")
-    good = ("w_vnn_cap off," in off) and (("w_vnn_cap %g," % cap) in on)
+    good = ("w_vnn_cap off," in off) and (("w_vnn_cap %g (slope margin" % cap) in on)
     ok = ok and good
     print("  the stage banner names the cap: %s" % ("pass" if good else "FAIL"))
     good = "WARNING: simplec.w_vnn_cap" not in on

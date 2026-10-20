@@ -164,7 +164,8 @@ Then, depending on the case:
 
 - **The geostrophic wind has u and v of opposite sign:** add ``steady.line_alternate = 1``.
 - **Thin first cells (aspect ratio far above 10) on flat or gentle terrain:** add ``simplec.w_vnn_cap = 16``. Over
-  steep terrain with very thin cells use a larger cap (64), and watch for the warning in the log.
+  steep terrain the default slope margin (``simplec.w_vnn_cap_slope_margin = 4``) lowers the cap where needed; see
+  :ref:`Slope margin <slope-margin>` in :doc:`results`.
 - **Many small boxes:** the LU-SGS sweeps lag the coupling across box faces, so very small boxes
   (``mesh.max_grid_size``) cost extra iterations.
 

@@ -1,0 +1,59 @@
+# A steep 2-D ridge with a thin first cell: the case of the slope margin of
+# simplec.w_vnn_cap (Predictor.H). 48 x 2 x 40 cells over 1500 m x 187.5 m
+# (dx = 31 m, dy = 94 m), first layer 0.4 m stretched by 1.2 (columns about
+# 2.9 km high; prob_hi z = 742 m sets only the computational spacing); an
+# Agnesi ridge 150 m high with a 150 m half-width (max ground slope 32.5 deg,
+# max aspect ratio max(dx, dy)/thickness 372, from dy at the crest); y periodic, inflow on xlo (the Askervein power law), outflow on
+# xhi, the surface layer (z0 = 0.03 m), a slip top, Rayleigh damping of w
+# above 250 m, no gravity. Line LU-SGS with two sweeps at a CFL cap of 16 and
+# a 3-order verdict. With simplec.w_vnn_cap = 16 and the default margin the
+# run is steady in 2568 iterations; with the margin off (#32's cap)
+# the pressure correction stalls (r 0.1-0.7) and the run is not steady after
+# 3500. The tests give the cap, the margin and steady.max_iterations on the
+# command line; the iteration counts are from the profile first guess below.
+mesh.n_cell        = 48 2 40
+mesh.prob_lo       = 0. 0. 0.
+mesh.prob_hi       = 1500. 187.5 742.
+mesh.is_periodic   = 0 1 0
+mesh.max_grid_size = 16 2
+mesh.dz0           = 0.4
+mesh.stretch_ratio = 1.2
+terrain.type            = agnesi
+terrain.hill_shape      = ridge_x
+terrain.hill_height     = 150.
+terrain.hill_half_width = 150.
+
+bc.xlo = inflow
+bc.xhi = outflow
+bc.zlo = surface_layer
+bc.zhi = slip_wall
+bc.surface_z0       = 0.03
+bc.inflow_profile   = power_law
+bc.inflow_speed     = 8.7502
+bc.inflow_zref      = 10.
+bc.inflow_alpha     = 0.2113
+bc.inflow_z0        = 0.03
+bc.inflow_direction = 0.
+bc.theta_profile_z  = 0.
+bc.theta_profile    = 300.
+bc.rayleigh_zdamp    = 250.
+bc.rayleigh_dampcoef = 0.2
+bc.rayleigh_fields   = w
+
+forcing.gravity = 0.
+turb.tke_floor  = 1.e-6
+
+init.first_guess = profile
+
+steady.stage                   = simplec
+steady.sweep                   = lusgs
+steady.zline_sweeps            = 2
+steady.cfl0                    = 1.
+steady.cfl_max                 = 16.
+steady.residual_ref_iterations = 100
+steady.residual_drop_orders    = 3
+
+io.plot_file = steep_ridge_plt
+io.chk_file  = steep_ridge_chk
+io.write_plotfile   = 0
+io.write_checkpoint = 0

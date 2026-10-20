@@ -39,6 +39,12 @@ std::vector<std::string> check_simplec_options (const SimplecOptions& opt)
         err.emplace_back("simplec.w_vnn_cap = " + std::to_string(opt.w_vnn_cap) + ": must be 0 (off), or finite and >= "
                          + std::to_string(static_cast<int>(w_vnn_cap_min)));
     }
+    // Below 1 the bound itself is crossed (Predictor.H): no margin.
+    if (std::isnan(opt.w_vnn_cap_slope_margin)
+        || !(opt.w_vnn_cap_slope_margin == 0 || (opt.w_vnn_cap_slope_margin >= 1 && std::isfinite(opt.w_vnn_cap_slope_margin)))) {
+        err.emplace_back("simplec.w_vnn_cap_slope_margin = " + std::to_string(opt.w_vnn_cap_slope_margin)
+                         + ": must be 0 (off), or finite and >= 1");
+    }
     return err;
 }
 
@@ -47,7 +53,7 @@ SimplecOptions read_simplec_options ()
     SimplecOptions opt;
     amrex::ParmParse pp("simplec");
     std::vector<std::string> err;
-    for (const char* key : {"pressure_reltol", "alpha_p", "rotation_relax", "w_vnn_cap"}) {
+    for (const char* key : {"pressure_reltol", "alpha_p", "rotation_relax", "w_vnn_cap", "w_vnn_cap_slope_margin"}) {
         if (!pp.contains(key)) { continue; }
         opt.given.emplace_back(key);
         if (pp.countname(key) > 1) { err.emplace_back(std::string("simplec.") + key + " is given more than once"); }
@@ -58,7 +64,13 @@ SimplecOptions read_simplec_options ()
         pp.query("alpha_p", opt.alpha_p);
         pp.query("rotation_relax", opt.rotation_relax);
         pp.query("w_vnn_cap", opt.w_vnn_cap);
+        pp.query("w_vnn_cap_slope_margin", opt.w_vnn_cap_slope_margin);
         err = check_simplec_options(opt);
+        // Read but ignored without the cap: refuse it.
+        const bool margin_given = std::find(opt.given.begin(), opt.given.end(), "w_vnn_cap_slope_margin") != opt.given.end();
+        if (margin_given && opt.w_vnn_cap == 0) {
+            err.emplace_back("simplec.w_vnn_cap_slope_margin has no effect unless simplec.w_vnn_cap > 0; remove it");
+        }
     }
     if (!err.empty()) {
         std::string all = "ablsteady: invalid inputs:";
@@ -367,7 +379,7 @@ void SimplecStage::iterate (State& q, const amrex::MultiFab& dtau)
     const SurfaceState* ss = (m_in.surface != nullptr) ? &m_ss : nullptr;
     const ClosureFields* cf = (m_in.closure != nullptr) ? &m_cf : nullptr;
     m_info.predictor = momentum_predictor(q, m_R, F, m_in, m_w.dtau_faces, m_mesh, m_geom, m_sweeps, m_pf, ss, cf, m_opt.rotation_relax,
-                                          m_sweep, m_opt.w_vnn_cap);
+                                          m_sweep, m_opt.w_vnn_cap, m_opt.w_vnn_cap_slope_margin);
     // 4. The pressure correction on u* (its ghosts refilled first).
     m_in.bc->fill_ghosts(q, m_in.surface, m_in.buoyancy, false, nullptr);
     m_info.pressure = pressure_correction(q, m_pf, m_solver, m_pbc, m_opt.alpha_p, m_mesh, m_geom, m_w);

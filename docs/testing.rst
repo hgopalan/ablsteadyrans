@@ -257,10 +257,13 @@ Current tests
      - The column deck with ``turb.max_geom_lscale`` and ``bc.surface_z0`` repeated on the command line: each stops,
        naming the key. Before, these two readers checked only the value count and the last value won (since
        sub-phases 1.9 and 1.7).
-   * - ``warn_w_vnn_cap_terrain``, ``warn_w_vnn_cap_terrain_below``, ``abort_w_vnn_cap_floor``
+   * - ``warn_w_vnn_cap_terrain``, ``warn_w_vnn_cap_terrain_margin``, ``warn_w_vnn_cap_terrain_below``,
+       ``abort_w_vnn_cap_floor``, ``abort_w_vnn_cap_slope_margin``, ``abort_w_vnn_cap_slope_margin_alone``
      - *Beyond the plan.* The thin-cell strip on a 50 m ridge
        (``Tests/Infrastructure/Input_Validation/inputs_w_vnn_cap_terrain``, max aspect ratio about 134), one
-       iteration: with ``simplec.w_vnn_cap = 16`` and a 0.7 m first cell the run exits 0 and prints the warning that
+       iteration. With ``simplec.w_vnn_cap = 16`` and the default slope margin the run prints no warning and its
+       banner names the margin (4); a margin of 0.5, or a margin given without the cap, is refused, naming the key.
+       With ``simplec.w_vnn_cap_slope_margin = 0`` and a 0.7 m first cell the run exits 0 and prints the warning that
        names the key, the tested aspect ratio 50.78 and the slow convergence without the cap; with a 4 m first cell
        (aspect ratio below 50.78) it runs without the warning; with 4 it stops on the floor of 16. The flat
        strip of ``rt_thin_cell_w_vnn_cap`` (aspect ratio above 50.78, no slope) prints no warning.
@@ -429,6 +432,14 @@ Current tests
        6487 and 687 iterations (9.4 times fewer), u and w within 5.6e-5 and 3.8e-5 m/s. That difference is the
        convergence error of the uncapped run at its verdict: the capped run at 687 iterations is within 5e-11 m/s of
        a 10000-iteration capped run. About 50 s on two ranks; label ``regression``; double only.
+   * - ``rt_steep_ridge_w_vnn_cap``, ``rt_steep_ridge_w_vnn_cap_margin_off``
+     - *Beyond the plan.* The slope margin of the cap on a steep ridge with a 0.4 m first cell
+       (``Tests/Canonical_RANS/Steep_Ridge_Thin_Cell/inputs_steep_ridge_thin_cell``: 48 × 2 × 40, an Agnesi ridge
+       150 m high with a 150 m half-width, max slope 32.5°, max aspect ratio 372, the verdict at 3 orders), 3500
+       iterations at most. With ``simplec.w_vnn_cap = 16`` and the default margin the run is steady (2568
+       iterations); with the margin off (the cap of #32) the pressure correction stalls and it is not (the test
+       checks the verdict only: the run without the cap, 3983 iterations, is not steady at 3500 either). Measured to
+       6 orders: cap off 14154, margin 2 4142, and the steady states agree to 3e-8 m/s.
    * - ``rt_steady_hill2d``
      - RT-1.16.1: ERF's Neutral_Hill_2D (``Tests/Canonical_RANS/Neutral_Hill_2D/inputs_steady_hill2d``: 128 × 1 × 64, the Witch of Agnesi of
        100 m and 500 m, the flat deck's sounding and forcing, Rayleigh damping of w and θ from 700 m, 16 sweeps, CFL
@@ -945,6 +956,21 @@ GoogleTest suite
        :math:`d = 0`, the effective VNN stays below :math:`V`, and the w correction is the z-line solve with the
        capped diagonal; u and v, and every field with the cap 0, are bit-identical to the call without the argument;
        a negative, NaN, infinite or subnormal cap is refused. On 1, 2 and 4 ranks (2 × 1 boxes).
+   * - ``Predictor.WVnnCapSlopeMarginKeepsThePressureOperatorDefinite``
+     - *Beyond the plan.* The slope-aware cap (``simplec.w_vnn_cap_slope_margin``) on a steep manufactured hill
+       (150 m over 1000 m, :math:`h^2` up to 0.12) with VNN up to about 70, :math:`V = 16`, margin 10: on every
+       interior w row :math:`a_P` and :math:`d` gain :math:`\min(K/V, \max(0, 1/(s r_c) - 1)/\Delta\tau)` (the
+       slope from the face's node heights, computed in the test; 1e-13, single 1e-5), the limit binds on some rows
+       and not on others, :math:`1/(1 + \text{term}\,\Delta\tau) \ge s r_c` on every sloped row, the u and v
+       rows are bit-identical to the call without the margin; with margin 100 (:math:`s r_c > 1` on the steepest
+       rows) those rows get no cap and no row gets less than none; a margin of 0.5, NaN or infinity is refused; on
+       1, 2 and 4 ranks. :math:`r_c` is pinned at :math:`a = 0.18` (0.04135501, the smaller root of
+       :math:`a r^2 - (2a + 4) r + a`). ``Predictor.IndependentOfTheBoxLayout`` also runs the cap with margin 4 on one
+       box and on 2 × 2 boxes (w, :math:`a_P` and :math:`d` of the w rows agree to 1e-12).
+   * - ``Predictor.WVnnCapSlopeMarginIsBitIdenticalOnFlatGround``
+     - *Beyond the plan.* On flat ground (several boxes) the cap :math:`V = 20` with margin 4 and with margin 0 gives
+       the same w rows (:math:`a_P`, :math:`d`) and the same u, v and w, bit for bit; the cap itself changes
+       :math:`a_P`. :math:`1/20` is inexact, so a regrouped term would differ.
    * - UT-1.15.1
      - One pressure correction of a predicted velocity (random wind, slip ground and top, periodic sides) leaves a
        divergence below the Poisson tolerance of the predicted one (0.1 and 1e-10, 2-norms), the ground and top faces

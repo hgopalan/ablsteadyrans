@@ -353,6 +353,9 @@ Quick reference
    * - ``simplec.w_vnn_cap``
      - ``0``
      - Vertical-velocity cap (0: off)
+   * - ``simplec.w_vnn_cap_slope_margin``
+     - ``4``
+     - The cap's safety margin on sloping ground (0: off)
    * - **Poisson solver** (`solver`_)
      -
      -
@@ -919,8 +922,13 @@ See :doc:`solution_algorithm`. Read with ``steady.stage = simplec`` only.
    * - ``simplec.w_vnn_cap``
      - ``0`` (off)
      - 0, or finite and ≥ 16: the cap :math:`V` on the vertical VNN number of the :math:`w` rows. Changes the path,
-       not the answer. Over terrain the run warns when the mesh aspect ratio is above 50.78. May change across a
-       restart.
+       not the answer. May change across a restart.
+   * - ``simplec.w_vnn_cap_slope_margin``
+     - ``4``
+     - 0 (off), or finite and ≥ 1; refused unless ``simplec.w_vnn_cap`` > 0. The safety factor :math:`s` that lowers the
+       cap on sloping ground so the pressure operator stays definite (:doc:`solution_algorithm`). 0 is the cap of
+       #32, which can stall where thin cells meet steep slopes; the run then warns over terrain when the mesh
+       aspect ratio is above 50.78. Changes the path, not the answer. May change across a restart.
 
 ``solver``
 ----------
