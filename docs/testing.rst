@@ -1505,7 +1505,9 @@ GoogleTest suite
      - *Changed from the plan.* ``NewtonPreconditioner.ApplyIsOneSimplecIteration``: on a terrain hill split into
        six boxes (shared and periodic faces), with non-uniform fields and :math:`\Delta\tau`, ``apply`` on
        :math:`r = -R(q)` with the stage's denominator equals one SIMPLEC stage iteration from :math:`q` to 1e-9
-       (1e-12 measured). Both ``zjacobi`` and ``lusgs`` are checked; :math:`p` is compared modulo its mean.
+       (1e-12 measured). Both ``zjacobi`` and ``lusgs`` are checked, and ``lusgs`` again with ``simplec.w_vnn_cap = 16``
+       and a slope margin of 1e6 (no cap on any sloped row; a preconditioner that drops the margin misses by 0.11);
+       :math:`p` is compared modulo its mean.
        :math:`\delta q = r` on the Dirichlet rows, and every shared-face copy equals its owner's.
    * - UT-3.3.2
      - *Changed from the plan.* ``NewtonPreconditioner.ConstantPressureShiftLeavesTheSolveUnchanged``: on the

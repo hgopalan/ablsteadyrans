@@ -167,7 +167,8 @@ void SimplecPreconditioner::apply (NewtonVector& dq, const NewtonVector& r)
     amrex::MultiFab::Copy(m_d.theta, m_q0.theta, 0, 0, 1, m_d.theta.nGrow());
     const amrex::Array<const amrex::MultiFab*, 3> F0{&m_F0[0], &m_F0[1], &m_F0[2]};
     m_info.predictor = momentum_predictor(m_d, m_R, F0, m_in, m_w.dtau_faces, m_mesh, m_geom, m_sweeps, m_pf, ss, cf,
-                                          m_opt.rotation_relax, m_sweep, m_opt.w_vnn_cap);
+                                          m_opt.rotation_relax, m_sweep, m_opt.w_vnn_cap,
+                                          m_opt.w_vnn_cap_slope_margin);
 
     // 2. The pressure correction of du*, with r_p as the source: the
     // homogeneous fill gives du*'s ghost cells (theta back to 0 first).

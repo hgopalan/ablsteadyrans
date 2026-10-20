@@ -311,11 +311,17 @@ double mean_of (const std::vector<int>& v)
 // owner's. Both sweeps (zjacobi, lusgs).
 TEST(NewtonPreconditioner, ApplyIsOneSimplecIteration)
 {
-    for (const auto kind : {ablsteady::SweepKind::zjacobi, ablsteady::SweepKind::lusgs}) {
+    // the third case: the w rows' cap with its slope margin (simplec.w_vnn_cap_slope_margin), here so large that it
+    // binds on every sloped row
+    const std::pair<ablsteady::SweepKind, amrex::Real> cases[3] = {
+        {ablsteady::SweepKind::zjacobi, 0}, {ablsteady::SweepKind::lusgs, 0}, {ablsteady::SweepKind::lusgs, 16}};
+    for (const auto& [kind, cap] : cases) {
         HillCase h(4);
         ASSERT_GE(h.c.ba.size(), 6);
         ablsteady::SimplecOptions opt;
         opt.pressure_reltol = amrex::Real(tol(1e-10, 1e-5));
+        opt.w_vnn_cap = cap;
+        if (cap > 0) { opt.w_vnn_cap_slope_margin = amrex::Real(1e6); }   // no cap on any sloped row
         ablsteady::PoissonOptions popt;
         const ablsteady::LineSweepOptions sweep(kind);
         amrex::MultiFab dtau(h.c.ba, h.c.dm, 1, 0);
