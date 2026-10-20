@@ -362,6 +362,15 @@ TEST(Continuation, DtauRampFollowsSer)
     st = ablsteady::continuation_after_failure(o, st);
     EXPECT_EQ(st.cfl, amrex::Real(2.5));
     EXPECT_FALSE(st.infinite);
+    // While infinite the law grows from cfl_max (a restored state may carry a
+    // lower CFL, or cfl_max may have been raised across a restart).
+    ContinuationState inf_st;
+    inf_st.cfl = 1;
+    inf_st.infinite = true;
+    inf_st.r0 = 10;
+    inf_st = ablsteady::continuation_after_accept(o, inf_st, amrex::Real(1e-3));
+    EXPECT_EQ(inf_st.cfl, 10);
+    EXPECT_TRUE(inf_st.infinite);
     // ser_cfl is the driver's law: a vanished residual gives the cap without
     // the power (no overflow), p = 0 gives cfl0.
     EXPECT_EQ(ablsteady::ser_cfl(4, 0, 1, 10, 3, 2), amrex::Real(8));
@@ -815,4 +824,164 @@ TEST(Newton, TrueLinearResidualMatchesEstimate)
         EXPECT_LE(e, static_cast<double>(rtol) * (1 + 1e-6));
         EXPECT_LT(std::abs(t - e), tol(1e-6, 1e-2));
     }
+}
+
+// ---------------------------------------------------------------------------
+// Beyond the plan, run on request (--gtest_also_run_disabled_tests): the
+// sweep of docs/results.rst. One input at a time away from the defaults
+// (newton_armijo_c, newton_backtrack, ser_exponent, cfl_max, the infinite-dtau
+// switch, and newton_lambda_min = 0.99, which leaves only lambda = 1) on the
+// hill (u x 1 and u x 3) and the Ekman column of test_Newton.cpp, GMRES(200):
+// accepted steps, attempts, GMRES iterations and the |R| reached, up to 60
+// steps or |R| <= 1e-8 |R_0|; then GMRES(30) with the defaults. Plain Newton steps (NewtonKrylov::step, no
+// globalization) for comparison.
+namespace {
+
+struct ColumnCase
+{
+    PCase c;
+    amrex::MultiFab nu, gt, gk;
+    ablsteady::BoundaryInputs bin;
+    std::unique_ptr<ablsteady::BoundaryConditions> bc;
+    ablsteady::SurfaceLayerOptions sl;
+    ablsteady::ResidualInputs in;
+    ablsteady::State q;
+    ColumnCase ()
+    {
+        c.in.mesh.n_cell = amrex::IntVect(2, 2, 32);
+        c.in.mesh.prob_hi = {200, 200, 1600};
+        c.in.mesh.is_periodic = {1, 1, 0};
+        c.in.mesh.max_grid_size = {64, 64};
+        c.make([] (double, double) { return 0.0; });
+        c.z.FillBoundary(c.geom.periodicity());
+        c.mesh.build_from_ground(c.in, c.geom, c.z);
+        ablsteady::trtest::smooth_vertical_ghost_nodes(c);
+        sl.z0 = amrex::Real(0.1);
+        for (auto* mf : {&nu, &gt, &gk}) {
+            mf->define(c.ba, c.dm, 1, 1);
+            mf->setVal(5.0);
+        }
+        in.nu = &nu;
+        in.gamma_theta = &gt;
+        in.gamma_tke = &gk;
+        in.theta_ref.z = {-1000, 5000};
+        in.theta_ref.theta = {300, 300};
+        in.buoyancy.gravity = 0;
+        in.coriolis.enabled = true;
+        in.coriolis.latitude = 45;
+        in.coriolis.three_d = false;
+        in.coriolis.geostrophic = true;
+        in.coriolis.ug = 10;
+        bin.face = {FaceType::periodic, FaceType::periodic, FaceType::surface_layer, FaceType::periodic, FaceType::periodic, FaceType::slip_wall};
+        in.surface = &sl;
+        bc = std::make_unique<ablsteady::BoundaryConditions>(bin, c.geom, c.mesh, in.coriolis);
+        in.bc = bc.get();
+        q.define(c.ba, c.dm);
+        amrex::MultiFab::Copy(q.z_phys_nd, c.z, 0, 0, 1, c.z.nGrow());
+        q.u.setVal(10.0);
+        q.theta.setVal(300.0);
+        q.tke.setVal(0.5);
+        bc->fill_ghosts(q, in.surface, in.buoyancy);
+    }
+};
+
+template <class Case>
+void sweep_one (const std::string& name, const std::string& label, const ContinuationOptions& o, double umult, bool history,
+                int restart = 200)
+{
+    Case cs;
+    if (umult != 1) {
+        cs.q.u.mult(umult);
+        cs.bc->fill_ghosts(cs.q, cs.in.surface, cs.in.buoyancy);
+    }
+    NewtonOptions no;
+    no.gmres_restart = restart;
+    Continuation pt(o, no, cs.in, cs.c.mesh, cs.c.geom, &cs.nu, 0, cs.c.ba, cs.c.dm, 0);
+    testing::internal::CaptureStdout();
+    const auto res = pt.run(cs.q, 60, amrex::Real(1e-8));
+    testing::internal::GetCapturedStdout();
+    int its = 0, failed = 0, backtracks = 0;
+    for (const auto& r : pt.records()) {
+        its += r.gmres_iterations;
+        failed += (r.outcome != AttemptOutcome::accepted) ? 1 : 0;
+        backtracks += r.backtracks;
+    }
+    amrex::Print() << std::setprecision(3) << "  " << std::left << std::setw(14) << name << std::setw(26) << label
+                   << " steps " << std::setw(4) << res.steps << " attempts " << std::setw(4) << pt.records().size()
+                   << " not accepted " << std::setw(3) << failed << " backtracks " << std::setw(3) << backtracks
+                   << " GMRES " << std::setw(6) << its << " |R|/|R_0| " << pt.state().r_last / pt.state().r0
+                   << (res.status == ContinuationStatus::failed ? "  FAILED" : (res.converged ? "" : "  not converged")) << "\n";
+    if (history) {
+        amrex::Print() << "    |R|:";
+        for (const auto& r : pt.records()) {
+            if (r.outcome == AttemptOutcome::accepted) { amrex::Print() << " " << r.residual; }
+        }
+        amrex::Print() << " " << pt.state().r_last << "\n    CFL:";
+        for (const auto& r : pt.records()) { amrex::Print() << " " << (r.infinite ? std::string("inf") : std::to_string(static_cast<double>(r.cfl))) << (r.outcome == AttemptOutcome::accepted ? "" : "x"); }
+        amrex::Print() << "\n";
+    }
+}
+
+template <class Case>
+void plain_newton (const std::string& name, double umult)
+{
+    Case cs;
+    if (umult != 1) {
+        cs.q.u.mult(umult);
+        cs.bc->fill_ghosts(cs.q, cs.in.surface, cs.in.buoyancy);
+    }
+    NewtonOptions no;
+    no.gmres_restart = 200;
+    ablsteady::NewtonKrylov nk(no, cs.in, cs.c.mesh, cs.c.geom, cs.c.ba, cs.c.dm, 0);
+    amrex::Print() << std::setprecision(3) << "  " << std::left << std::setw(14) << name << "plain Newton (step()) |R|:";
+    amrex::Real r0 = 0;
+    for (int n = 0; n < 12; ++n) {
+        const auto info = nk.step(cs.q, nullptr);
+        if (n == 0) { r0 = info.residual_norm; }
+        amrex::Print() << " " << info.residual_norm;
+        if (!std::isfinite(static_cast<double>(info.residual_norm)) || info.residual_norm <= amrex::Real(1e-8) * r0) { break; }
+    }
+    amrex::Print() << "\n";
+}
+
+struct HillU1 : HillCase { HillU1 () : HillCase(4, FaceType::surface_layer, 30) {} };
+struct HillU3 : HillCase { HillU3 () : HillCase(4, FaceType::surface_layer, 30) {} };
+
+} // namespace
+
+TEST(Continuation, DISABLED_ParameterSweep)
+{
+    struct Var { const char* label; void (*set) (ContinuationOptions&); };
+    const Var vars[] = {
+        {"defaults", [] (ContinuationOptions&) {}},
+        {"lambda_min 0.99 (no LS)", [] (ContinuationOptions& o) { o.lambda_min = amrex::Real(0.99); }},
+        {"dtau_inf_at_cap 0", [] (ContinuationOptions& o) { o.dtau_inf_at_cap = 0; }},
+        {"armijo_c 0.1", [] (ContinuationOptions& o) { o.armijo_c = amrex::Real(0.1); }},
+        {"armijo_c 0.4", [] (ContinuationOptions& o) { o.armijo_c = amrex::Real(0.4); }},
+        {"backtrack 0.3", [] (ContinuationOptions& o) { o.backtrack = amrex::Real(0.3); }},
+        {"backtrack 0.8", [] (ContinuationOptions& o) { o.backtrack = amrex::Real(0.8); }},
+        {"ser_exponent 0.5", [] (ContinuationOptions& o) { o.ser_exponent = amrex::Real(0.5); }},
+        {"ser_exponent 2", [] (ContinuationOptions& o) { o.ser_exponent = 2; }},
+        {"cfl_max 100", [] (ContinuationOptions& o) { o.cfl_max = 100; }},
+        {"cfl_max 1000", [] (ContinuationOptions& o) { o.cfl_max = 1000; }},
+        {"cfl0 10 (Newton)", [] (ContinuationOptions& o) { o.cfl0 = 10; }},
+    };
+    for (const Var& v : vars) {
+        ContinuationOptions o = default_options();
+        v.set(o);
+        const bool hist = std::string(v.label) == "defaults" || std::string(v.label).find("no LS") != std::string::npos;
+        sweep_one<HillU1>("hill", v.label, o, 1, hist);
+        sweep_one<HillU3>("hill u x 3", v.label, o, 3, hist);
+        sweep_one<ColumnCase>("column", v.label, o, 1, hist);
+    }
+    for (const int inf : {1, 0}) {
+        ContinuationOptions o = default_options();
+        o.dtau_inf_at_cap = inf;
+        const std::string label = std::string("GMRES(30), inf_at_cap ") + std::to_string(inf);
+        sweep_one<HillU1>("hill", label, o, 1, true, 30);
+        sweep_one<ColumnCase>("column", label, o, 1, false, 30);
+    }
+    plain_newton<HillU1>("hill", 1);
+    plain_newton<HillU3>("hill u x 3", 3);
+    plain_newton<ColumnCase>("column", 1);
 }

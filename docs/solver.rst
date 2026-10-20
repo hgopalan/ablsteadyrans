@@ -501,6 +501,60 @@ plain Newton steps restart 30 takes 1469 iterations against 346 for restart 200,
 step 4. A single step can also raise :math:`|R|` (by 25× at rtol 0.1 on the column); the line search and the
 :math:`\Delta\tau` ramp of sub-phase 3.2 address that.
 
+**GMRES iteration limit.** ``steady.newton_gmres_max_iters`` (2000, the AMReX default) bounds the iterations of
+one solve over all its restarts. A solve that reaches it reports status 1 and is treated like any other: its
+update is used when the Krylov residual is finite and below :math:`|b|`.
+
+Pseudo-transient continuation
+-----------------------------
+
+Sub-phase 3.2 wraps the Newton step in a continuation loop (``Continuation``, ``Source/Continuation.H``). The
+application does not run it yet (sub-phase 3.5). One continuation step from :math:`q_n`:
+
+1. :math:`\Delta\tau` from ``local_dtau`` at :math:`\mathrm{CFL}_n`, or no pseudo-time term (:math:`D = 0`) once
+   the CFL has reached its cap and ``steady.newton_dtau_inf_at_cap = 1``.
+2. The direction :math:`\delta q` from :math:`(D + J)\,\delta q = -R(q_n)` (one GMRES solve).
+3. A backtracking line search on :math:`|R| = |T^{-1}R(\mathrm{fill}(q))|_2`, the norm of the Newton step:
+
+   .. math::
+
+      |R(q_n + \lambda\,\delta q)| \le (1 - c\,\lambda)\,|R(q_n)|, \qquad \lambda = 1, \beta, \beta^2, \ldots
+      \ge \lambda_\mathrm{min},
+
+   with :math:`c` = ``steady.newton_armijo_c``, :math:`\beta` = ``steady.newton_backtrack`` and
+   :math:`\lambda_\mathrm{min}` = ``steady.newton_lambda_min``. Each trial point keeps :math:`k` at
+   ``turb.tke_floor`` and goes through the ghost fill before :math:`R` is evaluated.
+4. Accepted: :math:`q_{n+1} = q_n + \lambda\,\delta q`, and the CFL follows the driver's SER law,
+
+   .. math::
+
+      \mathrm{CFL}_{n+1} = \min\!\left(\mathrm{CFL}_\mathrm{max},\; g\,\mathrm{CFL}_n,\;
+      \mathrm{CFL}_0 \left(\frac{|R_0|}{|R_{n+1}|}\right)^{p}\right),
+
+   with ``steady.cfl0``, ``steady.cfl_max``, :math:`g` = ``steady.ser_max_growth`` and :math:`p` =
+   ``steady.ser_exponent``; :math:`|R_0|` is the first finite :math:`|R|`. While :math:`\Delta\tau` is infinite the
+   law starts from :math:`\mathrm{CFL}_\mathrm{max}`.
+5. A skipped update (the rule above) or a line search that accepts no :math:`\lambda` leaves :math:`q_n` as it is,
+   multiplies the CFL by ``steady.newton_cfl_cut`` (from infinite :math:`\Delta\tau`, :math:`\mathrm{CFL}_\mathrm{max}`
+   times it, with a finite :math:`\Delta\tau` again) and retries, up to ``steady.newton_max_retries`` times. Then
+   the step returns *failed*; sub-phase 3.5 falls back to SIMPLEC on it.
+
+Every attempt prints one line at verbosity 1 (failed attempts at any verbosity): the step, :math:`|R|` before and
+after, the CFL (``inf`` for :math:`D = 0`), :math:`\lambda`, the backtracks, the GMRES iterations and status, the
+Krylov relative residual and the outcome (accepted, skipped or rejected). Each attempt works on a copy of
+:math:`q_n`, so a failed one leaves it bit for bit as it was. The continuation state (the step count, the CFL, the
+switch to infinite :math:`\Delta\tau`, :math:`|R_0|` and the last :math:`|R|`) decides every later
+:math:`\Delta\tau`; ``write_continuation_state`` and ``read_continuation_state`` keep it in a checkpoint
+directory (``Continuation``, hex floats), and a restart from it gives the uninterrupted run's bits.
+
+**Limits.** At a small CFL the direction is not guaranteed to reduce :math:`|R|` (:math:`D + J` is not
+:math:`J`), so an attempt can be rejected at any CFL. With GMRES(30) and infinite :math:`\Delta\tau` the 30 m hill
+stagnates near 6e-3 of :math:`|R_0|` for twelve steps, each solve at the 2000-iteration limit, before it converges
+to 7e-8 and then fails (the retries run out); with ``steady.newton_dtau_inf_at_cap = 0`` it reaches 1e-8 in 23
+steps, and with GMRES(200) in 8 (:doc:`results`). On the Ekman column the cap of 10 without the switch to infinite
+:math:`\Delta\tau` leaves :math:`|R|` at 9e-4 of :math:`|R_0|` after 60 steps. The restart length and the cap are
+tuned in sub-phase 3.6.
+
 Reproducibility
 ---------------
 

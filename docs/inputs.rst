@@ -264,10 +264,38 @@ definition of a steady solution (:doc:`solver`) and its own. The application run
      - > 0 and ≤ 80. Krylov memory per rank in GB (10\ :sup:`9` bytes); the run aborts when the estimate of
        ``2 steady.newton_gmres_restart + 3`` state-size vectors on the rank with the most points exceeds it. The
        step's own buffers (about 9 vectors more) are not counted: leave that margin.
+   * - ``steady.newton_gmres_max_iters``
+     - ``2000``
+     - Integer, ≥ 1. GMRES iteration limit of each Newton step (all restarts together). A solve that reaches it is
+       unconverged (status 1); its update goes through the same usability rule as any other (:doc:`solver`).
+   * - ``steady.newton_armijo_c``
+     - ``1e-4``
+     - > 0 and < 0.5. Armijo constant :math:`c` of the continuation's line search: :math:`q + \lambda\,\delta q` is
+       accepted when :math:`|R(q + \lambda\,\delta q)| \le (1 - c\lambda)\,|R(q)|` (:doc:`solver`).
+   * - ``steady.newton_backtrack``
+     - ``0.5``
+     - > 0 and < 1. Factor :math:`\beta` of the backtracking: :math:`\lambda = 1, \beta, \beta^2, \ldots`
+   * - ``steady.newton_lambda_min``
+     - ``1e-2``
+     - > 0 and < 1. The smallest :math:`\lambda` tried; below it the attempt is rejected.
+   * - ``steady.newton_cfl_cut``
+     - ``0.25``
+     - > 0 and < 1. A rejected or skipped attempt multiplies the CFL by this factor (from infinite
+       :math:`\Delta\tau`: ``steady.cfl_max`` times it) and retries.
+   * - ``steady.newton_max_retries``
+     - ``4``
+     - Integer, ≥ 1. Retries of one continuation step; after the last the step returns ``failed``.
+   * - ``steady.newton_dtau_inf_at_cap``
+     - ``1``
+     - ``0`` or ``1``. ``1``: once the SER law brings the CFL to ``steady.cfl_max``, the next steps run without a
+       pseudo-time term (:math:`D = 0`, plain Newton), until an attempt fails. ``0``: the CFL stays at the cap.
 
-The four ``steady.newton_*`` rows are read by ``read_newton_options()`` (sub-phase 3.1). Their defaults are
-provisional until sub-phase 3.6 (PR-28) tunes them. The application runs no Newton step before sub-phase 3.5, so
-until then it refuses these keys as unknown inputs.
+The five ``steady.newton_*`` rows from ``steady.newton_gmres_restart`` to ``steady.newton_gmres_max_iters`` are
+read by ``read_newton_options()`` (sub-phases 3.1 and 3.2); the six continuation rows below them by
+``read_continuation_options()`` (sub-phase 3.2), which takes the SER ramp from ``steady.cfl0``,
+``steady.cfl_max``, ``steady.ser_exponent`` and ``steady.ser_max_growth`` (the same keys and range checks as the
+SIMPLEC driver). Their defaults are provisional until sub-phase 3.6 (PR-28) tunes them. The application runs no
+Newton step before sub-phase 3.5, so until then it refuses these keys as unknown inputs.
 
 ``solver``
 ----------
