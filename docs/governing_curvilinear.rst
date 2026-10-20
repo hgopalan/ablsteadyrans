@@ -123,7 +123,7 @@ Grid hierarchy
 
 ``mesh.hierarchy_levels`` = L > 1 adds L − 1 coarser meshes of the same domain (``Source/MeshHierarchy.H``). They
 are for grid sequencing and nonlinear multigrid (later sub-phases); in this version they are built, reported and
-written, and the solver runs on level 0.
+written, and the solver runs on level 0. The transfer operators between levels are described below.
 
 - Level l has :math:`n_x / 2^l \times n_y / 2^l` cells: x and y are coarsened by 2 per level, **z never**. Every
   level has the z-levels of level 0, bit for bit, so the first cell and the wall treatment are the same on all of
@@ -164,6 +164,82 @@ shares is level 0's, and its own warning names it.) More passes reduce capping a
 ratio, since STF then leaves thinner layers near the ground (Askervein level 2: aspect 25, 31, 34 for p = 0, 1,
 2). A level of 1 × 1 cells is refused (the FFT preconditioner needs two directions longer than one cell). ERF's STF note, printed while each
 level is built, names its own level 0 for every hierarchy level.
+
+Transfer operators
+------------------
+
+``Source/Transfer.H`` moves a state between two levels :math:`l_f < l_c` of the hierarchy, with :math:`r = 2^{l_c -
+l_f}` in x and y. z is never coarsened, so every transfer works per ζ-level and nothing is interpolated in the
+vertical. Nothing in the solver calls them yet: grid sequencing (sub-phase 2.5) will. They have no inputs.
+
+**Restriction** (``restrict_state``, fine → coarse).
+
+- θ, k and p′ at cell centres: the ``detJ``-weighted mean of the :math:`r \times r` fine cells,
+  :math:`q_c = \sum J_f q_f / \sum J_f`.
+- u and v: the face flux. A coarse x-face covers r fine x-faces; with the mesh's area factors :math:`a_x`,
+
+  .. math::
+
+     a_{x,c}\, u_c\, r = \sum_{b=0}^{r-1} a_{x,f}\, u_f ,
+
+  so the coarse velocity is set from the coarse face's own area. v alike.
+- w: the vertical flux :math:`\Omega = w - z_x u - z_y v` (``MassFlux.H``) of the :math:`r^2` fine z-faces,
+  :math:`a_{z,c}\,\Omega_c\, r^2 = \sum a_{z,f}\,\Omega_f`, then :math:`w_c` from :math:`\Omega_c` with the coarse
+  slopes and the restricted u, v. Restricting w itself would not conserve the flux over terrain, where the coarse
+  slopes are not the mean of the fine ones.
+
+Every coarse face then carries the sum of the fluxes of the fine faces it covers, so the coarse divergence is the
+J-weighted mean of the fine one,
+
+.. math::
+
+   r^2 J_c D_c = \sum J_f D_f ,
+
+over flat ground and over terrain alike. The coarse areas and :math:`J_c` are the coarse mesh's own (its ground is
+smoothed, so they are not sums of the fine ones); the identity holds because each coarse velocity is set from its own
+area. A divergence-free fine field gives a divergence-free coarse one to round-off. When the fine state has its
+boundary conditions applied, the fine Ω is 0 on the ground and the top, so :math:`\Omega_c = 0` there: :math:`w_c`
+is the no-flux value of the coarse, smoothed ground. The fine u and v need one ghost cell filled (the fine Ω reads
+them). The coarse ghost cells are not filled.
+
+**Prolongation** (``prolong_fields``, then ``prolong_state``, coarse → fine).
+
+1. Each field at its own staggered point, per ζ-level: bilinear interpolation of the four coarse values around it.
+   Along a direction where the field is cell-centred, fine cell i (counted from the domain's low face) sits
+   :math:`(2i + 1 - r)/(2r)` coarse cells from coarse centre 0. In the half coarse cell next to a non-periodic domain face it lies outside the coarse centres,
+   and the line through the two nearest ones is extended (linear extrapolation; constant extrapolation would not
+   reproduce a linear field there). Across a periodic seam the coarse periodic images are used. Along a direction
+   where the field is nodal (u in x, v in y) the fine faces lie on or between coarse faces 0 … N, and no
+   extrapolation is needed. A field :math:`a + bx + cy + dxy` is reproduced exactly at every fine point when every
+   non-periodic cell-centred direction has at least two coarse cells; with one, the field is constant along it.
+2. k is clipped at ``turb.tke_floor``.
+3. The fine level's boundary conditions (``BoundaryConditions::fill_ghosts``): inflow, walls, the ground and the top
+   set their Dirichlet normal velocities, and every ghost cell is filled.
+4. The projection: SIMPLEC's pressure correction (``pressure_correction``, ``Simplec.H``) with :math:`d = 1` on
+   every face except the Dirichlet rows (:math:`d = 0`), the fine level's Poisson solver and the run's pressure
+   boundary types. The interpolated p′ is restored afterwards. The initializer's projection (``Initializer.H``) is
+   not used: it puts a Dirichlet condition on the potential at inflow faces, which changes the inflow normal
+   velocity. The fine divergence after the projection is the Poisson solver's residual: ``gmres_mlmg`` stops on
+   its J-weighted 2-norm, ``gmres_fft`` on the plain one. After the projection only the periodic images of u, v
+   and w are refreshed; the solver's next ``fill_ghosts`` fills the rest.
+
+**Round trip.** Bilinear interpolation is not conservative, so :math:`R(P(c)) \ne c`. On flat ground with
+:math:`r = 2`, the round trip is :math:`S_x S_y` along the cell-centred directions, with
+:math:`(Sc)_I = (c_{I-1} + 6c_I + c_{I+1})/8` in the interior and across a periodic seam, and :math:`(Sc)_I = c_I`
+in the first and last cells next to a non-periodic face. Along a nodal direction it is the identity. So θ, k, p′
+and w get :math:`S_x S_y`, u gets :math:`S_y` and v gets :math:`S_x`.
+
+**Layouts.** A coarse level's boxes are the fine boxes coarsened, on the same ranks. Every transfer goes through
+the coarse image of the fine BoxArray on the fine DistributionMapping and ``ParallelCopy``, so a level gathered
+onto one box gives the same result, bit for bit, as the distributed one. This assumes the input is periodic bit
+for bit: the two copies of a face on a periodic seam hold the same value, as the solver keeps them. The projection
+into a gathered fine level depends on its layout through the Poisson solve, so ``prolong_state`` into it is not
+bit-identical to the distributed one.
+
+**Terrain.** Over terrain the coarse ground is smoothed, so a prolonged field is a starting guess on the fine mesh,
+not an interpolant of a fine solution. The flux identity, the projection, the k floor and the layout identity are
+tested over terrain. The exactness of the interpolation and the round trip are tested on flat ground only
+(:doc:`testing`).
 
 References
 ----------
