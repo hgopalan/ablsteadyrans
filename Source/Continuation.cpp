@@ -126,6 +126,12 @@ std::vector<std::string> check_continuation_options (const ContinuationOptions& 
     if (opt.dtau_inf_at_cap != 0 && opt.dtau_inf_at_cap != 1) {
         err.emplace_back("steady.newton_dtau_inf_at_cap = " + std::to_string(opt.dtau_inf_at_cap) + ": must be 0 or 1");
     }
+    {
+        const auto d = static_cast<double>(opt.ptc_growth);
+        if (std::isnan(d) || !std::isfinite(d) || !(d >= 1)) {
+            err.emplace_back("steady.newton_ptc_growth = " + num(d) + ": must be finite and >= 1");
+        }
+    }
     return err;
 }
 
@@ -151,6 +157,7 @@ ContinuationOptions read_continuation_options (const SteadyOptions& steady)
     pp.query("newton_cfl_cut", opt.cfl_cut);
     pp.query("newton_max_retries", opt.max_retries);
     pp.query("newton_dtau_inf_at_cap", opt.dtau_inf_at_cap);
+    pp.query("newton_ptc_growth", opt.ptc_growth);
     err = check_continuation_options(opt);
     if (!err.empty()) {
         std::string all = "ablsteady: invalid inputs:";
@@ -169,21 +176,31 @@ bool armijo_accepts (amrex::Real r_trial, amrex::Real r, amrex::Real lambda, amr
 }
 
 LineSearchResult armijo_line_search (const std::function<amrex::Real (amrex::Real)>& phi, amrex::Real r,
-                                     const ContinuationOptions& opt)
+                                     const ContinuationOptions& opt, amrex::Real growth)
 {
     LineSearchResult ls;
     ls.lambda = 1;
+    amrex::Real r_full = 0;
     while (true) {
         ls.residual = phi(ls.lambda);
+        if (ls.lambda == 1) { r_full = ls.residual; }
         if (armijo_accepts(ls.residual, r, ls.lambda, opt.armijo_c)) {
             ls.accepted = true;
             return ls;
         }
         const amrex::Real next = opt.backtrack * ls.lambda;
-        if (!(next >= opt.lambda_min)) { return ls; }
+        if (!(next >= opt.lambda_min)) { break; }
         ls.lambda = next;
         ++ls.backtracks;
     }
+    // isfinite first (the invalid flag).
+    if (growth > 1 && std::isfinite(static_cast<double>(r_full)) && r_full <= growth * r) {
+        ls.lambda = 1;
+        ls.residual = phi(ls.lambda);
+        ls.accepted = true;
+        ls.by_growth = true;
+    }
+    return ls;
 }
 
 ContinuationState continuation_after_accept (const ContinuationOptions& opt, ContinuationState st, amrex::Real r_new)
@@ -204,6 +221,11 @@ ContinuationState continuation_after_failure (const ContinuationOptions& opt, Co
     st.cfl = amrex::max(opt.cfl_cut * (st.infinite ? opt.cfl_max : st.cfl), std::numeric_limits<amrex::Real>::min());
     st.infinite = false;
     return st;
+}
+
+amrex::Real line_search_growth (const ContinuationOptions& opt, const ContinuationState& st)
+{
+    return st.infinite ? amrex::Real(1) : opt.ptc_growth;
 }
 
 // ---------------------------------------------------------------------------
@@ -303,6 +325,15 @@ void Continuation::restore (const ContinuationState& st)
     m_st.cfl = amrex::min(m_st.cfl, m_opt.cfl_max);
 }
 
+void Continuation::set_reference_residual (amrex::Real r0)
+{
+    const auto d = static_cast<double>(r0);
+    if (std::isnan(d) || !std::isfinite(d) || !(d > 0)) {
+        amrex::Abort("ablsteady: Continuation::set_reference_residual: |R_0| must be finite and > 0");
+    }
+    m_st.r0 = r0;
+}
+
 void Continuation::log (const ContinuationRecord& rec) const
 {
     if (m_verbose <= 0 && rec.outcome == AttemptOutcome::accepted) { return; }
@@ -311,7 +342,8 @@ void Continuation::log (const ContinuationRecord& rec) const
                    << ", CFL " << (rec.infinite ? std::string("inf") : sci(static_cast<double>(rec.cfl)))
                    << ", lambda " << rec.lambda << ", " << rec.backtracks << " backtracks, GMRES "
                    << rec.gmres_iterations << " iterations (status " << rec.gmres_status << "), Krylov relative "
-                   << sci(static_cast<double>(rec.krylov_relative)) << ": " << outcome_name(rec.outcome) << "\n";
+                   << sci(static_cast<double>(rec.krylov_relative)) << ": " << outcome_name(rec.outcome)
+                   << (rec.by_growth ? " (by steady.newton_ptc_growth)" : "") << "\n";
 }
 
 ContinuationStatus Continuation::step (State& q, NewtonPreconditioner* pc)
@@ -363,10 +395,11 @@ ContinuationStatus Continuation::step (State& q, NewtonPreconditioner* pc)
                 clip_floor(m_qt.tke, m_tke_floor);
                 return m_nk.residual_norm(m_qt);   // fills m_qt
             };
-            const LineSearchResult ls = armijo_line_search(phi, r, m_opt);
+            const LineSearchResult ls = armijo_line_search(phi, r, m_opt, line_search_growth(m_opt, m_st));
             rec.lambda = ls.lambda;
             rec.backtracks = ls.backtracks;
             rec.residual_new = ls.residual;
+            rec.by_growth = ls.by_growth;
             if (ls.accepted) {
                 copy_state(q, m_qt);
                 amrex::Gpu::streamSynchronize();

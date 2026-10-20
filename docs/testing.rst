@@ -1116,7 +1116,7 @@ GoogleTest suite
      - ``Continuation.DtauRampFollowsSer``: given a sequence of :math:`|R|`, the CFL after each accepted step
        equals the closed form :math:`\min(\mathrm{CFL}_\mathrm{max}, g\,\mathrm{CFL}_n, \mathrm{CFL}_0(|R_0|/|R_n|)^p)`
        for four SER settings, with a flag per setting for whether the growth limit and the cap bind (each asserted); the switch to infinite :math:`\Delta\tau`
-       at the cap (and not with ``steady.newton_dtau_inf_at_cap = 0``), the law from the cap while infinite, and
+       at the cap (and not with ``steady.newton_dtau_inf_at_cap = 0``), the law from the cap while infinite, the growth bound at a finite :math:`\Delta\tau` only, and
        the CFL cut after a failure, floored at the smallest normal ``Real``. The defaults give 1.25, 2.5, 5, 10, then infinite.
    * - UT-3.2 (a)
      - *Beyond the plan.* ``Continuation.SkippedStepCutsCflAndKeepsState``: a NaN preconditioner (the update is
@@ -1127,7 +1127,9 @@ GoogleTest suite
        trials fail without raising the invalid flag. ``Continuation.InputReadersAndRangeChecks``: the defaults, the
        seven new keys read, each range check refusing a value just outside its range (and NaN) and naming the
        key, the reader aborting on those and on repeated or two-valued keys, the SER checks of the driver, and
-       the application's unknown-input hint. ``Continuation.GmresIterationLimit``: a limit of 3 stops GMRES at 3
+       the application's unknown-input hint. The line search's growth bound (``steady.newton_ptc_growth``) on the
+       same quadratic with :math:`K` = 100: a bound of 100 accepts the full step, ``nextafter(100, 0)`` and 1 do
+       not, a NaN full step never is. ``Continuation.GmresIterationLimit``: a limit of 3 stops GMRES at 3
        iterations with status 1.
    * - UT-3.2 (b)
      - *Beyond the plan.* ``Continuation.HillSameOnAnyRankCount``: the hill on six uneven boxes reaches
@@ -1139,4 +1141,9 @@ GoogleTest suite
        refuses a :math:`q` on another BoxArray or DistributionMapping.
        ``Newton.TrueLinearResidualMatchesEstimate``: the true linear residual :math:`|b - Ax|/|b|` of a GMRES
        solve on the hill agrees with GMRES's estimate to 1e-6 (on one and six boxes).
+       ``Continuation.ReferenceResidualFromCaller``: a caller's :math:`|R_0|` (ten times the first :math:`|R|`)
+       stays, gives a CFL ten times that of the step's own :math:`|R_0|` and is the reference of ``run``'s
+       tolerance; a zero, negative, infinite or NaN one is refused. ``Continuation.GrowthBoundAtFiniteDtau``: the
+       Ekman column with ``steady.ser_exponent = 0.5`` fails after 7 steps without the growth bound and converges
+       in 26 with 1.5, each step accepted by the bound at a finite :math:`\Delta\tau` with :math:`\lambda = 1`.
        ``Continuation.DISABLED_ParameterSweep`` (on request): the sweep of :doc:`results`.

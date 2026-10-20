@@ -349,6 +349,22 @@ The continuation of sub-phase 3.2 (:doc:`solver`) on the same hill (six uneven b
      - 6, 940
      - 13, 2585
      - 11, 370
+   * - ``steady.newton_ptc_growth = 1.5``
+     - 8, 976
+     - 8, 967
+     - 17, 510
+   * - **steady.newton_ptc_growth = 1.5, p = 0.5**
+     - **9, 1126**
+     - **9, 1088**
+     - **26, 475**
+   * - ``steady.newton_ptc_growth = 1.5``, no line search
+     - 8, 976
+     - 8, 967
+     - :math:`|R|/|R_0|` = 2.8e-3 after 60
+   * - Leave infinite :math:`\Delta\tau` after a damped or unconverged step (tried, not kept)
+     - 8, 976
+     - 8, 967
+     - fails at :math:`|R|/|R_0|` = 8.8e-5
    * - Plain Newton (``NewtonKrylov::step``, no globalization)
      - 6 steps
      - diverges (:math:`|R|` 99.5, 377, 12 971, ...)
@@ -359,7 +375,11 @@ The continuation of sub-phase 3.2 (:doc:`solver`) on the same hill (six uneven b
 0.760, 0.568, 0.387, 0.223, 0.0912, 0.0241, 0.0232, 0.0178, 0.0167, 1.1e-3, 1.06e-3, 9.95e-4, 9.61e-4,
 9.38e-4, 4.5e-4, 4.5e-6, 5.2e-7, 5.0e-9 (eleven backtracks, the slow steps at :math:`\lambda < 1`). No setting showed limit cycling (a CFL alternating between cut and growth); the
 failures are retries running out at a small CFL. GMRES(30) on the hill: 23 steps to 6.6e-9 without the switch to
-infinite :math:`\Delta\tau`; with it (the default restart of 30 with the default switch), twelve steps at the 2000-iteration limit near 6e-3 and a failure at 7.3e-8.
+infinite :math:`\Delta\tau`; with it (the default restart of 30 with the default switch), twelve steps at the 2000-iteration limit near 6e-3 and a failure at 7.3e-8;
+leaving infinite :math:`\Delta\tau` after a damped or unconverged step fails earlier, at 2.6e-5 after 11 steps.
+``steady.newton_ptc_growth = 1.5`` changes no result of the defaults above and turns the two column failures at a
+finite CFL into convergence (:math:`p` = 0.5: 26 steps) or slow progress (no line search). With :math:`p` = 0.5 it
+converges on all three cases; it is the recommended setting until sub-phase 3.6 tunes the defaults.
 
 In UT-3.2.1 (one box, GMRES(30), :math:`u \times 3`, plain Newton throughout) ``NewtonKrylov::step`` raises
 :math:`|R|` by 3.53 on the first step, where :math:`k` goes negative. The continuation keeps :math:`k` at its floor,

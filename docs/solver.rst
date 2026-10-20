@@ -523,7 +523,11 @@ application does not run it yet (sub-phase 3.5). One continuation step from :mat
 
    with :math:`c` = ``steady.newton_armijo_c``, :math:`\beta` = ``steady.newton_backtrack`` and
    :math:`\lambda_\mathrm{min}` = ``steady.newton_lambda_min``. Each trial point keeps :math:`k` at
-   ``turb.tke_floor`` and goes through the ghost fill before :math:`R` is evaluated.
+   ``turb.tke_floor`` and goes through the ghost fill before :math:`R` is evaluated. At a finite
+   :math:`\Delta\tau` the direction is a pseudo-time step and need not reduce :math:`|R|` (for a non-normal
+   :math:`J` the slope of :math:`|R(q_n + \lambda\,\delta q)|` at :math:`\lambda = 0` can be positive). With
+   :math:`\gamma` = ``steady.newton_ptc_growth`` > 1, when no :math:`\lambda` meets the condition there, the full
+   step is accepted if :math:`|R(q_n + \delta q)| \le \gamma\,|R(q_n)|`; the SER law then lowers the next CFL.
 4. Accepted: :math:`q_{n+1} = q_n + \lambda\,\delta q`, and the CFL follows the driver's SER law,
 
    .. math::
@@ -532,7 +536,8 @@ application does not run it yet (sub-phase 3.5). One continuation step from :mat
       \mathrm{CFL}_0 \left(\frac{|R_0|}{|R_{n+1}|}\right)^{p}\right),
 
    with ``steady.cfl0``, ``steady.cfl_max``, :math:`g` = ``steady.ser_max_growth`` and :math:`p` =
-   ``steady.ser_exponent``; :math:`|R_0|` is the first finite :math:`|R|`. While :math:`\Delta\tau` is infinite the
+   ``steady.ser_exponent``; :math:`|R_0|` is the first finite :math:`|R|`, or the caller's
+   (``set_reference_residual``, for example the residual where an earlier stage started). While :math:`\Delta\tau` is infinite the
    law starts from :math:`\mathrm{CFL}_\mathrm{max}`.
 5. A skipped update (the rule above) or a line search that accepts no :math:`\lambda` leaves :math:`q_n` as it is,
    multiplies the CFL by ``steady.newton_cfl_cut`` (from infinite :math:`\Delta\tau`, :math:`\mathrm{CFL}_\mathrm{max}`
@@ -547,13 +552,13 @@ switch to infinite :math:`\Delta\tau`, :math:`|R_0|` and the last :math:`|R|`) d
 :math:`\Delta\tau`; ``write_continuation_state`` and ``read_continuation_state`` keep it in a checkpoint
 directory (``Continuation``, hex floats), and a restart from it gives the uninterrupted run's bits.
 
-**Limits.** At a finite CFL the direction is not guaranteed to reduce :math:`|R|` (:math:`D + J` is not
-:math:`J`; for a non-normal :math:`J` the slope of :math:`|R(q + \lambda\,\delta q)|` at :math:`\lambda = 0` can be
-positive), so an attempt can be rejected at any CFL and a CFL cut need not help. Repeated cuts stop at the
-smallest normal ``Real``. Once :math:`\Delta\tau` is infinite it stays infinite through damped
-(:math:`\lambda < 1`) steps; only a failed attempt returns it to a finite CFL. ``run``'s relative tolerance and
-the SER law use the continuation's own :math:`|R_0|` (its first step), not the residual at the start of the
-solve. With GMRES(30) and infinite :math:`\Delta\tau` the 30 m hill
+**Limits.** With ``steady.newton_ptc_growth = 1`` (the default) a pseudo-time direction that raises :math:`|R|`
+for every :math:`\lambda` is rejected, and a CFL cut need not help: on the Ekman column with
+``steady.ser_exponent = 0.5`` the retries run out at 3.5e-2 of :math:`|R_0|`; with 1.5 the column converges
+(:doc:`results`). Repeated cuts stop at the smallest normal ``Real``. Once :math:`\Delta\tau` is infinite it stays
+infinite through damped (:math:`\lambda < 1`) steps and unconverged solves; only a failed attempt returns it to a
+finite CFL. Returning to :math:`\mathrm{CFL}_\mathrm{max}` after such a step was tried and not kept: the column
+failed at 8.8e-5 and the hill with GMRES(30) at 2.6e-5 of :math:`|R_0|` (:doc:`results`). With GMRES(30) and infinite :math:`\Delta\tau` the 30 m hill
 stagnates near 6e-3 of :math:`|R_0|` for twelve steps, each solve at the 2000-iteration limit, before it converges
 to 7e-8 and then fails (the retries run out); with ``steady.newton_dtau_inf_at_cap = 0`` it reaches 1e-8 in 23
 steps, and with GMRES(200) in 8 (:doc:`results`). On the Ekman column the cap of 10 without the switch to infinite

@@ -20,6 +20,9 @@
 //      |R_0|)^-p), with |R_0| the residual of the first step. With
 //      steady.newton_dtau_inf_at_cap = 1, a CFL that reaches cfl_max
 //      switches to infinite dtau;
+//   3b. with steady.newton_ptc_growth > 1, at finite dtau (where the
+//      direction need not reduce |R|), a full step that no lambda's Armijo
+//      test accepts is accepted when |R| grows by at most that factor;
 //   5. a skipped Newton update (newton_update_usable false: a non-finite or
 //      growing Krylov residual, Newton.H) or a line search that accepts no
 //      lambda leaves q as it is (every attempt works on a copy), cuts the CFL by
@@ -33,7 +36,7 @@
 // ser_max_growth: SteadyOptions, Driver.H). The new inputs (steady.*, read by
 // read_continuation_options): newton_armijo_c, newton_backtrack,
 // newton_lambda_min, newton_cfl_cut, newton_max_retries,
-// newton_dtau_inf_at_cap. Like the steady.newton_* keys of Newton.H, the
+// newton_dtau_inf_at_cap, newton_ptc_growth. Like the steady.newton_* keys of Newton.H, the
 // application does not read them before sub-phase 3.5: setting them stops
 // the run as unknown keys.
 //
@@ -76,6 +79,7 @@ struct ContinuationOptions
     amrex::Real cfl_cut{amrex::Real(0.25)};     //!< steady.newton_cfl_cut (> 0, < 1): CFL <- cfl_cut CFL on a failed attempt
     int max_retries{4};                         //!< steady.newton_max_retries (>= 1): retries after a failed attempt
     int dtau_inf_at_cap{1};                     //!< steady.newton_dtau_inf_at_cap (0 | 1): infinite dtau once the CFL reaches cfl_max
+    amrex::Real ptc_growth{1};                  //!< steady.newton_ptc_growth (>= 1; 1: off): at finite dtau, the full step is accepted when |R| grows by at most this factor
     std::vector<std::string> given;             //!< the new keys given
 };
 
@@ -97,12 +101,16 @@ struct LineSearchResult
     amrex::Real lambda{0};     //!< the accepted lambda, or the last one tried
     int backtracks{0};         //!< reductions of lambda
     amrex::Real residual{0};   //!< phi at the last trial
+    bool by_growth{false};     //!< accepted by the growth bound, not by the Armijo condition
 };
 
 //! Backtracking from lambda = 1: phi(lambda) is |R(q + lambda dq)|, r is
-//! |R(q)|. Tries 1, beta, beta^2, ... while lambda >= opt.lambda_min.
+//! |R(q)|. Tries 1, beta, beta^2, ... while lambda >= opt.lambda_min. When
+//! no lambda meets the Armijo condition and growth > 1, the full step is
+//! accepted if phi(1) is finite and phi(1) <= growth r (phi(1) is evaluated
+//! again last, so the caller's trial point is the full step).
 LineSearchResult armijo_line_search (const std::function<amrex::Real (amrex::Real)>& phi, amrex::Real r,
-                                     const ContinuationOptions& opt);
+                                     const ContinuationOptions& opt, amrex::Real growth = 1);
 
 //! The state that decides the next dtau; checkpointed.
 struct ContinuationState
@@ -121,6 +129,9 @@ ContinuationState continuation_after_accept (const ContinuationOptions& opt, Con
 //! The state after a skipped or rejected attempt: CFL cut (from infinite
 //! dtau: cfl_cut cfl_max, finite again).
 ContinuationState continuation_after_failure (const ContinuationOptions& opt, ContinuationState st);
+//! The growth bound of the line search for the next attempt: ptc_growth at a
+//! finite dtau, 1 (off) at infinite dtau, where the direction is Newton's.
+amrex::Real line_search_growth (const ContinuationOptions& opt, const ContinuationState& st);
 
 void write_continuation_state (const std::string& dir, const ContinuationState& st);
 //! Aborts, naming the file, on a missing or corrupt file.
@@ -144,6 +155,7 @@ struct ContinuationRecord
     int gmres_status{-1};
     amrex::Real krylov_relative{0};
     AttemptOutcome outcome{AttemptOutcome::skipped};
+    bool by_growth{false};          //!< accepted by steady.newton_ptc_growth
 };
 
 struct ContinuationRunResult
@@ -176,6 +188,10 @@ public:
     ContinuationRunResult run (State& q, int max_steps, amrex::Real rel_tol, NewtonPreconditioner* pc = nullptr);
 
     [[nodiscard]] const ContinuationState& state () const { return m_st; }
+    //! |R_0| of the SER law and of run()'s rel_tol, given by the caller (for
+    //! example the residual where an earlier stage started) instead of the
+    //! first step's |R|. Finite and > 0, else an abort.
+    void set_reference_residual (amrex::Real r0);
     //! Continue from a saved state (CFL finite and > 0, brought to at most
     //! cfl_max; r0 and r_last finite and >= 0; steps >= 0; else an abort).
     void restore (const ContinuationState& st);

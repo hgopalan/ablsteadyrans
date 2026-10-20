@@ -143,7 +143,7 @@ inline constexpr const char* kNewtonInputKeys[] = {"newton_gmres_restart", "newt
 //! sub-phase 3.5 as kNewtonInputKeys.
 inline constexpr const char* kContinuationInputKeys[] = {"newton_armijo_c", "newton_backtrack", "newton_lambda_min",
                                                          "newton_cfl_cut", "newton_max_retries",
-                                                         "newton_dtau_inf_at_cap"};
+                                                         "newton_dtau_inf_at_cap", "newton_ptc_growth"};
 
 //! The current ParmParse table as InputEntry records.
 std::vector<InputEntry> parmparse_entries ();

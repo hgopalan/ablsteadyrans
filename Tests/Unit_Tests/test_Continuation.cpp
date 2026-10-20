@@ -372,6 +372,16 @@ TEST(Continuation, DtauRampFollowsSer)
     inf_st = ablsteady::continuation_after_accept(o, inf_st, amrex::Real(1e-3));
     EXPECT_EQ(inf_st.cfl, 10);
     EXPECT_TRUE(inf_st.infinite);
+    // The growth bound applies at a finite dtau only.
+    {
+        ContinuationOptions x = default_options();
+        x.ptc_growth = amrex::Real(1.5);
+        ContinuationState f;
+        f.cfl = 3;
+        EXPECT_EQ(ablsteady::line_search_growth(x, f), amrex::Real(1.5));
+        f.infinite = true;
+        EXPECT_EQ(ablsteady::line_search_growth(x, f), 1);
+    }
     // Repeated cuts stop at the smallest normal Real, never 0.
     {
         ContinuationOptions x = default_options();
@@ -518,6 +528,42 @@ TEST(Continuation, ArmijoOnKnownQuadratic)
     EXPECT_FALSE(ablsteady::armijo_accepts(inf, 1, 1, amrex::Real(1e-4)));
     EXPECT_TRUE(ablsteady::armijo_accepts(amrex::Real(0.5), 1, 1, amrex::Real(0.5)));               // the edge
     EXPECT_FALSE(ablsteady::armijo_accepts(std::nextafter(amrex::Real(0.5), amrex::Real(1)), 1, 1, amrex::Real(0.5)));
+
+    // The growth bound (steady.newton_ptc_growth): K = 100, lambda_min 0.05
+    // rejects every lambda; phi(1) = 100 r, so a growth of 100 accepts the full
+    // step (evaluated again last: 6 calls) and nextafter(100, 0) does not; the
+    // default 1 never does.
+    {
+        ContinuationOptions g = default_options();
+        g.lambda_min = amrex::Real(0.05);
+        const amrex::Real r = 2;
+        for (const amrex::Real growth : {amrex::Real(100), std::nextafter(amrex::Real(100), amrex::Real(0)), amrex::Real(1)}) {
+            std::vector<amrex::Real> calls;
+            const auto lg = ablsteady::armijo_line_search([&] (amrex::Real l) {
+                calls.push_back(l);
+                return r * (1 - l + 100 * l * l);
+            }, r, g, growth);
+            const bool accept = growth >= amrex::Real(100);
+            EXPECT_EQ(lg.accepted, accept) << growth;
+            EXPECT_EQ(lg.by_growth, accept) << growth;
+            EXPECT_EQ(lg.backtracks, 4) << growth;
+            ASSERT_EQ(calls.size(), accept ? 6U : 5U) << growth;
+            EXPECT_EQ(calls.back(), accept ? amrex::Real(1) : amrex::Real(0.0625)) << growth;
+            if (accept) {
+                EXPECT_EQ(lg.lambda, 1);
+                EXPECT_EQ(lg.residual, 100 * r);
+            }
+        }
+        // a NaN full step is never accepted by the bound, and raises no flag
+        const auto prev = amrex::disableFPExcept(amrex::FPExcept::invalid);
+        std::feclearexcept(FE_INVALID);
+        const auto ln = ablsteady::armijo_line_search([&] (amrex::Real) { return nan; }, r, g, amrex::Real(1e30));
+        const bool flag = std::fetestexcept(FE_INVALID) != 0;
+        std::feclearexcept(FE_INVALID);
+        amrex::setFPExcept(prev);
+        EXPECT_FALSE(ln.accepted);
+        EXPECT_FALSE(flag);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -545,10 +591,11 @@ TEST(Continuation, InputReadersAndRangeChecks)
     EXPECT_EQ(def.cfl_cut, amrex::Real(0.25));
     EXPECT_EQ(def.max_retries, 4);
     EXPECT_EQ(def.dtau_inf_at_cap, 1);
+    EXPECT_EQ(def.ptc_growth, 1);
     EXPECT_TRUE(def.given.empty());
     EXPECT_TRUE(ablsteady::check_continuation_options(def).empty());
     const char* keys[] = {"newton_armijo_c", "newton_backtrack", "newton_lambda_min", "newton_cfl_cut",
-                          "newton_max_retries", "newton_dtau_inf_at_cap", "newton_gmres_max_iters"};
+                          "newton_max_retries", "newton_dtau_inf_at_cap", "newton_ptc_growth", "newton_gmres_max_iters"};
     amrex::ParmParse pp("steady");
     auto clear = [&] { for (const char* k : keys) { while (pp.remove(k) > 0) {} } };
     clear();
@@ -558,6 +605,7 @@ TEST(Continuation, InputReadersAndRangeChecks)
     pp.add("newton_cfl_cut", amrex::Real(0.5));
     pp.add("newton_max_retries", 7);
     pp.add("newton_dtau_inf_at_cap", 0);
+    pp.add("newton_ptc_growth", amrex::Real(1.5));
     pp.add("newton_gmres_max_iters", 300);
     const ContinuationOptions o = ablsteady::read_continuation_options(so);
     EXPECT_EQ(o.armijo_c, amrex::Real(0.25));
@@ -566,7 +614,8 @@ TEST(Continuation, InputReadersAndRangeChecks)
     EXPECT_EQ(o.cfl_cut, amrex::Real(0.5));
     EXPECT_EQ(o.max_retries, 7);
     EXPECT_EQ(o.dtau_inf_at_cap, 0);
-    EXPECT_EQ(o.given.size(), 6U);
+    EXPECT_EQ(o.ptc_growth, amrex::Real(1.5));
+    EXPECT_EQ(o.given.size(), 7U);
     EXPECT_EQ(ablsteady::read_newton_options().gmres_max_iters, 300);
     for (const auto& k : amrex::ParmParse::getUnusedInputs("steady")) {
         EXPECT_EQ(k.find("steady.newton_"), std::string::npos) << k;   // every key given is read
@@ -587,6 +636,8 @@ TEST(Continuation, InputReadersAndRangeChecks)
         {"steady.newton_cfl_cut = 1", [] (ContinuationOptions& x) { x.cfl_cut = 1; }},
         {"steady.newton_max_retries = 0", [] (ContinuationOptions& x) { x.max_retries = 0; }},
         {"steady.newton_dtau_inf_at_cap = 2", [] (ContinuationOptions& x) { x.dtau_inf_at_cap = 2; }},
+        {"steady.newton_ptc_growth = 0.5", [] (ContinuationOptions& x) { x.ptc_growth = amrex::Real(0.5); }},
+        {"steady.newton_ptc_growth = inf", [] (ContinuationOptions& x) { x.ptc_growth = std::numeric_limits<amrex::Real>::infinity(); }},
         {"steady.newton_dtau_inf_at_cap = -1", [] (ContinuationOptions& x) { x.dtau_inf_at_cap = -1; }},
         {"steady.cfl0", [] (ContinuationOptions& x) { x.cfl0 = 0; }},
         {"steady.cfl_max", [] (ContinuationOptions& x) { x.cfl_max = amrex::Real(0.5); }},
@@ -606,7 +657,8 @@ TEST(Continuation, InputReadersAndRangeChecks)
         x.backtrack = nan;
         x.lambda_min = nan;
         x.cfl_cut = nan;
-        EXPECT_EQ(ablsteady::check_continuation_options(x).size(), 4U);
+        x.ptc_growth = nan;
+        EXPECT_EQ(ablsteady::check_continuation_options(x).size(), 5U);
         x = default_options();   // the edges inside
         x.armijo_c = std::nextafter(amrex::Real(0.5), amrex::Real(0));
         x.backtrack = std::nextafter(amrex::Real(1), amrex::Real(0));
@@ -614,6 +666,7 @@ TEST(Continuation, InputReadersAndRangeChecks)
         x.cfl_cut = std::nextafter(amrex::Real(1), amrex::Real(0));
         x.max_retries = 1;
         x.dtau_inf_at_cap = 0;
+        x.ptc_growth = 1;
         EXPECT_TRUE(ablsteady::check_continuation_options(x).empty());
     }
     {
@@ -628,7 +681,8 @@ TEST(Continuation, InputReadersAndRangeChecks)
     // the reader aborts
     struct Given { const char* key; double value; };
     for (const Given g : {Given{"newton_armijo_c", 0.6}, Given{"newton_backtrack", 1.0}, Given{"newton_lambda_min", 0.0},
-                          Given{"newton_cfl_cut", 2.0}, Given{"newton_max_retries", 0}, Given{"newton_dtau_inf_at_cap", 3}}) {
+                          Given{"newton_cfl_cut", 2.0}, Given{"newton_max_retries", 0}, Given{"newton_dtau_inf_at_cap", 3},
+                          Given{"newton_ptc_growth", 0.9}}) {
         if (std::string(g.key) == "newton_max_retries" || std::string(g.key) == "newton_dtau_inf_at_cap") {
             pp.add(g.key, static_cast<int>(g.value));
         } else {
@@ -826,6 +880,46 @@ TEST(Continuation, RestartIsBitIdentical)
 // solve (A applied once more to the answer) against GMRES's own estimate, on
 // the hill with a uniform dtau of 20 s. They agree to 1e-6 of |b| (the
 // forward difference's error in the extra product), and both meet rtol.
+// ---------------------------------------------------------------------------
+// The caller's |R_0| (set_reference_residual, for the handover of sub-phase
+// 3.5): with |R_0| ten times the first step's |R|, that |R_0| stays, the
+// first CFL is the SER law with that |R_0| (not the one of the step's own
+// |R_0|), and run()'s rel_tol is relative to it.
+// A non-finite or non-positive |R_0| is refused.
+TEST(Continuation, ReferenceResidualFromCaller)
+{
+    // The law binds (no growth limit, a high cap): the two CFLs differ by 10.
+    ContinuationOptions lo = default_options();
+    lo.ser_max_growth = 1000;
+    lo.cfl_max = 1000;
+    HillCase h(4, FaceType::surface_layer, 30);
+    Continuation c(lo, hill_newton(), h.in, h.c.mesh, h.c.geom, &h.nu, 0, h.c.ba, h.c.dm, 0);
+    for (const amrex::Real bad : {amrex::Real(0), amrex::Real(-1), std::numeric_limits<amrex::Real>::infinity(),
+                                  std::numeric_limits<amrex::Real>::quiet_NaN()}) {
+        EXPECT_THROW(c.set_reference_residual(bad), std::runtime_error);
+    }
+    HillCase h0(4, FaceType::surface_layer, 30);
+    Continuation own(lo, hill_newton(), h0.in, h0.c.mesh, h0.c.geom, &h0.nu, 0, h0.c.ba, h0.c.dm, 0);
+    ASSERT_EQ(own.step(h0.q), ContinuationStatus::accepted);
+    const amrex::Real r_first = own.records().front().residual;
+    const amrex::Real r_ref = 10 * r_first;
+    c.set_reference_residual(r_ref);
+    ASSERT_EQ(c.step(h.q), ContinuationStatus::accepted);
+    EXPECT_EQ(c.state().r0, r_ref);
+    EXPECT_EQ(c.records().front().residual, r_first);
+    const auto& o = c.options();
+    EXPECT_EQ(c.state().cfl, ablsteady::ser_cfl(o.cfl0, c.state().r_last / r_ref, o.cfl0, o.cfl_max, o.ser_exponent,
+                                                o.ser_max_growth));
+    EXPECT_NEAR(static_cast<double>(c.state().cfl), 10 * static_cast<double>(own.state().cfl),
+                tol(1e-12, 1e-4) * static_cast<double>(c.state().cfl));
+    // rel_tol: |R| after one step is below 0.1 |R_0| for the caller's |R_0|
+    // and above it for the step's own.
+    ASSERT_LT(c.state().r_last, amrex::Real(0.1) * r_ref);
+    ASSERT_GT(own.state().r_last, amrex::Real(0.1) * r_first);
+    EXPECT_TRUE(c.run(h.q, 3, amrex::Real(0.1)).converged);
+    EXPECT_EQ(c.state().steps, 1);
+}
+
 TEST(Newton, TrueLinearResidualMatchesEstimate)
 {
     for (const int max_grid : {64, 4}) {
@@ -988,6 +1082,49 @@ struct HillU3 : HillCase { HillU3 () : HillCase(4, FaceType::surface_layer, 30) 
 
 } // namespace
 
+// ---------------------------------------------------------------------------
+// steady.newton_ptc_growth on the Ekman column with steady.ser_exponent =
+// 0.5 (beyond the plan; review finding P1): without it the step at a finite
+// CFL whose direction raises |R| for every lambda is rejected until the
+// retries run out (|R|/|R_0| 3.5e-2); with 1.5 those full steps are accepted
+// by the growth bound, only at a finite dtau, and the run reaches 1e-8 |R_0|.
+TEST(Continuation, GrowthBoundAtFiniteDtau)
+{
+    for (const double growth : {1.0, 1.5}) {
+        ColumnCase cs;
+        ContinuationOptions o = default_options();
+        o.ser_exponent = amrex::Real(0.5);
+        o.ptc_growth = static_cast<amrex::Real>(growth);
+        NewtonOptions no;
+        no.gmres_restart = 200;
+        Continuation pt(o, no, cs.in, cs.c.mesh, cs.c.geom, &cs.nu, 0, cs.c.ba, cs.c.dm, 0);
+        testing::internal::CaptureStdout();
+        const auto res = pt.run(cs.q, 60, amrex::Real(1e-8));
+        testing::internal::GetCapturedStdout();
+        int by_growth = 0;
+        for (const auto& r : pt.records()) {
+            if (r.by_growth) {
+                ++by_growth;
+                EXPECT_FALSE(r.infinite);
+                EXPECT_EQ(r.lambda, 1);
+                EXPECT_GT(r.residual_new, r.residual);
+                EXPECT_LE(r.residual_new, o.ptc_growth * r.residual);
+                EXPECT_EQ(r.outcome, AttemptOutcome::accepted);
+            }
+        }
+        if (growth == 1) {
+            EXPECT_EQ(res.status, ContinuationStatus::failed);
+            EXPECT_EQ(by_growth, 0);
+            EXPECT_EQ(res.steps, 7);
+        } else {
+            EXPECT_EQ(res.status, ContinuationStatus::accepted);
+            EXPECT_TRUE(res.converged);
+            EXPECT_GT(by_growth, 0);
+            EXPECT_EQ(res.steps, 26);
+        }
+    }
+}
+
 TEST(Continuation, DISABLED_ParameterSweep)
 {
     struct Var { const char* label; void (*set) (ContinuationOptions&); };
@@ -1004,6 +1141,10 @@ TEST(Continuation, DISABLED_ParameterSweep)
         {"cfl_max 100", [] (ContinuationOptions& o) { o.cfl_max = 100; }},
         {"cfl_max 1000", [] (ContinuationOptions& o) { o.cfl_max = 1000; }},
         {"cfl0 10 (Newton)", [] (ContinuationOptions& o) { o.cfl0 = 10; }},
+        {"ptc_growth 1.5", [] (ContinuationOptions& o) { o.ptc_growth = amrex::Real(1.5); }},
+        {"ptc_growth 3", [] (ContinuationOptions& o) { o.ptc_growth = 3; }},
+        {"no LS, ptc_growth 1.5", [] (ContinuationOptions& o) { o.lambda_min = amrex::Real(0.99); o.ptc_growth = amrex::Real(1.5); }},
+        {"p 0.5, ptc_growth 1.5", [] (ContinuationOptions& o) { o.ser_exponent = amrex::Real(0.5); o.ptc_growth = amrex::Real(1.5); }},
     };
     for (const Var& v : vars) {
         ContinuationOptions o = default_options();

@@ -289,9 +289,14 @@ definition of a steady solution (:doc:`solver`) and its own. The application run
      - ``1``
      - ``0`` or ``1``. ``1``: once the SER law brings the CFL to ``steady.cfl_max``, the next steps run without a
        pseudo-time term (:math:`D = 0`, plain Newton), until an attempt fails. ``0``: the CFL stays at the cap.
+   * - ``steady.newton_ptc_growth``
+     - ``1``
+     - Finite, ≥ 1. At a finite :math:`\Delta\tau`, when no :math:`\lambda` meets the Armijo condition, the full
+       step is accepted if :math:`|R|` grows by at most this factor (a pseudo-time step; :doc:`solver`). ``1``: off.
+       Not used at infinite :math:`\Delta\tau`.
 
 The five ``steady.newton_*`` rows from ``steady.newton_gmres_restart`` to ``steady.newton_gmres_max_iters`` are
-read by ``read_newton_options()`` (sub-phases 3.1 and 3.2); the six continuation rows below them by
+read by ``read_newton_options()`` (sub-phases 3.1 and 3.2); the seven continuation rows below them by
 ``read_continuation_options()`` (sub-phase 3.2), which takes the SER ramp from ``steady.cfl0``,
 ``steady.cfl_max``, ``steady.ser_exponent`` and ``steady.ser_max_growth`` (the same keys and range checks as the
 SIMPLEC driver). Their defaults are provisional until sub-phase 3.6 (PR-28) tunes them. The application runs no
