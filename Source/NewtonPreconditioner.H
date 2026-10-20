@@ -26,13 +26,19 @@
 //      the linearized system are div(du) = r_p (R_p = div(u), Residual.H),
 //      which the correction meets to simplec.pressure_reltol. d: the
 //      denominators below;
-//   3. theta: the stage's re-evaluation of theta's convection with the
-//      corrected velocity, conv(theta, F(u + du)) - conv(theta, F(u)) (the
-//      second half of the point-implicit buoyancy pair, Predictor.H), added
-//      to -r_theta; then one z-line step, (1/dtau + A1) dtheta = r_theta +
-//      that term, with A1 from the corrected transport;
-//   4. k: the same step, (1/dtau + A1) dk = r_k, without the stage's clip at
-//      turb.tke_floor (dk is an increment);
+//   3. theta: the coupling to the velocity, conv(theta, F(u + du)) -
+//      conv(theta, F(u)) (the second half of the point-implicit buoyancy
+//      pair, Predictor.H), added to -r_theta; then one z-line step,
+//      (1/dtau + A1) dtheta = r_theta + that term. stage: with du itself and
+//      A1 from the corrected transport F(u + du), the stage's iteration.
+//      diagonal: the directional derivative [conv(theta, F(u + sigma du)) -
+//      conv(theta, F(u))] / sigma, sigma = sqrt(eps) max(1, max|u|) /
+//      max|du| (jvp's step), and A1 from q's transport, the theta block of
+//      J: apply is then linear in r (apply(s r) = s apply(r), to the inner
+//      Poisson tolerance) and keeps q's upwind sides whatever the Krylov
+//      vector's size;
+//   4. k: the same step, (1/dtau + A1) dk = r_k, with the same transport,
+//      without the stage's clip at turb.tke_floor (dk is an increment);
 //   5. on the Dirichlet rows of u, v, w (identity rows of the Newton
 //      system: the operator's fill sets those points of dq from the others,
 //      Newton.H) dq = r; the copies of every shared face are set to the
@@ -48,10 +54,10 @@
 // and the pressure increment dp = alpha_p p' vanishes as dtau grows: as a
 // preconditioner of the steady Newton system the stage's iteration leaves
 // the pressure to GMRES, whose iterations then grow with the CFL (on the 3-D
-// hill of UT-3.3.3 from 16 at CFL 10 to 150-680 at 1e4, more than the
-// identity's 130-310). With d = a_P (which carries the transport and
+// hill of UT-3.3.3 from 18 at CFL 10 to 360-381 at 1e4, more than the
+// identity's 163.5-227.5). With d = a_P (which carries the transport and
 // diffusion diagonal) the pressure increment does not depend on dtau and the
-// iterations stay at 8-15 from CFL 10 to 1e4 (the SIMPLE preconditioner of
+// iterations stay at 10-10.5 from CFL 10 to 1e4 (the SIMPLE preconditioner of
 // Elman, Howle, Shadid, Shuttleworth and Tuminaro, J. Comput. Phys. 227,
 // 2008, with the predictor's line sweeps as the momentum solve). Neither
 // helps where the pressure plays no part: on the horizontally uniform
@@ -62,9 +68,12 @@
 //
 // The sweeps are the stage's: steady.zline_sweeps of steady.sweep (zjacobi
 // or lusgs, with steady.line_*), simplec.* for the correction, the rotation
-// and the w cap. apply is linear in r except in step 3, where a face flux of
-// u + du of the other sign than u's moves the upwind side: FGMRES allows that
-// (Newton.H).
+// and the w cap. With the stage's denominators apply is not linear in r
+// (step 3 uses the full increment du and steps 3-4 the transport of u + du,
+// whose upwind sides and weights depend on the size of du); FGMRES allows
+// that (Newton.H). With the diagonal denominators apply is linear in r up to
+// the finite-difference truncation of step 3 and the Poisson tolerance
+// (NewtonPreconditioner.ApplyIsLinearInR).
 //
 // The pressure gauge (Newton.H): in a domain without a Dirichlet pressure
 // face the Poisson problem is singular. The J-weighted mean of its
@@ -168,6 +177,7 @@ private:
     SimplecIterationInfo m_info;
     bool m_ready{false};
     bool m_used_inf{false};
+    amrex::Real m_speed{1};   //!< max(1, max |u|) at q: the scale of step 3's directional derivative
     int m_setups{0}, m_applies{0};
 };
 

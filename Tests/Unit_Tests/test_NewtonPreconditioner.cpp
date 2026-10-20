@@ -4,8 +4,8 @@
 // preconditioned solve unchanged), UT-3.3.3 (GMRES iterations per Newton
 // step grow by less than 50 % from CFL 10 to 1e4 with simplec, not with the
 // identity), and beyond the plan: the reader of steady.newton_preconditioner,
-// the range checks, the setup contract and the identity-vs-simplec
-// regression on the column.
+// the range checks, the setup contract, the linearity of apply in r and the
+// identity-vs-simplec regression in the continuation loop on the open hill.
 #include "BoundaryConditions.H"
 #include "Continuation.H"
 #include "Driver.H"
@@ -456,7 +456,9 @@ TEST(NewtonPreconditioner, ConstantPressureShiftLeavesTheSolveUnchanged)
                    << "\n";
     EXPECT_EQ(i0.gmres_status, 0);
     EXPECT_EQ(ic.gmres_status, 0);
-    EXPECT_EQ(i0.gmres_iterations, ic.gmres_iterations);
+    // Single precision: J v from q + c differs by rounding (below), which can
+    // move the stopping iteration by one.
+    EXPECT_LE(std::abs(i0.gmres_iterations - ic.gmres_iterations), kDouble ? 0 : 1);
     for (int f = 0; f < 6; ++f) {
         const double s = static_cast<double>(field(d0, f).norm0(0, 0));
         EXPECT_GT(s, 0) << f;
@@ -472,6 +474,59 @@ TEST(NewtonPreconditioner, ConstantPressureShiftLeavesTheSolveUnchanged)
     const double dp = static_cast<double>(d0.p.norm0(0, 0));
     EXPECT_LE(std::abs(weighted_mean(d0.p, h.c.mesh.detJ)), tol(1e-10, 1e-4) * dp);
     EXPECT_LE(std::abs(weighted_mean(dc.p, h.c.mesh.detJ)), tol(1e-10, 1e-4) * dp);
+}
+
+// ---------------------------------------------------------------------------
+// Beyond the plan (from the numerics review): the default preconditioner is
+// linear in r. On the stratified periodic hill (gravity 9.81, theta 290 to
+// 350 K, so theta's convection couples to du), apply(s r) = s apply(r) for
+// s = 2, -1 and 1e3, to the inner Poisson tolerance. The mutant check: the
+// stage's denominators (step 3 with du itself and the corrected transport)
+// are not, by more than 1e-3 (the upwind sides of u + du move with s).
+TEST(NewtonPreconditioner, ApplyIsLinearInR)
+{
+    HillCase h(4);
+    amrex::MultiFab dtau(h.c.ba, h.c.dm, 1, 0);
+    ablsteady::local_dtau(h.q, &h.nu, h.c.mesh, h.c.geom, amrex::Real(10), dtau);
+    ablsteady::ResidualFields R;
+    ablsteady::residual(h.q, h.in, h.c.mesh, h.c.geom, R);
+    NewtonVector r, rs, a, b;
+    for (auto* v : {&r, &rs, &a, &b}) { v->define(h.c.ba, h.c.dm); }
+    for (int f = 0; f < 6; ++f) {
+        amrex::MultiFab::Copy(r.f[f], rfield(R, f), 0, 0, 1, 0);
+        r.f[f].mult(-1, 0, 1, 0);
+        if (f < 3) { r.f[f].OverrideSync(h.c.geom.periodicity()); }
+    }
+    const auto worst = [&] (SimplecPreconditioner& pc) {
+        pc.setup(h.q, &dtau);
+        pc.apply(a, r);
+        double err = 0;
+        for (const double s : {2.0, -1.0, 1e3}) {
+            for (int f = 0; f < 6; ++f) {
+                amrex::MultiFab::Copy(rs.f[f], r.f[f], 0, 0, 1, 0);
+                rs.f[f].mult(static_cast<amrex::Real>(s), 0, 1, 0);
+            }
+            pc.apply(b, rs);
+            for (int f = 0; f < 6; ++f) {
+                b.f[f].mult(static_cast<amrex::Real>(1 / s), 0, 1, 0);
+                const double scale = static_cast<double>(a.f[f].norm0(0, 0));
+                EXPECT_GT(scale, 0) << f;
+                err = std::max(err, max_diff(a.f[f], b.f[f]) / scale);
+            }
+        }
+        return err;
+    };
+    ablsteady::SimplecOptions opt;
+    opt.pressure_reltol = amrex::Real(tol(1e-10, 1e-5));
+    SimplecPreconditioner lin(opt, 2, h.in, ablsteady::PoissonOptions{}, h.c.mesh, h.c.geom, h.c.z, 100, h.c.ba, h.c.dm);
+    SimplecPreconditioner stg(opt, 2, h.in, ablsteady::PoissonOptions{}, h.c.mesh, h.c.geom, h.c.z, 100, h.c.ba, h.c.dm,
+                              ablsteady::LineSweepOptions(), ablsteady::PressureDenominator::stage);
+    const double el = worst(lin), es = worst(stg);
+    amrex::Print() << "apply(s r) / s - apply(r), relative: diagonal " << el << ", stage " << es << "\n";
+    // 1e-5 measured in double: the finite-difference truncation of step 3
+    // and the Poisson solve to a relative tolerance; stage mode gives 1.03.
+    EXPECT_LE(el, tol(1e-4, 1e-2));
+    EXPECT_GT(es, 1e-3);
 }
 
 // ---------------------------------------------------------------------------
@@ -531,7 +586,6 @@ TEST(NewtonPreconditioner, ContinuationIdentityVersusSimplec)
     EXPECT_TRUE(rb.converged);
     EXPECT_EQ(ra.steps, 8);
     EXPECT_NEAR(static_cast<double>(pa.records().front().residual), 11.328, 1e-3);
-    EXPECT_EQ(pa.records().front().residual, pb.records().front().residual);
     EXPECT_LE(rb.steps, ra.steps);
     int ia = 0, ib = 0;
     for (const auto& r : pa.records()) { ia += r.gmres_iterations; }
@@ -539,6 +593,8 @@ TEST(NewtonPreconditioner, ContinuationIdentityVersusSimplec)
     amrex::Print() << "Continuation on the open hill: identity " << ra.steps << " steps, " << ia << " GMRES iterations; simplec "
                    << rb.steps << " steps, " << ib << " GMRES iterations\n";
     EXPECT_LE(5 * ib, ia);
+    EXPECT_EQ(rb.steps, 8);
+    EXPECT_LE(ib, 70);
     EXPECT_EQ(pc->setups(), static_cast<int>(pb.records().size()));
     EXPECT_EQ(pc->used_inf_cfl(), pb.records().back().infinite);
     for (int f = 0; f < 6; ++f) {

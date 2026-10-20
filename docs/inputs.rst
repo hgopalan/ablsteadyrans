@@ -866,6 +866,11 @@ writes them and stops; the other ``steady.*`` keys are then refused.
      - ``2000``
      - Integer, ≥ 1. GMRES iteration limit of one Newton step (all restarts). A solve that reaches it is unconverged;
        its update goes through the usual usability rule.
+   * - ``steady.newton_preconditioner``
+     - ``simplec``
+     - ``identity`` or ``simplec``; any other value aborts and names the key. The preconditioner of each GMRES
+       solve of the Newton step (:doc:`solution_algorithm`). ``simplec``: one SIMPLEC iteration with
+       ``steady.sweep`` and ``steady.zline_sweeps``. ``identity``: none.
    * - ``steady.newton_armijo_c``
      - ``1e-4``
      - > 0 and < 0.5. Armijo constant :math:`c` of the continuation's line search.
@@ -890,11 +895,6 @@ writes them and stops; the other ``steady.*`` keys are then refused.
      - ``1``
      - Finite, ≥ 1. At a finite :math:`\Delta\tau`, when no :math:`\lambda` meets the Armijo condition, accept the
        full step if :math:`|R|` grows by at most this factor. 1: off. Not used at infinite :math:`\Delta\tau`.
-   * - ``steady.newton_preconditioner``
-     - ``simplec``
-     - ``identity`` or ``simplec``; any other value aborts and names the key. The preconditioner of each GMRES
-       solve of the Newton step (:doc:`solution_algorithm`). ``simplec``: one SIMPLEC iteration with
-       ``steady.sweep`` and ``steady.zline_sweeps``. ``identity``: none.
 
 The ``steady.newton_*`` keys belong to the Newton–Krylov stage, which the application does not run yet; until then
 they are refused as unknown keys. ``steady.newton_preconditioner`` is read and range-checked, then refused with

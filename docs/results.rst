@@ -770,26 +770,21 @@ Newton steps at a fixed CFL, Krylov tolerance 1e-3, GMRES(200). Mean GMRES itera
      - CFL 1e4
    * - ``identity``
      - 163.5
-     - 210.5
-     - 228
+     - —
+     - —
      - 227.5
    * - **simplec (default), zjacobi**
      - **10.25**
      - **10.5**
      - **10.5**
      - **10.5**
-   * - simplec, lusgs
-     - 10.5
-     - 14
-     - 12.5
-     - 12
    * - simplec with the stage's denominator
      - 18
-     - 57
-     - 154
+     - —
+     - —
      - 360–381
 
-In the continuation loop on the same hill both preconditioners converge in 8 steps; ``simplec`` needs 56 GMRES
-iterations in all and ``identity`` 976. On the Ekman column ``simplec`` gives no gain: both need 4 to 16 iterations
-from CFL 10 to 1e4. The stage's denominator varies between runs at large CFL (359 and 381 measured at 1e4) because
-GMRES at the 200-vector restart is sensitive to rounding; the bound fails either way.
+UT-3.3.3 runs ``identity`` and the stage's denominator only at CFL 10 and 1e4 (—: not run). In the continuation
+loop on the same hill (UT-3.3 (a)) both preconditioners converge in 8 steps; ``simplec`` needs 54 GMRES iterations
+in all and ``identity`` 976. The stage's denominator varies between runs at large CFL (359 and 381 measured at 1e4)
+because GMRES at the 200-vector restart is sensitive to rounding; the bound fails either way.

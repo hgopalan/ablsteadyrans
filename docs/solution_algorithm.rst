@@ -311,8 +311,12 @@ no preconditioner. ``simplec`` (the default) applies one SIMPLEC iteration to th
 
    so that :math:`\nabla\cdot\delta u = r_p`. :math:`a_P` is the predictor's diagonal and :math:`\alpha_p` is
    ``simplec.alpha_p``.
-3. The :math:`\theta` and :math:`k` line steps on their parts of :math:`r`, with the corrected transport. The
-   increment :math:`\delta k` is not clipped.
+3. The :math:`\theta` and :math:`k` line steps on their parts of :math:`r`. The change of the :math:`\theta`
+   convection by :math:`\delta u` is a directional derivative,
+   :math:`[C(F(u + \sigma\delta u)) - C(F(u))]/\sigma` with :math:`\sigma` as in the Jacobian-vector product, and
+   the line operators use the transport of :math:`u`, so ``apply`` is linear in :math:`r` (to the finite-difference
+   and Poisson tolerances). With the stage's denominator (below) the full :math:`\delta u` and the transport of
+   :math:`u + \delta u` are used instead, as in the stage. The increment :math:`\delta k` is not clipped.
 4. On the Dirichlet rows of :math:`u, v, w`, which are identity rows of the Newton system, :math:`\delta q = r`.
 
 The sweeps are those of the SIMPLEC stage: ``steady.zline_sweeps`` of ``steady.sweep``. ``setup`` rebuilds the

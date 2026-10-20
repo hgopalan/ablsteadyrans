@@ -7,6 +7,7 @@
 #include <AMReX_Print.H>
 
 #include <cmath>
+#include <limits>
 #include <string>
 
 namespace ablsteady {
@@ -141,6 +142,8 @@ void SimplecPreconditioner::setup (const State& q, const amrex::MultiFab* dtau)
     face_dtau(m_dtau, m_mesh, m_geom, m_w.dtau_faces);
     const amrex::Array<const amrex::MultiFab*, 3> F0{&m_F0[0], &m_F0[1], &m_F0[2]};
     convection(Loc::cell, m_q0.theta, F0, m_in.theta, m_mesh, m_geom, m_conv0);
+    // The velocity scale of step 3's directional derivative (at least 1 m/s).
+    m_speed = amrex::max(amrex::Real(1), m_q0.u.norm0(0, 0), m_q0.v.norm0(0, 0), m_q0.w.norm0(0, 0));
     m_ready = true;
 }
 
@@ -177,25 +180,36 @@ void SimplecPreconditioner::apply (NewtonVector& dq, const NewtonVector& r)
     }
     m_info.pressure = pressure_correction(m_d, m_pf, m_solver, m_pbc, m_opt.alpha_p, m_mesh, m_geom, m_w, &r.f[nf_p], true);
 
-    // 3. theta's convection with the corrected velocity u + du (the stage's
-    // fill of the corrected state), minus that at q.
+    // 3. theta's convection with the corrected velocity, minus that at q.
+    // stage: with u + du, the stage's own step. diagonal: the directional
+    // derivative along du with the step sigma du, sigma = sqrt(eps) U /
+    // max|du| (as jvp's), divided by sigma: linear in r and on the upwind
+    // side of q's transport whatever the Krylov vector's size.
+    const bool linear = (m_denominator == PressureDenominator::diagonal);
+    amrex::Real sigma = 1;
+    if (linear) {
+        const amrex::Real dmax = amrex::max(m_d.u.norm0(0, 0), m_d.v.norm0(0, 0), m_d.w.norm0(0, 0));
+        sigma = (dmax > 0) ? std::sqrt(std::numeric_limits<amrex::Real>::epsilon()) * m_speed / dmax : amrex::Real(1);
+    }
     copy_state(m_qn, m_q0);
-    amrex::MultiFab::Add(m_qn.u, m_d.u, 0, 0, 1, 0);
-    amrex::MultiFab::Add(m_qn.v, m_d.v, 0, 0, 1, 0);
-    amrex::MultiFab::Add(m_qn.w, m_d.w, 0, 0, 1, 0);
+    amrex::MultiFab::Saxpy(m_qn.u, sigma, m_d.u, 0, 0, 1, 0);
+    amrex::MultiFab::Saxpy(m_qn.v, sigma, m_d.v, 0, 0, 1, 0);
+    amrex::MultiFab::Saxpy(m_qn.w, sigma, m_d.w, 0, 0, 1, 0);
     m_in.bc->fill_ghosts(m_qn, m_in.surface, m_in.buoyancy, false, nullptr);
     transport_fluxes(m_qn.u, m_qn.v, m_qn.w, m_z, m_mesh, m_geom, m_w.transport);
     const amrex::Array<const amrex::MultiFab*, 3> F1{&m_w.transport[0], &m_w.transport[1], &m_w.transport[2]};
     if (m_w.conv1.empty()) { m_w.conv1.define(m_conv0.boxArray(), m_conv0.DistributionMap(), 1, 0); }
     convection(Loc::cell, m_qn.theta, F1, m_in.theta, m_mesh, m_geom, m_w.conv1);
     amrex::MultiFab::Subtract(m_w.conv1, m_conv0, 0, 0, 1, 0);
-    amrex::MultiFab::Add(m_R.theta, m_w.conv1, 0, 0, 1, 0);
+    amrex::MultiFab::Saxpy(m_R.theta, amrex::Real(1) / sigma, m_w.conv1, 0, 0, 1, 0);
 
-    // 4. The theta and k steps on the increments (zero, ghosts included),
-    // with the corrected transport; no floor on dk.
-    m_info.theta = scalar_sweep(Equation::theta, m_d.theta, m_R.theta, F1, m_z, m_in, m_dtau, m_mesh, m_geom, m_sweeps, 0, ss, cf,
+    // 4. The theta and k steps on the increments (zero, ghosts included); no
+    // floor on dk. stage: with the corrected transport; diagonal: with q's,
+    // the transport of the Newton system's theta and k blocks.
+    const amrex::Array<const amrex::MultiFab*, 3>& Fs = linear ? F0 : F1;
+    m_info.theta = scalar_sweep(Equation::theta, m_d.theta, m_R.theta, Fs, m_z, m_in, m_dtau, m_mesh, m_geom, m_sweeps, 0, ss, cf,
                                 m_w, m_sweep);
-    m_info.tke = scalar_sweep(Equation::tke, m_d.tke, m_R.tke, F1, m_z, m_in, m_dtau, m_mesh, m_geom, m_sweeps, 0, ss, cf, m_w,
+    m_info.tke = scalar_sweep(Equation::tke, m_d.tke, m_R.tke, Fs, m_z, m_in, m_dtau, m_mesh, m_geom, m_sweeps, 0, ss, cf, m_w,
                               m_sweep, false);
 
     // 5. dq: the increment's valid points; every shared face takes its
