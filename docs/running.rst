@@ -1,40 +1,48 @@
-Running
-========
+Running a simulation
+====================
+
+ablsteady takes one input file and, optionally, extra inputs on the command line:
 
 .. code-block:: bash
 
-   mpirun -n 2 build-rel/ablsteady Tests/Infrastructure/Smoke_Restart/inputs_smoke
+   mpirun -n 2 build-rel/ablsteady inputs_file [key=value ...]
 
-The first argument is the inputs file; further ``key=value`` arguments override it. A run today:
+For a first run, follow :doc:`tutorial_column`.
 
-#. reads and checks the inputs (:doc:`inputs`), and stops with every error listed if any check fails;
-#. builds the mesh and the solution fields (the first guess of :doc:`initial_conditions` with ``init.first_guess =
-   profile``), or reads them from ``io.restart``;
-#. with ``steady.stage = simplec``, runs the SIMPLEC stage under the steady driver (:doc:`solver`) to
-   its verdict or ``steady.max_iterations``, printing one line per iteration (the first ten, then every tenth);
-#. writes a plotfile, the turbulence diagnostics plotfile if ``io.turb_plot_file`` is set, and a checkpoint
+What a run does
+---------------
+
+#. **Check the inputs** (:doc:`inputs`). If any check fails, the run lists every error and stops.
+#. **Build the mesh** and print its quality report (:doc:`terrain_coordinates`).
+#. **Build the initial field** (:doc:`initial_conditions`), or read it from a checkpoint (``io.restart``).
+#. **Solve** with the SIMPLEC stage when ``steady.stage = simplec`` (:doc:`solution_algorithm`), until the
+   convergence criteria are met or ``steady.max_iterations`` is reached. One log line is printed per iteration for
+   the first ten, then every tenth.
+#. **Write the output**: a plotfile, the turbulence plotfile if ``io.turb_plot_file`` is set, and a checkpoint
    (:doc:`output`).
 
-For example, the 1-D neutral column of RT-1.15.1 and ERF's Neutral_ABL_Flat:
+With the default ``steady.stage = none`` the run skips step 4: it writes the mesh and initial field and stops.
+This is useful for checking a new mesh or initial field.
 
-.. code-block:: bash
+Command-line inputs
+-------------------
 
-   mpirun -n 2 build-rel/ablsteady Tests/Canonical_RANS/Neutral_Column/inputs_steady_column
-   mpirun -n 2 build-rel/ablsteady Tests/Canonical_RANS/Neutral_ABL_Flat/inputs_steady_neutral_flat
-
-A key the deck already sets cannot be overridden on the command line: a repeated key is refused.
+Inputs after the file name are added to the file's inputs. A key that the file already sets cannot be given again
+on the command line: a repeated key is refused.
 
 Restarting
 ----------
 
-Set ``io.restart`` to a checkpoint directory. The checkpoint's mesh and floating-point precision must match the
-inputs exactly. The box layout (``mesh.max_grid_size``) and the number of ranks may differ. The run stops if it
-would write a checkpoint with the same name as the one it read, since AMReX would rename that checkpoint to
-``<name>.old.NNNN``. With the SIMPLEC stage the checkpoint also holds the driver history and the closure's
-:math:`\nu_t` history, and the continued run is bit for bit the uninterrupted one on the same rank count
-(``rt_steady_column_restart_*``); a restart with the stage needs a checkpoint the stage wrote (its ``Driver`` file;
-a checkpoint from a stage-less run is refused). ``init.first_guess = profile`` and ``io.restart`` are exclusive (a restart keeps its
-state): the restart test gives the first guess on the command line of the first run only.
+Set ``io.restart`` to a checkpoint directory (:doc:`howto` has a step-by-step recipe).
+
+- The mesh and terrain inputs and the floating-point precision must match the checkpoint exactly. The box layout
+  (``mesh.max_grid_size``) and the number of ranks may differ.
+- ``init.*`` keys cannot be combined with ``io.restart``: the checkpoint holds the state.
+- With grid sequencing, a restart continues level 0 only.
+- A restart with the SIMPLEC stage needs a checkpoint written by the stage. The checkpoint holds the solver history
+  and the turbulence model's state, so the continued run reproduces an uninterrupted one bit for bit on the same
+  number of ranks.
+- The run stops if it would write a checkpoint with the name of the one it read.
 
 AMReX runtime flags
 -------------------
@@ -45,5 +53,6 @@ AMReX reads its own ``amrex.*`` flags. The tests use these, which match the GPU 
 
    amrex.the_arena_init_size=0 amrex.init_snan=1 amrex.fpe_trap_invalid=1 amrex.abort_on_unused_inputs=1
 
-``amrex.abort_on_unused_inputs=1`` makes a misspelt ``amrex.*`` flag stop the run instead of printing a warning
-at the end. AppleClang builds do not trap floating-point exceptions; use a Linux GCC build to check for them.
+``amrex.abort_on_unused_inputs=1`` makes a misspelled ``amrex.*`` flag fail the run when it finishes (after the
+output is written). AppleClang builds do not trap
+floating-point exceptions; use a Linux GCC build for that check.

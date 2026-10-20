@@ -142,7 +142,7 @@ ContinuationOptions default_options ()
 }
 
 // The Krylov settings of the hill runs: restart 200 (restart 30 stagnates
-// on the hill once the CFL nears the cap; docs/solver.rst).
+// on the hill once the CFL nears the cap; docs/solution_algorithm.rst).
 NewtonOptions hill_newton ()
 {
     NewtonOptions o;

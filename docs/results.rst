@@ -1,28 +1,64 @@
 Results
 ========
 
-This page collects the measured accuracy and cost of each part. The cases are those of :doc:`cases`; the tests
-are in :doc:`testing`.
+This page collects the measured accuracy and cost of ablsteady. Each study states its setup, shows the numbers in a
+table and lists the main findings. Recommended settings are in **bold**. The cases are described in
+:doc:`test_cases`; the tests that check these numbers are listed in :doc:`testing`.
 
-Operator accuracy
------------------
+Summary of recommended settings
+-------------------------------
 
-Manufactured flow over a 120 m cosine hill (slopes up to 0.38), BTF mapping, geometric layers, 16 × 12 × 8 to
-64 × 48 × 32 cells:
+.. list-table::
+   :header-rows: 1
+   :widths: 35 30 35
+
+   * - Setting
+     - Recommended
+     - Section
+   * - Line solver
+     - ``steady.sweep = lusgs``, 2 sweeps
+     - `Line LU-SGS`_
+   * - CFL cap
+     - ``steady.cfl_max = 16``
+     - `Line LU-SGS`_
+   * - Initial field, terrain with Coriolis
+     - ``init.first_guess = column``
+     - `Initial field: profile or column`_
+   * - Initial field, flat with an inversion
+     - ``init.first_guess = profile``
+     - `Initial field: profile or column`_
+   * - Thin first cells (flat ground)
+     - ``simplec.w_vnn_cap = 16``
+     - `Vertical-velocity cap`_
+   * - Grid sequencing (terrain)
+     - ``steady.sequencing = 1``, 2–3 levels
+     - `Grid sequencing`_
+   * - Poisson back end
+     - ``gmres_mlmg`` (default)
+     - `Poisson back end`_
+
+Verification
+------------
+
+Spatial accuracy
+^^^^^^^^^^^^^^^^
+
+*Setup.* Method of manufactured solutions on a 120 m cosine hill (slopes up to 0.38), BTF mapping, geometric layers,
+meshes from 16 × 12 × 8 to 64 × 48 × 32 cells.
 
 .. list-table::
    :header-rows: 1
    :widths: 46 27 27
 
    * - Operator
-     - L2 order
-     - Max-norm order
+     - Order, L2 norm
+     - Order, max norm
    * - Convection, unlimited MUSCL
      - 1.99–2.10
      - 1.94–2.10
    * - Convection, ``van_leer`` / ``van_albada``
      - 1.5–2.2
-     - about 1 (extrema)
+     - about 1 (at extrema)
    * - Convection, ``upwind``
      - 1.00
      - 0.96
@@ -30,13 +66,17 @@ Manufactured flow over a 120 m cosine hill (slopes up to 0.38), BTF mapping, geo
      - 1.99–2.00
      - 1.96–1.99
 
-The Poisson layer is second order away from sloped ground. Next to sloped ground and sloped Neumann sides it is first
-order, as ERF's operator is.
+*Findings.*
+
+- The operators reach their design order.
+- The Poisson operator is second order away from sloped ground and first order next to sloped ground and sloped
+  Neumann sides, as ERF's operator is.
+- A uniform wind has zero discrete divergence on all three terrain mappings, to 1e-12.
 
 Wall distance
--------------
+^^^^^^^^^^^^^
 
-Tucker's distance against the exact distance on ERF's decks:
+*Setup.* Tucker's wall distance compared with the exact distance on ERF's meshes.
 
 .. list-table::
    :header-rows: 1
@@ -44,7 +84,7 @@ Tucker's distance against the exact distance on ERF's decks:
 
    * - Case
      - Max relative error
-     - Max error, d < 100 m
+     - Max error for d < 100 m
    * - Flat ground (128 × 1 × 64)
      - 0.13 %
      - 0.03 m
@@ -55,11 +95,11 @@ Tucker's distance against the exact distance on ERF's decks:
      - 9.2 %
      - 0.13 cells
 
-Initial field against FastWindTerrain
--------------------------------------
+Mass-consistent initial field
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-FastWindTerrain's bump case (100 m Gaussian hill on a 0.1 slope, power-law inflow): hilltop speed-up
-:math:`|u_h|/S_0(h)`, ablsteady / FastWindTerrain.
+*Setup.* FastWindTerrain's bump case: a 100 m Gaussian hill on a 0.1 slope with a power-law inflow. The table gives
+the hilltop speed-up :math:`|u_h|/S_0(h)` at four heights, as ablsteady / FastWindTerrain.
 
 .. list-table::
    :header-rows: 1
@@ -86,10 +126,16 @@ FastWindTerrain's bump case (100 m Gaussian hill on a 0.1 slope, power-law inflo
      - 1.052 / 1.052
      - 1.032 / 1.032
 
-The two codes agree to within 0.3–0.8 % of the speed-up at every height.
+*Finding.* The two codes agree to within 0.3–0.8 % at every height.
 
-SIMPLEC runs to steady
-----------------------
+Steady solutions
+----------------
+
+Convergence on the test cases
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+*Setup.* Each case runs to the steady verdict (:ref:`convergence-criteria`) with the settings of its input file,
+on two ranks (four for the 3-D hill).
 
 .. list-table::
    :header-rows: 1
@@ -97,42 +143,98 @@ SIMPLEC runs to steady
 
    * - Case
      - Iterations
-     - Check
-   * - 1-D neutral column (RT-1.15.1)
+     - Check against reference
+   * - 1-D neutral column
      - 2231
-     - :math:`u_*` 0.3499999 against 0.35; first-cell :math:`|U|` and :math:`k` exact to 1e-6
-   * - Lid-driven cavity, Re 100 (UT-1.15.3)
+     - :math:`u_*` = 0.3499999 against 0.35; first-cell speed and :math:`k` exact to 1e-6
+   * - Lid-driven cavity, Re = 100
      - 1760
      - within 0.0083 of Ghia, Ghia and Shin (1982)
-   * - ``Neutral_ABL_Flat`` (RT-1.15.2)
-     - about 2850
-     - :math:`u_*` 0.377 m/s; ERF's ``check_neutral.py --physics`` passes
-   * - **2-D hill (RT-1.16.1)**
-     - **4590**
+   * - ``Neutral_ABL_Flat``
+     - 2840
+     - :math:`u_*` = 0.377 m/s; ERF's ``check_neutral.py --physics`` passes
+   * - 2-D hill
+     - 4590 (Jacobi); 3077 (LU-SGS)
      - crest speed-up 0.59 / 0.50 / 0.43; ERF's ``check_hill.py --physics`` passes
-   * - **3-D hill (RT-1.16.2)**
-     - **2092**
+   * - 3-D hill
+     - 2092 (Jacobi); 823 (LU-SGS)
      - crest speed-up 0.39 / 0.27 / 0.21; ERF's ``check_hill3d.py --physics`` passes
-   * - Smooth plateau (beyond the plan)
+   * - Smooth plateau
      - 8635
      - within 0.37 m/s of ERF's 24 h run in :math:`u`
-   * - Askervein, coarse (RT-1.16.3)
+   * - Askervein, coarse mesh
      - 156
-     - convergence only; the line A/AA comparison needs Kestrel
+     - convergence only (below)
 
-**Cost against ERF.** On the 2-D hill one iteration costs 1.3 ERF steps. The steady state takes 49 s on two ranks,
-against 116 s for ERF's 6 h run and about 460 s for 24 h. On the 3-D hill the steady state takes 148 s on four
-ranks, against 242 s for ERF's 4 h run, which is still a quarter of an inertial period from steady.
+The column, flat, 2-D hill (LU-SGS) and Askervein counts were re-measured on ``main`` at commit ``7bf696c``
+(October 2026). The other numbers on this page were measured when each feature was added; later changes to the
+code shift iteration counts by up to about 1 % (for example 3062 → 3077 on the 2-D hill).
 
-**Sweeps and CFL cap on the 2-D hill:**
+The crest speed-ups are those of the z-line Jacobi runs (16 sweeps, CFL cap 4). The LU-SGS runs reach the same
+steady state to the convergence tolerance, and ERF's checks pass for both (`Line LU-SGS`_).
+
+**Askervein.** The coarse mesh (30 × 30 × 18) with a log-law inflow, outflow and slip sides and no Coriolis reaches
+the verdict after 156 iterations (2 s on two ranks). The residual is largest in the two columns next to the outflow,
+but keeps falling there with a tighter tolerance (1e-9 after 706 iterations), so the outflow needs no sponge. The
+comparison with ERF's unsteady RANS on lines A and AA needs the full mesh and ERF's reference run on Kestrel and is
+not yet available.
+
+Cost compared with ERF
+^^^^^^^^^^^^^^^^^^^^^^
+
+*Setup.* Idle machine; ERF run at the pinned commit with its own input files.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 24 22 18 36
+
+   * - Case
+     - ablsteady
+     - Cost of one iteration
+     - ERF
+   * - 2-D hill, 2 ranks
+     - **23 s** (LU-SGS, timed at 3062 it.); 49 s (Jacobi, 4590 it.)
+     - 1.3 ERF steps (Jacobi)
+     - 116 s for 6 h; about 460 s for 24 h
+   * - 3-D hill, 4 ranks
+     - **51 s** (LU-SGS, 823 it.); 148 s (Jacobi, 2092 it.)
+     - 2.8 ERF steps (Jacobi)
+     - 242 s for 4 h, still a quarter of an inertial period from steady
+
+*Finding.* ablsteady reaches a converged steady state in a fraction of the time ERF needs for a run that is not yet
+steady.
+
+Solver settings
+---------------
+
+z-line Jacobi: sweeps and CFL cap
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+*Setup.* Largest stable CFL number from a Fourier analysis of the z-line Jacobi iteration
+(``tools/sweeps_cfl_scan.py``), and the 2-D hill with three settings.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 40 15 15 15 15
+
+   * - Sweeps per iteration
+     - 2
+     - 4
+     - 8
+     - 16
+   * - Largest stable CFL
+     - 0.9
+     - 2.4
+     - 3.7
+     - 6.1
 
 .. list-table::
    :header-rows: 1
    :widths: 30 20 20 30
 
-   * - Sweeps / cap
+   * - Sweeps / CFL cap
      - Iterations
-     - Wall (s)
+     - Wall time (s)
      - Verdict
    * - 4 / 2
      - 20 000
@@ -144,23 +246,21 @@ ranks, against 242 s for ERF's 4 h run, which is still a quarter of an inertial 
      - steady
    * - **16 / 4**
      - **4590**
-     - **49 (idle)**
-     - **steady** (the deck)
+     - **49**
+     - **steady**
 
-**Line LU-SGS on the 2-D hill (sub-phase 2.1).** With two symmetric sweeps and a CFL cap of 16, the 2-D hill reaches
-the verdict in 3062 iterations (23 s on two ranks) against 4590 iterations and 49 s for sixteen Jacobi sweeps at a
-cap of 4. Every ERF check passes; the steady fields are within the verdict tolerance of the Jacobi result (:math:`u`
-within 0.017 m/s and :math:`w` within 2e-4 m/s). On the 3-D hill, two LU-SGS sweeps at a cap of 16 take 823
-iterations (51 s on four ranks) against 2092 iterations (148 s) for sixteen Jacobi sweeps at a cap of 4; ERF's
-checks pass in both cases.
+Line LU-SGS
+^^^^^^^^^^^
 
-.. list-table:: Line LU-SGS on the 2-D hill (two ranks)
+*Setup.* 2-D hill, two ranks, ``steady.sweep = lusgs``.
+
+.. list-table::
    :header-rows: 1
-   :widths: 22 18 18
+   :widths: 30 20 20
 
-   * - Sweeps / cap
+   * - Sweeps / CFL cap
      - Iterations
-     - Wall (s)
+     - Wall time (s)
    * - 1 / 4
      - 6306
      - 41
@@ -189,108 +289,376 @@ checks pass in both cases.
      - 8431
      - 106
    * - 4 / 64
-     - 20 000
-     - 481 (not steady)
+     - 20 000 (not steady)
+     - 481
    * - 2 / 128
-     - 20 000
-     - 405 (not steady)
+     - 20 000 (not steady)
+     - 405
 
-**The converged-column first guess (sub-phase 2.1b).** With ``init.first_guess = column`` (:doc:`initial_conditions`: the
-deck's column solved as a 1-D problem in 0.02–0.06 s, its u, v, k broadcast by height above the ground) the
-inertial spin-up of the profile guess is gone:
+*Findings.*
 
-.. list-table:: The first guess and the verdict (LU-SGS decks; two ranks for the 2-D hill and the flat case, four
-   for the 3-D hill; wall times with the machine shared)
-   :header-rows: 1
-   :widths: 30 26 16 16
+- Two sweeps at a CFL cap of 16 converge in 3062 iterations and 23 s, against 4590 iterations and 49 s for 16 Jacobi
+  sweeps at a cap of 4.
+- On the 3-D hill, LU-SGS takes 823 iterations (51 s, four ranks) against 2092 (148 s) for Jacobi.
+- The steady fields agree with the Jacobi result to the convergence tolerance (:math:`u` within 0.017 m/s), and all
+  ERF checks pass.
+- Caps above 32 slow the iteration down.
 
-   * - case
-     - first guess
-     - iterations
-     - wall (s)
-   * - 2-D hill
-     - profile + projection
-     - 3062
-     - 23 (idle)
-   * - 2-D hill
-     - column + projection
-     - 1237
-     - 98 (shared)
-   * - 2-D hill
-     - column alone
-     - 1202
-     - 95 (shared)
-   * - 3-D hill
-     - profile + projection
-     - 823
-     - 51 (idle)
-   * - 3-D hill
-     - column + projection
-     - 402
-     - 1441 (shared, starved)
-   * - Neutral_ABL_Flat
-     - profile + projection
-     - 2839
-     - 13 (idle)
-   * - Neutral_ABL_Flat
-     - column + projection
-     - not steady by 20 000
-     - (:doc:`initial_conditions`)
+Alternating sweep direction
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-On the 2-D hill the cross-wind residual's plateau (0.1–0.2 of its reference until iteration 1500 from the profile)
-is gone: at iteration 300 the column run's u and v residuals are an order below the profile run's, and the verdict
-comes at 1237 iterations against 3062; column alone and column with the projection differ by 3 %. The column
-seed's *first* residual is larger than the profile's (u 5.8e-2 against 3.1e-2, v 3.5e-2 against 3.1e-3): the
-lifted spiral carries an advective imbalance :math:`U\,\partial_z v\,h'` on the flanks that the profile guess (v
-= 0) does not have and the projection does not remove; the balance shows after the CFL ramp. On the 3-D hill the verdict comes at 402 iterations against 823. On the flat case the column seed is the 1-D
-steady state of u and v to round-off (first-iteration u residual 3e-11 against 3e-2), but its k at the inversion
-base differs from the 3-D closure's and the run falls into a slow k oscillation there that does not reach the
-verdict (:doc:`initial_conditions`); the flat deck keeps the profile.
-
-**Askervein (RT-1.16.3, the convergence half).** The coarse mesh of RT-1.12.1 (30 × 30 × 18) with the log-law
-inflow, the outflow and slip sides, no Coriolis, four sweeps, cap 2: the verdict after 156 iterations (2 s on two
-ranks). The residual is largest in the two columns next to the outflow (100 times the interior, a checkerboard in
-:math:`R_w`); with ``steady.residual_tol`` 1e-10 it keeps falling there (1e-9 after 706 iterations, the interior at
-1e-13), so the outflow needs neither a sponge nor an outlet drag. The 5 % comparison with ERF's URANS on lines A
-and AA needs the full mesh and the reference run (Kestrel) and is not in this version.
-
-**Time per step** (idle machine). On the 2-D hill one SIMPLEC iteration with 16 sweeps costs 1.3 ERF steps (10.8
-against 8.1 ms on two ranks); the steady state takes 4590 iterations against the 57 600 steps of ERF's 24 h (3.1
-against ERF's 6 h physics run, which is not steady aloft): 49 s against 116 s (6 h) and about 460 s (24 h). On the
-3-D hill one iteration costs 2.8 ERF steps (71 against 25 ms on four ranks) and the steady state 2092 iterations
-against ERF's 9600 steps of 4 h: 148 s against 242 s, with ERF still a quarter of an inertial period from steady.
-
-Newton–Krylov
--------------
-
-On the Ekman column of UT-3.1.2, plain Newton reduces the scaled residual by 0.403, 0.171, 0.0131, 2.09e-4 and
-8.26e-8 in its first five steps, with :math:`r_{n+1}/r_n^2` between 0.25 and 0.57 (quadratic convergence). At the
-default Krylov tolerance 1e-2 every restart length from 10 up takes 3, 5 and 8 GMRES iterations in the first three
-steps; restart 5 reaches the 2000-iteration cap on the third.
-
-Ten plain Newton steps on the column at rtol 1e-2 (GMRES iterations in all):
+*Setup.* ``steady.line_alternate`` on four ranks, LU-SGS with ``line_ghosts = zero``, an overlap of 2, diagonal order
+and two sweeps. The first four rows are the truly neutral 3-D hill, run to round-off; the last two run to their input
+file's convergence criteria (two orders).
 
 .. list-table::
    :header-rows: 1
+   :widths: 46 18 18 18
 
-   * - Restart
+   * - Case
+     - Off
+     - On
+     - z-line Jacobi
+   * - :math:`(u_g, v_g) = (10, 0)`, CFL cap 16
+     - 1792
+     - 1813
+     - 3495
+   * - :math:`(u_g, v_g) = (10, 0)`, CFL cap 64
+     - 2997
+     - 2991
+     - —
+   * - :math:`(u_g, v_g) = (10, -10)`, CFL cap 16
+     - not converged at 20 000
+     - **3052**
+     - 6051
+   * - :math:`(u_g, v_g) = (10, -10)`, CFL cap 64
+     - not converged at 20 000
+     - 3585
+     - —
+   * - Conventionally neutral 3-D hill, cap 16
+     - 1100
+     - 1146
+     - —
+   * - 2-D hill
+     - 3062
+     - 3061
+     - —
+
+*Findings.*
+
+- When :math:`u` and :math:`v` have opposite signs, the plain LU-SGS sweeps stall; alternating sweeps converge in
+  half the Jacobi iterations.
+- When the wind keeps one sign, alternating costs 0–4 % more iterations. The default is off.
+
+Box count and overlap
+^^^^^^^^^^^^^^^^^^^^^
+
+*Setup.* Conventionally neutral 3-D hill (64 × 64 × 20, periodic), LU-SGS with two sweeps at a cap of 16. One box on
+one rank; 4 and 16 boxes on four ranks. Iterations to the verdict.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 16 21 21 21 21
+
+   * - Boxes
+     - ``lagged``
+     - ``zero``, overlap 0
+     - ``zero``, overlap 2
+     - ``zero``, overlap 4
+   * - 1
+     - **860**
+     - 998
+     - 948
+     - 926
+   * - 4
+     - **823**
+     - 1205
+     - 1100
+     - 1020
+   * - 16
+     - **974**
+     - 1552
+     - 1310
+     - 1270
+
+*Findings.*
+
+- On CPUs, ``zero`` needs 16–59 % more iterations than ``lagged`` without overlap, and 8–30 % more with an overlap
+  of 4. The communication it saves is expected to matter on GPUs and many ranks; that is not yet measured.
+- More boxes cost more iterations in both modes.
+- ``line_order = diagonal`` gives the same iterates and, on CPUs, the same wall time as ``sequential``.
+
+Initial field: profile or column
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+*Setup.* LU-SGS input files; two ranks for the 2-D hill and the flat case, four for the 3-D hill. The column itself
+takes 0.02–0.06 s. Wall times marked "shared" were measured on a busy machine and are not comparable.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 26 16 16
+
+   * - Case
+     - Initial field
+     - Iterations
+     - Wall time (s)
+   * - 2-D hill
+     - profile + adjustment
+     - 3062
+     - 23
+   * - 2-D hill
+     - **column + adjustment**
+     - **1237**
+     - 98 (shared)
+   * - 2-D hill
+     - column only
+     - 1202
+     - 95 (shared)
+   * - 3-D hill
+     - profile + adjustment
+     - 823
+     - 51
+   * - 3-D hill
+     - **column + adjustment**
+     - **402**
+     - 1441 (shared)
+   * - ``Neutral_ABL_Flat``
+     - **profile + adjustment**
+     - **2839**
+     - 13
+   * - ``Neutral_ABL_Flat``
+     - column + adjustment
+     - not steady at 20 000
+     - —
+
+*Findings.*
+
+- On the hills the column start removes the slow inertial adjustment and halves the iterations or better.
+- The first residual of the column start is larger (an advective imbalance on the hill flanks), but it falls faster
+  once the CFL ramp is over.
+- On the flat case the column's :math:`k` at the inversion base differs from the 3-D solution, and the run
+  oscillates there. Use ``profile`` for that case.
+
+Vertical-velocity cap
+^^^^^^^^^^^^^^^^^^^^^
+
+*Setup.* Askervein mesh (140 × 140 cells at 43 m, layers stretched by 1.08), LU-SGS with two sweeps at a CFL cap of
+16, ``gmres_mlmg``. Iterations to the verdict for several caps :math:`V` (``simplec.w_vnn_cap``). "Diverged" means
+the residuals rose to 0.2–0.8 after the CFL reached its cap; "—" means not run. :math:`V = 4` and 8 were measured
+before the lower limit of 16 was introduced; they can no longer be set.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 28 12 12 12 12 12 12
+
+   * - Case
+     - Off
+     - :math:`V = 4`
+     - :math:`V = 8`
+     - :math:`V = 16`
+     - :math:`V = 32`
+     - :math:`V = 64`
+   * - Flat, 0.4 m first cell
+     - 1620
+     - 194
+     - —
+     - **196**
+     - —
+     - —
+   * - Flat, 1 m first cell
+     - 485
+     - —
+     - —
+     - **216**
+     - —
+     - —
+   * - Flat, 1 m, CFL cap 32
+     - 855
+     - —
+     - —
+     - **285**
+     - —
+     - —
+   * - Hill, 1 m first cell
+     - 324
+     - diverged
+     - diverged
+     - **200**
+     - 200
+     - 201
+   * - Hill, 0.4 m first cell
+     - about 2800
+     - —
+     - —
+     - diverged
+     - —
+     - 278
+
+*Findings.*
+
+- On flat ground the cap reduces the iterations 2.2 to 8.3 times.
+- The capped and uncapped steady states agree to the convergence tolerance: 2.7e-7 m/s in the velocity at 0.4 m, and
+  3e-6 in the 10 m speed-ups on lines A, AA and B at 1 m.
+- Over steep terrain with very thin cells a small cap can diverge; a larger cap (64) is safer.
+- With z-line Jacobi (four sweeps, CFL cap 4) the cap has little effect: at that CFL the VNN number is small.
+
+Poisson back end
+^^^^^^^^^^^^^^^^
+
+*Setup.* Askervein terrain at 43 m horizontal spacing (140 × 140 cells, layers stretched by 1.08 to about 750 m),
+LU-SGS with two sweeps at a CFL cap of 16, ``init.alpha_v = init.alpha_h = 1``. Mean Poisson iterations per
+pressure correction.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 15 20 20 25
+
+   * - First layer (m)
+     - dx/dz
+     - SIMPLEC iterations
+     - ``gmres_fft``
+     - ``gmres_mlmg``
+   * - 8
+     - 5
+     - 196
+     - 6.6
+     - **2.6**
+   * - 4
+     - 11
+     - 203
+     - 7.7
+     - **2.6**
+   * - 2
+     - 21
+     - 230
+     - 9.6
+     - **2.5**
+   * - 1
+     - 43
+     - 324
+     - 12.8
+     - **2.1**
+
+*Findings.*
+
+- Both back ends give the same SIMPLEC iterations.
+- ``gmres_mlmg`` keeps the Poisson work per correction flat as the first layer thins; ``gmres_fft`` needs more.
+- The back ends stop on different norms (volume-weighted for ``gmres_mlmg``). On these runs ``gmres_mlmg`` left 10–30
+  times less divergence at the same ``simplec.pressure_reltol``.
+
+Grid sequencing
+^^^^^^^^^^^^^^^
+
+*Setup.* ``steady.sequencing = 1`` (:doc:`solution_algorithm`). Level-0 iterations to the normal convergence criteria,
+with the coarse-level iterations in brackets (coarsest first). Default settings unless noted.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 40 15 25 20
+
+   * - Case
+     - 1 level
+     - With sequencing
+     - Levels
+   * - ``Neutral_Hill_3D``
+     - 2091
+     - **706** (383, 51)
+     - 3
+   * - Truly neutral 3-D hill (to round-off)
+     - 3495
+     - **2688** (239, 38)
+     - 3
+   * - Askervein, neutral
+     - 156
+     - **130** (100)
+     - 2
+   * - Askervein, conventionally neutral
+     - 220
+     - **124** (100)
+     - 2
+   * - Askervein, 1 m first cell, ``w_vnn_cap = 16``
+     - 200
+     - **157** (100)
+     - 2
+   * - Askervein, 1 m first cell, ``w_vnn_cap = 16``
+     - 200
+     - **151** (100, 40)
+     - 3
+
+Wall time on four ranks, ``Neutral_Hill_3D``: 145 s without sequencing, 57 s with three levels and the reference
+hold on every level (``steady.sequencing_hold = 1``), 54 s with the default.
+
+.. list-table:: Effect of the reference hold and the starting CFL (level-0 iterations)
+   :header-rows: 1
+   :widths: 40 20 20 20
+
+   * - Case
+     - ``sequencing_hold = 1``
+     - **Default**
+     - ``cfl_start = previous``
+   * - ``Neutral_Hill_3D``, 3 levels
+     - 774 (383, 127)
+     - **706 (383, 51)**
+     - 704 (383, 51)
+   * - Truly neutral 3-D hill, 3 levels
+     - 2773 (239, 101)
+     - **2688 (239, 38)**
+     - 2709 (239, 28)
+   * - Askervein, neutral, 2 levels
+     - 164 (100)
+     - **130 (100)**
+     - 130 (100)
+   * - Askervein, conventionally neutral, 2 levels
+     - 147 (100)
+     - **124 (100)**
+     - 124 (100)
+
+*Findings.*
+
+- Three levels cut the level-0 iterations of the 3-D hill by a factor of three and the wall time by more than half.
+- Skipping the reference hold on the seeded levels (the default) saves most on the coarse levels (127 → 51,
+  101 → 38).
+- The gain is the transient the coarse levels remove. A deep stop (round-off) gains less in proportion than a
+  two-order stop, since the final convergence rate is that of level 0.
+- The starting field still matters: on ``Neutral_Hill_3D`` with three levels (and the hold on every level), the
+  default projection needs 774 level-0 iterations, no projection 1442, and :math:`\alpha_v = 0.1` 1007.
+- The converged state matches the run without sequencing to 1e-8 (``rt_steady_hill3d_neutral_sequencing``).
+- Equal verdicts do not mean equal end states: each run stops at the first iteration that meets the criteria, so
+  final residuals can differ by up to an order of magnitude within the same criteria.
+
+Newton–Krylov (in development)
+------------------------------
+
+*Setup.* The Ekman column of UT-3.1.2 with plain Newton steps.
+
+- The scaled residual falls by 0.403, 0.171, 0.0131, 2.09e-4 and 8.26e-8 in the first five steps, with
+  :math:`r_{n+1}/r_n^2` between 0.25 and 0.57: quadratic convergence.
+- On a 30 m hill under the wall model (9 × 6 × 8 cells, :math:`\Delta\tau` = 20 s), four steps reduce :math:`|R|`
+  from 11.3 to 0.211.
+
+GMRES iterations over ten Newton steps on the column (Krylov tolerance 1e-2):
+
+.. list-table::
+   :header-rows: 1
+   :widths: 24 19 19 19 19
+
+   * - Restart length
      - 10
      - 30 (default)
      - 60
-     - **200**
-   * - Iterations
-     - 4942 (cap reached on step 4)
+     - 200
+   * - GMRES iterations
+     - 4942 (cap reached)
      - 1469
      - 647
      - **346**
 
-On a 30 m hill under the wall law (9 × 6 × 8, inflow and outflow, :math:`\Delta\tau` = 20 s, the defaults)
-four steps take :math:`|R|` from 11.3 to 0.211, every solve meeting its tolerance.
+The defaults are provisional and will be tuned together with the Newton stage.
 
 Pseudo-transient continuation
------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The continuation of sub-phase 3.2 (:doc:`solver`) on the same hill (six uneven boxes), on the hill with
+The continuation (:doc:`solution_algorithm`) on the same hill (six uneven boxes), on the hill with
 :math:`u` three times larger, and on the Ekman column, GMRES(200), up to :math:`|R| \le 10^{-8}|R_0|`
 (``Continuation.DISABLED_ParameterSweep``; steps accepted, GMRES iterations in all):
 
@@ -379,7 +747,7 @@ infinite :math:`\Delta\tau`; with it (the default restart of 30 with the default
 leaving infinite :math:`\Delta\tau` after a damped or unconverged step fails earlier, at 2.6e-5 after 11 steps.
 ``steady.newton_ptc_growth = 1.5`` changes no result of the defaults above and turns the two column failures at a
 finite CFL into convergence (:math:`p` = 0.5: 26 steps) or slow progress (no line search). With :math:`p` = 0.5 it
-converges on all three cases; it is the recommended setting until sub-phase 3.6 tunes the defaults.
+converges on all three cases; it is the recommended setting until the defaults are tuned.
 
 In UT-3.2.1 (one box, GMRES(30), :math:`u \times 3`, plain Newton throughout) ``NewtonKrylov::step`` raises
 :math:`|R|` by 3.53 on the first step, where :math:`k` goes negative. The continuation keeps :math:`k` at its floor,
