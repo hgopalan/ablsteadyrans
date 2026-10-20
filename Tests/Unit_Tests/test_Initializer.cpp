@@ -1078,6 +1078,55 @@ TEST(Initializer, ColumnGuessAndProjectionSwitch)
     }
 }
 
+// Beyond the plan. The column guess on rough ground takes the wall law's
+// denominator floor (bc.surface_denominator_floor): the force-driven neutral
+// column of rt_steady_column_rough (64 x 1 m layers, z0 = 0.5 m, F = 0.125/64,
+// first centre 0.5 m, ln((d + z0)/z0) = ln 2 < 1). At the end the friction
+// velocity is kappa U1 / ln 2 with log_law (the inflow profile's log law) and
+// kappa U1 / 1 with one, U1 the first cell's speed; u* = sqrt(F H) in both.
+TEST(Initializer, ColumnGuessTakesTheDenominatorFloor)
+{
+    ablsteady::Inputs in;
+    in.mesh.n_cell = amrex::IntVect(4, 4, 64);
+    in.mesh.prob_lo = {0, 0, 0};
+    in.mesh.prob_hi = {256, 256, 64};
+    in.mesh.is_periodic = {1, 1, 0};
+    in.mesh.max_grid_size = {4, 4};
+    in.terrain.type = "flat";
+    InitOptions io;
+    io.first_guess = InitOptions::FirstGuess::column;
+    ablsteady::SteadyOptions so;
+    so.stage = ablsteady::StageKind::simplec;
+    BoundaryInputs bin;
+    bin.face = {FaceType::periodic, FaceType::periodic, FaceType::surface_layer, FaceType::periodic, FaceType::periodic, FaceType::slip_wall};
+    bin.inflow.kind = ablsteady::InflowProfileOptions::Kind::log_law;
+    bin.inflow.ustar = amrex::Real(0.3);
+    bin.inflow.z0 = amrex::Real(0.5);
+    bin.theta_ref.z = {0};
+    bin.theta_ref.theta = {300};
+    ablsteady::ClosureOptions copt;
+    copt.max_geom_lscale = amrex::Real(1e12);
+    ablsteady::ForcingOptions fopt;
+    fopt.pressure_gradient = {amrex::Real(1.953125e-3), 0, 0};
+    const double kappa = static_cast<double>(copt.kappa), lz = std::log(2.0);
+    using Floor = ablsteady::SurfaceLayerOptions::DenominatorFloor;
+    for (const Floor fl : {Floor::log_law, Floor::one}) {
+        ablsteady::SurfaceLayerOptions surf;
+        surf.z0 = amrex::Real(0.5);
+        surf.denominator_floor = fl;
+        const auto r = ablsteady::run_column_guess(in, io, so, bin, surf, true, copt, fopt);
+        const char* name = (fl == Floor::one) ? "one" : "log_law";
+        ASSERT_TRUE(r.steady) << name;
+        ASSERT_GE(r.z.size(), 2u);
+        EXPECT_NEAR(static_cast<double>(r.z[1]), 0.5, 1e-12);
+        const double U1 = std::hypot(static_cast<double>(r.u[1]), static_cast<double>(r.v[1]));
+        const double den = (fl == Floor::one) ? 1.0 : lz;
+        const double t = (sizeof(amrex::Real) == sizeof(double)) ? 1e-6 : 1e-3;
+        EXPECT_NEAR(static_cast<double>(r.ustar), kappa * U1 / den, t * static_cast<double>(r.ustar)) << name;
+        EXPECT_NEAR(static_cast<double>(r.ustar), std::sqrt(0.125), 1e-3 * std::sqrt(0.125)) << name;
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Sub-phase 2.1b: the 1-D column itself (run_column_guess) on a
 // Coriolis-driven column of 16 levels over 1000 m under the flat deck's

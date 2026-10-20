@@ -71,11 +71,11 @@ void tangential_wind (amrex::Array4<amrex::Real const> const& u, amrex::Array4<a
     for (int d = 0; d < 3; ++d) { ut[d] = U[d] - un * n[d]; }
 }
 
-// u - kappa U / den(u): the MOST relation for u*, den = max(ln((d+z0)/z0) - psi_m(d/L), m),
-// m the floor of bc.surface_denominator_floor.
+// u - kappa U / den(u): the MOST relation for u*, den = max(ln((d+z0)/z0) - psi_m(d/L), den_min),
+// den_min the floor m of bc.surface_denominator_floor.
 struct MostRelation
 {
-    amrex::Real kappa, U, d, lz, m, gq;
+    amrex::Real kappa, U, d, lz, den_min, gq;
     amrex::Real ustar_min;   //!< kUstarMin, held by value: a namespace constant is not usable in device code
     AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
     amrex::Real inv_L (amrex::Real u) const noexcept
@@ -88,7 +88,7 @@ struct MostRelation
     {
         const similarity_funs sfuns;
         const amrex::Real zeta = amrex::max(amrex::min(d * inv_L(u), amrex::Real(100)), -amrex::Real(100));
-        return u - kappa * U / amrex::max(lz - sfuns.calc_psi_m(zeta), m);
+        return u - kappa * U / amrex::max(lz - sfuns.calc_psi_m(zeta), den_min);
     }
 };
 
@@ -153,12 +153,12 @@ void columns (const State& q, const SurfaceLayerOptions& opt, const BuoyancyOpti
             const amrex::Real lz = std::log((d + z0) / z0);
             // The denominator's floor: min(lz, 1) leaves the neutral log law
             // whole (lz > 0 for every d > 0); 1 cuts it below d = (e - 1) z0.
-            amrex::Real m = amrex::min(lz, amrex::Real(1));
-            if constexpr (FLOOR_ONE) { m = amrex::Real(1); }
-            amrex::Real ustar = kappa * U / amrex::max(lz, m);
+            amrex::Real den_min = amrex::min(lz, amrex::Real(1));
+            if constexpr (FLOOR_ONE) { den_min = amrex::Real(1); }
+            amrex::Real ustar = kappa * U / amrex::max(lz, den_min);
             amrex::Real invL = 0;
             if constexpr (HEAT) {
-                const MostRelation F{kappa, U, d, lz, m, gq_c, ustar_min_l};
+                const MostRelation F{kappa, U, d, lz, den_min, gq_c, ustar_min_l};
                 bool converged = false;
                 for (int it = 0; it < kMaxNewton && !converged; ++it) {
                     const amrex::Real fu = F(ustar);

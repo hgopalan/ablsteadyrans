@@ -101,7 +101,11 @@ acts, and :math:`u_*` is the log law's at every height, as in the inflow profile
 :math:`m = 1` acts on neutral flow when the reference point is below :math:`(e-1)\,z_0 \approx 1.72\,z_0`, i.e. a
 first layer thinner than :math:`3.44\,z_0`. Then :math:`u_*` is :math:`\ln((d+z_0)/z_0)` times the log law's value.
 For example, :math:`z_0 = 0.5` m over a 1 m first layer gives 0.69 of the log law's :math:`u_*` and 0.48 of its
-stress. Rough ground (:math:`z_0` = 0.1–0.5 m) with a first layer of 1–4 m is in this range. Where
+stress. The range is a first layer under 1.72 m for :math:`z_0 = 0.5` m, under 1.03 m for :math:`z_0 = 0.3` m and
+under 0.34 m for :math:`z_0 = 0.1` m. With a heat flux and :math:`\ln((d+z_0)/z_0) < 1`, an unstable
+:math:`\psi_m > 0` meets either floor at once, so :math:`u_*` takes no convective increase there (with ``log_law``
+it is the neutral value; with ``one`` it is :math:`\kappa U`, below the neutral value). On the stable side
+(:math:`\psi_m < 0`) ``log_law`` never binds, while ``one`` also bound weakly stable cases there. Where
 :math:`\ln((d+z_0)/z_0) \ge 1` the two floors give the same answer, bit for bit. ``one`` keeps the form of
 sub-phase 1.7.
 

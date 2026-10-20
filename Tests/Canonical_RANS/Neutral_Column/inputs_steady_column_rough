@@ -5,12 +5,13 @@
 # = 0.354 m/s and H = 64 m. With bc.surface_denominator_floor = log_law (the
 # default) the steady first cell follows the log law of the inflow profile;
 # rt_steady_column_rough_floor_one runs it with one (sub-phase 1.7's floor),
-# where the first cell is 1/ln 2 = 1.44 times the log law's speed.
+# where the first cell is 1/ln 2 = 1.44 times the log law's speed. Two boxes
+# (max_grid_size 2 4), one per rank on two ranks.
 # Tests/Canonical_RANS/Neutral_Column/check_steady_column.py.
 mesh.n_cell        = 4 4 64
 mesh.prob_hi       = 256. 256. 64.
 mesh.is_periodic   = 1 1 0
-mesh.max_grid_size = 4 4
+mesh.max_grid_size = 2 4
 
 terrain.type = flat
 

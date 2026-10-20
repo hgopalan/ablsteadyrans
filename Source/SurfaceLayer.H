@@ -20,10 +20,13 @@
 //   [-100, 100] and the denominator kept >= m (strong convection at low wind
 //   would otherwise give u* < 0). bc.surface_denominator_floor sets m:
 //   log_law (default) m = min(ln((d + z0)/z0), 1), so the neutral u* is the
-//   log law's at every height, as the inflow profile and the column guess;
+//   log law's at every height, as in the inflow profile and the column guess;
 //   one, m = 1 (sub-phase 1.7): the neutral u* is then below the log law's when
 //   the reference point is below (e - 1) z0 = 1.72 z0. Both are the same
-//   where ln((d + z0)/z0) >= 1;
+//   where ln((d + z0)/z0) >= 1. Below that, with either floor, an unstable
+//   psi_m > 0 meets the floor at once and u* stays at its floor value, and
+//   on the stable side m = 1 also bound weakly stable cases that log_law
+//   leaves to the MOST relation;
 // - neutral: the log law; heat_flux: solved by Newton's method to round-off
 //   (so the residual is a smooth function of the state, as jvp needs), from
 //   the neutral value, u* >= 0.001 m/s in L.
