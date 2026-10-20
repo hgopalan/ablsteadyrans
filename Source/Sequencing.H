@@ -194,8 +194,9 @@ std::vector<LevelSummary> sequence_coarse_levels (const MeshHierarchy& h, const 
 //! The summary table of sequence_coarse_levels plus the finest level's
 //! iterations, wall time, AU (from the run's driver) and how it ended
 //! (finest_status: "steady", "not steady" or "diverged"), for the log.
-//! A last line compares level 0's residual references (seeded) with the
-//! largest of its own first ref_iterations residuals.
+//! A last line prints level 0's residual references (seeded) beside the
+//! largest of its first ref_iterations residuals after the prolongation
+//! (what an unseeded reference would have been).
 std::string sequencing_report (const std::vector<LevelSummary>& levels, const DriverHistory& finest,
                                const std::string& finest_status, int ref_iterations);
 

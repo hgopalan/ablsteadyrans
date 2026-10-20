@@ -334,9 +334,11 @@ std::string sequencing_report (const std::vector<LevelSummary>& levels, const Dr
             os += line;
         }
     }
-    // The seeded references against the ones level 0 would have taken on its
-    // own (the largest of its first ref_iterations residuals): a seed above
-    // its own value loosens the drop test by log10(seed / own) orders, no more.
+    // The seeded references (the coarsest level's), and the largest of level
+    // 0's first ref_iterations residuals from its prolonged start, which a
+    // level-0 reference of its own would have been. The second is not the
+    // reference of a run without sequencing (that run starts from the
+    // initializer on level 0); compare with such a run's checkpoint.
     const std::vector<amrex::Real>& seed = finest.criterion.res_ref;
     std::vector<amrex::Real> own(seed.size(), amrex::Real(0));
     for (std::size_t n = 0; n < finest.records.size() && static_cast<int>(n) < ref_iterations; ++n) {
@@ -344,8 +346,8 @@ std::string sequencing_report (const std::vector<LevelSummary>& levels, const Dr
             own[q] = std::max(own[q], std::abs(finest.records[n].residuals[q]));
         }
     }
-    os += "  residual references on level 0 (coarsest level's, seeded / level 0's own first " + std::to_string(ref_iterations)
-          + "):";
+    os += "  level-0 residual references (seeded from the coarsest level) / largest of level 0's first "
+          + std::to_string(ref_iterations) + " residuals after the prolongation:";
     for (std::size_t q = 0; q < seed.size(); ++q) { os += " " + fmt(double(seed[q])) + " / " + fmt(double(own[q])); }
     os += "\n";
     return os;

@@ -412,11 +412,24 @@ them. So the drop is measured from the initial field's residual on every level. 
 :math:`r_n` of the SER ramp uses the same reference: after the reference iterations it is already small on a finer
 level, and the CFL then climbs to ``steady.cfl_max`` at ``steady.ser_max_growth`` per iteration (on
 ``Neutral_Hill_3D`` within 10 iterations of the hold, against about 200 without sequencing; part of the measured gain,
-about 50–100 iterations, comes from this faster ramp). The coarsest level's references are not larger than
-level 0's own in the cases measured (``Neutral_Hill_3D``: 0.66–1.0 of them, the coarse terrain being smoother), so the
-seeding makes level 0's drop test slightly stricter there; a seed above level 0's own value would loosen the drop
-test by at most :math:`\log_{10}(\text{seed}/\text{own})` orders, and the absolute and monitor tests not at all. The
-summary table's last line prints both for every residual.
+about 50–100 iterations, comes from this faster ramp). Compared with the references of a run without sequencing (whose level 0
+starts from the initializer), the seeds are close: 0.66–1.0 of them on ``Neutral_Hill_3D`` (the coarse terrain is
+smoother), 0.55–1.15 on the neutral Askervein deck and 0.51–1.53 on the conventionally neutral one. A seed above that
+reference loosens the drop test by at most :math:`\log_{10}(\text{seed}/\text{reference})` orders, and the absolute
+and monitor tests not at all. The summary table's last line prints the seeds beside the largest of level 0's first
+residuals after the prolongation; those are small by construction (the start is close to the solution) and are not
+the reference of a run without sequencing.
+
+Equal verdicts do not mean equal end states: each run stops at the first iteration that meets every test. On the
+conventionally neutral Askervein deck (two levels, 30 × 30 and 15 × 15) the sequenced run reaches the verdict in 147
+level-0 iterations against 220, but its final residuals are up to 13 times larger (θ; u 3 times), within the same
+criterion. On the neutral Askervein deck it needs 164 against 156 and ends with smaller residuals. On these small
+decks the reference hold (``steady.residual_ref_iterations = 100`` iterations at ``steady.cfl0`` on every level)
+sets most of the cost, and sequencing gains little. The 1 m first-cell Askervein mesh of the ``simplec.w_vnn_cap`` study (140 × 140 × 54 at
+43 m, line LU-SGS, CFL cap 16, eight ranks) shows the same floor: without the cap two levels cut level 0 from 324
+iterations to 168 (146.7 s to 92.0 s with the coarse level); with ``simplec.w_vnn_cap = 16`` from 200 to 173 (two
+levels, 97.4 s to 96.1 s) or 172 (three levels, boxes of 28, 78.7 s to 74.7 s). Every coarse level stops at
+exactly 100 iterations there, the end of the reference hold, and level 0 cannot stop much sooner either.
 
 **The loose stop.** A coarse level stops after an iteration when
 
