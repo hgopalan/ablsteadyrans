@@ -232,8 +232,8 @@ GMRES limit in ``Source/Newton.cpp``), each run against ``Continuation.*``, ``Ne
 with the unit-test flags by ``tools/continuation_mutants.py`` (run on macOS arm64 with AppleClang). #36 reported 40
 mutants killed but kept no list; these 40 are a new set. The first run left C20, C25 and C36 alive: C25 because
 UT-3.2.1 no longer pins the trajectory, and C20 and C36 because no test covered them. UT-3.2.1 now checks the
-:math:`k` floor, and ``RestoreCapsTheCflAndTheFloorIsChecked`` covers the other two. 39 are killed; C2 cannot be told
-apart from the original on arm64.
+:math:`k` floor, and ``RestoreCapsTheCflAndTheFloorIsChecked`` covers the other two. All 40 are killed with GCC; with
+Clang and AppleClang 39 are, and C2 cannot be told apart from the original.
 
 .. list-table::
    :header-rows: 1
@@ -247,7 +247,9 @@ apart from the original on arm64.
      - ``ArmijoOnKnownQuadratic``
    * - C2
      - Armijo compares a NaN trial (no isfinite guard)
-     - Survives on macOS arm64, where the compare with NaN is quiet; on x86-64 it raises the invalid flag that ``ArmijoOnKnownQuadratic`` checks (not run there)
+     - ``ArmijoOnKnownQuadratic`` with GCC (verified with GCC 16 on arm64, one process), whose compare with NaN raises
+       the invalid flag the test checks (``fcmpe`` on aarch64, ``comisd`` on x86-64). Survives with Clang and
+       AppleClang, which emit a quiet compare; the script reports it as expected there
    * - C3
      - Backtracking factor fixed at 1/2
      - ``ArmijoOnKnownQuadratic``
@@ -1426,11 +1428,13 @@ GoogleTest suite
    * - UT-3.2.1
      - ``Continuation.LineSearchRejectsOvershoot``: the 30 m hill with :math:`u` three times larger, plain Newton
        throughout, GMRES(30) stopped at 200 iterations. Plain ``NewtonKrylov::step`` raises :math:`|R|` more than
-       twofold. Six continuation steps are accepted; each meets the Armijo condition with
+       twofold with a Krylov relative residual at most 1, and drives :math:`k` negative. Six continuation steps are
+       accepted, each keeping :math:`k` at or above its floor; each meets the Armijo condition (written out) with
        :math:`\lambda = \beta^{\text{backtracks}} \ge \lambda_\mathrm{min}`, :math:`|R|` is monotone, and at least one
        step backtracks. From the state before the first backtracked step, with ``steady.newton_lambda_min = 0.9``,
        the full step fails the Armijo test and is rejected, and the retry runs at CFL 2.5 with a finite
-       :math:`\Delta\tau`; if it is rejected too, the step fails with :math:`q` unchanged, bit for bit. The solves
+       :math:`\Delta\tau`; if it is rejected too, the step fails with :math:`q` unchanged, bit for bit (the test
+       prints which; ``SkippedStepCutsCflAndKeepsState`` covers :math:`q` unchanged after a failure everywhere). The solves
        end at their iteration limit, so the trajectory's digits depend on the platform's rounding: the test checks
        these properties rather than the trajectory (pinned to 1e-4 before, it held on Linux and failed on macOS
        arm64 and Windows MSVC).

@@ -231,15 +231,19 @@ TEST(Continuation, LineSearchRejectsOvershoot)
     plain.infinite = true;
     ContinuationOptions po = default_options();
     po.cfl0 = po.cfl_max;
-    double full = 0;
+    double full = 0, eta = 0;
     {
         HillCase hc(64, FaceType::surface_layer, 30);
         make(hc);
         ablsteady::NewtonKrylov nk(nopt, hc.in, hc.c.mesh, hc.c.geom, hc.c.ba, hc.c.dm, 0);
         const auto info = nk.step(hc.q, nullptr);
         full = static_cast<double>(nk.residual_norm(hc.q) / info.residual_norm);
+        eta = static_cast<double>(info.krylov_relative);
         EXPECT_LT(hc.q.tke.min(0), 0) << "plain Newton drives k negative";
     }
+    // |R(q + d)| <= eta |R| + |nonlinear remainder|: with eta <= 1, a rise
+    // above 2x comes mostly from the nonlinearity, not from the inexact solve.
+    EXPECT_LE(eta, 1.0);
     EXPECT_GT(full, 2.0) << "plain Newton overshoots";
 
     constexpr int nsteps = 6;
@@ -259,7 +263,7 @@ TEST(Continuation, LineSearchRejectsOvershoot)
     }
     const auto& rec = pt.records();
     amrex::Print() << std::setprecision(6) << "UT-3.2.1: NewtonKrylov::step |R_1| / |R_0| = " << full
-                   << "; the continuation: step, |R|, lambda, ratio\n";
+                   << " (Krylov relative " << eta << "); the continuation: step, |R|, lambda, ratio\n";
     for (const auto& r : rec) {
         amrex::Print() << "  " << r.step << "  " << r.residual << "  " << r.lambda << "  " << r.residual_new / r.residual << "\n";
     }
@@ -269,9 +273,13 @@ TEST(Continuation, LineSearchRejectsOvershoot)
     for (int n = 0; n < nsteps; ++n) {
         EXPECT_EQ(rec[n].outcome, AttemptOutcome::accepted) << n;
         EXPECT_TRUE(rec[n].infinite) << n;
-        EXPECT_EQ(rec[n].lambda, std::pow(po.backtrack, amrex::Real(rec[n].backtracks))) << n;
+        // lambda as the line search builds it (repeated multiplication)
+        amrex::Real lam = 1;
+        for (int b = 0; b < rec[n].backtracks; ++b) { lam = po.backtrack * lam; }
+        EXPECT_EQ(rec[n].lambda, lam) << n;
         EXPECT_GE(rec[n].lambda, po.lambda_min) << n;
-        EXPECT_TRUE(ablsteady::armijo_accepts(rec[n].residual_new, rec[n].residual, rec[n].lambda, po.armijo_c)) << n;
+        // the Armijo condition, written out (not armijo_accepts, which is under test)
+        EXPECT_LE(rec[n].residual_new, (1 - po.armijo_c * rec[n].lambda) * rec[n].residual) << n;
         // monotone (the refill on terrain moves |R| by ~1e-8 relative)
         if (n + 1 < nsteps) { EXPECT_LE(rec[n + 1].residual, rec[n].residual_new * (1 + tol(1e-7, 1e-4))) << n; }
         if (rec[n].backtracks > 0 && first_backtrack < 0) { first_backtrack = n; }
@@ -298,17 +306,21 @@ TEST(Continuation, LineSearchRejectsOvershoot)
     EXPECT_EQ(r0.lambda, 1);
     EXPECT_EQ(r0.backtracks, 0);
     EXPECT_EQ(r0.residual, rec[first_backtrack].residual);
-    EXPECT_FALSE(ablsteady::armijo_accepts(r0.residual_new, r0.residual, 1, o.armijo_c)) << "the full step fails Armijo";
+    EXPECT_GT(r0.residual_new, (1 - o.armijo_c) * r0.residual) << "the full step fails the Armijo test";
     const auto& r1 = p2.records()[1];
     EXPECT_EQ(r1.attempt, 1);
     EXPECT_FALSE(r1.infinite);
     EXPECT_EQ(r1.cfl, amrex::Real(2.5));
+    // Either outcome of the retry is valid; SkippedStepCutsCflAndKeepsState
+    // covers q unchanged after a failed step on every platform.
+    amrex::Print() << "UT-3.2.1: lambda_min 0.9 from step " << first_backtrack << ": the retry at CFL 2.5 was "
+                   << (st == ContinuationStatus::failed ? "rejected (step failed)" : "accepted") << "\n";
     if (st == ContinuationStatus::failed) {
         EXPECT_EQ(r1.outcome, AttemptOutcome::rejected);
         EXPECT_EQ(valid_diff(at, keep), 0);
     } else {
         EXPECT_EQ(r1.outcome, AttemptOutcome::accepted);
-        EXPECT_TRUE(ablsteady::armijo_accepts(r1.residual_new, r1.residual, r1.lambda, o.armijo_c));
+        EXPECT_LE(r1.residual_new, (1 - o.armijo_c * r1.lambda) * r1.residual);
     }
     if (amrex::ParallelDescriptor::IOProcessor()) { EXPECT_NE(out.find("attempt 0"), std::string::npos) << out; }
 }

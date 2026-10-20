@@ -5,9 +5,10 @@ tools/continuation_mutants.py.
 Each mutant replaces one piece of text (it must occur exactly once in its
 file), rebuilds unit_tests, runs the given GoogleTest filter on two ranks with
 the unit-test flags of Tests/CMakeLists.txt (SNaN fill, FPE trap), restores the
-file and prints one row: id | change | killed, SURVIVED or survived
-(equivalent) | failing tests. The unmutated code runs first and must pass. The
-run exits 1 when a mutant not listed as equivalent survives.
+file and prints one row: id | change | outcome | failing tests. The outcome is
+killed, killed (timeout), SURVIVED, survived (<reason>) for a mutant listed as
+expected to survive, or not compiled. The unmutated code runs first and must
+pass. The run exits 1 when a mutant not listed survives or does not compile.
 """
 import os
 import re
@@ -35,6 +36,11 @@ def build_and_run(build, gtest_filter, ranks=2):
         os.killpg(p.pid, signal.SIGKILL)
         p.communicate()
         return "timeout", []
+    except BaseException:
+        # Ctrl-C: mpirun is in its own session, so SIGINT does not reach it.
+        os.killpg(p.pid, signal.SIGKILL)
+        p.communicate()
+        raise
     failed = sorted(set(re.findall(r"\[  FAILED  \] (\S+\.\S+)", out)))
     if failed:
         return "failed", failed
@@ -60,6 +66,9 @@ def run(mutants, gtest_filter, equivalent, doc):
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     build = os.path.abspath(sys.argv[1])
     only = sys.argv[2:]
+    unknown = sorted(set(only) - {m[0] for m in mutants})
+    if unknown:
+        sys.exit(f"unknown mutant ids: {', '.join(unknown)}")
     # The unmutated code must pass, or every mutant would look killed.
     base, failed = build_and_run(build, gtest_filter)
     if base != "passed":
@@ -87,7 +96,7 @@ def run(mutants, gtest_filter, equivalent, doc):
                    "build error": "not compiled"}[res]
             if res == "SURVIVED" and mid in equivalent:
                 res = f"survived ({equivalent[mid]})"
-            survived += res == "SURVIVED"
+            survived += res in ("SURVIVED", "not compiled")
             print(f"{mid} | {what} | {res} | {', '.join(failed)}", flush=True)
     finally:
         # Leave the binary built from the unmutated files.

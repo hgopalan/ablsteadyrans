@@ -10,7 +10,10 @@ flags). The table is in docs/testing.rst.
 
     python3 tools/continuation_mutants.py BUILD_DIR [C1 C4 ...]
 """
-import platform
+import glob
+import os
+import re
+import sys
 
 import mutants
 
@@ -95,13 +98,23 @@ M = [
   "if (opt.gmres_max_iters < 1) {", "if (opt.gmres_max_iters < 0) {"),
 ]
 
-# C2 is killed by ArmijoOnKnownQuadratic's invalid-flag check where an
-# ordered compare with NaN raises FE_INVALID (x86-64: comisd). On arm64 the
-# compiler emits a quiet compare (no flag), so no test can tell C2 from the
-# original there.
+# C2 (no isfinite guard) is told apart only through the invalid flag that
+# ArmijoOnKnownQuadratic checks after comparing a NaN. GCC compiles the
+# ordered compare to a signalling instruction (comisd on x86-64, fcmpe on
+# aarch64) and kills C2; Clang and AppleClang emit a quiet compare
+# (ucomisd, fcmp), so no test can tell C2 from the original there.
+def compiler_id(build):
+    """CMAKE_CXX_COMPILER_ID of the build (CMake records it per version)."""
+    for path in glob.glob(os.path.join(build, "CMakeFiles", "*", "CMakeCXXCompiler.cmake")):
+        with open(path) as fh:
+            m = re.search(r'^set\(CMAKE_CXX_COMPILER_ID "([^"]*)"\)', fh.read(), re.M)
+        if m:
+            return m.group(1)
+    return ""
+
 EQUIVALENT = {}
-if platform.machine().lower() in ("arm64", "aarch64"):
-    EQUIVALENT["C2"] = "quiet NaN compare on arm64"
+if len(sys.argv) > 1 and "Clang" in compiler_id(sys.argv[1]):
+    EQUIVALENT["C2"] = "quiet NaN compare with Clang"
 
 if __name__ == "__main__":
     mutants.run(M, "Continuation.*:Newton.*:Driver.*", EQUIVALENT, __doc__)
