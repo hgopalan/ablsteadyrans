@@ -36,6 +36,7 @@ set(ABLSTEADY_SOURCES
     Simplec.cpp
     Transfer.cpp
     Newton.cpp
+    NewtonPreconditioner.cpp
     Continuation.cpp
     TurbulenceOutput.cpp
     App.cpp

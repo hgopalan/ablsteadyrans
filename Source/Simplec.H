@@ -124,9 +124,17 @@ struct PressureCorrectionResult
 //! correction's tolerance); bc its boundary types. The singular case's
 //! removed mean is a net source the boundaries cannot carry: the correction
 //! aborts when it exceeds round-off (1e-8 of the divergence scale U/h).
+//! source (the Newton preconditioner, NewtonPreconditioner.H; null: none):
+//! cell-centred on the mesh's layout, subtracted from the Poisson right-hand
+//! side, which becomes div(u*) - source, so that the corrected velocity has
+//! div(u) = source (to the solver's tolerance). project_net_source: in the
+//! singular case the net source the solver removes is projected out instead
+//! of aborting (a Krylov vector's continuity part has one; the linearized
+//! continuity rows cannot carry it either).
 PressureCorrectionResult pressure_correction (State& q, const PredictorFields& d, PoissonSolver& solver, const PoissonBC& bc,
                                               amrex::Real alpha_p, const Mesh& mesh, const amrex::Geometry& geom,
-                                              SimplecWorkspace& w);
+                                              SimplecWorkspace& w, const amrex::MultiFab* source = nullptr,
+                                              bool project_net_source = false);
 
 struct ScalarSweepResult
 {
@@ -139,12 +147,15 @@ struct ScalarSweepResult
 //! form: field += dq with (1/dtau + A1) dq = -R_eq, A1 = implicit_rows(F, ...)
 //! with the surface state and the closure's fields at the state (both as for
 //! implicit_rows), dtau the cell-centred step, sweeps >= 1. For tke the
-//! result is clipped at floor (>= 0). The field's ghosts are not refilled.
+//! result is clipped at floor (>= 0) unless clip is false (the Newton
+//! preconditioner's increment, which has no floor). The field's ghosts are
+//! not refilled.
 ScalarSweepResult scalar_sweep (Equation eq, amrex::MultiFab& field, const amrex::MultiFab& R_eq,
                                 const amrex::Array<const amrex::MultiFab*, AMREX_SPACEDIM>& F, const amrex::MultiFab& z_nd,
                                 const ResidualInputs& in, const amrex::MultiFab& dtau, const Mesh& mesh,
                                 const amrex::Geometry& geom, int sweeps, amrex::Real floor, const SurfaceState* surface,
-                                const ClosureFields* fields, SimplecWorkspace& w, const LineSweepOptions& sweep = LineSweepOptions());
+                                const ClosureFields* fields, SimplecWorkspace& w, const LineSweepOptions& sweep = LineSweepOptions(),
+                                bool clip = true);
 
 //! What one iteration did (the application's log line).
 struct SimplecIterationInfo

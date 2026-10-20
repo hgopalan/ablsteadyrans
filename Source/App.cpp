@@ -80,6 +80,12 @@ void run ()
         fopt = read_forcing_options();
         cin = read_convection_options();
         simplec = read_simplec_options();
+        // Read and range-checked, but the run has no Newton stage yet.
+        for (const auto& k : sopt.given) {
+            if (k == "newton_preconditioner") {
+                err.emplace_back("steady.newton_preconditioner has no effect until the run can switch to Newton (sub-phase 3.5)");
+            }
+        }
     } else {
         // Keys of the stage alone have no effect without it.
         for (const InputEntry& e : parmparse_entries()) {

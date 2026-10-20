@@ -22,7 +22,8 @@ namespace {
 const char* const kKeys[] = {"residual_tol", "residual_drop_orders", "residual_ref_iterations", "monitor_rel_tol",
                              "monitor_window", "max_iterations", "cfl0", "cfl_max", "ser_exponent", "ser_max_growth",
                              "switch_window", "switch_residual", "switch_back_growth", "zline_sweeps", "sweep", "line_ghosts", "line_overlap",
-                             "line_order", "line_alternate", "machine", "nodes", "stage"};
+                             "line_order", "line_alternate", "machine", "nodes", "stage",
+                             "newton_preconditioner"};
 
 constexpr int kDriverVersion = 2;   // 2: the reference hold (version 1 files still read)
 const char* const kDriverMagic = "ablsteady-driver";
@@ -140,6 +141,12 @@ SteadyOptions read_steady_options ()
         if (sweep == "zjacobi") { opt.sweep = SweepKind::zjacobi; }
         else if (sweep == "lusgs") { opt.sweep = SweepKind::lusgs; }
         else { amrex::Abort("ablsteady: steady.sweep = " + sweep + ": must be zjacobi or lusgs"); }
+    }
+    std::string pc;
+    if (pp.query("newton_preconditioner", pc)) {
+        if (pc == "identity") { opt.newton_preconditioner = NewtonPreconditionerKind::identity; }
+        else if (pc == "simplec") { opt.newton_preconditioner = NewtonPreconditionerKind::simplec; }
+        else { amrex::Abort("ablsteady: steady.newton_preconditioner = " + pc + ": must be identity or simplec"); }
     }
     std::string word;
     if (pp.query("line_ghosts", word)) {
