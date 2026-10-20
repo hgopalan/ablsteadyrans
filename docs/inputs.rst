@@ -580,6 +580,17 @@ simplec`` only. The sweep count is ``steady.zline_sweeps``.
        1/\max(|f|/r, a_P - \sum a_{nb})`, applied to the horizontal mean of the other component's residual
        (:doc:`solver`). Since sub-phase 1.16 the fluctuation about the mean takes the row's own step, and 1 converges
        as well as 0.3 (Neutral_ABL_Flat: 2507 against 2613 iterations); the default stays 0.3.
+   * - ``simplec.w_vnn_cap``
+     - ``0`` (off)
+     - 0, or finite and ≥ 16 (dimensionless): the cap :math:`V` on the vertical VNN number of the :math:`w` rows. On those rows alone
+       :math:`1/\Delta\tau` becomes :math:`1/\Delta\tau + (a_{ZM} + a_{ZP})/V` in :math:`a_P` and in the SIMPLEC
+       denominator :math:`d` (not on the Dirichlet ground and top rows). It changes the pseudo-time path, not the
+       steady answer (:doc:`solver`). 0 is bit-identical to the solver without the input. May change across a
+       restart (nothing about it is in the checkpoint). Over terrain the cap can make the pressure correction
+       unstable where thin cells meet slopes; the run warns when the mesh's max aspect ratio is above the tested
+       50.78 (Askervein, 1 m first cell). The aspect ratio is a proxy for the condition :math:`1 + \mathrm{VNN}/V <
+       1/h^2`, with :math:`h` the local slope (:doc:`solver`). Above it a larger cap is safer (64 converged on Askervein
+       with a 0.4 m first cell, where 16 burst).
 
 ``init``
 --------

@@ -1097,21 +1097,24 @@ TEST (Simplec, InputReadersAndRefusals)
 {
     {
         amrex::ParmParse pp("simplec");
-        auto clear = [&] { for (const char* k : {"pressure_reltol", "alpha_p", "rotation_relax"}) { while (pp.remove(k) > 0) {} } };
+        auto clear = [&] { for (const char* k : {"pressure_reltol", "alpha_p", "rotation_relax", "w_vnn_cap"}) { while (pp.remove(k) > 0) {} } };
         clear();
         ablsteady::SimplecOptions o = ablsteady::read_simplec_options();
         EXPECT_EQ(o.pressure_reltol, amrex::Real(1.0e-3));
         EXPECT_EQ(o.alpha_p, 1);
         EXPECT_TRUE(o.given.empty());
         EXPECT_EQ(o.rotation_relax, amrex::Real(0.3));
+        EXPECT_EQ(o.w_vnn_cap, 0);   // off
         pp.add("pressure_reltol", amrex::Real(0.05));
         pp.add("alpha_p", amrex::Real(0.7));
         pp.add("rotation_relax", amrex::Real(0.5));
+        pp.add("w_vnn_cap", amrex::Real(16));
         o = ablsteady::read_simplec_options();
         EXPECT_EQ(o.pressure_reltol, amrex::Real(0.05));
         EXPECT_EQ(o.alpha_p, amrex::Real(0.7));
         EXPECT_EQ(o.rotation_relax, amrex::Real(0.5));
-        EXPECT_EQ(o.given.size(), 3u);
+        EXPECT_EQ(o.w_vnn_cap, amrex::Real(16));
+        EXPECT_EQ(o.given.size(), 4u);
         pp.add("alpha_p", amrex::Real(0.8));   // repeated
         EXPECT_THROW(ablsteady::read_simplec_options(), std::runtime_error);
         clear();
@@ -1127,15 +1130,34 @@ TEST (Simplec, InputReadersAndRefusals)
         pp.add("rotation_relax", amrex::Real(0));
         EXPECT_THROW(ablsteady::read_simplec_options(), std::runtime_error);
         clear();
+        pp.add("w_vnn_cap", amrex::Real(-1));
+        EXPECT_THROW(ablsteady::read_simplec_options(), std::runtime_error);
+        clear();
+        pp.add("w_vnn_cap", amrex::Real(15.9));   // below the floor of 16
+        EXPECT_THROW(ablsteady::read_simplec_options(), std::runtime_error);
+        clear();
+        pp.add("w_vnn_cap", amrex::Real(16));
+        EXPECT_EQ(ablsteady::read_simplec_options().w_vnn_cap, amrex::Real(16));
+        clear();
+        pp.add("w_vnn_cap", std::numeric_limits<amrex::Real>::infinity());
+        EXPECT_THROW(ablsteady::read_simplec_options(), std::runtime_error);
+        clear();
+        {
+            ablsteady::SimplecOptions tiny;
+            tiny.w_vnn_cap = std::numeric_limits<amrex::Real>::denorm_min();   // > 0, below the floor
+            ASSERT_EQ(ablsteady::check_simplec_options(tiny).size(), 1u);
+        }
         ablsteady::SimplecOptions bad;
         bad.pressure_reltol = 0;
         bad.alpha_p = 0;
         bad.rotation_relax = 2;
+        bad.w_vnn_cap = std::numeric_limits<amrex::Real>::quiet_NaN();
         const auto err = ablsteady::check_simplec_options(bad);
-        ASSERT_EQ(err.size(), 3u);
+        ASSERT_EQ(err.size(), 4u);
         EXPECT_NE(err[0].find("simplec.pressure_reltol"), std::string::npos);
         EXPECT_NE(err[1].find("simplec.alpha_p"), std::string::npos);
         EXPECT_NE(err[2].find("simplec.rotation_relax"), std::string::npos);
+        EXPECT_NE(err[3].find("simplec.w_vnn_cap"), std::string::npos);
     }
     {
         amrex::ParmParse pp("forcing");

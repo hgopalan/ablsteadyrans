@@ -1,0 +1,35 @@
+# simplec.w_vnn_cap over terrain: the thin-cell strip of
+# Tests/Canonical_RANS/Thin_Cell_Flat (max aspect ratio about 134) on a Witch
+# of Agnesi ridge, one iteration. The cap and the first cell mesh.dz0 are
+# given on the command line: 16 with dz0 = 0.7 m must run with the
+# aspect-ratio warning, 16 with dz0 = 4 m (aspect ratio below the tested
+# 50.78) without it, and 4 must be refused (the floor of 16).
+mesh.n_cell        = 16 2 40
+mesh.prob_lo       = 0. 0. 0.
+mesh.prob_hi       = 1500. 187.5 742.
+mesh.is_periodic   = 0 1 0
+mesh.max_grid_size = 8 2
+mesh.stretch_ratio = 1.2
+terrain.type            = agnesi
+terrain.hill_shape      = ridge_x
+terrain.hill_height     = 50.
+terrain.hill_half_width = 300.
+
+bc.xlo = inflow
+bc.xhi = outflow
+bc.zlo = surface_layer
+bc.zhi = slip_wall
+bc.surface_z0       = 0.03
+bc.inflow_profile   = power_law
+bc.inflow_speed     = 8.7502
+bc.inflow_zref      = 10.
+bc.inflow_alpha     = 0.2113
+bc.inflow_z0        = 0.03
+bc.inflow_direction = 0.
+bc.theta_profile_z  = 0.
+bc.theta_profile    = 300.
+
+init.first_guess = profile
+forcing.gravity  = 0.
+steady.stage     = simplec
+steady.max_iterations = 1

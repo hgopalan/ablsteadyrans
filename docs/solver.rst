@@ -274,6 +274,112 @@ Euler step:
 inertial time scale. Applying it to the local residual fed an internal gravity wave in the inviscid inversion.
 Every added term vanishes when :math:`R = 0`, so the steady solution is unchanged.
 
+**The w rows' VNN cap** (``simplec.w_vnn_cap``, off by default). On thin first cells the :math:`w` residual decays
+slowly. The cause is the SIMPLEC denominator of the :math:`w` rows. The vertical neighbour weights
+:math:`a_{ZM}, a_{ZP}` appear in both :math:`a_P` and :math:`\sum a_{nb}`, so they cancel and
+:math:`d \approx 1/\Delta\tau`. The implicit z-line solve moves :math:`w` by about :math:`1/(1/\Delta\tau + K)` per
+unit force, with :math:`K = a_{ZM} + a_{ZP}` (mostly the vertical diffusion). The pressure correction moves it by
+:math:`\Delta\tau`. A correction that varies from layer to layer is therefore too large by the vertical VNN number
+
+.. math::
+
+   \mathrm{VNN} = \Delta\tau\,K,
+
+and the next predictor takes most of it back. With a 0.4 m first cell under 43 m cells VNN reaches about 380, a few
+metres above the ground. A linear model of one SIMPLEC iteration (one horizontal Fourier mode, a stretched log-law
+column, an exact z-line solve) gives a slowest decay of :math:`1 - \rho \approx 1/(2\,\mathrm{VNN}_\max)`, which
+matches the solver's late :math:`w` tail. With the cap :math:`V > 0` the :math:`w` rows take
+
+.. math::
+
+   \frac{1}{\Delta\tau} \;\rightarrow\; \frac{1}{\Delta\tau} + \frac{a_{ZM} + a_{ZP}}{V}
+   \quad\text{in } a_P \text{ and in } d,
+   \qquad \mathrm{VNN}_\mathrm{eff} = \frac{\mathrm{VNN}}{1 + \mathrm{VNN}/V} < V,
+
+except on the Dirichlet ground and top rows. u, v, θ and k keep their rows.
+
+- **Why the answer does not change.** The predictor is in delta form, so its fixed point is :math:`R = 0` whatever
+  the diagonal. On the staggered grid there is no Rhie–Chow interpolation, so :math:`d` enters only the pressure
+  correction: it changes the path to the fixed point, not the fixed point.
+- **What it costs.** One kernel over the :math:`w` faces per iteration; nothing with the cap off (0 is
+  bit-identical to the solver without the input).
+- **Why both** :math:`a_P` **and** :math:`d`. In the same model, capping :math:`d` alone diverges for
+  :math:`V \le 8`, and capping :math:`a_P` alone gains nothing.
+- **Why the floor of 16.** On flat ground the model diverges for :math:`V \le 2` at CFL 16 and above, and for
+  :math:`V = 4` at CFL 64. On the Askervein hill with a 1 m first cell :math:`V = 4` and 8 burst after the jump to
+  CFL 16, while 16, 32 and 64 all converged in 200 iterations.
+- **Terrain: a known limit.** The pressure correction's z-face flux scales the whole :math:`\mathbf n\cdot\nabla
+  p'`, slope cross term included, by :math:`\beta_z = 1/d_w`. With the cap, :math:`\beta_z \ll \beta_x` near the
+  ground, so the corrected :math:`w` gains :math:`-h(\beta_x - \beta_z)\,\partial_x p'` (:math:`h` the slope),
+  and the operator becomes indefinite once :math:`\beta_z/\beta_x` falls below about :math:`h^2`. The model is
+  stable roughly while :math:`1 + \mathrm{VNN}/V < 1/h^2`. On the Askervein hill with a 0.4 m first cell,
+  :math:`V = 16` burst at the jump to CFL 16, which the uncapped run makes cleanly. With a 1 m first cell
+  (max aspect ratio 50.78, slopes to 23°) :math:`V \ge 16` converged and :math:`V = 4` and 8 burst. The application
+  therefore warns when the cap is on over terrain and the mesh's max aspect ratio, max(dx, dy)/thickness, is above
+  the tested 50.78. The aspect ratio is a proxy: the condition depends on VNN, :math:`V` and the local slope.
+  A larger cap is safer: on the 0.4 m Askervein hill (max aspect ratio 127) :math:`V = 64` converged in 278
+  iterations where 16 burst. Without the cap the :math:`w` residual converges slowly on such meshes (the uncapped
+  0.4 m hill needed about 2800 iterations). The warning does not stop the run. The slowest decay of a long horizontal wave (:math:`\lambda
+  \gtrsim` 3 km) is not the :math:`w` mode and the cap barely changes it.
+
+Measured on Askervein (140 × 140 cells at 43 m, the layers stretched by 1.08, line LU-SGS with two sweeps at a CFL
+cap of 16, ``gmres_mlmg``), iterations to the steady verdict:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 28 12 12 12 12 12 12
+
+   * - Case
+     - Off
+     - :math:`V = 4`
+     - :math:`V = 8`
+     - :math:`V = 16`
+     - :math:`V = 32`
+     - :math:`V = 64`
+   * - Flat, 0.4 m
+     - 1620
+     - 194
+     - not run
+     - **196**
+     - not run
+     - not run
+   * - Flat, 1 m
+     - 485
+     - not run
+     - not run
+     - **216**
+     - not run
+     - not run
+   * - Flat, 1 m, CFL cap 32
+     - 855
+     - not run
+     - not run
+     - **285**
+     - not run
+     - not run
+   * - Hill, 1 m
+     - 324
+     - burst
+     - burst
+     - **200**
+     - 200
+     - 201
+   * - Hill, 0.4 m
+     - about 2800
+     - not run
+     - not run
+     - burst
+     - not run
+     - 278
+
+"Burst": after the jump to the CFL cap the residuals rose to 0.2–0.8 and the CFL collapsed; those runs were stopped
+unsteady (V = 4 at 870 iterations, V = 8 at 1470, V = 16 at 0.4 m at 460). With z-line Jacobi (four sweeps, CFL cap
+4) the 1 m flat case needs 292 iterations either way: at that CFL the VNN is small and the cap has little to do. The
+capped and uncapped steady states agree to the convergence tolerance: at 0.4 m with a tight verdict (6 orders,
+5e-7; 353 iterations) u, v and w agree to 2.7e-7 m/s, and on the 1 m hill the 10 m speed-ups on lines A, AA and B
+agree to 3e-6 (:doc:`testing`, ``rt_thin_cell_w_vnn_cap``). The pressure correction takes more Poisson iterations
+with the cap (1 m hill: 2.83 per correction against 2.14), fewer in all (566 against 693).
+
 Poisson solver
 --------------
 

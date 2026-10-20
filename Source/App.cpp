@@ -235,6 +235,19 @@ void run ()
     if (!solve) { check_overwrite(); }
 
     amrex::Print() << mesh.quality_report();
+    if (solve && simplec.w_vnn_cap > 0 && mesh.quality().max_ground_slope_deg > 0
+        && mesh.quality().max_aspect_ratio > w_vnn_cap_tested_aspect) {
+        // Over terrain the cap can destabilise the pressure correction where thin
+        // cells meet slopes (Predictor.H); aspect ratio is the proxy.
+        char tested[32];   // two decimals in either precision (50.78, not 50.77999878)
+        std::snprintf(tested, sizeof(tested), "%.2f", static_cast<double>(w_vnn_cap_tested_aspect));
+        amrex::Print() << "WARNING: simplec.w_vnn_cap = " << simplec.w_vnn_cap << " over terrain with max aspect ratio "
+                       << mesh.quality().max_aspect_ratio << ", above the tested " << tested
+                       << " (Askervein, 1 m first cell): the cap may make the pressure correction unstable where thin "
+                          "cells meet steep slopes (docs/solver.rst); a larger cap is safer (64 converged on Askervein "
+                          "with a 0.4 m first cell), and without it (simplec.w_vnn_cap = 0) w converges slowly on thin "
+                          "first cells\n";
+    }
 
     // The x/y grid hierarchy (mesh.hierarchy_levels > 1): built from level 0's
     // node heights, reported and written with the plotfile. The stage runs on
@@ -296,7 +309,9 @@ void run ()
                            << (sopt.line_alternate != 0 ? ", alternating" : "") << ")";
         }
         amrex::Print() << ", pressure " << popt.backend << " reltol "
-                       << simplec.pressure_reltol << ", alpha_p " << simplec.alpha_p << ", cfl0 " << sopt.cfl0
+                       << simplec.pressure_reltol << ", alpha_p " << simplec.alpha_p << ", w_vnn_cap ";
+        if (simplec.w_vnn_cap > 0) { amrex::Print() << simplec.w_vnn_cap; } else { amrex::Print() << "off"; }
+        amrex::Print() << ", cfl0 " << sopt.cfl0
                        << ", cfl_max " << sopt.cfl_max << "\n";
         SteadyVerdict v = driver.verdict();
         int done = 0;
