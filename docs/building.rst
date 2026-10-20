@@ -74,22 +74,33 @@ An option outside its allowed values stops the configuration.
 Windows
 -------
 
-On Windows the solver builds with MSVC and no MPI. FFTW comes from vcpkg. From a "Developer PowerShell for VS"
-(or after ``ilammy/msvc-dev-cmd`` in CI):
+On Windows the solver builds with MSVC and no MPI, and FFTW comes from vcpkg. It needs Visual Studio 2022 with
+the "Desktop development with C++" workload (including "C++ CMake tools for Windows", which provides CMake and
+Ninja), Git and Python 3. The vcpkg that ships with Visual Studio supports only manifest mode, so use a standalone
+clone. From a "Developer PowerShell for VS":
 
 .. code-block:: powershell
 
-   vcpkg install fftw3:x64-windows
+   git clone https://github.com/microsoft/vcpkg $HOME/vcpkg
+   & $HOME/vcpkg/bootstrap-vcpkg.bat
+   $env:VCPKG_ROOT = "$HOME/vcpkg"
+   & $env:VCPKG_ROOT/vcpkg install fftw3:x64-windows
+
+   git clone --recursive https://github.com/hgopalan/ablsteadyrans.git
+   cd ablsteadyrans
    cmake -S . -B build-rel -G Ninja -DCMAKE_BUILD_TYPE=Release `
-     -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake `
+     -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" `
      -DVCPKG_TARGET_TRIPLET=x64-windows -DABLSTEADY_MPI=OFF
    cmake --build build-rel
-   $env:PATH = "C:/vcpkg/installed/x64-windows/bin;$env:PATH"
+   $env:PATH = "$env:VCPKG_ROOT/installed/x64-windows/bin;$env:PATH"
    ctest --test-dir build-rel -L "unit|smoke" --output-on-failure
 
-The FFTW DLLs are found through ``PATH``. The Kestrel shell-script tests are not registered on Windows. A CUDA
-build on Windows uses ``cl`` with ``nvcc``; with CUDA 12.6 and C++20 use Windows SDK 10.0.22621.0
-(``-DCMAKE_SYSTEM_VERSION=10.0.22621.0``), as the CI job does.
+The FFTW DLLs are found through ``PATH``. Without MPI every test runs on one rank, and MSVC does not trap
+floating-point exceptions (:doc:`testing`). The Kestrel shell-script tests are not registered on Windows.
+
+A CUDA build on Windows uses ``cl`` with ``nvcc``. With CUDA 12.6 and C++20 it needs Windows SDK 10.0.22621.0:
+install that SDK, open the prompt with ``-winsdk=10.0.22621.0`` (for example ``VsDevCmd.bat -arch=x64
+-winsdk=10.0.22621.0``) and configure with ``-DCMAKE_SYSTEM_VERSION=10.0.22621.0``, as the CI job does.
 
 Kestrel
 -------

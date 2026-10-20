@@ -370,9 +370,10 @@ std::string sequencing_report (const std::vector<LevelSummary>& levels, const Dr
                       wall, au, stop.c_str());
         os += line;
         if (s.prolonged) {
-            std::snprintf(line, sizeof(line), "         prolonged into level %d: divergence %.3e -> %.3e, %ld k values clipped\n",
+            std::snprintf(line, sizeof(line), "         prolonged into level %d: divergence %.3e -> %.3e, %lld k values clipped\n",
                           s.level, static_cast<double>(s.prolong.projection.divergence_before),
-                          static_cast<double>(s.prolong.projection.divergence_after), s.prolong.tke_clipped);
+                          static_cast<double>(s.prolong.projection.divergence_after),
+                          static_cast<long long>(s.prolong.tke_clipped));
             os += line;
         }
     }

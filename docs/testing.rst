@@ -521,10 +521,15 @@ Current tests
      - ``external/VERSIONS`` is well formed and its ``amrex`` entry matches the submodule; the self-test shows a
        mismatch with a throw-away submodule is reported.
    * - ``kestrel_parse_*``, ``kestrel_dryrun``
-     - The Kestrel scripts parse; a dry run with stub ``module``/``sbatch``/``srun`` checks the Askervein job
+     - Not registered on Windows. The Kestrel scripts parse; a dry run with stub ``module``/``sbatch``/``srun`` checks the Askervein job
        script (run length, plot period, no 2-D plotfiles, ranks) and archives a fake finished run, averaging only
        the 3-D plotfiles in the final window and archiving the inputs but not the run's outputs; a second case
        with the default prefix ``plt`` keeps its ``plt2d_`` plotfiles out.
+
+In a build without MPI (``ABLSTEADY_MPI=OFF``, as in the Windows CI job) every test runs on one rank, so
+``unit_np2`` and ``unit_np4`` repeat ``unit_np1`` and ``smoke_restart_matches`` does not change the rank count.
+MSVC does not trap floating-point exceptions, so ``amrex.fpe_trap_invalid=1`` has no effect there; the Linux GCC
+jobs keep that check.
 
 GoogleTest suite
 ~~~~~~~~~~~~~~~~
