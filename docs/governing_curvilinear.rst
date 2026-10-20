@@ -122,8 +122,9 @@ Grid hierarchy
 --------------
 
 ``mesh.hierarchy_levels`` = L > 1 adds L − 1 coarser meshes of the same domain (``Source/MeshHierarchy.H``). They
-are for grid sequencing and nonlinear multigrid (later sub-phases); in this version they are built, reported and
-written, and the solver runs on level 0. The transfer operators between levels are described below.
+are for grid sequencing (``steady.sequencing``, :doc:`solver`) and nonlinear multigrid (a later sub-phase); they
+are built, reported and written, and without sequencing the solver runs on level 0 alone. The transfer operators
+between levels are described below.
 
 - Level l has :math:`n_x / 2^l \times n_y / 2^l` cells: x and y are coarsened by 2 per level, **z never**. Every
   level has the z-levels of level 0, bit for bit, so the first cell and the wall treatment are the same on all of
@@ -170,7 +171,8 @@ Transfer operators
 
 ``Source/Transfer.H`` moves a state between two levels :math:`l_f < l_c` of the hierarchy, with :math:`r = 2^{l_c -
 l_f}` in x and y. z is never coarsened, so every transfer works per ζ-level and nothing is interpolated in the
-vertical. Nothing in the solver calls them yet: grid sequencing (sub-phase 2.5) will. They have no inputs.
+vertical. Grid sequencing (:doc:`solver`) calls ``prolong_state``; restriction is for nonlinear multigrid (a
+later sub-phase). They have no inputs.
 
 **Restriction** (``restrict_state``, fine → coarse).
 

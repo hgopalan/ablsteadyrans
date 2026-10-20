@@ -894,4 +894,154 @@ TEST (Driver, DivergenceStopsAndTheChecksNameTheirInput)
     }
 }
 
+// ---------------------------------------------------------------------------
+// Beyond the plan (grid sequencing, steady.sequencing_hold = 0): a seeded
+// driver whose reference hold is released measures r_n against the seed
+// from the first iteration and starts the SER ramp at once, the growth cap
+// still binding; the first residual_ref_iterations residuals still raise the
+// seed; start_cfl sets the first CFL; the hold survives a restart (and a
+// version-1 history, without it, reads as the default hold); the calls are
+// refused after a step, without a seed, with the hold on, or out of range.
+TEST (Driver, ReleasedHoldRampsFromTheFirstIteration)
+{
+    PCase c = make_mesh(0, false);
+    SteadyOptions o = base_options();   // residual_ref_iterations = 2
+    o.cfl0 = 1;
+    o.cfl_max = 64;
+    o.ser_exponent = 1;
+    o.ser_max_growth = 4;
+    o.criterion.monitor_window = 1000;   // never steady: the CFL keeps updating
+    // residuals 1/4, 1/16, 1/64, ... (DecayStage, rate 1/4, u = 1)
+    auto cfls = [&] (const std::vector<amrex::Real>& seed, bool release, amrex::Real start, int n,
+                     std::vector<double>* rel = nullptr) {
+        ablsteady::State q;
+        define_state(q, c);
+        q.u.setVal(1.0);
+        ablsteady::Driver d(o, one_stage<DecayStage>("decay", amrex::Real(0.25)), c.mesh, c.geom, nullptr);
+        if (!seed.empty()) { d.seed_reference(seed); }
+        if (release) { d.release_reference_hold(); }
+        if (start > 0) { d.start_cfl(start); }
+        EXPECT_EQ(d.hold_iterations(), release ? 0 : 2);
+        std::vector<double> out;
+        for (int i = 0; i < n; ++i) {
+            d.step(q);
+            out.push_back(d.history().records.back().cfl);
+            if (rel != nullptr) { rel->push_back(d.history().records.back().relative_residual); }
+        }
+        return out;
+    };
+    auto expect_seq = [] (const std::vector<double>& got, const std::vector<double>& want) {
+        ASSERT_EQ(got.size(), want.size());
+        for (std::size_t i = 0; i < want.size(); ++i) { EXPECT_DOUBLE_EQ(got[i], want[i]) << i; }
+    };
+    // Seeded at 1 with the hold: cfl0 for three iterations (as unseeded).
+    expect_seq(cfls({amrex::Real(1)}, false, 0, 6), {1, 1, 1, 4, 16, 64});
+    // Released: r_0 = 1/4 -> 4 (growth cap 4), r_1 = 1/16 -> 16, r_2 = 1/64 -> 64.
+    std::vector<double> rel;
+    expect_seq(cfls({amrex::Real(1)}, true, 0, 5, &rel), {1, 4, 16, 64, 64});
+    EXPECT_DOUBLE_EQ(rel[0], 0.25);
+    EXPECT_DOUBLE_EQ(rel[1], 0.0625);
+    // A seed below the first residual is raised to it (r_0 = 1, CFL stays 1),
+    // then measured from it: r_1 = (1/16) / (1/4) -> 4.
+    rel.clear();
+    expect_seq(cfls({amrex::Real(0.1)}, true, 0, 5, &rel), {1, 1, 4, 16, 64});
+    EXPECT_DOUBLE_EQ(rel[0], 1.0);
+    EXPECT_DOUBLE_EQ(rel[1], 0.25);
+    // The previous level's CFL: the first iteration runs at 8; the law then
+    // gives 1 / r_0 = 4 (below the growth cap 32).
+    expect_seq(cfls({amrex::Real(1)}, true, 8, 4), {8, 4, 16, 64});
+    // The hold survives a write, a read and a restore: the continued run is
+    // the uninterrupted one.
+    {
+        const std::string dir = "ut_driver_hold";
+        if (amrex::ParallelDescriptor::IOProcessor()) {
+            amrex::FileSystem::RemoveAll(dir);
+            amrex::UtilCreateDirectory(dir, 0755);
+        }
+        amrex::ParallelDescriptor::Barrier();
+        ablsteady::State q;
+        define_state(q, c);
+        q.u.setVal(1.0);
+        ablsteady::Driver a(o, one_stage<DecayStage>("decay", amrex::Real(0.25)), c.mesh, c.geom, nullptr);
+        a.seed_reference({amrex::Real(1)});
+        a.release_reference_hold();
+        a.step(q);
+        ablsteady::write_driver_history(dir, a.history());
+        const DriverHistory h = ablsteady::read_driver_history(dir);
+        EXPECT_EQ(h.hold, 0);
+        ablsteady::Driver b(o, one_stage<DecayStage>("decay", amrex::Real(0.25)), c.mesh, c.geom, nullptr);
+        b.restore(h, q);
+        EXPECT_EQ(b.hold_iterations(), 0);
+        for (int i = 0; i < 3; ++i) { b.step(q); }
+        std::vector<double> got;
+        for (const auto& r : b.history().records) { got.push_back(r.cfl); }
+        expect_seq(got, {1, 4, 16, 64});
+        // A version-1 history (no hold line) reads as the default hold.
+        if (amrex::ParallelDescriptor::IOProcessor()) {
+            std::ofstream os(dir + "/Driver");
+            os << "ablsteady-driver 1\nstate 0 0x1p+0 0 -1\naccounts 1\n0 0x0p+0 0x0p+0\nrecords 0\nswitches 0\n"
+                  "criterion 0 0 0 \n1 0x0p+0\n1 0x0p+0\n1\n0\n";
+        }
+        amrex::ParallelDescriptor::Barrier();
+        const DriverHistory v1 = ablsteady::read_driver_history(dir);
+        EXPECT_EQ(v1.hold, -1);
+        ablsteady::Driver d1(o, one_stage<DecayStage>("decay", amrex::Real(0.25)), c.mesh, c.geom, nullptr);
+        d1.restore(v1, q);
+        EXPECT_EQ(d1.hold_iterations(), 2);
+        // A hold other than -1 or 0 is refused (on read and on restore).
+        if (amrex::ParallelDescriptor::IOProcessor()) {
+            std::ofstream os(dir + "/Driver");
+            os << "ablsteady-driver 2\nstate 0 0x1p+0 0 -1\nhold -2\naccounts 1\n0 0x0p+0 0x0p+0\nrecords 0\nswitches 0\n"
+                  "criterion 0 0 0 \n1 0x0p+0\n1 0x0p+0\n1\n0\n";
+        }
+        amrex::ParallelDescriptor::Barrier();
+        EXPECT_THROW(ablsteady::read_driver_history(dir), std::runtime_error);
+        // the same complete file with hold 0 reads
+        if (amrex::ParallelDescriptor::IOProcessor()) {
+            std::ofstream os(dir + "/Driver");
+            os << "ablsteady-driver 2\nstate 0 0x1p+0 0 -1\nhold 0\naccounts 1\n0 0x0p+0 0x0p+0\nrecords 0\nswitches 0\n"
+                  "criterion 0 0 0 \n1 0x0p+0\n1 0x0p+0\n1\n0\n";
+        }
+        amrex::ParallelDescriptor::Barrier();
+        EXPECT_EQ(ablsteady::read_driver_history(dir).hold, 0);
+        for (const char* bad : {"hold -2", "hold 3"}) {
+            if (amrex::ParallelDescriptor::IOProcessor()) {
+                std::ofstream os(dir + "/Driver");
+                os << "ablsteady-driver 2\nstate 0 0x1p+0 0 -1\n" << bad << "\naccounts 1\n0 0x0p+0 0x0p+0\nrecords 0\nswitches 0\n"
+                      "criterion 0 0 0 \n1 0x0p+0\n1 0x0p+0\n1\n0\n";
+            }
+            amrex::ParallelDescriptor::Barrier();
+            EXPECT_THROW(ablsteady::read_driver_history(dir), std::runtime_error) << bad;
+        }
+        DriverHistory h3 = v1;
+        h3.hold = 3;
+        ablsteady::Driver d3(o, one_stage<DecayStage>("decay", amrex::Real(0.25)), c.mesh, c.geom, nullptr);
+        EXPECT_THROW(d3.restore(h3, q), std::runtime_error);
+        amrex::ParallelDescriptor::Barrier();
+        if (amrex::ParallelDescriptor::IOProcessor()) { amrex::FileSystem::RemoveAll(dir); }
+    }
+    // Refusals.
+    {
+        ablsteady::State q;
+        define_state(q, c);
+        q.u.setVal(1.0);
+        ablsteady::Driver d(o, one_stage<DecayStage>("decay", amrex::Real(0.25)), c.mesh, c.geom, nullptr);
+        EXPECT_THROW(d.release_reference_hold(), std::runtime_error);   // not seeded
+        d.seed_reference({amrex::Real(1)});
+        EXPECT_THROW(d.start_cfl(2), std::runtime_error);   // the hold is on
+        d.release_reference_hold();
+        for (const double x : {0.0, -1.0, 65.0, std::nan(""), std::numeric_limits<double>::infinity()}) {
+            EXPECT_THROW(d.start_cfl(static_cast<amrex::Real>(x)), std::runtime_error) << x;
+        }
+        EXPECT_NO_THROW(d.start_cfl(64));
+        EXPECT_EQ(d.cfl(), 64);
+        // below cfl0 (a coarse level that ended with r_n > 1): raised to cfl0
+        d.start_cfl(amrex::Real(0.25));
+        EXPECT_EQ(d.cfl(), 1);
+        d.step(q);
+        EXPECT_THROW(d.release_reference_hold(), std::runtime_error);   // after a step
+        EXPECT_THROW(d.start_cfl(2), std::runtime_error);
+    }
+}
+
 } // namespace

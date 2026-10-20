@@ -13,7 +13,9 @@ Check script: `Supporting_Files/check_steady_hill.py --erf-check check_hill3d.py
 `Neutral_Hill_2D`), which runs ERF's `check_hill3d.py --physics` (`extern_erf/`).
 
 ## CTest
-`rt_steady_hill3d` (label `nightly`, four ranks, double precision only).
+`rt_steady_hill3d` (label `nightly`, four ranks, double precision only). `rt_steady_hill3d_sequencing` (RT-2.5.1)
+runs the same deck with `mesh.hierarchy_levels=3 steady.sequencing=1` and the same checks; the two-order drop is
+measured from the criterion's reference, which with sequencing is the coarsest level's.
 
 ## Expected Results
 - The steady verdict with a two-order drop of the u residual.

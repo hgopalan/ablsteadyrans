@@ -110,6 +110,13 @@ public:
     //! criterion's residuals, monitors and window.
     void restore (const SteadyHistory& h);
 
+    //! Start the residual references at ref (one per residual, finite and
+    //! >= 0) instead of 0: the first residual_ref_iterations iterations
+    //! still raise them to their largest value (grid sequencing, Sequencing.H,
+    //! carries the coarsest level's references to the finer levels). Aborts
+    //! after the first add or on a wrong size or value.
+    void seed_reference (const std::vector<amrex::Real>& ref);
+
 private:
     SteadyParams m_p;
     std::vector<std::string> m_res_names;

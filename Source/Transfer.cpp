@@ -310,7 +310,9 @@ void prolong_fields (const MeshHierarchy& h, int lc, const State& coarse, int lf
     const amrex::Geometry& gc = h.geom(lc);
     const Axis cx = make_axis(gf, gc, 0, r, false), cy = make_axis(gf, gc, 1, r, false);
     const Axis nx = make_axis(gf, gc, 0, r, true), ny = make_axis(gf, gc, 1, r, true);
-    amrex::MultiFab::Copy(fine.z_phys_nd, h.z_phys_nd(lf), 0, 0, 1, ngrow_nodal);
+    // Level 0's node heights are the run's state.z_phys_nd: grid sequencing
+    // prolongs into that state, so the copy would be onto itself.
+    if (&fine.z_phys_nd != &h.z_phys_nd(lf)) { amrex::MultiFab::Copy(fine.z_phys_nd, h.z_phys_nd(lf), 0, 0, 1, ngrow_nodal); }
 
     // The coarse values on the coarse image of the fine layout, with one
     // ghost cell: the neighbouring boxes and the periodic images.

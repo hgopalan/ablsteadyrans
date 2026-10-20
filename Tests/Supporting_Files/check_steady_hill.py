@@ -5,8 +5,9 @@
 
 Runs COMMAND (the application on Tests/Canonical_RANS/Neutral_Hill_2D/inputs_steady_hill2d or
 inputs_steady_hill3d), requires the steady verdict (and, with --orders, a
-drop of N orders of the residual of u from its reference, from the Driver
-history of the checkpoint), then runs ERF's check script from extern_erf/
+drop of N orders of the residual of u from the criterion's reference, read
+from the Driver history of the checkpoint; with grid sequencing that is the
+coarsest level's reference), then runs ERF's check script from extern_erf/
 with --physics on the turbulence plotfile the stage wrote (io.turb_plot_file:
 ERF's variable names): the wall distance against the exact distance to the
 hill, the length-scale bound, positivity, the wall cell's k balance, the
@@ -37,6 +38,17 @@ def read_history(path):
         nres = int(parts[5])
         out.append([float.fromhex(x) for x in parts[6:6 + nres]])
     return out
+
+
+def read_reference(path):
+    """The criterion's residual references (the line after 'criterion'):
+    the largest of the first steady.residual_ref_iterations residuals, or,
+    with grid sequencing, the coarsest level's seeded value if larger."""
+    with open(path) as fh:
+        lines = [ln.rstrip("\n") for ln in fh]
+    i = next(k for k, ln in enumerate(lines) if ln.startswith("criterion "))
+    parts = lines[i + 1].split()
+    return [float.fromhex(x) for x in parts[1:1 + int(parts[0])]]
 
 
 def main(argv):
@@ -71,7 +83,7 @@ def main(argv):
         if not chk:
             raise SystemExit("check_steady_hill: no checkpoint written (the residual drop needs its Driver history)")
         hist = read_history(os.path.join(chk[-1], "Driver"))
-        ref = max(r[0] for r in hist[:100])
+        ref = read_reference(os.path.join(chk[-1], "Driver"))[0]
         drop = math.log10(ref / hist[-1][0])
         good = drop >= orders
         ok = ok and good
