@@ -380,6 +380,121 @@ capped and uncapped steady states agree to the convergence tolerance: at 0.4 m w
 agree to 3e-6 (:doc:`testing`, ``rt_thin_cell_w_vnn_cap``). The pressure correction takes more Poisson iterations
 with the cap (1 m hill: 2.83 per correction against 2.14), fewer in all (566 against 693).
 
+Grid sequencing
+---------------
+
+With ``steady.sequencing = 1`` and ``mesh.hierarchy_levels`` = L ≥ 2 (sub-phase 2.5; ``Source/Sequencing.H``), a
+fresh run solves on the coarse levels of the x/y hierarchy (:doc:`governing_curvilinear`) first and starts each finer
+level from the coarser solution:
+
+1. Level L − 1 (the coarsest): the initializer (``init.*``) on that level's mesh, then the SIMPLEC stage under its own
+   driver to the *loose stop*.
+2. Levels L − 2 … 1: ``prolong_state`` from the level above (bilinear per ζ-level, k clipped, the level's boundary
+   conditions and a projection; :doc:`governing_curvilinear`), then SIMPLEC to the loose stop.
+3. Level 0 (the run's mesh): ``prolong_state`` from level 1, then the run's driver to the strict stop
+   (``steady.residual_*``, ``steady.monitor_*``), as without sequencing.
+
+Every level has its own boundary conditions, closure (its :math:`\nu_t` history starts empty), wall distance,
+pressure solver and driver, built from the run's inputs; the SER ramp starts at ``steady.cfl0`` on every level.
+``init.*`` acts on the coarsest level only: every finer level starts from a prolonged, projected state, so
+``init.projection = 0`` leaves only the coarsest start unprojected. ``steady.max_iterations`` caps each level
+separately; the closing line ``steady after N iterations`` and the checkpoint count level 0's iterations, and a
+summary table after it lists every level's iterations, wall time, allocation units and how it stopped. A coarse
+level that reaches the cap is prolonged as it is, with a warning; one that diverges aborts the run.
+
+**The residual reference.** The strict criterion asks each scaled residual :math:`R_q` to drop
+``steady.residual_drop_orders`` orders below its reference :math:`R_q^{\mathrm{ref}}`, the largest of its first
+``steady.residual_ref_iterations`` values. A prolonged start is already close to the solution, so a level's own
+first residuals are small, and level 0 would be held to a lower absolute residual than a run without sequencing. With
+sequencing every finer level starts its references at the coarsest level's (``Driver::seed_reference``), which, like
+a run without sequencing, starts from the initializer; the first ``residual_ref_iterations`` values can still raise
+them. So the drop is measured from the initial field's residual on every level. The relative residual
+:math:`r_n` of the SER ramp uses the same reference: after the reference iterations it is already small on a finer
+level, and the CFL then climbs to ``steady.cfl_max`` at ``steady.ser_max_growth`` per iteration (on
+``Neutral_Hill_3D`` within 10 iterations of the hold, against about 200 without sequencing; part of the measured gain,
+about 50–100 iterations, comes from this faster ramp). The coarsest level's references are not larger than
+level 0's own in the cases measured (``Neutral_Hill_3D``: 0.66–1.0 of them, the coarse terrain being smoother), so the
+seeding makes level 0's drop test slightly stricter there; a seed above level 0's own value would loosen the drop
+test by at most :math:`\log_{10}(\text{seed}/\text{own})` orders, and the absolute and monitor tests not at all. The
+summary table's last line prints both for every residual.
+
+**The loose stop.** A coarse level stops after an iteration when
+
+.. math::
+
+   R_q^n \le \max\!\left(R_q^{\mathrm{ref}}, \tau\right) 10^{-d_\ell} \quad\text{or}\quad R_q^n < \tau
+   \qquad \text{for every residual } q,
+
+after at least ``steady.residual_ref_iterations`` iterations (both branches), with :math:`\tau` = ``steady.residual_tol`` and
+:math:`d_\ell` = ``steady.sequencing_drop_orders`` (2), or when the strict criterion holds. With
+``steady.sequencing_monitor_tol`` = :math:`\mu > 0` it also stops when every monitor :math:`m` changed by at most
+:math:`\mu \max(|m|, s_m)` over the last ``steady.monitor_window`` iterations (the strict monitor test without its
+extrapolation). That branch is off by default: right after a prolongation the monitors (largest face speed, mean k,
+mean :math:`u_*`) are already near their limits and change by less than 1 % over a window while the residuals have
+not dropped. On ``Neutral_Hill_3D`` with :math:`\mu = 0.01`, level 1 stopped after 51 iterations with no residual
+drop and level 0 took 985 iterations, against 774 with the residual branch alone.
+
+**Cost.** An iteration on level l costs about :math:`4^{-l}` of a level-0 iteration (the same z column, a quarter
+of the columns per level), plus the Poisson solve. Measured on four ranks (Apple M-series, double precision):
+
+.. list-table::
+   :header-rows: 1
+
+   * - Case (strict stop)
+     - Levels
+     - Coarse iterations (2, 1)
+     - Level-0 iterations
+     - Wall time (s)
+   * - ``Neutral_Hill_3D`` (2 orders)
+     - 1
+     - —
+     - 2091
+     - 144.8
+   * - ``Neutral_Hill_3D``
+     - **3**
+     - **383, 127**
+     - **774**
+     - **57.1**
+   * - ``Neutral_Hill_3D``
+     - 2
+     - 692 (level 1)
+     - 843
+     - 69.4
+   * - Truly neutral hill (round-off)
+     - 1
+     - —
+     - 3495
+     - 39.6
+   * - Truly neutral hill
+     - 3
+     - 239, 101
+     - 2773
+     - 32.5
+   * - Truly neutral hill, ``sequencing_drop_orders = 3``
+     - 3
+     - 323, 147
+     - 2472
+     - 28.8
+
+The ``Neutral_Hill_3D`` deck stops at two orders (with its monitor test), the truly neutral deck
+(``Truly_Neutral_Hill_3D/inputs_steady_hill3d_neutral``) at round-off (1e-11 and eight orders). The starting field
+matters with sequencing (PT-2.5.2, ``Neutral_Hill_3D``, three levels): the plain projection (``init.projection = 1``,
+:math:`\alpha_v = \alpha_h`, the default) needs 774 level-0 iterations, the first guess without projection
+(``init.projection = 0``) 1442, and the mass-consistent field with ``init.alpha_v = 0.1`` 1007. Without sequencing
+the three need 2091, 2042 and 2044. The default stays the plain projection.
+
+The gain is the transient the coarse levels remove. Once the error is down to the slowest mode of the level-0
+iteration, every run converges at the same rate, so a deep stop (round-off, 8 orders) gains less in proportion than
+an engineering stop (2 orders). The converged state does not depend on sequencing: ``rt_steady_hill3d_neutral_sequencing``
+matches the run without it to 1e-8 (:doc:`testing`).
+
+**Restart and memory.** The coarse levels run on a fresh start only: a checkpoint holds the level-0 state and its
+driver history (with the seeded references), and a restart with ``steady.sequencing = 1`` continues level 0 and says
+so. The coarse levels' wall time and allocation units are in the log, not in the checkpoint. The level-0 solver
+(stage, pressure solver, wall distance) is built before the coarse levels run and stays allocated while they do, and
+the prolongation into level 0 builds a second level-0 pressure solver for its projection, so the peak memory is
+above that of level 0 alone.
+
 Poisson solver
 --------------
 

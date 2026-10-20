@@ -218,6 +218,15 @@ Driver::Driver (const SteadyOptions& opt, std::vector<std::unique_ptr<Stage>> st
     m_h.cfl = opt.cfl0;
 }
 
+void Driver::seed_reference (const std::vector<amrex::Real>& ref)
+{
+    if (!m_h.records.empty() || m_h.criterion.count != 0) {
+        amrex::Abort("ablsteady: Driver::seed_reference: only before the first iteration");
+    }
+    m_criterion.seed_reference(ref);
+    m_h.criterion = m_criterion.history();
+}
+
 amrex::Real Driver::relative_residual () const
 {
     return m_h.records.empty() ? amrex::Real(0) : m_h.records.back().relative_residual;

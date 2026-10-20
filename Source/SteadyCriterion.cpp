@@ -82,6 +82,17 @@ void SteadyCriterion::restore (const SteadyHistory& h)
     m_h = h;
 }
 
+void SteadyCriterion::seed_reference (const std::vector<amrex::Real>& ref)
+{
+    bool ok = m_h.count == 0 && ref.size() == m_res_names.size();
+    for (const auto r : ref) { ok = ok && std::isfinite(r) && r >= 0; }
+    if (!ok) {
+        amrex::Abort("ablsteady: SteadyCriterion::seed_reference: needs one finite reference >= 0 per residual, "
+                     "before the first iteration");
+    }
+    m_h.res_ref = ref;
+}
+
 void SteadyCriterion::add (const std::vector<amrex::Real>& residuals,
                            const std::vector<amrex::Real>& monitors)
 {

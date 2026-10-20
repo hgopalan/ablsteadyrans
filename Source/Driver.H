@@ -185,6 +185,10 @@ public:
     //! lives in q, so the checkpoint of q restores it). Aborts on a history
     //! that does not fit the stages or is inconsistent.
     void restore (const DriverHistory& h, State& q);
+    //! Start the criterion's residual references at ref before the first
+    //! step (SteadyCriterion::seed_reference; grid sequencing). Aborts after
+    //! a step or a restore.
+    void seed_reference (const std::vector<amrex::Real>& ref);
     //! The relative residual r of the last record (0 before the first).
     [[nodiscard]] amrex::Real relative_residual () const;
 
