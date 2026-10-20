@@ -387,7 +387,7 @@ void write_reals (std::ostream& os, const std::vector<amrex::Real>& v)
 }
 
 // Hex floats are read through strtod: libstdc++'s stream extraction does not
-// accept them (IO.cpp and Reference.cpp do the same).
+// accept them (StateIO.cpp and Reference.cpp do the same).
 double read_double (std::istream& is, const std::string& dir, const char* what)
 {
     std::string tok;
