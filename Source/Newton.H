@@ -45,8 +45,9 @@
 // BoxArray.
 //
 // The preconditioner is a hook (NewtonPreconditioner): the identity (a copy)
-// by default; sub-phase 3.3 plugs in one SIMPLEC iteration or a hypre solve
-// through it without changing NewtonKrylov.
+// when none is given; sub-phase 3.3 plugs in one SIMPLEC iteration
+// (SimplecPreconditioner, NewtonPreconditioner.H) through it without
+// changing NewtonKrylov.
 //
 // Memory: FGMRES(m) keeps m + 1 Arnoldi vectors, m preconditioned vectors
 // and two work vectors, all of state size: 2m + 3 vectors. The estimate is
@@ -121,8 +122,27 @@ struct NewtonVector
 //! The preconditioner hook: dq ~ (D + J)^-1 r in physical units (r on the
 //! residual's rows, dq on the state's fields; both NewtonVectors). setup is
 //! called once per Newton step, after R(q) and before GMRES, with the state
-//! (ghost cells filled) and the step (null: none). FGMRES lets apply change
-//! from one call to the next (an inner iteration stopped by a tolerance).
+//! (ghost cells filled) and the step (null: none); a hook rebuilds whatever
+//! depends on them there (the continuation, Continuation.H, changes dtau
+//! from one step to the next). FGMRES lets apply change from one call to the
+//! next (an inner iteration stopped by a tolerance).
+//!
+//! The contract of apply (sub-phase 3.3):
+//!  * shared faces: a face shared by two boxes, or a periodic seam face and
+//!    its image, is one unknown. r arrives with equal copies (the vector
+//!    operations act point by point and residual() syncs its face rows);
+//!    apply returns dq with equal copies too, the value of the copy the
+//!    owner mask counts (OverrideSync), so that the update S x and the inner
+//!    products see one value;
+//!  * any r: r need not be in the range of D + J. In particular its
+//!    continuity part may carry a net source in a domain without a
+//!    Dirichlet pressure face, where the continuity rows cannot (the
+//!    divergence of the face fluxes sums to the boundary flux);
+//!  * the pressure gauge: in such a domain a constant p is the null space of
+//!    D + J (the gradient of a constant is 0, and p has no pseudo-time
+//!    term). The FGMRES solution is a combination of apply's outputs, so the
+//!    gauge of dq's p is apply's: a hook that returns p with zero J-weighted
+//!    mean leaves the pressure level of q unchanged.
 class NewtonPreconditioner
 {
 public:
@@ -130,6 +150,13 @@ public:
     virtual void setup (const State& /*q*/, const amrex::MultiFab* /*dtau*/) {}
     virtual void apply (NewtonVector& dq, const NewtonVector& r) = 0;
 };
+
+//! steady.newton_preconditioner (identity | simplec): the identity (no hook,
+//! NewtonOperator::precond's copy) or one SIMPLEC iteration
+//! (SimplecPreconditioner, NewtonPreconditioner.H).
+enum class NewtonPreconditionerKind : int { identity = 0, simplec = 1 };
+//! "identity" or "simplec".
+const char* newton_preconditioner_name (NewtonPreconditionerKind kind) noexcept;
 
 //! A = T^-1 (D + J) S with the interface amrex::GMRES<NewtonVector,
 //! NewtonOperator> needs. It references q, R0, in, mesh and geom, which must

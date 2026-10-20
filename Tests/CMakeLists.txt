@@ -45,6 +45,7 @@ add_executable(unit_tests
     Unit_Tests/test_Newton.cpp
     Unit_Tests/test_NewtonCoverage.cpp
     Unit_Tests/test_Continuation.cpp
+    Unit_Tests/test_NewtonPreconditioner.cpp
     Unit_Tests/test_Terrain.cpp
     Unit_Tests/test_Transfer.cpp
     Unit_Tests/test_Sequencing.cpp
@@ -270,6 +271,20 @@ ablsteady_add_test(NAME abort_sequencing_cfl_start_value NP 1 LABELS "regression
 ablsteady_add_test(NAME abort_sequencing_no_stage NP 1 LABELS "regression;smoke"
                    PREFIX ${EXPECT_ABORT} "steady\\.sequencing has no effect without steady\\.stage = simplec" --
                    COMMAND $<TARGET_FILE:ablsteady> ${VALIDATION_CASE}/inputs_abort_no_stage steady.sequencing=1
+                           ${ABLSTEADY_TEST_AMREX_FLAGS})
+# steady.newton_preconditioner (sub-phase 3.3): a bad value aborts naming the
+# key; a good one aborts until the run can switch to Newton (sub-phase 3.5).
+ablsteady_add_test(NAME abort_newton_preconditioner_value NP 1 LABELS "regression;smoke"
+                   PREFIX ${EXPECT_ABORT} "steady\\.newton_preconditioner = hypre: must be identity or simplec" --
+                   COMMAND $<TARGET_FILE:ablsteady> ${HILL3D_NEUTRAL_CASE}/inputs_steady_hill3d_neutral
+                           steady.newton_preconditioner=hypre ${ABLSTEADY_TEST_AMREX_FLAGS})
+ablsteady_add_test(NAME abort_newton_preconditioner_no_newton NP 1 LABELS "regression;smoke"
+                   PREFIX ${EXPECT_ABORT} "steady\\.newton_preconditioner has no effect until the run can switch to Newton" --
+                   COMMAND $<TARGET_FILE:ablsteady> ${HILL3D_NEUTRAL_CASE}/inputs_steady_hill3d_neutral
+                           steady.newton_preconditioner=identity ${ABLSTEADY_TEST_AMREX_FLAGS})
+ablsteady_add_test(NAME abort_newton_preconditioner_no_stage NP 1 LABELS "regression;smoke"
+                   PREFIX ${EXPECT_ABORT} "steady\\.newton_preconditioner has no effect without steady\\.stage = simplec" --
+                   COMMAND $<TARGET_FILE:ablsteady> ${VALIDATION_CASE}/inputs_abort_no_stage steady.newton_preconditioner=simplec
                            ${ABLSTEADY_TEST_AMREX_FLAGS})
 # The LU-SGS overlap against the coarse levels' boxes: overlap 3 fits level 0's
 # 16-wide boxes but not level 3's, 2 wide.

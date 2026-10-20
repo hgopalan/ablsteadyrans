@@ -121,7 +121,7 @@ amrex::Real max_abs_masked (const amrex::MultiFab& f, const amrex::MultiFab& kee
 
 PressureCorrectionResult pressure_correction (State& q, const PredictorFields& d, PoissonSolver& solver, const PoissonBC& bc,
                                               amrex::Real alpha_p, const Mesh& mesh, const amrex::Geometry& geom,
-                                              SimplecWorkspace& w)
+                                              SimplecWorkspace& w, const amrex::MultiFab* source, bool project_net_source)
 {
     const char* op = "pressure_correction";
     if (std::isnan(alpha_p) || !(alpha_p > 0 && alpha_p <= 1)) {
@@ -134,6 +134,7 @@ PressureCorrectionResult pressure_correction (State& q, const PredictorFields& d
     check_operator_field(op, "v", q.v, Loc::yface, mesh, 1);
     check_operator_field(op, "w", q.w, Loc::zface, mesh, 1);
     check_operator_field(op, "p", q.p, Loc::cell, mesh, 1);
+    if (source != nullptr) { check_operator_field(op, "source", *source, Loc::cell, mesh, 0); }
     const amrex::MultiFab& z = q.z_phys_nd;
     const amrex::BoxArray& ba = q.p.boxArray();
     const amrex::DistributionMapping& dm = q.p.DistributionMap();
@@ -153,6 +154,7 @@ PressureCorrectionResult pressure_correction (State& q, const PredictorFields& d
 
     velocity_divergence(q.u, q.v, q.w, z, mesh, geom, w.rhs);
     res.divergence_before = w.rhs.norm0();
+    if (source != nullptr) { amrex::MultiFab::Subtract(w.rhs, *source, 0, 0, 1, 0); }
     // The scale of the divergence, U / h, for the net-source check.
     amrex::Real speed = amrex::max(q.u.norm0(0, 0, false), q.v.norm0(0, 0, false), q.w.norm0(0, 0, false));
     amrex::ParallelDescriptor::ReduceRealMax(speed);
@@ -167,7 +169,7 @@ PressureCorrectionResult pressure_correction (State& q, const PredictorFields& d
     coeffs.precond_ratio = 1;
     w.phi.setVal(0.0);
     res.poisson = solver.solve(w.rhs, w.phi, coeffs, bc, &w.F);
-    if (res.poisson.singular && std::abs(res.poisson.removed_mean) > amrex::Real(1.0e-8) * speed * inv_h) {
+    if (!project_net_source && res.poisson.singular && std::abs(res.poisson.removed_mean) > amrex::Real(1.0e-8) * speed * inv_h) {
         amrex::Abort("ablsteady: pressure_correction: the predicted velocity has a net source the boundaries cannot carry: "
                      "J-weighted mean divergence " + std::to_string(double(res.poisson.removed_mean)) + " 1/s against the scale "
                      + std::to_string(double(speed * inv_h)) + " 1/s (a boundary condition or the predictor is inconsistent)");
@@ -209,7 +211,7 @@ ScalarSweepResult scalar_sweep (Equation eq, amrex::MultiFab& field, const amrex
                                 const amrex::Array<const amrex::MultiFab*, AMREX_SPACEDIM>& F, const amrex::MultiFab& z_nd,
                                 const ResidualInputs& in, const amrex::MultiFab& dtau, const Mesh& mesh,
                                 const amrex::Geometry& geom, int sweeps, amrex::Real floor, const SurfaceState* surface,
-                                const ClosureFields* fields, SimplecWorkspace& w, const LineSweepOptions& sweep)
+                                const ClosureFields* fields, SimplecWorkspace& w, const LineSweepOptions& sweep, bool clip)
 {
     const char* op = "scalar_sweep";
     if (eq != Equation::theta && eq != Equation::tke) { amrex::Abort("ablsteady: scalar_sweep: eq must be theta or tke"); }
@@ -247,7 +249,7 @@ ScalarSweepResult scalar_sweep (Equation eq, amrex::MultiFab& field, const amrex
     res.last_sweep = line_sweeps(sweep, Loc::cell, w.A, w.ap, rhs, sweeps, mesh, geom, w.delta);
     res.max_dq = w.delta.norm0();
     amrex::MultiFab::Add(field, w.delta, 0, 0, 1, 0);
-    if (eq == Equation::tke) {
+    if (eq == Equation::tke && clip) {
         amrex::ReduceOps<amrex::ReduceOpSum> rop;
         amrex::ReduceData<amrex::Long> data(rop);
         for (amrex::MFIter mfi(field, amrex::TilingIfNotGPU()); mfi.isValid(); ++mfi) {

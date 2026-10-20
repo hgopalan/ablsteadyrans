@@ -757,3 +757,38 @@ These solves stop at their iteration limit, so the sequence depends on the platf
 2000-iteration limit, Linux GCC took three full steps (reductions 0.670, 0.783, 0.826) and then three at
 :math:`\lambda = 1/2`, where the full step would raise :math:`|R|` by 2.77. The test checks the properties (Armijo,
 monotone :math:`|R|`, the :math:`k` floor, at least one backtrack), not the sequence.
+
+The Newton preconditioner
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+*Setup.* UT-3.3.3: the open hill (9 × 6 × 8 cells, six boxes, a 30 m hill, inflow and outflow, the wall law), four
+Newton steps at a fixed CFL, Krylov tolerance 1e-3, GMRES(200). Mean GMRES iterations per Newton step:
+
+.. list-table::
+   :header-rows: 1
+
+   * - Preconditioner
+     - CFL 10
+     - CFL 1e2
+     - CFL 1e3
+     - CFL 1e4
+   * - ``identity``
+     - 163.5
+     - —
+     - —
+     - 227.5
+   * - **simplec (default), zjacobi**
+     - **10.25**
+     - **10.5**
+     - **10.5**
+     - **10.5**
+   * - simplec with the stage's denominator
+     - 18
+     - —
+     - —
+     - 360–381
+
+UT-3.3.3 runs ``identity`` and the stage's denominator only at CFL 10 and 1e4 (—: not run). In the continuation
+loop on the same hill (UT-3.3 (a)) both preconditioners converge in 8 steps; ``simplec`` needs 54 GMRES iterations
+in all and ``identity`` 976. The stage's denominator varies between runs at large CFL (359 and 381 measured at 1e4)
+because GMRES at the 200-vector restart is sensitive to rounding; the bound fails either way.

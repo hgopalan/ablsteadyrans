@@ -1475,3 +1475,34 @@ GoogleTest suite
        ``Continuation.RestoreCapsTheCflAndTheFloorIsChecked``: a checkpointed CFL of 8 restored under
        ``steady.cfl_max = 5`` becomes 5, and 3 stays 3; a negative, infinite or NaN ``turb.tke_floor`` is refused,
        naming the key. ``Continuation.DISABLED_ParameterSweep`` (on request): the sweep of :doc:`results`.
+   * - UT-3.3.1
+     - *Changed from the plan.* ``NewtonPreconditioner.ApplyIsOneSimplecIteration``: on a terrain hill split into
+       six boxes (shared and periodic faces), with non-uniform fields and :math:`\Delta\tau`, ``apply`` on
+       :math:`r = -R(q)` with the stage's denominator equals one SIMPLEC stage iteration from :math:`q` to 1e-9
+       (1e-12 measured). Both ``zjacobi`` and ``lusgs`` are checked; :math:`p` is compared modulo its mean.
+       :math:`\delta q = r` on the Dirichlet rows, and every shared-face copy equals its owner's.
+   * - UT-3.3.2
+     - *Changed from the plan.* ``NewtonPreconditioner.ConstantPressureShiftLeavesTheSolveUnchanged``: on the
+       periodic hill (singular pressure problem), a constant added to :math:`r_p` or to :math:`q`'s :math:`p`
+       leaves ``apply`` unchanged, and :math:`\delta p` has zero :math:`J`-weighted mean. A Newton step from
+       :math:`q` and from :math:`q + c` takes the same GMRES iterations (53) and gives the same increment (to 1e-5;
+       compared in double only, as :math:`p + c` keeps about four digits of :math:`p` in single precision).
+   * - UT-3.3.3
+     - ``NewtonPreconditioner.IterationsBoundedOverCfl``: four Newton steps on the open hill (9 × 6 × 8, six boxes)
+       at CFL 10, 1e2, 1e3 and 1e4. With ``simplec`` the mean GMRES iterations per step grow by less than 50 %
+       (10.25 to 10.5). The mutant check: the stage's denominator fails the bound (18 to 360–381, run to run). ``identity`` needs
+       at least five times as many iterations at CFL 10 and 1e4.
+   * - UT-3.3 (a)
+     - *Beyond the plan.* ``NewtonPreconditioner.ContinuationIdentityVersusSimplec``: the continuation loop on the
+       open hill with each preconditioner. Both converge to :math:`10^{-8}|R_0|` in 8 steps to the same state;
+       ``identity`` keeps the 8 steps of UT-3.2 (b), and ``simplec`` needs 54 GMRES iterations against 976 (pinned:
+       8 steps, at most 70 iterations, at most a fifth of the identity's). ``NewtonPreconditioner.ApplyIsLinearInR``
+       (Pressel review): on the stratified hill, :math:`\mathrm{apply}(s\,r)/s = \mathrm{apply}(r)` for
+       :math:`s = 2, -1, 10^3` to 1e-4 with the default denominators (1e-5 measured; 0.5 in single precision, 0.21
+       measured, where step 3's difference of the :math:`\theta` convections about 300 K keeps about one digit); the
+       stage's denominators
+       miss it (1.03), and so does the full-increment step 3 this test replaced (1.04, the mutant check). The
+       preconditioner is set up once per attempt. ``NewtonPreconditioner.ReaderFactoryAndRangeChecks``: the
+       default, ``identity``, an unknown value aborting with the key named, the range checks of the class, and
+       ``apply`` before ``setup``. CTest ``abort_newton_preconditioner_value``, ``_no_newton`` and ``_no_stage``:
+       the application's messages.
