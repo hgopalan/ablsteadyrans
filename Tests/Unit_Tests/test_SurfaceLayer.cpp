@@ -9,6 +9,8 @@
 #include "SurfaceLayer.H"
 #include "TransportTestHelpers.H"
 
+#include <AMReX_ParmParse.H>
+
 #include <gtest/gtest.h>
 
 #include <cfenv>
@@ -128,16 +130,17 @@ TEST(SurfaceLayer, ReferenceIntervalIsHalfOpen)
 }
 
 
-// A flat mesh with geometric layers dz0 = 10 m, ratio 1.1 (nz layers; the top
-// lands where the layers end) over nx x nx x nz cells, periodic sides.
-PCase flat_column (int nz, int nx = 4)
+// A flat mesh with geometric layers dz0 (10 m by default), ratio 1.1 (nz
+// layers; the top lands where the layers end) over nx x nx x nz cells,
+// periodic sides.
+PCase flat_column (int nz, int nx = 4, double dz0 = 10)
 {
     PCase c;
     c.in.mesh.n_cell = amrex::IntVect(nx, nx, nz);
     c.in.mesh.prob_hi = {400, 400, 1000};
     c.in.mesh.is_periodic = {1, 1, 0};
     c.in.mesh.max_grid_size = {nx, nx};
-    c.in.mesh.dz0 = 10;
+    c.in.mesh.dz0 = static_cast<amrex::Real>(dz0);
     c.in.mesh.stretch_ratio = amrex::Real(1.1);
     c.in.mesh.stretch_ratio_given = true;
     c.in.terrain.smoothing = 0;
@@ -204,15 +207,15 @@ TEST(SurfaceLayer, LogLawFrictionVelocityOnAStretchedColumn)
 }
 
 // The independent MOST solve: bisection to 1e-14 on u = kappa U / den(u), the
-// same relation (z/L clamped to [-100, 100], den >= 1, u >= 0.001 in L).
-double most_ustar (double U, double d, double z0, double qs)
+// same relation (z/L clamped to [-100, 100], den >= m, u >= 0.001 in L).
+double most_ustar (double U, double d, double z0, double qs, double m)
 {
     const similarity_funs sf;
     const double kappa = 0.41, gq = 9.81 / 300 * qs;
     auto f = [&] (double u) {
         const double uf = std::max(u, 0.001);
         const double zeta = std::max(std::min(-d * kappa * gq / (uf * uf * uf), 100.0), -100.0);
-        return u - kappa * U / std::max(std::log((d + z0) / z0) - double(sf.calc_psi_m(static_cast<amrex::Real>(zeta))), 1.0);
+        return u - kappa * U / std::max(std::log((d + z0) / z0) - double(sf.calc_psi_m(static_cast<amrex::Real>(zeta))), m);
     };
     double a = 1e-4, b = 5.0;
     for (int it = 0; it < 200; ++it) {
@@ -244,12 +247,86 @@ TEST(SurfaceLayer, MostFrictionVelocityWithAHeatFlux)
         opt.heat_flux = static_cast<amrex::Real>(cs.qs);
         ablsteady::SurfaceState s;
         ablsteady::compute_surface_state(q, opt, kBuoyancy, c.mesh, c.geom, s);
-        const double want = most_ustar(cs.U, d, z0, cs.qs);
+        const double want = most_ustar(cs.U, d, z0, cs.qs, 1.0);   // ln((d + z0)/z0) = 3.9: both floors are 1
         EXPECT_GT(at00(s.ustar), 0.0);
         EXPECT_NEAR(at00(s.ustar), want, tol(1e-10, 1e-4) * want) << "U " << cs.U << " q " << cs.qs;
         EXPECT_NEAR(at00(s.inv_L), -0.41 * 9.81 / 300 * cs.qs / std::pow(std::max(want, 0.001), 3),
                     tol(1e-9, 1e-3) * std::abs(at00(s.inv_L)));
     }
+}
+
+// Beyond the plan. A rough wall below (e - 1) z0: z0 = 0.5 m over a 1 m first
+// layer (first centre 0.5 m, ln((d + z0)/z0) = ln 2 = 0.69), the log-law state
+// of UT-1.7.3 with u* = 0.45. bc.surface_denominator_floor = log_law (the
+// default) recovers u* to 2e-5 at the first centre and at 0.8 m, between the
+// first two centres (ln 2.6 = 0.96 < 1): the neutral wall law is the inflow
+// profile's log law at every height. With one, u* = kappa U / 1 = 0.45 ln 2 at
+// the first centre (sub-phase 1.7's form, 31 % low). With a heat flux at the
+// first centre, both floors match the bisection with their m (min(ln 2, 1) and
+// 1) to 1e-10, for the unstable, stable and low-wind convective cases.
+TEST(SurfaceLayer, RoughWallFollowsTheLogLaw)
+{
+    PCase c = flat_column(24, 4, 1.0);
+    ablsteady::State q;
+    define_state(q, c);
+    const double us = 0.45, z0 = 0.5, kappa = 0.41;
+    auto logu = [&] (double z) { return us / kappa * std::log((std::max(z, 0.0) + z0) / z0) / std::sqrt(2.0); };
+    ablsteady::trtest::fill_loc(q.u, Loc::xface, c, [&] (double, double, double z) { return logu(z); });
+    ablsteady::trtest::fill_loc(q.v, Loc::yface, c, [&] (double, double, double z) { return logu(z); });
+    q.w.setVal(0.0);
+    const double d = centres(1, 1.1, 24)[0];
+    const double lz = std::log((d + z0) / z0);
+    ASSERT_LT(lz, 1.0);
+    using Floor = SurfaceLayerOptions::DenominatorFloor;
+    for (double zr : {0.0, 0.8}) {
+        SurfaceLayerOptions opt;
+        opt.z0 = static_cast<amrex::Real>(z0);
+        opt.zref = static_cast<amrex::Real>(zr);
+        ablsteady::SurfaceState s;
+        ablsteady::compute_surface_state(q, opt, kBuoyancy, c.mesh, c.geom, s);
+        EXPECT_NEAR(at00(s.ustar), us, tol(2e-5, 1e-4) * us) << "log_law, zref " << zr;
+    }
+    {
+        SurfaceLayerOptions opt;
+        opt.z0 = static_cast<amrex::Real>(z0);
+        opt.denominator_floor = Floor::one;
+        ablsteady::SurfaceState s;
+        ablsteady::compute_surface_state(q, opt, kBuoyancy, c.mesh, c.geom, s);
+        EXPECT_NEAR(at00(s.ustar), us * lz, tol(2e-5, 1e-4) * us) << "one";
+    }
+    struct Case { double U, qs; };
+    for (const Floor fl : {Floor::log_law, Floor::one}) {
+        for (const Case cs : {Case{8.0, 0.1}, Case{8.0, -0.02}, Case{0.5, 0.3}}) {
+            q.u.setVal(static_cast<amrex::Real>(cs.U));
+            q.v.setVal(0.0);
+            SurfaceLayerOptions opt;
+            opt.z0 = static_cast<amrex::Real>(z0);
+            opt.stability = SurfaceLayerOptions::Stability::heat_flux;
+            opt.heat_flux = static_cast<amrex::Real>(cs.qs);
+            opt.denominator_floor = fl;
+            ablsteady::SurfaceState s;
+            ablsteady::compute_surface_state(q, opt, kBuoyancy, c.mesh, c.geom, s);
+            const double want = most_ustar(cs.U, d, z0, cs.qs, fl == Floor::one ? 1.0 : std::min(lz, 1.0));
+            EXPECT_GT(at00(s.ustar), 0.0);
+            EXPECT_NEAR(at00(s.ustar), want, tol(1e-10, 1e-4) * want)
+                << (fl == Floor::one ? "one" : "log_law") << ", U " << cs.U << " q " << cs.qs;
+        }
+    }
+}
+
+// An unknown bc.surface_denominator_floor stops the run, naming the key.
+TEST(SurfaceLayer, DenominatorFloorKeyIsChecked)
+{
+    amrex::ParmParse pp("bc");
+    pp.add("surface_denominator_floor", std::string("two"));
+    std::string what;
+    try {
+        (void) ablsteady::read_surface_layer_options();
+    } catch (const std::runtime_error& e) {
+        what = e.what();
+    }
+    while (pp.remove("surface_denominator_floor") > 0) {}
+    EXPECT_NE(what.find("bc.surface_denominator_floor = two"), std::string::npos) << what;
 }
 
 // UT-1.7.4. The wall k: u*^2 / Cmu0^2 exactly for neutral; Axell's

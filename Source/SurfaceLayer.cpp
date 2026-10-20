@@ -71,10 +71,11 @@ void tangential_wind (amrex::Array4<amrex::Real const> const& u, amrex::Array4<a
     for (int d = 0; d < 3; ++d) { ut[d] = U[d] - un * n[d]; }
 }
 
-// u - kappa U / den(u): the MOST relation for u*, den = max(ln((d+z0)/z0) - psi_m(d/L), 1).
+// u - kappa U / den(u): the MOST relation for u*, den = max(ln((d+z0)/z0) - psi_m(d/L), m),
+// m the floor of bc.surface_denominator_floor.
 struct MostRelation
 {
-    amrex::Real kappa, U, d, lz, gq;
+    amrex::Real kappa, U, d, lz, m, gq;
     amrex::Real ustar_min;   //!< kUstarMin, held by value: a namespace constant is not usable in device code
     AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
     amrex::Real inv_L (amrex::Real u) const noexcept
@@ -87,11 +88,11 @@ struct MostRelation
     {
         const similarity_funs sfuns;
         const amrex::Real zeta = amrex::max(amrex::min(d * inv_L(u), amrex::Real(100)), -amrex::Real(100));
-        return u - kappa * U / amrex::max(lz - sfuns.calc_psi_m(zeta), amrex::Real(1));
+        return u - kappa * U / amrex::max(lz - sfuns.calc_psi_m(zeta), m);
     }
 };
 
-template <bool HEAT, bool FIRST_CENTRE>
+template <bool HEAT, bool FIRST_CENTRE, bool FLOOR_ONE>
 void columns (const State& q, const SurfaceLayerOptions& opt, const BuoyancyOptions& buoy,
               const amrex::Geometry& geom, SurfaceState& s)
 {
@@ -150,10 +151,14 @@ void columns (const State& q, const SurfaceLayerOptions& opt, const BuoyancyOpti
             const amrex::Real U = amrex::max(mag, ws_min_c);
             const amrex::Real d = zr * ia;
             const amrex::Real lz = std::log((d + z0) / z0);
-            amrex::Real ustar = kappa * U / amrex::max(lz, amrex::Real(1));
+            // The denominator's floor: min(lz, 1) leaves the neutral log law
+            // whole (lz > 0 for every d > 0); 1 cuts it below d = (e - 1) z0.
+            amrex::Real m = amrex::min(lz, amrex::Real(1));
+            if constexpr (FLOOR_ONE) { m = amrex::Real(1); }
+            amrex::Real ustar = kappa * U / amrex::max(lz, m);
             amrex::Real invL = 0;
             if constexpr (HEAT) {
-                const MostRelation F{kappa, U, d, lz, gq_c, ustar_min_l};
+                const MostRelation F{kappa, U, d, lz, m, gq_c, ustar_min_l};
                 bool converged = false;
                 for (int it = 0; it < kMaxNewton && !converged; ++it) {
                     const amrex::Real fu = F(ustar);
@@ -219,7 +224,8 @@ SurfaceLayerOptions read_surface_layer_options ()
     // The ground is a boundary condition: its keys live in bc.surface_*.
     SurfaceLayerOptions opt;
     amrex::ParmParse pp("bc");
-    for (const char* key : {"surface_z0", "surface_zref", "surface_stability", "surface_heat_flux", "surface_wall_k"}) {
+    for (const char* key : {"surface_z0", "surface_zref", "surface_stability", "surface_heat_flux", "surface_wall_k",
+                            "surface_denominator_floor"}) {
         if (pp.contains(key) && pp.countval(key) != 1) {
             amrex::Abort(std::string("ablsteady: bc.") + key + " takes exactly one value");
         }
@@ -227,15 +233,19 @@ SurfaceLayerOptions read_surface_layer_options ()
     pp.query("surface_z0", opt.z0);
     pp.query("surface_zref", opt.zref);
     pp.query("surface_heat_flux", opt.heat_flux);
-    std::string s = "neutral", w = "dirichlet";
+    std::string s = "neutral", w = "dirichlet", f = "log_law";
     pp.query("surface_stability", s);
     pp.query("surface_wall_k", w);
+    pp.query("surface_denominator_floor", f);
     if (s == "neutral") { opt.stability = SurfaceLayerOptions::Stability::neutral; }
     else if (s == "heat_flux") { opt.stability = SurfaceLayerOptions::Stability::heat_flux; }
     else { amrex::Abort("ablsteady: bc.surface_stability = " + s + ": must be neutral or heat_flux"); }
     if (w == "dirichlet") { opt.wall_k = SurfaceLayerOptions::WallK::dirichlet; }
     else if (w == "source") { opt.wall_k = SurfaceLayerOptions::WallK::source; }
     else { amrex::Abort("ablsteady: bc.surface_wall_k = " + w + ": must be dirichlet or source"); }
+    if (f == "log_law") { opt.denominator_floor = SurfaceLayerOptions::DenominatorFloor::log_law; }
+    else if (f == "one") { opt.denominator_floor = SurfaceLayerOptions::DenominatorFloor::one; }
+    else { amrex::Abort("ablsteady: bc.surface_denominator_floor = " + f + ": must be log_law or one"); }
     const auto err = check_surface_layer_options(opt);
     if (!err.empty()) {
         // The checks say "surface layer z0"; the key is bc.surface_z0.
@@ -309,10 +319,17 @@ void compute_surface_state (const State& q, const SurfaceLayerOptions& opt, cons
     }
     const bool heat = (opt.stability == SurfaceLayerOptions::Stability::heat_flux);
     const bool first = !(opt.zref > 0);
-    if (heat && first) { columns<true, true>(q, opt, buoyancy, geom, s); }
-    else if (heat) { columns<true, false>(q, opt, buoyancy, geom, s); }
-    else if (first) { columns<false, true>(q, opt, buoyancy, geom, s); }
-    else { columns<false, false>(q, opt, buoyancy, geom, s); }
+    if (opt.denominator_floor == SurfaceLayerOptions::DenominatorFloor::one) {
+        if (heat && first) { columns<true, true, true>(q, opt, buoyancy, geom, s); }
+        else if (heat) { columns<true, false, true>(q, opt, buoyancy, geom, s); }
+        else if (first) { columns<false, true, true>(q, opt, buoyancy, geom, s); }
+        else { columns<false, false, true>(q, opt, buoyancy, geom, s); }
+    } else {
+        if (heat && first) { columns<true, true, false>(q, opt, buoyancy, geom, s); }
+        else if (heat) { columns<true, false, false>(q, opt, buoyancy, geom, s); }
+        else if (first) { columns<false, true, false>(q, opt, buoyancy, geom, s); }
+        else { columns<false, false, false>(q, opt, buoyancy, geom, s); }
+    }
 
     // Every column the ground fluxes read (ghost columns included) needs a
     // finite, positive u* and a finite k_w. NaN is tested with != first.

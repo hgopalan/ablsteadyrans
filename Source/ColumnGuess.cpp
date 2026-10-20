@@ -151,6 +151,9 @@ ColumnGuessResult run_column_guess (const Inputs& in, const InitOptions& iopt, c
     // The physics.
     const ClosureConstants cc = closure_constants(copt);
     const double kappa = cc.kappa, z0 = surf.z0;
+    // The wall law's denominator floor (SurfaceLayer.H): 1 with
+    // bc.surface_denominator_floor = one; none otherwise (min(lz, 1) <= lz).
+    const double den_floor = (surf.denominator_floor == SurfaceLayerOptions::DenominatorFloor::one) ? 1.0 : 0.0;
     const double f = fopt.coriolis.enabled ? static_cast<double>(coriolis_parameter(fopt.coriolis)) : 0.0;
     const bool geo = fopt.coriolis.enabled && fopt.coriolis.geostrophic;
     const cplx Wg(geo ? fopt.coriolis.ug : 0.0, geo ? fopt.coriolis.vg : 0.0);
@@ -202,7 +205,7 @@ ColumnGuessResult run_column_guess (const Inputs& in, const InitOptions& iopt, c
     for (int it = 0; it < iopt.column_max_iterations; ++it) {
         // 1. the wall law from the first cell (neutral)
         const double U1 = std::max(std::abs(W[0]), 1.0e-12);
-        ustar = kappa * U1 / std::log((zc[0] + z0) / z0);
+        ustar = kappa * U1 / std::max(std::log((zc[0] + z0) / z0), den_floor);
         const double drag = ustar * ustar / U1;   // the ground stress per unit speed (m/s)
         // 2. the closure at every cell: N^2 and S^2 from the cell's two faces
         std::vector<double> dWdz2(nz + 1, 0.0), dthdz(nz + 1, 0.0);   // at faces 0..nz
