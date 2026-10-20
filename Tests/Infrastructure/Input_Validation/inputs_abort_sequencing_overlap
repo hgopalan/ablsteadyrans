@@ -1,0 +1,63 @@
+# Must abort: the LU-SGS overlap 3 fits level 0's 16-wide boxes but not
+# hierarchy level 3's, 2 wide (steady.sequencing = 1 checks every level).
+# Otherwise the deck of Tests/Canonical_RANS/Truly_Neutral_Hill_3D/
+# inputs_steady_hill3d_neutral_lusgs.
+mesh.n_cell        = 32 32 16
+mesh.prob_lo       = -2560. -2560. 0.
+mesh.prob_hi       =  2560.  2560. 800.
+mesh.is_periodic   = 1 1 0
+mesh.max_grid_size = 16 16
+
+terrain.type            = agnesi
+terrain.hill_shape = round
+terrain.hill_height     = 100.
+terrain.hill_half_width = 500.
+terrain.smoothing       = 0
+
+bc.zlo = surface_layer
+bc.zhi = slip_wall
+bc.surface_z0 = 0.1
+bc.theta_profile_z = 0.
+bc.theta_profile   = 300.
+bc.inflow_profile   = log_law
+bc.inflow_ustar     = 0.35
+bc.inflow_z0        = 0.1
+bc.inflow_direction = 0.
+bc.rayleigh_zdamp    = 550.
+bc.rayleigh_dampcoef = 0.2
+bc.rayleigh_fields   = w
+
+init.first_guess = profile
+
+forcing.gravity         = 0.
+forcing.coriolis        = 1
+forcing.coriolis_3d     = 0
+forcing.latitude        = 90.
+forcing.rotation_period = 125663.7061435917
+forcing.geostrophic     = 1
+forcing.ug              = 10.
+forcing.vg              = 0.
+
+turb.tke_floor = 1.e-6
+
+steady.stage                   = simplec
+steady.cfl0                    = 1.
+steady.cfl_max                 = 16.
+steady.zline_sweeps            = 2
+steady.sweep                   = lusgs
+steady.line_ghosts             = zero
+steady.line_overlap = 3
+steady.line_order              = diagonal
+simplec.rotation_relax         = 1.
+steady.residual_ref_iterations = 100
+steady.residual_tol            = 1.e-11
+steady.residual_drop_orders    = 8
+steady.monitor_rel_tol         = 1.e-10
+steady.max_iterations          = 20000
+
+io.plot_file      = steady_hill3d_neutral_plt
+io.turb_plot_file = steady_hill3d_neutral_turb
+io.chk_file       = steady_hill3d_neutral_chk
+
+mesh.hierarchy_levels = 4
+steady.sequencing     = 1

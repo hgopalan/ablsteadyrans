@@ -32,6 +32,7 @@ set(ABLSTEADY_SOURCES
     Driver.cpp
     Predictor.cpp
     LineSweeps.cpp
+    Sequencing.cpp
     Simplec.cpp
     Transfer.cpp
     Newton.cpp

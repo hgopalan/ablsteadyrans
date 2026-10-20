@@ -8,7 +8,10 @@
 //   UT-2.4.4 prolonged k >= k_floor
 //   beyond the plan: a gathered level gives the transfers of the distributed
 //            one bit for bit; restrict(prolong(c)) on flat ground is the
-//            closed-form smoother S_x S_y
+//            closed-form smoother S_x S_y (UT-2.4.5, UT-2.4.6); the target's
+//            node heights come from the hierarchy (UT-2.4.7); a coarse
+//            direction one cell wide gives a constant (UT-2.4.8); a wrong
+//            level pair aborts (UT-2.4.9)
 // The pinned values are computed on the host from closed forms, in double
 // precision, from host copies of the fields gathered on every rank.
 #include "BoundaryConditions.H"
@@ -712,5 +715,140 @@ TEST (Transfer, GatheredLevelEqualsDistributed)
         ablsteady::prolong_state(*a.h, lc, ca, 0, fa, bca, &so, buoy, *sa, amrex::Real(1e-6));
         ablsteady::prolong_state(*b.h, lc, cb, 0, fb, bcb, &so, buoy, *sb, amrex::Real(1e-6));
         EXPECT_EQ(diffs(fa, fb), 0) << "prolong_state, " << lc << " -> 0";
+    }
+}
+
+// ---------------------------------------------------------------------------
+// beyond the plan: restrict_state and prolong_fields set the target State's
+// node heights (ghost nodes included) to its level's, bit for bit, whatever
+// they held before. Over the hill, where the levels' grounds differ.
+TEST (Transfer, TargetNodeHeightsComeFromTheHierarchy)
+{
+    TCase c = case_inputs(false, true, true);
+    c.make();
+    const int ng = ablsteady::ngrow_nodal;
+    const std::pair<int, int> pairs[] = {{0, 1}, {1, 2}, {0, 2}};
+    for (const auto& [lf, lc] : pairs) {
+        const std::string where = std::to_string(lf) + " <-> " + std::to_string(lc);
+        {
+            ablsteady::State qf, qc;
+            define_level(c, lf, qf);
+            qc.define(c.h->boxArray(lc), c.h->DistributionMap(lc));
+            qc.z_phys_nd.setVal(-1.0);
+            smooth_state(c, lf, qf);
+            ablsteady::restrict_state(*c.h, lf, qf, lc, qc);
+            EXPECT_EQ(ablsteady::test::count_bit_differences(qc.z_phys_nd, c.h->z_phys_nd(lc), ng), 0)
+                << "restrict_state, " << where;
+        }
+        {
+            ablsteady::State qf, qc;
+            define_level(c, lc, qc);
+            qf.define(c.h->boxArray(lf), c.h->DistributionMap(lf));
+            qf.z_phys_nd.setVal(-1.0);
+            smooth_state(c, lc, qc);
+            ablsteady::prolong_fields(*c.h, lc, qc, lf, qf);
+            EXPECT_EQ(ablsteady::test::count_bit_differences(qf.z_phys_nd, c.h->z_phys_nd(lf), ng), 0)
+                << "prolong_fields, " << where;
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// beyond the plan: a non-periodic direction one coarse cell wide. 32 x 4
+// cells, periodic x, walls in y, three levels: level 2 is one cell wide in
+// y, so the field is constant along y there and the interpolation reads
+// that cell only (no second point to extrapolate with). A tent in x,
+// constant in y, is reproduced at every fine point of each field, from
+// level 2 to levels 1 and 0. The coarse image's ghost cells outside the
+// domain are never filled: under amrex.init_snan (the unit-test flags) a
+// read of them gives NaN, even with a zero weight.
+TEST (Transfer, OneCellDirectionIsConstant)
+{
+    const double rel = tol(1e-13, 2e-6);
+    TCase c;
+    c.in.mesh.n_cell = amrex::IntVect(32, 4, 10);
+    c.in.mesh.prob_lo = {0, 0, 0};
+    c.in.mesh.prob_hi = {3200, 400, 1000};
+    c.in.mesh.is_periodic = {1, 0, 0};
+    c.in.mesh.max_grid_size = {12, 12};
+    c.in.mesh.dz0 = 40;
+    c.in.mesh.hierarchy_levels = 3;
+    c.in.terrain.hierarchy_passes = 1;
+    c.make();
+    const int lc = 2;
+    ASSERT_EQ(c.h->geom(lc).Domain().length(1), 1);
+    for (const int lf : {0, 1}) {
+        const amrex::Geometry& gc = c.h->geom(lc);
+        ablsteady::State qf, qc;
+        define_level(c, lf, qf);
+        define_level(c, lc, qc);
+        amrex::MultiFab* cf[6] = {&qc.u, &qc.v, &qc.w, &qc.theta, &qc.tke, &qc.p};
+        amrex::MultiFab* ff[6] = {&qf.u, &qf.v, &qf.w, &qf.theta, &qf.tke, &qf.p};
+        const char* names[6] = {"u", "v", "w", "theta", "k", "p"};
+        std::vector<std::function<double(double, double, int)>> fn(6);
+        for (int n = 0; n < 6; ++n) {
+            const double L = static_cast<double>(gc.ProbLength(0));
+            const double D = static_cast<double>(gc.CellSize(0));
+            const bool nodal = cf[n]->ixType().nodeCentered(0);
+            const double xa = (gc.Domain().length(0) / 4 + (nodal ? 0.0 : 0.5)) * D;
+            const double a = 1.0 + n, cc = 0.02 - 0.003 * n, g = 0.7 * n - 1;
+            fn[n] = [=] (double x, double, int k) {
+                double m = std::fmod(x - xa, L);
+                if (m < 0) { m += L; }
+                return a * (1.0 + cc * std::abs(m - L / 2)) + g * k;
+            };
+            fill_xy(*cf[n], gc, fn[n]);
+            cf[n]->setBndry(amrex::Real(1e30));
+            ff[n]->setVal(amrex::Real(-1e30));
+        }
+        ablsteady::prolong_fields(*c.h, lc, qc, lf, qf);
+        const amrex::Geometry& gf = c.h->geom(lf);
+        for (int n = 0; n < 6; ++n) {
+            const HostField h = gather(*ff[n]);
+            double err = 0, scale = 0;
+            const amrex::Box& d = h.dom;
+            for (int k = d.smallEnd(2); k <= d.bigEnd(2); ++k) {
+                for (int j = d.smallEnd(1); j <= d.bigEnd(1); ++j) {
+                    for (int i = d.smallEnd(0); i <= d.bigEnd(0); ++i) {
+                        const double ex = fn[n](xpos(gf, *ff[n], i, 0), xpos(gf, *ff[n], j, 1), k);
+                        const double e = std::abs(h(i, j, k) - ex);
+                        err = std::isfinite(e) ? std::max(err, e) : std::numeric_limits<double>::infinity();
+                        scale = std::max(scale, std::abs(ex));
+                    }
+                }
+            }
+            EXPECT_LT(err, rel * scale) << names[n] << ", " << lc << " -> " << lf;
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// beyond the plan: a level pair that is not fine < coarse aborts, naming the
+// rule, in restrict_state and prolong_fields.
+TEST (Transfer, WrongLevelPairsAbort)
+{
+    TCase c = case_inputs(false, true, false);
+    c.make();
+    const std::pair<int, int> bad[] = {{1, 1}, {2, 1}, {-1, 1}, {0, 3}};
+    for (const auto& [lf, lc] : bad) {
+        const std::string where = std::to_string(lf) + ", " + std::to_string(lc);
+        const int sf = std::clamp(lf, 0, 2), sc = std::clamp(lc, 0, 2);
+        ablsteady::State qf, qc;
+        define_level(c, sf, qf);
+        define_level(c, sc, qc);
+        smooth_state(c, sf, qf);
+        smooth_state(c, sc, qc);
+        try {
+            ablsteady::restrict_state(*c.h, lf, qf, lc, qc);
+            ADD_FAILURE() << "restrict_state: no abort for " << where;
+        } catch (const std::runtime_error& e) {
+            EXPECT_NE(std::string(e.what()).find("the levels must satisfy"), std::string::npos) << e.what();
+        }
+        try {
+            ablsteady::prolong_fields(*c.h, lc, qc, lf, qf);
+            ADD_FAILURE() << "prolong_fields: no abort for " << where;
+        } catch (const std::runtime_error& e) {
+            EXPECT_NE(std::string(e.what()).find("the levels must satisfy"), std::string::npos) << e.what();
+        }
     }
 }

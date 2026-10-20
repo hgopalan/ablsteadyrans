@@ -58,7 +58,8 @@ All errors are reported together. Each row below matches the range check in ``So
        alone. With L > 1, n_cell x and y must be divisible by :math:`2^{L-1}` and ``mesh.max_grid_size`` x and y
        must be multiples of :math:`2^{L-1}`. Level 0 is then laid out so that every level coarsens it exactly, which
        can differ from the L = 1 layout (the last bits of a solve can differ). The levels are built, reported and
-       written with the plotfile; the solver runs on level 0 in this version. The test-only tools refuse L > 1.
+       written with the plotfile; the solver runs on level 0 alone unless ``steady.sequencing = 1`` (grid sequencing
+       over all levels). The test-only tools refuse L > 1.
        May change across a restart.
 
 ``terrain``
@@ -163,7 +164,9 @@ definition of a steady solution (:doc:`solver`) and its own. The application run
        also have dropped this many orders below its reference.
    * - ``steady.residual_ref_iterations``
      - ``5``
-     - ≥ 1. A residual's reference is its largest value over this many first iterations.
+     - ≥ 1. A residual's reference is its largest value over this many first iterations. During them (the
+       reference hold) the CFL stays at ``steady.cfl0``; on the seeded levels of grid sequencing see
+       ``steady.sequencing_hold``.
    * - ``steady.monitor_rel_tol``
      - ``1e-3``
      - Finite, > 0. Every monitor must change by at most this fraction of max(\|value\|, scale) over the window, and be
@@ -173,10 +176,12 @@ definition of a steady solution (:doc:`solver`) and its own. The application run
      - ≥ 2. The window, in iterations.
    * - ``steady.max_iterations``
      - ``10000``
-     - ≥ 1. Iterations over the whole run (restarts included) after which the driver stops.
+     - ≥ 1. Iterations over the whole run (restarts included) after which the driver stops. With
+       ``steady.sequencing = 1`` it caps each level of the sequence separately.
    * - ``steady.cfl0``
      - ``1``
-     - Finite, > 0. The CFL of the first iterations (while the residual reference is taken).
+     - Finite, > 0. The CFL of the first iterations (while the residual reference is taken; on a seeded level of
+       grid sequencing see ``steady.sequencing_hold`` and ``steady.sequencing_cfl_start``).
    * - ``steady.cfl_max``
      - ``10``
      - Finite, ≥ ``steady.cfl0``. The cap of the SER ramp.
@@ -225,7 +230,8 @@ definition of a steady solution (:doc:`solver`) and its own. The application run
      - ``0``
      - An integer ≥ 0 and ≤ 8, and ≤ the narrowest box width along each axis it applies to (not along a
        one-cell axis); > 0 only with ``steady.line_ghosts = zero``; refused unless ``steady.sweep = lusgs``. Each box sweeps its owned region grown by
-       this many columns and keeps the owned part.
+       this many columns and keeps the owned part. With ``steady.sequencing = 1`` the bound holds on every
+       hierarchy level, whose boxes are :math:`2^l` times narrower.
    * - ``steady.line_order``
      - ``sequential``
      - ``sequential`` or ``diagonal``; refused unless ``steady.sweep = lusgs``. ``diagonal`` sweeps the
@@ -237,6 +243,42 @@ definition of a steady solution (:doc:`solver`) and its own. The application run
        whose u and v have opposite signs is swept along its own direction once per two sweeps (:doc:`solver`).
        ``1`` is refused with ``steady.zline_sweeps = 1`` (there is no odd sweep to reverse); on a domain one cell
        wide in y only v (two y faces per column) changes.
+   * - ``steady.sequencing``
+     - ``0``
+     - ``0`` or ``1`` (sub-phase 2.5). ``1``: grid sequencing, coarse to fine, over the ``mesh.hierarchy_levels``
+       levels (:doc:`solver`): the initializer and the SIMPLEC stage to a loose stop on the coarsest level, then on
+       each finer level the prolonged state to a loose stop, and on level 0 the strict stop. Needs
+       ``mesh.hierarchy_levels`` ≥ 2 and at least 2 cells in x and in y on the coarsest level
+       (``mesh.n_cell`` / 2^(L−1)). ``init.*`` then acts on the coarsest level only, and ``steady.max_iterations``
+       caps each level separately. The coarse levels run on a fresh start only; a restart continues level 0, and the
+       ``steady.sequencing*`` keys then have no effect (the log says so).
+   * - ``steady.sequencing_drop_orders``
+     - ``2``
+     - Finite, > 0 and ≤ ``steady.residual_drop_orders``; refused unless ``steady.sequencing = 1``. A coarse level
+       stops once every residual is this many orders below its reference (the coarsest level's, :doc:`solver`) or
+       below ``steady.residual_tol``.
+   * - ``steady.sequencing_monitor_tol``
+     - ``0``
+     - 0 (off) or finite, > 0 and < 1; refused unless ``steady.sequencing = 1``. When > 0 a coarse level also
+       stops once every monitor changed by at most this fraction of max(\|value\|, scale) over
+       ``steady.monitor_window`` iterations. Off by default: after a prolongation the monitors settle before the
+       residuals drop (:doc:`solver`).
+   * - ``steady.sequencing_hold``
+     - ``0``
+     - ``0`` or ``1``; refused unless ``steady.sequencing = 1``. The reference hold on the seeded levels (every
+       level but the coarsest, level 0 included). ``0``: from their first iteration the relative residual is
+       measured against the seeded reference, the SER ramp starts at once (``steady.ser_max_growth`` still caps
+       it) and the loose stop may hold. ``1``: every level runs its first ``steady.residual_ref_iterations``
+       iterations at ``steady.cfl0`` with :math:`r_n = 1`, and its loose stop waits for them (the behaviour of
+       sub-phase 2.5). The coarsest level always holds: it takes the reference. A restart keeps the hold of the
+       checkpoint, with or without ``steady.sequencing``, and the log prints it (:doc:`solver`).
+   * - ``steady.sequencing_cfl_start``
+     - ``cfl0``
+     - ``cfl0`` or ``previous``; refused unless ``steady.sequencing = 1``. The CFL of a seeded level's first
+       iteration: ``steady.cfl0``, or the CFL the previous (coarser) level would have run its next iteration with,
+       raised to ``steady.cfl0`` if it is below (the SER law goes below ``steady.cfl0`` when a residual is above
+       its reference).
+       ``previous`` needs ``steady.sequencing_hold = 0`` (the hold runs at ``steady.cfl0``).
    * - ``steady.machine``
      - ``local``
      - ``local``, ``kestrel-cpu`` or ``kestrel-gpu``: the allocation-unit rate of the accounting (0, 10, 100 AU per

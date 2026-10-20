@@ -24,7 +24,7 @@ const char* const kKeys[] = {"residual_tol", "residual_drop_orders", "residual_r
                              "switch_window", "switch_residual", "switch_back_growth", "zline_sweeps", "sweep", "line_ghosts", "line_overlap",
                              "line_order", "line_alternate", "machine", "nodes", "stage"};
 
-constexpr int kDriverVersion = 1;
+constexpr int kDriverVersion = 2;   // 2: the reference hold (version 1 files still read)
 const char* const kDriverMagic = "ablsteady-driver";
 
 std::string hexfloat (double x)
@@ -218,6 +218,51 @@ Driver::Driver (const SteadyOptions& opt, std::vector<std::unique_ptr<Stage>> st
     m_h.cfl = opt.cfl0;
 }
 
+void Driver::seed_reference (const std::vector<amrex::Real>& ref)
+{
+    if (!m_h.records.empty() || m_h.criterion.count != 0) {
+        amrex::Abort("ablsteady: Driver::seed_reference: only before the first iteration");
+    }
+    m_criterion.seed_reference(ref);
+    m_h.criterion = m_criterion.history();
+}
+
+void Driver::release_reference_hold ()
+{
+    if (!m_h.records.empty() || m_h.criterion.count != 0) {
+        amrex::Abort("ablsteady: Driver::release_reference_hold: only before the first iteration");
+    }
+    bool seeded = false;
+    for (const amrex::Real x : m_h.criterion.res_ref) { seeded = seeded || x > 0; }
+    if (!seeded) {
+        // Unseeded, the reference is still 0 and r_n would be measured
+        // against residual_tol alone.
+        amrex::Abort("ablsteady: Driver::release_reference_hold: the reference is not seeded (seed_reference first)");
+    }
+    m_h.hold = 0;
+}
+
+void Driver::start_cfl (amrex::Real cfl)
+{
+    if (!m_h.records.empty() || m_h.criterion.count != 0) {
+        amrex::Abort("ablsteady: Driver::start_cfl: only before the first iteration");
+    }
+    if (hold_iterations() > 0) { amrex::Abort("ablsteady: Driver::start_cfl: the reference hold is on"); }
+    if (std::isnan(cfl) || !std::isfinite(cfl) || !(cfl > 0) || cfl > m_opt.cfl_max) {
+        amrex::Abort("ablsteady: Driver::start_cfl: " + fmt(double(cfl)) + " is not finite, > 0 and <= steady.cfl_max = "
+                     + fmt(double(m_opt.cfl_max)));
+    }
+    // The SER law goes below cfl0 when r_n > 1 (a residual above its
+    // reference), so a coarse level can end below it; as restore does, the
+    // start is brought up to cfl0.
+    m_h.cfl = amrex::max(cfl, m_opt.cfl0);
+}
+
+int Driver::hold_iterations () const
+{
+    return m_h.hold < 0 ? m_opt.criterion.residual_ref_iterations : m_h.hold;
+}
+
 amrex::Real Driver::relative_residual () const
 {
     return m_h.records.empty() ? amrex::Real(0) : m_h.records.back().relative_residual;
@@ -226,9 +271,10 @@ amrex::Real Driver::relative_residual () const
 amrex::Real Driver::next_cfl (amrex::Real r) const
 {
     // The robust start: cfl0 while the criterion's reference is still being
-    // taken (the first residual_ref_iterations), then the SER law capped by
+    // taken (the first residual_ref_iterations, the hold; none on a level
+    // whose reference is seeded and released), then the SER law capped by
     // cfl_max and by the growth per iteration.
-    if (m_criterion.iterations() <= m_opt.criterion.residual_ref_iterations) { return m_opt.cfl0; }
+    if (m_criterion.iterations() <= hold_iterations()) { return m_opt.cfl0; }
     const amrex::Real capped = amrex::min(m_opt.cfl_max, m_opt.ser_max_growth * m_h.cfl);
     // Below r_min = (cfl0 / cfl_max)^(1/p) the law already gives the cap, so
     // the power is never taken there (it would overflow for a vanished
@@ -299,12 +345,14 @@ SteadyVerdict Driver::step (State& q)
     amrex::ParallelDescriptor::ReduceRealMax(wall);
 
     // r_n: every residual over its reference (the criterion's, floored at
-    // the tolerance as the criterion does); 1 until the reference is taken.
+    // the tolerance as the criterion does); 1 during the reference hold.
+    // Without the hold (a seeded level) the first residual_ref_iterations
+    // values still raise the reference, so r_n <= 1 while they do.
     amrex::Real r = 1;
     const SteadyHistory& ch = m_criterion.history();
     if (ch.nonfinite) {
         r = relative_residual();   // Diverged: no arithmetic on the NaN or inf (the traps)
-    } else if (m_criterion.iterations() > m_opt.criterion.residual_ref_iterations) {
+    } else if (m_criterion.iterations() > hold_iterations()) {
         r = 0;
         for (std::size_t i = 0; i < res.size(); ++i) {
             const amrex::Real ref = amrex::max(ch.res_ref[i], m_opt.criterion.residual_tol);
@@ -367,6 +415,9 @@ void Driver::restore (const DriverHistory& h, State& q)
     if (h.below_count < 0 || h.last_switch < -1 || h.last_switch >= static_cast<int>(h.records.size())
         || h.criterion.count != static_cast<int>(h.records.size())) {
         amrex::Abort("ablsteady: Driver::restore: the history's switch state or iteration count is inconsistent");
+    }
+    if (h.hold != -1 && h.hold != 0) {
+        amrex::Abort("ablsteady: Driver::restore: the history's reference hold " + std::to_string(h.hold) + " is not -1 or 0");
     }
     m_criterion.restore(h.criterion);   // checks its own sizes
     m_h = h;
@@ -457,6 +508,7 @@ void write_driver_history (const std::string& dir, const DriverHistory& h)
     if (!os.good()) { amrex::FileOpenFailed(name); }
     os << kDriverMagic << " " << kDriverVersion << "\n";
     os << "state " << h.stage << " " << hexfloat(static_cast<double>(h.cfl)) << " " << h.below_count << " " << h.last_switch << "\n";
+    os << "hold " << h.hold << "\n";
     os << "accounts " << h.accounts.size() << "\n";
     for (const auto& a : h.accounts) {
         os << a.iterations << " " << hexfloat(a.wall_seconds) << " " << hexfloat(a.au) << "\n";
@@ -511,8 +563,8 @@ DriverHistory read_driver_history (const std::string& dir)
     std::string magic;
     int version = 0;
     is >> magic >> version;
-    if (!is || magic != kDriverMagic || version != kDriverVersion) {
-        history_error(dir, "not an ablsteady driver history of format version " + std::to_string(kDriverVersion));
+    if (!is || magic != kDriverMagic || version < 1 || version > kDriverVersion) {
+        history_error(dir, "not an ablsteady driver history of format version 1 to " + std::to_string(kDriverVersion));
     }
     DriverHistory h;
     expect(is, dir, "state");
@@ -520,6 +572,11 @@ DriverHistory read_driver_history (const std::string& dir)
     h.cfl = static_cast<amrex::Real>(read_double(is, dir, "cfl"));
     h.below_count = read_int(is, dir, "below_count");
     h.last_switch = read_int(is, dir, "last_switch");
+    if (version >= 2) {
+        expect(is, dir, "hold");
+        h.hold = read_int(is, dir, "hold");
+        if (h.hold != -1 && h.hold != 0) { history_error(dir, "corrupt: hold must be -1 or 0"); }
+    }   // version 1 had no line: the hold of steady.residual_ref_iterations
     expect(is, dir, "accounts");
     const int na = read_count(is, dir, "the account count", bytes);
     if (na < 1) { history_error(dir, "corrupt: no accounts"); }
