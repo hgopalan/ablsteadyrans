@@ -47,8 +47,11 @@ set(ABLSTEADY_PRECISION DOUBLE CACHE STRING "Floating-point precision: DOUBLE or
 set_property(CACHE ABLSTEADY_PRECISION PROPERTY STRINGS DOUBLE SINGLE)
 
 # GPU backend, passed to AMReX. Kestrel's GPU nodes are H100 (CUDA arch 9.0).
-set(ABLSTEADY_GPU_BACKEND NONE CACHE STRING "GPU backend: NONE or CUDA")
-set_property(CACHE ABLSTEADY_GPU_BACKEND PROPERTY STRINGS NONE CUDA)
+# HIP (AMD) and SYCL (Intel) need the vendor compiler as CMAKE_CXX_COMPILER
+# (ROCm clang++, icpx) and, for HIP, AMReX_AMD_ARCH. The FFT library follows
+# the backend (AMReX FFT): FFTW on the CPU, cuFFT, rocFFT or oneMKL.
+set(ABLSTEADY_GPU_BACKEND NONE CACHE STRING "GPU backend: NONE, CUDA, HIP or SYCL")
+set_property(CACHE ABLSTEADY_GPU_BACKEND PROPERTY STRINGS NONE CUDA HIP SYCL)
 
 # Extra flags for mpiexec in the tests (CI passes --oversubscribe to Open MPI
 # so 4-rank tests run on 2-core runners).
@@ -98,6 +101,12 @@ if(ABLSTEADY_USE_INTERNAL_AMREX)
     list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/external/amrex/Tools/CMake)
 else()
     find_package(AMReX REQUIRED 3D ${ABLSTEADY_PRECISION} FFT)
+endif()
+
+# MSVC: M_PI and friends need _USE_MATH_DEFINES; NOMINMAX keeps <windows.h>
+# (pulled in by MS-MPI and the CUDA runtime) from defining min and max macros.
+if(WIN32)
+    add_compile_definitions(_USE_MATH_DEFINES NOMINMAX)
 endif()
 
 add_subdirectory(Source)

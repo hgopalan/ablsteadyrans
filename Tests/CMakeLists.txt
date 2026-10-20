@@ -10,6 +10,9 @@
 # --- GoogleTest (submodule) -------------------------------------------------
 set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
 set(BUILD_GMOCK OFF CACHE BOOL "" FORCE)
+# MSVC: GoogleTest would link the static runtime (/MT) and AMReX the DLL one
+# (/MD); the mismatch fails at link time.
+set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 add_subdirectory(${PROJECT_SOURCE_DIR}/external/googletest
                  ${CMAKE_BINARY_DIR}/external/googletest EXCLUDE_FROM_ALL)
 
@@ -790,19 +793,22 @@ add_test(NAME versions_check_selftest
          COMMAND ${Python3_EXECUTABLE} -m unittest -v test_check_versions
          WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/tools)
 set_tests_properties(versions_check_selftest PROPERTIES LABELS unit ENVIRONMENT PYTHONDONTWRITEBYTECODE=1)
-# The Kestrel scripts cannot run here; at least they must parse.
-file(GLOB KESTREL_SCRIPTS ${PROJECT_SOURCE_DIR}/tools/kestrel/*.sh)
-foreach(script IN LISTS KESTREL_SCRIPTS)
-    get_filename_component(sname ${script} NAME_WE)
-    add_test(NAME kestrel_parse_${sname} COMMAND bash -n ${script})
-    set_tests_properties(kestrel_parse_${sname} PROPERTIES LABELS unit)
-endforeach()
-# ... and a dry run with stub module/sbatch/srun exercises submit and archive.
-add_test(NAME kestrel_dryrun
-         COMMAND bash ${KESTREL_CASE}/kestrel_dryrun.sh ${PROJECT_SOURCE_DIR}
-                 $<TARGET_FILE:ablsteady_refavg> ${SMOKE_DIR}/smoke_plt00000
-                 ${CMAKE_CURRENT_BINARY_DIR}/run/kestrel_dryrun)
-set_tests_properties(kestrel_dryrun PROPERTIES LABELS "regression;smoke" FIXTURES_REQUIRED smoke)
+# The Kestrel scripts cannot run here; at least they must parse. They are
+# bash scripts for a Linux cluster, so they are not registered on Windows.
+if(NOT WIN32)
+    file(GLOB KESTREL_SCRIPTS ${PROJECT_SOURCE_DIR}/tools/kestrel/*.sh)
+    foreach(script IN LISTS KESTREL_SCRIPTS)
+        get_filename_component(sname ${script} NAME_WE)
+        add_test(NAME kestrel_parse_${sname} COMMAND bash -n ${script})
+        set_tests_properties(kestrel_parse_${sname} PROPERTIES LABELS unit)
+    endforeach()
+    # ... and a dry run with stub module/sbatch/srun exercises submit and archive.
+    add_test(NAME kestrel_dryrun
+             COMMAND bash ${KESTREL_CASE}/kestrel_dryrun.sh ${PROJECT_SOURCE_DIR}
+                     $<TARGET_FILE:ablsteady_refavg> ${SMOKE_DIR}/smoke_plt00000
+                     ${CMAKE_CURRENT_BINARY_DIR}/run/kestrel_dryrun)
+    set_tests_properties(kestrel_dryrun PROPERTIES LABELS "regression;smoke" FIXTURES_REQUIRED smoke)
+endif()
 
 # --- RT-1.3.1 helper: the extern_erf drift check's own tests -----------------
 add_test(NAME drift_check_selftest

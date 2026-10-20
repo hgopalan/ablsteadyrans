@@ -178,6 +178,197 @@ jobs:
           cmake --build build-ci --parallel
 
   # ---------------------------------------------------------------------
+  # Windows CPU (MSVC, no MPI, double precision): build, then the unit and
+  # smoke tests. Windows is where most fire users run WindNinja, so the
+  # solver is built and tested there, not only compiled. FFTW comes from
+  # vcpkg; AMReX finds it through its CMake config files on Windows. MSVC
+  # does not trap floating-point exceptions, so the FPE check stays with the
+  # Linux GCC job. The Kestrel shell-script tests are not registered here.
+  # ---------------------------------------------------------------------
+  windows:
+    name: Windows MSVC Release
+    runs-on: windows-latest
+    env:
+      PYTHONIOENCODING: utf-8
+
+    steps:
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install FFTW (vcpkg)
+        run: vcpkg install fftw3:x64-windows
+
+      - name: Set up MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Configure
+        run: |
+          cmake -S . -B build-ci -G Ninja `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake `
+            -DVCPKG_TARGET_TRIPLET=x64-windows `
+            -DABLSTEADY_MPI=OFF
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build
+        run: |
+          cmake --build build-ci --parallel
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      # The FFTW DLLs sit in the vcpkg tree, not next to the executables.
+      - name: Unit and smoke tests
+        run: |
+          $env:PATH = "C:/vcpkg/installed/x64-windows/bin;$env:PATH"
+          ctest --test-dir build-ci -L "unit|smoke" --output-on-failure
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+  # ---------------------------------------------------------------------
+  # CUDA on Windows: compile only (hosted runners have no GPU). The Windows
+  # SDK is pinned to 10.0.22621.0: CUDA 12.6 with the newer SDK and C++20
+  # fails on CRT header redefinitions (as in massconsistent_amr's CI).
+  # ---------------------------------------------------------------------
+  windows-cuda:
+    name: Windows CUDA sm_90 (compile only)
+    runs-on: windows-2022
+
+    steps:
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install CUDA toolkit
+        uses: Jimver/cuda-toolkit@v0.2.19
+        with:
+          cuda: '12.6.1'
+          sub-packages: '["nvcc", "cudart", "cuda_profiler_api", "cufft_dev", "cusparse_dev", "curand_dev"]'
+          method: 'network'
+          use-github-cache: 'false'
+
+      - name: Install Ninja
+        run: |
+          curl.exe -L -o ninja-win.zip https://github.com/ninja-build/ninja/releases/download/v1.11.1/ninja-win.zip
+          Expand-Archive -Path ninja-win.zip -DestinationPath .
+          echo "$pwd" >> $env:GITHUB_PATH
+
+      - name: Set up MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          sdk: 10.0.22621.0
+
+      - name: Configure and build
+        run: |
+          cmake -S . -B build-ci -G Ninja `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_SYSTEM_VERSION=10.0.22621.0 `
+            -DCMAKE_CXX_COMPILER=cl `
+            -DCMAKE_CUDA_COMPILER=nvcc `
+            -DABLSTEADY_MPI=OFF `
+            -DABLSTEADY_GPU_BACKEND=CUDA `
+            -DAMReX_CUDA_ARCH=9.0
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake --build build-ci --parallel 4
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+  # ---------------------------------------------------------------------
+  # HIP (AMD, gfx90a = MI250X) and SYCL (Intel GPUs): compile only, as in
+  # FastWindTerrain's CI. The FFT library follows the backend: rocFFT for
+  # HIP, oneMKL for SYCL.
+  # ---------------------------------------------------------------------
+  hip:
+    name: HIP gfx90a (compile only)
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build wget gnupg
+
+      - name: Add the ROCm apt repository
+        run: |
+          sudo mkdir -p /etc/apt/keyrings
+          wget -q -O - https://repo.radeon.com/rocm/rocm.gpg.key \
+            | gpg --dearmor | sudo tee /etc/apt/keyrings/rocm.gpg > /dev/null
+          echo 'deb [arch=amd64 signed-by=/etc/apt/keyrings/rocm.gpg] https://repo.radeon.com/rocm/apt/6.2.4 jammy main' \
+            | sudo tee /etc/apt/sources.list.d/rocm.list
+          printf 'Package: *\nPin: release o=repo.radeon.com\nPin-Priority: 600\n' \
+            | sudo tee /etc/apt/preferences.d/rocm-pin-600
+          sudo apt-get update -qq
+
+      - name: Install ROCm/HIP
+        run: |
+          sudo apt-get install -y --no-install-recommends \
+            rocm-dev rocrand-dev rocprim-dev rocsparse-dev rocfft-dev rocm-cmake
+
+      - name: Configure and build
+        run: |
+          export PATH=/opt/rocm/llvm/bin:/opt/rocm/bin:$PATH
+          cmake -S . -B build-ci -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=$(which clang) \
+            -DCMAKE_CXX_COMPILER=$(which clang++) \
+            -DABLSTEADY_MPI=OFF \
+            -DABLSTEADY_GPU_BACKEND=HIP \
+            -DAMReX_AMD_ARCH=gfx90a
+          cmake --build build-ci --parallel
+
+  sycl:
+    name: SYCL (compile only)
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build wget gnupg
+
+      - name: Add the Intel oneAPI apt repository
+        run: |
+          wget -O- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB \
+            | gpg --dearmor \
+            | sudo tee /usr/share/keyrings/oneapi-archive-keyring.gpg > /dev/null
+          echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" \
+            | sudo tee /etc/apt/sources.list.d/oneAPI.list
+          sudo apt-get update -qq
+
+      - name: Install the Intel DPC++ compiler and oneMKL
+        run: |
+          sudo apt-get install -y --no-install-recommends \
+            intel-oneapi-compiler-dpcpp-cpp intel-oneapi-mkl-devel
+
+      - name: Configure and build
+        shell: bash
+        run: |
+          set +e; source /opt/intel/oneapi/setvars.sh; set -e
+          cmake -S . -B build-ci -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=$(which icx) \
+            -DCMAKE_CXX_COMPILER=$(which icpx) \
+            -DABLSTEADY_MPI=OFF \
+            -DABLSTEADY_GPU_BACKEND=SYCL
+          cmake --build build-ci --parallel
+
+  # ---------------------------------------------------------------------
   # RT-1.3.1: code copied from ERF must match extern_erf/EXTRACTED.md at
   # the pinned ERF SHA. The job also lists upstream ERF changes to each
   # copied file since its pin; that list is a report and never fails.
