@@ -344,15 +344,15 @@ ProlongResult prolong_state (const MeshHierarchy& h, int lc, const State& coarse
     // k >= the floor (before the boundary fill, so the ghosts see it).
     {
         amrex::ReduceOps<amrex::ReduceOpSum> rop;
-        amrex::ReduceData<long> data(rop);
+        amrex::ReduceData<amrex::Long> data(rop);
         for (amrex::MFIter mfi(fine.tke, amrex::TilingIfNotGPU()); mfi.isValid(); ++mfi) {
             const amrex::Box bx = mfi.tilebox();
             const auto f = fine.tke.array(mfi);
-            rop.eval(bx, data, [=] AMREX_GPU_DEVICE (int i, int j, int k) -> amrex::GpuTuple<long>
+            rop.eval(bx, data, [=] AMREX_GPU_DEVICE (int i, int j, int k) -> amrex::GpuTuple<amrex::Long>
             {
                 const bool low = f(i, j, k) < tke_floor;
                 if (low) { f(i, j, k) = tke_floor; }
-                return {low ? 1L : 0L};
+                return {low ? amrex::Long(1) : amrex::Long(0)};
             });
         }
         res.tke_clipped = amrex::get<0>(data.value(rop));

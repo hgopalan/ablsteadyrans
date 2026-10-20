@@ -107,7 +107,7 @@ void prolong_fields (const MeshHierarchy& h, int lc, const State& coarse, int lf
 struct ProlongResult
 {
     PressureCorrectionResult projection;   //!< divergence before and after (max norms), the Poisson solve
-    long tke_clipped{0};                   //!< fine cells raised to the k floor
+    amrex::Long tke_clipped{0};                   //!< fine cells raised to the k floor
 };
 
 //! The prolongation: prolong_fields, k clipped at tke_floor (>= 0), the fine

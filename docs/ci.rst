@@ -19,6 +19,15 @@ Every pull request runs two workflows.
      - Compiles only. The steady stop needs double precision.
    * - CUDA sm_90
      - Compiles only, for the H100. Hosted runners have no GPU.
+   * - Windows MSVC Release
+     - Builds with MSVC, no MPI and FFTW from vcpkg, and runs ``ctest -L "unit|smoke"``. MSVC does not trap
+       floating-point exceptions; that check stays with Linux GCC.
+   * - Windows CUDA sm_90
+     - Compiles only, with ``cl`` and ``nvcc`` (CUDA 12.6, Windows SDK 10.0.22621.0).
+   * - HIP gfx90a
+     - Compiles only, with ROCm 6.2.4 and rocFFT, for AMD GPUs (MI250X).
+   * - SYCL
+     - Compiles only, with Intel ``icpx`` and oneMKL, for Intel GPUs.
    * - ``extern_erf`` drift check
      - Runs the drift check's self-tests and the check itself against a clone of ERF, and lists upstream ERF
        changes to copied files (:doc:`extraction`).

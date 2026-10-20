@@ -18,6 +18,12 @@ HEADER = """# Code copied from ERF
 """
 
 
+def write(path, text):
+    """Write text with LF line ends on every platform: the copies are compared
+    byte for byte with the ERF blobs, and text mode writes CRLF on Windows."""
+    path.write_bytes(text.encode())
+
+
 def git(repo, *args):
     return subprocess.run(["git", "-C", str(repo), *args], check=True,
                           stdout=subprocess.PIPE, text=True).stdout.strip()
@@ -34,8 +40,9 @@ class DriftCheck(unittest.TestCase):
         git(self.erf, "init", "-q")
         git(self.erf, "config", "user.email", "t@t")
         git(self.erf, "config", "user.name", "t")
-        (self.erf / "Source" / "A.H").write_text("line 1\nline 2\n")
-        (self.erf / "Source" / "B.H").write_text("alpha\nbeta\n")
+        git(self.erf, "config", "core.autocrlf", "false")
+        write(self.erf / "Source" / "A.H", "line 1\nline 2\n")
+        write(self.erf / "Source" / "B.H", "alpha\nbeta\n")
         git(self.erf, "add", ".")
         git(self.erf, "commit", "-q", "-m", "pin")
         self.sha = git(self.erf, "rev-parse", "--short", "HEAD")
@@ -46,10 +53,10 @@ class DriftCheck(unittest.TestCase):
     def manifest(self, *rows):
         text = HEADER.format(rows="\n".join(
             f"| `{l}` | `{s}` | {sha} | {st} | |" for l, s, sha, st in rows))
-        (self.root / "extern_erf" / "EXTRACTED.md").write_text(text)
+        write(self.root / "extern_erf" / "EXTRACTED.md", text)
 
     def local(self, name, text):
-        (self.root / "extern_erf" / name).write_text(text)
+        write(self.root / "extern_erf" / name, text)
 
     def run_check(self, report=None):
         lines = []
@@ -76,14 +83,14 @@ class DriftCheck(unittest.TestCase):
         self.manifest(("extern_erf/B.H", "Source/B.H", self.sha, "modified"))
         self.local("B.H", "alpha\nbeta, local\n")
         patch = cx.make_patch("alpha\nbeta\n", "alpha\nbeta, local\n", "Source/B.H", "extern_erf/B.H")
-        (self.root / "extern_erf" / "patches" / "B.H.patch").write_text(patch)
+        write(self.root / "extern_erf" / "patches" / "B.H.patch", patch)
         self.assertEqual(self.run_check()[0], [])
 
     def test_modified_copy_with_stale_patch_fails(self):
         self.manifest(("extern_erf/B.H", "Source/B.H", self.sha, "modified"))
         self.local("B.H", "alpha\nbeta, local, edited again\n")
         patch = cx.make_patch("alpha\nbeta\n", "alpha\nbeta, local\n", "Source/B.H", "extern_erf/B.H")
-        (self.root / "extern_erf" / "patches" / "B.H.patch").write_text(patch)
+        write(self.root / "extern_erf" / "patches" / "B.H.patch", patch)
         errs, _ = self.run_check()
         self.assertEqual(len(errs), 1)
         self.assertIn("does not match the current local changes", errs[0])
@@ -98,7 +105,7 @@ class DriftCheck(unittest.TestCase):
         self.manifest()
         self.local("Stray.H", "x\n")
         self.local("LICENSE.md", "licence\n")
-        (self.root / "extern_erf" / "patches" / "old.patch").write_text("")
+        write(self.root / "extern_erf" / "patches" / "old.patch", "")
         errs = cx.check(self.root, None)
         self.assertEqual(errs, ["extern_erf/Stray.H: in extern_erf/ but has no manifest row"])
 
@@ -114,7 +121,7 @@ class DriftCheck(unittest.TestCase):
         self.assertIn("status must be one of", errs[0])
 
     def test_missing_header_row_fails(self):
-        (self.root / "extern_erf" / "EXTRACTED.md").write_text(
+        write(self.root / "extern_erf" / "EXTRACTED.md",
             "<!-- manifest:start -->\n"
             f"| `extern_erf/A.H` | `Source/A.H` | {self.sha} | unchanged | |\n"
             f"| `extern_erf/B.H` | `Source/B.H` | {self.sha} | unchanged | |\n"
@@ -125,7 +132,7 @@ class DriftCheck(unittest.TestCase):
     def test_upstream_report_lists_later_commits_and_never_fails(self):
         self.manifest(("extern_erf/A.H", "Source/A.H", self.sha, "unchanged"))
         self.local("A.H", "line 1\nline 2\n")
-        (self.erf / "Source" / "A.H").write_text("line 1\nline 2\nline 3\n")
+        write(self.erf / "Source" / "A.H", "line 1\nline 2\nline 3\n")
         git(self.erf, "commit", "-q", "-am", "upstream fix to A")
         errs, lines = self.run_check(report="HEAD")
         self.assertEqual(errs, [])

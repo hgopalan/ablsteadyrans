@@ -249,15 +249,15 @@ ScalarSweepResult scalar_sweep (Equation eq, amrex::MultiFab& field, const amrex
     amrex::MultiFab::Add(field, w.delta, 0, 0, 1, 0);
     if (eq == Equation::tke) {
         amrex::ReduceOps<amrex::ReduceOpSum> rop;
-        amrex::ReduceData<long> data(rop);
+        amrex::ReduceData<amrex::Long> data(rop);
         for (amrex::MFIter mfi(field, amrex::TilingIfNotGPU()); mfi.isValid(); ++mfi) {
             const amrex::Box bx = mfi.tilebox();
             const auto f = field.array(mfi);
-            rop.eval(bx, data, [=] AMREX_GPU_DEVICE (int i, int j, int k) -> amrex::GpuTuple<long>
+            rop.eval(bx, data, [=] AMREX_GPU_DEVICE (int i, int j, int k) -> amrex::GpuTuple<amrex::Long>
             {
                 const bool low = f(i, j, k) < floor;
                 if (low) { f(i, j, k) = floor; }
-                return {low ? 1L : 0L};
+                return {low ? amrex::Long(1) : amrex::Long(0)};
             });
         }
         res.clipped = amrex::get<0>(data.value(rop));

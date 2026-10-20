@@ -3,7 +3,7 @@
 set(ABLSTEADY_SOURCES
     Inputs.cpp
     State.cpp
-    IO.cpp
+    StateIO.cpp
     Reductions.cpp
     SteadyCriterion.cpp
     Sha256.cpp

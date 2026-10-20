@@ -1,6 +1,6 @@
 // UT-1.3.2: plotfile round trip (cell-centred variables and nodal z_phys_nd).
 // UT-1.3.3: checkpoint/restart round trip, onto a different box layout.
-#include "IO.H"
+#include "StateIO.H"
 #include "State.H"
 #include "TestHelpers.H"
 

@@ -1,5 +1,8 @@
-#ifndef ABLSTEADY_IO_H_
-#define ABLSTEADY_IO_H_
+#ifndef ABLSTEADY_STATEIO_H_
+#define ABLSTEADY_STATEIO_H_
+
+// Named StateIO.H, not IO.H: Windows file systems ignore case, so an IO.H on
+// the include path would stand in for the system <io.h>.
 
 #include "State.H"
 

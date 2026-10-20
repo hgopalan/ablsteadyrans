@@ -4,9 +4,10 @@ Installation
 Requirements
 ------------
 
-- CMake 3.25 or newer and a C++20 compiler (GCC, Clang, AppleClang; nvcc for CUDA).
-- MPI (Open MPI, MPICH or Cray MPICH).
-- FFTW, for AMReX's FFT module (cuFFT is used in CUDA builds).
+- CMake 3.25 or newer and a C++20 compiler (GCC, Clang, AppleClang, MSVC; nvcc for CUDA, ROCm ``clang++`` for HIP,
+  ``icpx`` for SYCL).
+- MPI (Open MPI, MPICH or Cray MPICH), unless ``ABLSTEADY_MPI=OFF``.
+- An FFT library for AMReX's FFT module: FFTW on the CPU, cuFFT (CUDA), rocFFT (HIP) or oneMKL (SYCL).
 - Python 3, for the test scripts.
 
 AMReX and GoogleTest are git submodules. AMReX is pinned to the commit the development plan was checked against.
@@ -48,7 +49,8 @@ An option outside its allowed values stops the configuration.
      - ``DOUBLE`` or ``SINGLE``. The steady stop needs double precision; single precision is kept compiling only.
    * - ``ABLSTEADY_GPU_BACKEND``
      - ``NONE``
-     - ``NONE`` or ``CUDA``. For an H100 add ``-DAMReX_CUDA_ARCH=9.0``.
+     - ``NONE``, ``CUDA``, ``HIP`` or ``SYCL``. For an H100 add ``-DCMAKE_CUDA_ARCHITECTURES=90``; HIP needs
+       ``-DAMReX_AMD_ARCH`` (for example ``gfx90a``) and ROCm's ``clang++`` as the C++ compiler; SYCL needs ``icpx``.
    * - ``ABLSTEADY_FFT``
      - ``ON``
      - AMReX FFT. Required: the Poisson solver uses its FFT preconditioner. Configuring with ``OFF`` stops
@@ -68,6 +70,37 @@ An option outside its allowed values stops the configuration.
    * - ``ABLSTEADY_USE_INTERNAL_AMREX``
      - ``ON``
      - Use the AMReX submodule. ``OFF`` uses an installed AMReX found through ``AMReX_ROOT``.
+
+Windows
+-------
+
+On Windows the solver builds with MSVC and no MPI, and FFTW comes from vcpkg. It needs Visual Studio 2022 with
+the "Desktop development with C++" workload (including "C++ CMake tools for Windows", which provides CMake and
+Ninja), Git and Python 3. The vcpkg that ships with Visual Studio supports only manifest mode, so use a standalone
+clone. From a "Developer PowerShell for VS":
+
+.. code-block:: powershell
+
+   git clone https://github.com/microsoft/vcpkg $HOME/vcpkg
+   & $HOME/vcpkg/bootstrap-vcpkg.bat
+   $env:VCPKG_ROOT = "$HOME/vcpkg"
+   & $env:VCPKG_ROOT/vcpkg install fftw3:x64-windows
+
+   git clone --recursive https://github.com/hgopalan/ablsteadyrans.git
+   cd ablsteadyrans
+   cmake -S . -B build-rel -G Ninja -DCMAKE_BUILD_TYPE=Release `
+     -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" `
+     -DVCPKG_TARGET_TRIPLET=x64-windows -DABLSTEADY_MPI=OFF
+   cmake --build build-rel
+   $env:PATH = "$env:VCPKG_ROOT/installed/x64-windows/bin;$env:PATH"
+   ctest --test-dir build-rel -L "unit|smoke" --output-on-failure
+
+The FFTW DLLs are found through ``PATH``. Without MPI every test runs on one rank, and MSVC does not trap
+floating-point exceptions (:doc:`testing`). The Kestrel shell-script tests are not registered on Windows.
+
+A CUDA build on Windows uses ``cl`` with ``nvcc``. With CUDA 12.6 and C++20 it needs Windows SDK 10.0.22621.0:
+install that SDK, open the prompt with ``-winsdk=10.0.22621.0`` (for example ``VsDevCmd.bat -arch=x64
+-winsdk=10.0.22621.0``) and configure with ``-DCMAKE_SYSTEM_VERSION=10.0.22621.0``, as the CI job does.
 
 Kestrel
 -------

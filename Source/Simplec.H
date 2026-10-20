@@ -132,7 +132,7 @@ struct ScalarSweepResult
 {
     amrex::Real max_dq{0};        //!< max |dq| applied
     amrex::Real last_sweep{0};    //!< max |change over the last sweep| (Predictor.H)
-    long clipped{0};              //!< cells raised to the floor (k only)
+    amrex::Long clipped{0};              //!< cells raised to the floor (k only)
 };
 
 //! One z-line Jacobi step of the cell equation eq (theta or tke) in delta

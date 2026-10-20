@@ -1,5 +1,8 @@
 # ablsteady
 
+[![CI](https://github.com/hgopalan/ablsteadyrans/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/hgopalan/ablsteadyrans/actions/workflows/ci.yml)
+[![Docs](https://github.com/hgopalan/ablsteadyrans/actions/workflows/docs.yml/badge.svg?branch=main)](https://github.com/hgopalan/ablsteadyrans/actions/workflows/docs.yml)
+
 A stand-alone [AMReX](https://github.com/AMReX-Codes/amrex) solver for fast steady-state RANS of the atmospheric
 boundary layer over complex terrain. It reuses [ERF](https://github.com/erf-model/ERF) components (Axell–Liungman
 k–L closure, terrain-following mesh, terrain Poisson solver, MOST surface layer) and starts from a mass-consistent
@@ -20,6 +23,20 @@ cmake --build build-rel -j 8
 ctest --test-dir build-rel --output-on-failure
 mpirun -n 2 build-rel/ablsteady Tests/Infrastructure/Smoke_Restart/inputs_smoke
 ```
+
+## Platforms
+
+The CI badge covers every job below. Hosted runners have no GPU, so the GPU builds are compiled, not run
+(details in the [CI page](https://hgopalan.github.io/ablsteadyrans/ci.html)).
+
+| Platform | CI |
+|---|---|
+| Linux CPU (GCC Release and Debug, Clang; MPI) | built and tested |
+| Windows CPU (MSVC, no MPI) | built and tested |
+| Single precision (Linux) | compiled |
+| CUDA, H100 (Linux and Windows) | compiled |
+| HIP, AMD MI250X (Linux) | compiled |
+| SYCL, Intel GPUs (Linux) | compiled |
 
 ## Documentation
 

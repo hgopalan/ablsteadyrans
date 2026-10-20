@@ -495,7 +495,7 @@ TEST (Simplec, KStaysAboveTheFloor)
         ablsteady::SimplecStage stage(opt, 2, in, &closure, popt, c.mesh, c.geom, c.z, static_cast<amrex::Real>(cs.floor), c.ba, c.dm);
         stage.init(q);
         amrex::MultiFab dtau;
-        long clipped = 0;
+        amrex::Long clipped = 0;
         for (int it = 0; it < 5; ++it) {
             bc.fill_ghosts(q, nullptr, in.buoyancy);
             ablsteady::local_dtau(q, &stage.nu(), c.mesh, c.geom, amrex::Real(1), dtau);
