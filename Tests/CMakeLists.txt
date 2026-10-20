@@ -139,6 +139,7 @@ set(BUMP_CASE           ${CMAKE_CURRENT_SOURCE_DIR}/Initialization/Bump_Speedup_
 set(COLUMN_CASE         ${CMAKE_CURRENT_SOURCE_DIR}/Canonical_RANS/Neutral_Column)
 set(FLAT_CASE           ${CMAKE_CURRENT_SOURCE_DIR}/Canonical_RANS/Neutral_ABL_Flat)
 set(THIN_CELL_CASE      ${CMAKE_CURRENT_SOURCE_DIR}/Canonical_RANS/Thin_Cell_Flat)
+set(STEEP_RIDGE_CASE    ${CMAKE_CURRENT_SOURCE_DIR}/Canonical_RANS/Steep_Ridge_Thin_Cell)
 set(HILL2D_CASE         ${CMAKE_CURRENT_SOURCE_DIR}/Canonical_RANS/Neutral_Hill_2D)
 set(HILL3D_CASE         ${CMAKE_CURRENT_SOURCE_DIR}/Canonical_RANS/Neutral_Hill_3D)
 set(HILL3D_NEUTRAL_CASE ${CMAKE_CURRENT_SOURCE_DIR}/Canonical_RANS/Truly_Neutral_Hill_3D)
@@ -332,15 +333,33 @@ ablsteady_add_test(NAME rt_sequencing_cfl_previous NP 2 LABELS "regression;smoke
                           "ablsteady: level 1: it 150 cfl 4\\.000e\\+00" "ablsteady: it 1 cfl 4\\.000e\\+00 r [1-9]\\.[0-9]+e-0[1-9]" --
                    COMMAND $<TARGET_FILE:ablsteady> ${HILL3D_NEUTRAL_CASE}/inputs_sequencing_restart steady.max_iterations=150
                            init.first_guess=profile steady.sequencing_cfl_start=previous ${ABLSTEADY_TEST_AMREX_FLAGS})
-# simplec.w_vnn_cap over terrain above the tested aspect ratio: the run goes
-# on with a warning; below its floor of 16 the cap is refused.
+# simplec.w_vnn_cap over terrain above the tested aspect ratio: without the
+# slope margin (simplec.w_vnn_cap_slope_margin = 0, #32's cap) the run goes on
+# with a warning; with the default margin there is none. Below its floor of 16
+# the cap is refused, and so is a margin below 1 or given without the cap.
 ablsteady_add_test(NAME warn_w_vnn_cap_terrain NP 1 LABELS "regression;smoke"
                    PREFIX ${EXPECT_ABORT} --success
                           "WARNING: simplec\\.w_vnn_cap = 16 over terrain with max aspect ratio .* above the tested 50\\.78"
-                          "without it \\(simplec\\.w_vnn_cap = 0\\) w converges slowly"
+                          "simplec\\.w_vnn_cap_slope_margin = 0" "without the cap \\(simplec\\.w_vnn_cap = 0\\) w converges"
                           "ablsteady: not steady after 1 iterations" --
                    COMMAND $<TARGET_FILE:ablsteady> ${VALIDATION_CASE}/inputs_w_vnn_cap_terrain simplec.w_vnn_cap=16
+                           simplec.w_vnn_cap_slope_margin=0 mesh.dz0=0.7 ${ABLSTEADY_TEST_AMREX_FLAGS})
+ablsteady_add_test(NAME warn_w_vnn_cap_terrain_margin NP 1 LABELS "regression;smoke"
+                   PREFIX ${EXPECT_ABORT} --success
+                          "max aspect ratio max\\(dx,dy\\) / thickness += [1-9]\\.[0-9]+e\\+02"
+                          "!WARNING: simplec\\.w_vnn_cap" "w_vnn_cap 16 \\(slope margin 4\\)" "ablsteady: not steady after 1 iterations" --
+                   COMMAND $<TARGET_FILE:ablsteady> ${VALIDATION_CASE}/inputs_w_vnn_cap_terrain simplec.w_vnn_cap=16
                            mesh.dz0=0.7 ${ABLSTEADY_TEST_AMREX_FLAGS})
+ablsteady_add_test(NAME abort_w_vnn_cap_slope_margin NP 1 LABELS "regression;smoke"
+                   PREFIX ${EXPECT_ABORT}
+                          "simplec\\.w_vnn_cap_slope_margin = 0\\.50+: must be 0 \\(off\\), or finite and >= 1" --
+                   COMMAND $<TARGET_FILE:ablsteady> ${VALIDATION_CASE}/inputs_w_vnn_cap_terrain simplec.w_vnn_cap=16
+                           simplec.w_vnn_cap_slope_margin=0.5 mesh.dz0=0.7 ${ABLSTEADY_TEST_AMREX_FLAGS})
+ablsteady_add_test(NAME abort_w_vnn_cap_slope_margin_alone NP 1 LABELS "regression;smoke"
+                   PREFIX ${EXPECT_ABORT}
+                          "simplec\\.w_vnn_cap_slope_margin has no effect unless simplec\\.w_vnn_cap > 0" --
+                   COMMAND $<TARGET_FILE:ablsteady> ${VALIDATION_CASE}/inputs_w_vnn_cap_terrain
+                           simplec.w_vnn_cap_slope_margin=2 mesh.dz0=0.7 ${ABLSTEADY_TEST_AMREX_FLAGS})
 ablsteady_add_test(NAME warn_w_vnn_cap_terrain_below NP 1 LABELS "regression;smoke"
                    PREFIX ${EXPECT_ABORT} --success
                           "max aspect ratio max\\(dx,dy\\) / thickness += [1-4]\\.[0-9]+e\\+01"
@@ -689,6 +708,21 @@ if(ABLSTEADY_PRECISION STREQUAL "DOUBLE")
                               --cap 16 --min-ratio 5 --tol 2e-4 --
                        COMMAND $<TARGET_FILE:ablsteady> ${THIN_CELL_CASE}/inputs_thin_cell_flat ${ABLSTEADY_TEST_AMREX_FLAGS})
     set_tests_properties(rt_thin_cell_w_vnn_cap PROPERTIES ENVIRONMENT PYTHONDONTWRITEBYTECODE=1 TIMEOUT 300)
+    # Beyond the plan: the slope margin of the cap on a steep ridge with a 0.4 m
+    # first cell (Canonical_RANS/Steep_Ridge_Thin_Cell). With the default margin
+    # the run is steady within 3500 iterations; with the margin off (#32's cap)
+    # the pressure correction stalls and it is not.
+    ablsteady_add_test(NAME rt_steep_ridge_w_vnn_cap NP 2 LABELS "regression"
+                       PREFIX ${EXPECT_ABORT} --success "w_vnn_cap 16 \\(slope margin 4\\)"
+                              "ablsteady: steady after [0-9]+ iterations" --
+                       COMMAND $<TARGET_FILE:ablsteady> ${STEEP_RIDGE_CASE}/inputs_steep_ridge_thin_cell simplec.w_vnn_cap=16
+                               steady.max_iterations=3500 ${ABLSTEADY_TEST_AMREX_FLAGS})
+    ablsteady_add_test(NAME rt_steep_ridge_w_vnn_cap_margin_off NP 2 LABELS "regression"
+                       PREFIX ${EXPECT_ABORT} --success "w_vnn_cap 16 \\(slope margin off\\)"
+                              "ablsteady: not steady after 3500 iterations" --
+                       COMMAND $<TARGET_FILE:ablsteady> ${STEEP_RIDGE_CASE}/inputs_steep_ridge_thin_cell simplec.w_vnn_cap=16
+                               simplec.w_vnn_cap_slope_margin=0 steady.max_iterations=3500 ${ABLSTEADY_TEST_AMREX_FLAGS})
+    set_tests_properties(rt_steep_ridge_w_vnn_cap rt_steep_ridge_w_vnn_cap_margin_off PROPERTIES TIMEOUT 600)
     # RT-1.16.1: ERF's Neutral_Hill_2D to steady (about 80 s on two ranks);
     # the verdict, a two-order drop of the u residual and ERF's own
     # check_hill.py --physics (extern_erf/) on the turbulence plotfile.

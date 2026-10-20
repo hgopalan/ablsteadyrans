@@ -133,7 +133,7 @@ MomentumPredictorResult momentum_predictor (State& q, const ResidualFields& R,
                                             const Mesh& mesh, const amrex::Geometry& geom, int sweeps,
                                             PredictorFields& ap, const SurfaceState* surface, const ClosureFields* fields,
                                             amrex::Real rotation_relax, const LineSweepOptions& sweep,
-                                            amrex::Real w_vnn_cap)
+                                            amrex::Real w_vnn_cap, amrex::Real w_vnn_slope_margin)
 {
     const char* op = "momentum_predictor";
     if (std::isnan(rotation_relax) || !(rotation_relax > 0 && rotation_relax <= 1)) {
@@ -142,6 +142,10 @@ MomentumPredictorResult momentum_predictor (State& q, const ResidualFields& R,
     if (std::isnan(w_vnn_cap) || !(w_vnn_cap == 0 || (w_vnn_cap > 0 && std::isfinite(w_vnn_cap) && std::isfinite(1 / w_vnn_cap)))) {
         amrex::Abort("ablsteady: momentum_predictor: w_vnn_cap must be 0 (off), or finite and > 0 with a finite reciprocal "
                      "(simplec.w_vnn_cap)");
+    }
+    if (std::isnan(w_vnn_slope_margin) || !(w_vnn_slope_margin == 0 || (w_vnn_slope_margin >= 1 && std::isfinite(w_vnn_slope_margin)))) {
+        amrex::Abort("ablsteady: momentum_predictor: w_vnn_slope_margin must be 0 (off), or finite and >= 1 "
+                     "(simplec.w_vnn_cap_slope_margin)");
     }
     if (sweeps < 1) { amrex::Abort("ablsteady: momentum_predictor: sweeps must be >= 1 (got " + std::to_string(sweeps) + ")"); }
     check_operator_field(op, "dtau_x", dtau_faces[0], Loc::xface, mesh, 0);
@@ -198,7 +202,41 @@ MomentumPredictorResult momentum_predictor (State& q, const ResidualFields& R,
                 dd(i, j, k) = keep * (p(i, j, k) - nb);   // 0 on a Dirichlet row
             });
         }
-        if (c == 2 && w_vnn_cap > 0) {
+        if (c == 2 && w_vnn_cap > 0 && w_vnn_slope_margin > 0) {
+            // The slope-aware cap (the header): on the w face at node level k
+            // the ground-following slope a = h_x^2 + h_y^2 gives the bound
+            // r_c = a/(sqrt(1 + a) + 1)^2 on beta_z/beta_h, and the term is
+            // min(K/V, max(0, 1/(s r_c) - 1)/dtau), so 1/(1 + term dtau) >=
+            // s r_c. Flat ground (a = 0) keeps K/V exactly.
+            const amrex::Real inv_cap = amrex::Real(1) / w_vnn_cap;
+            const amrex::Real s = w_vnn_slope_margin;
+            const auto dxi = geom.InvCellSizeArray();
+            for (amrex::MFIter mfi(*aps[c], amrex::TilingIfNotGPU()); mfi.isValid(); ++mfi) {
+                const auto p = aps[c]->array(mfi);
+                const auto dd = ds[c]->array(mfi);
+                const auto a = A.const_array(mfi);
+                const auto dt = dtau_faces[c].const_array(mfi);
+                const auto zp = q.z_phys_nd.const_array(mfi);
+                const auto m = has_mask ? mask.const_array(mfi) : A.const_array(mfi);   // read only with has_mask
+                amrex::ParallelFor(mfi.tilebox(), [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
+                {
+                    const amrex::Real keep = has_mask ? amrex::Real(1) - m(i, j, k) : amrex::Real(1);
+                    amrex::Real term = inv_cap * (a(i, j, k, coef_ZM) + a(i, j, k, coef_ZP));
+                    const amrex::Real hx = amrex::Real(0.5) * (zp(i + 1, j + 1, k) + zp(i + 1, j, k) - zp(i, j + 1, k) - zp(i, j, k)) * dxi[0];
+                    const amrex::Real hy = amrex::Real(0.5) * (zp(i + 1, j + 1, k) + zp(i, j + 1, k) - zp(i + 1, j, k) - zp(i, j, k)) * dxi[1];
+                    const amrex::Real slope2 = hx * hx + hy * hy;
+                    if (slope2 > 0) {
+                        const amrex::Real root = std::sqrt(amrex::Real(1) + slope2) + amrex::Real(1);
+                        const amrex::Real rc = slope2 / (root * root);
+                        const amrex::Real lim = amrex::max(amrex::Real(0), amrex::Real(1) / (s * rc) - amrex::Real(1)) / dt(i, j, k);
+                        term = amrex::min(term, lim);
+                    }
+                    const amrex::Real cap = keep * term;
+                    p(i, j, k) += cap;
+                    dd(i, j, k) += cap;
+                });
+            }
+        } else if (c == 2 && w_vnn_cap > 0) {
             // The w rows' VNN cap (the header): 1/dtau -> 1/dtau + (a_ZM +
             // a_ZP)/w_vnn_cap in a_P and d, none on a Dirichlet row.
             const amrex::Real inv_cap = amrex::Real(1) / w_vnn_cap;

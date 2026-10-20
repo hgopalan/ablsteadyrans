@@ -147,17 +147,34 @@
 // Limits (the review of the cap): the same linear model diverges for V <= 2
 // at CFL >= 16 and for V = 4 at CFL 64 (the w rows' predictor then lags the
 // pressure correction the other way); capping d alone diverges for V <= 8
-// and capping a_P alone gains nothing, so both get the term. Over terrain the pressure correction's z-face flux scales the
-// whole n . grad p', slope cross term included, by beta_z = 1/d_w: with the
-// cap beta_z << beta_x near the ground, the corrected w gains -h (beta_x -
-// beta_z) dp'/dx (h the slope), and the operator turns indefinite once
-// beta_z/beta_x falls below about h^2: stable roughly while 1 + VNN/V <
-// 1/h^2. Askervein with a 1 m first cell (max aspect ratio 50.78, slopes to
-// 23 deg) converges with V = 16, 32 and 64 (200 iterations) and bursts with
-// V = 4 and 8, hence the input's floor of 16; with a 0.4 m first cell V = 16
-// burst at the CFL jump. The application warns when the cap is
-// on over terrain above the tested aspect ratio (App.cpp, Simplec.H); the
-// aspect ratio is a proxy for VNN, V and the local slope.
+// and capping a_P alone gains nothing, so both get the term.
+//
+// Over terrain (the slope margin, simplec.w_vnn_cap_slope_margin = s): the
+// pressure correction's z-face flux scales the whole n . grad p', slope
+// cross term included, by beta_z = 1/d_w, while the x- and y-faces use
+// beta_h = 1/d_u, 1/d_v. For one Fourier mode (k along the slope h, m in
+// zeta) the operator's quadratic form is beta_h k^2 + beta_z (1 + h^2) m^2 -
+// h (beta_h + beta_z) k m, definite only while r = beta_z/beta_h exceeds
+// r_c = a/(sqrt(1 + a) + 1)^2, a = h^2 (the smaller root of 4 r (1 + a) =
+// a (1 + r)^2). Without the cap r is about 1; with it r = 1/(1 + VNN/V), and
+// thin cells on steep slopes cross r_c (Askervein, 23 deg: r_c = 0.041, so
+// V = 16 fails once VNN > 370, as the 0.4 m first cell did at the CFL jump).
+// With s > 0 the cap's term on each w row becomes min(K/V, max(0, 1/(s r_c)
+// - 1)/dtau), with a the slope of the face's node heights (the slope the
+// operator's cross term uses). This assumes d_u = d_w0 = 1/dtau (d_w0: d_w
+// without the cap); then r >= s r_c wherever s r_c < 1 (below 53 deg at
+// s = 4; steeper rows get no cap). The solver's ratio is d_h/(d_w0 + term):
+// where d_w0 dtau > 1 (stable stratification, the Rayleigh layer) the margin
+// shrinks (at s = 4 and 32.5 deg, r >= 3.0 r_c at d_w0 dtau = 2 and 1.7 r_c
+// at 5); where d_u dtau > 1 (the surface drag in the first layer) the limit
+// is stricter than needed. The definite band is also bounded above
+// (r < 1/r_c); the drag can put r there with or without the cap. The cap
+// acts as a larger local V on steep slopes only, and flat ground keeps K/V
+// exactly. s = 0 is #32's cap; the application then warns over terrain
+// above the tested aspect ratio 50.78 (App.cpp, Simplec.H). Giving the cross
+// term beta_h instead (FaceCoeffs::z_cross) would make the operator definite
+// for any r, but MLTerrainPoisson (the default back end) has no split
+// coefficient.
 //
 // Invariant: the two copies of a periodic seam face are the same unknown;
 // the sweeps update them independently from identical inputs (A, R and the
@@ -219,6 +236,9 @@ struct MomentumPredictorResult
 //! w_vnn_cap (0: off, else finite and > 0 with a finite reciprocal; the
 //! input's own range is 0 or >= 16): on the w rows 1/dtau becomes 1/dtau +
 //! (a_ZM + a_ZP)/w_vnn_cap in a_P and d (the header).
+//! w_vnn_slope_margin (0: off, else finite and >= 1; used only with the cap):
+//! the cap's term is limited on sloping ground so the pressure operator stays
+//! definite with this margin (the header).
 MomentumPredictorResult momentum_predictor (State& q, const ResidualFields& R,
                                             const amrex::Array<const amrex::MultiFab*, AMREX_SPACEDIM>& F,
                                             const ResidualInputs& in,
@@ -227,7 +247,9 @@ MomentumPredictorResult momentum_predictor (State& q, const ResidualFields& R,
                                             PredictorFields& ap, const SurfaceState* surface = nullptr,
                                             const ClosureFields* fields = nullptr, amrex::Real rotation_relax = 1,
                                             const LineSweepOptions& sweep = LineSweepOptions(),
-                                            amrex::Real w_vnn_cap = 0);
+                                            amrex::Real w_vnn_cap = 0,
+                                            // 0 here (#32's cap); the application's default is 4 (SimplecOptions)
+                                            amrex::Real w_vnn_slope_margin = 0);
 
 //! zline_jacobi or, with opt.kind = lusgs, zline_lusgs (LineSweeps.H, the
 //! line LU-SGS solve of sub-phases 2.1 and 2.2) with opt's ghosts, overlap

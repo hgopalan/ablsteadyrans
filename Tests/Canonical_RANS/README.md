@@ -14,6 +14,7 @@ turbulence plotfile where ERF has one.
 | `Neutral_Hill_3D` | RT-1.16.2 | ERF's Neutral_Hill_3D (64 x 64 x 20); label `nightly`. |
 | `Truly_Neutral_Hill_3D` | RT-2.2.1 | A truly neutral Hill_3D to round-off with z-line Jacobi and box-local line LU-SGS sweeps; the two states agree to 1e-8. Label `nightly`. |
 | `Thin_Cell_Flat` | (beyond the plan) | A flat inflow/outflow strip with a 0.7 m first cell, with and without `simplec.w_vnn_cap`: fewer iterations, the same steady state, a restart bit for bit. |
+| `Steep_Ridge_Thin_Cell` | (beyond the plan) | A steep 2-D ridge (32.5°) with a 0.4 m first cell: `simplec.w_vnn_cap = 16` with the default slope margin is steady within 3500 iterations, without the margin it is not. |
 | `Smooth_Plateau_2D` | (comparison case) | A 2-D plateau run in both codes; not a CTest. |
 
 The hill cases use `Supporting_Files/check_steady_hill.py` (shared by the 2-D and 3-D folders).

@@ -884,6 +884,205 @@ TEST (Predictor, WVnnCapAddsToTheWDiagonalAndD)
 }
 
 // ---------------------------------------------------------------------------
+// Beyond the plan: the slope-aware cap (simplec.w_vnn_cap_slope_margin,
+// Predictor.H). On each w row the cap's term is min(K/V, max(0, 1/(s r_c) -
+// 1)/dtau), K = a_ZM + a_ZP, r_c = a/(sqrt(1 + a) + 1)^2 and a = h_x^2 + h_y^2
+// the slope of the face's node heights, in a_P and d; so the row keeps
+// 1/(1 + term dtau) >= s r_c, the bound that keeps the pressure operator
+// definite (beta_z/beta_h >= s r_c, beta_h ~ dtau). On a steep manufactured
+// hill (150 m over 1000 m, slope^2 up to 0.12, margin 10) with VNN up to
+// about 70 the slope limit binds on some rows and not on others; the u and v rows are bit-identical to the call without the margin;
+// a margin below 1, NaN or infinite is refused.
+TEST (Predictor, WVnnCapSlopeMarginKeepsThePressureOperatorDefinite)
+{
+    PCase c = make_mesh(8, 4, 6, 150, false, true, 4);   // 2 x 1 boxes; slopes up to about 0.9
+    ablsteady::State q;
+    define_state(q, c);
+    fill_state(q, c, 61);
+    Coefficients co;
+    co.make(c, 2.0, 63);
+    ablsteady::BoundaryInputs bin;
+    bin.face = {ablsteady::FaceType::inflow, ablsteady::FaceType::periodic, ablsteady::FaceType::slip_wall,
+                ablsteady::FaceType::outflow, ablsteady::FaceType::periodic, ablsteady::FaceType::slip_wall};
+    bin.inflow.kind = ablsteady::InflowProfileOptions::Kind::log_law;
+    bin.inflow.ustar = amrex::Real(0.5);
+    bin.inflow.z0 = amrex::Real(0.1);
+    const ablsteady::CoriolisOptions cor;
+    const ablsteady::BoundaryConditions bc(bin, c.geom, c.mesh, cor);
+    bc.fill_ghosts(q, nullptr, co.in.buoyancy);
+    co.in.bc = &bc;
+    Problem pr;
+    pr.make(q, co, c, Equation::w);
+    amrex::MultiFab dtau(c.ba, c.dm, 1, 0);
+    fill_random(dtau, 400, 1600, 67, c);
+    amrex::Array<amrex::MultiFab, 3> df;
+    ablsteady::face_dtau(dtau, c.mesh, c.geom, df);
+    amrex::MultiFab mw;
+    bc.dirichlet_rows(Equation::w, Loc::zface, c.mesh, mw);
+    const amrex::Array<const amrex::MultiFab*, 3> F{&pr.F[0], &pr.F[1], &pr.F[2]};
+    auto copy_state = [&] (ablsteady::State& to) {
+        define_state(to, c);
+        for (auto [d, s] : std::initializer_list<std::pair<amrex::MultiFab*, const amrex::MultiFab*>>{
+                 {&to.u, &q.u}, {&to.v, &q.v}, {&to.w, &q.w}, {&to.p, &q.p}, {&to.theta, &q.theta}, {&to.tke, &q.tke}}) {
+            amrex::MultiFab::Copy(*d, *s, 0, 0, 1, 2);
+        }
+    };
+    auto same = [] (const amrex::MultiFab& a, const amrex::MultiFab& b) {
+        amrex::MultiFab dff(a.boxArray(), a.DistributionMap(), 1, 0);
+        amrex::MultiFab::Copy(dff, a, 0, 0, 1, 0);
+        amrex::MultiFab::Subtract(dff, b, 0, 0, 1, 0);
+        return dff.norm0() == 0;
+    };
+    const ablsteady::LineSweepOptions sweep;
+    const amrex::Real V = 16;
+    const amrex::Real smargin = 10;   // slope^2 reaches 0.12 and VNN 68 here: the limit binds on the steepest rows
+    ablsteady::State q0, qs;
+    copy_state(q0);
+    copy_state(qs);
+    ablsteady::PredictorFields p0, ps;
+    ablsteady::momentum_predictor(q0, pr.R, F, co.in, df, c.mesh, c.geom, 3, p0, nullptr, nullptr, 1, sweep);
+    ablsteady::momentum_predictor(qs, pr.R, F, co.in, df, c.mesh, c.geom, 3, ps, nullptr, nullptr, 1, sweep, V, smargin);
+    EXPECT_TRUE(same(p0.ap_u, ps.ap_u) && same(p0.d_u, ps.d_u) && same(p0.ap_v, ps.ap_v) && same(p0.d_v, ps.d_v));
+    EXPECT_TRUE(same(q0.u, qs.u) && same(q0.v, qs.v));
+    // r_c = a/(sqrt(1 + a) + 1)^2 is the smaller root of a r^2 - (2a + 4) r + a (the 2 x 2 form's discriminant);
+    // pinned at a = 0.18 (23 deg, Askervein's steepest slope)
+    EXPECT_NEAR(0.18 / ((std::sqrt(1.18) + 1) * (std::sqrt(1.18) + 1)), 0.04135501, 1e-8);
+    const auto dxi = c.geom.InvCellSizeArray();
+    int bound = 0, free_rows = 0;
+    double worst = std::numeric_limits<double>::infinity();   // ranks without rows keep it
+    for (amrex::MFIter mfi(ps.d_w, false); mfi.isValid(); ++mfi) {
+        const auto p = host_copy(ps.ap_w, mfi), d = host_copy(ps.d_w, mfi), p0w = host_copy(p0.ap_w, mfi),
+                   d0 = host_copy(p0.d_w, mfi), m = host_copy(mw, mfi), dt = host_copy(df[2], mfi),
+                   a = host_copy(pr.A, mfi), z = host_copy(q.z_phys_nd, mfi);
+        amrex::LoopOnCpu(mfi.validbox(), [&] (int i, int j, int k) {
+            const amrex::IntVect iv(i, j, k);
+            if (m(iv) == 1) {
+                EXPECT_EQ(p(iv), 1);
+                EXPECT_EQ(d(iv), 0);
+                return;
+            }
+            auto zn = [&] (int ii, int jj) { return double(z(amrex::IntVect(ii, jj, k))); };
+            const double hx = 0.5 * (zn(i + 1, j + 1) + zn(i + 1, j) - zn(i, j + 1) - zn(i, j)) * double(dxi[0]);
+            const double hy = 0.5 * (zn(i + 1, j + 1) + zn(i, j + 1) - zn(i + 1, j) - zn(i, j)) * double(dxi[1]);
+            const double sl = hx * hx + hy * hy;
+            const double K = double(a(iv, ablsteady::coef_ZM)) + double(a(iv, ablsteady::coef_ZP));
+            const double tdt = double(dt(iv));
+            double term = K / double(V);
+            double rc = 0;
+            if (sl > 0) {
+                rc = sl / ((std::sqrt(1 + sl) + 1) * (std::sqrt(1 + sl) + 1));
+                const double lim = std::max(0.0, 1 / (double(smargin) * rc) - 1) / tdt;
+                if (lim < term) { term = lim; ++bound; } else { ++free_rows; }
+            } else {
+                ++free_rows;
+            }
+            const double scale = 1 / tdt + K;
+            EXPECT_NEAR(double(p(iv)) - double(p0w(iv)), term, tol(1e-13, 1e-5) * scale) << i << " " << j << " " << k;
+            EXPECT_NEAR(double(d(iv)) - double(d0(iv)), term, tol(1e-13, 1e-5) * scale) << i << " " << j << " " << k;
+            // the definiteness bound, from the solver's own d
+            const double r = 1 / (1 + (double(d(iv)) - double(d0(iv))) * tdt);
+            if (rc > 0) { worst = std::min(worst, r / (double(smargin) * rc)); }
+        });
+    }
+    amrex::ParallelDescriptor::ReduceIntSum(bound);
+    amrex::ParallelDescriptor::ReduceIntSum(free_rows);
+    amrex::ParallelDescriptor::ReduceRealMin(worst);
+    EXPECT_GT(bound, 0) << "not vacuous: the slope limit binds on some rows";
+    EXPECT_GT(free_rows, 0) << "and the cap K/V on others";
+    EXPECT_GE(worst, 1 - tol(1e-12, 1e-5)) << "beta_z/beta_h >= s r_c on every sloped row";
+    // a margin no cap can meet (s r_c > 1 on the steepest rows): those rows run without the cap, never below it
+    {
+        ablsteady::State qh;
+        copy_state(qh);
+        ablsteady::PredictorFields ph;
+        ablsteady::momentum_predictor(qh, pr.R, F, co.in, df, c.mesh, c.geom, 3, ph, nullptr, nullptr, 1, sweep, V,
+                                      amrex::Real(100));
+        int off = 0;
+        for (amrex::MFIter mfi(ph.ap_w, false); mfi.isValid(); ++mfi) {
+            const auto p = host_copy(ph.ap_w, mfi), p0w = host_copy(p0.ap_w, mfi), m = host_copy(mw, mfi);
+            amrex::LoopOnCpu(mfi.validbox(), [&] (int i, int j, int k) {
+                const amrex::IntVect iv(i, j, k);
+                if (m(iv) == 1) { return; }
+                EXPECT_GE(p(iv), p0w(iv)) << i << " " << j << " " << k;
+                if (p(iv) == p0w(iv)) { ++off; }
+            });
+        }
+        amrex::ParallelDescriptor::ReduceIntSum(off);
+        EXPECT_GT(off, 0) << "not vacuous: some rows need more than the bare operator gives";
+    }
+    // the range check
+    for (const amrex::Real bad : {amrex::Real(0.5), std::numeric_limits<amrex::Real>::quiet_NaN(),
+                                  std::numeric_limits<amrex::Real>::infinity()}) {
+        ablsteady::State qb;
+        copy_state(qb);
+        ablsteady::PredictorFields pb;
+        try {
+            ablsteady::momentum_predictor(qb, pr.R, F, co.in, df, c.mesh, c.geom, 3, pb, nullptr, nullptr, 1, sweep, V, bad);
+            ADD_FAILURE() << "no abort for margin " << bad;
+        } catch (const std::runtime_error& e) {
+            EXPECT_NE(std::string(e.what()).find("simplec.w_vnn_cap_slope_margin"), std::string::npos) << e.what();
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Beyond the plan: on flat ground the slope margin of the w rows' cap changes
+// nothing: margin 4 and margin 0 (#32's cap) give the same rows and the same
+// update, bit for bit.
+TEST (Predictor, WVnnCapSlopeMarginIsBitIdenticalOnFlatGround)
+{
+    PCase c = make_mesh(8, 4, 6, 0, false, true, 4);
+    ablsteady::State q;
+    define_state(q, c);
+    fill_state(q, c, 71);
+    Coefficients co;
+    co.make(c, 2.0, 73);
+    ablsteady::BoundaryInputs bin;
+    bin.face = {ablsteady::FaceType::inflow, ablsteady::FaceType::periodic, ablsteady::FaceType::slip_wall,
+                ablsteady::FaceType::outflow, ablsteady::FaceType::periodic, ablsteady::FaceType::slip_wall};
+    bin.inflow.kind = ablsteady::InflowProfileOptions::Kind::log_law;
+    bin.inflow.ustar = amrex::Real(0.5);
+    bin.inflow.z0 = amrex::Real(0.1);
+    const ablsteady::CoriolisOptions cor;
+    const ablsteady::BoundaryConditions bc(bin, c.geom, c.mesh, cor);
+    bc.fill_ghosts(q, nullptr, co.in.buoyancy);
+    co.in.bc = &bc;
+    Problem pr;
+    pr.make(q, co, c, Equation::w);
+    amrex::MultiFab dtau(c.ba, c.dm, 1, 0);
+    fill_random(dtau, 400, 1600, 77, c);
+    amrex::Array<amrex::MultiFab, 3> df;
+    ablsteady::face_dtau(dtau, c.mesh, c.geom, df);
+    const amrex::Array<const amrex::MultiFab*, 3> F{&pr.F[0], &pr.F[1], &pr.F[2]};
+    auto copy_state = [&] (ablsteady::State& to) {
+        define_state(to, c);
+        for (auto [d, f] : std::initializer_list<std::pair<amrex::MultiFab*, const amrex::MultiFab*>>{
+                 {&to.u, &q.u}, {&to.v, &q.v}, {&to.w, &q.w}, {&to.p, &q.p}, {&to.theta, &q.theta}, {&to.tke, &q.tke}}) {
+            amrex::MultiFab::Copy(*d, *f, 0, 0, 1, 2);
+        }
+    };
+    auto same = [] (const amrex::MultiFab& a, const amrex::MultiFab& b) {
+        amrex::MultiFab dff(a.boxArray(), a.DistributionMap(), 1, 0);
+        amrex::MultiFab::Copy(dff, a, 0, 0, 1, 0);
+        amrex::MultiFab::Subtract(dff, b, 0, 0, 1, 0);
+        return dff.norm0() == 0;
+    };
+    const ablsteady::LineSweepOptions sweep;   // V = 20: 1/V is inexact, so a regrouped term would show
+    ablsteady::State qn, q0, q4;
+    copy_state(qn);
+    copy_state(q0);
+    copy_state(q4);
+    ablsteady::PredictorFields pn, p0, p4;
+    ablsteady::momentum_predictor(qn, pr.R, F, co.in, df, c.mesh, c.geom, 3, pn, nullptr, nullptr, 1, sweep);
+    ablsteady::momentum_predictor(q0, pr.R, F, co.in, df, c.mesh, c.geom, 3, p0, nullptr, nullptr, 1, sweep, 20, 0);
+    ablsteady::momentum_predictor(q4, pr.R, F, co.in, df, c.mesh, c.geom, 3, p4, nullptr, nullptr, 1, sweep, 20, 4);
+    EXPECT_FALSE(same(pn.ap_w, p0.ap_w)) << "not vacuous: the cap changes the w rows";
+    EXPECT_TRUE(same(p0.ap_w, p4.ap_w));
+    EXPECT_TRUE(same(p0.d_w, p4.d_w));
+    EXPECT_TRUE(same(q0.u, q4.u) && same(q0.v, q4.v) && same(q0.w, q4.w));
+}
+
+// ---------------------------------------------------------------------------
 // Beyond the plan: the predictor's result does not depend on the box layout:
 // the same state and inputs on one box and on 2 x 2 boxes (the lagged
 // neighbours then cross box seams through the ghost exchange) give the same
@@ -927,6 +1126,15 @@ TEST (Predictor, IndependentOfTheBoxLayout)
     Problem p1, p2;
     p1.make(q1, co1, c1, Equation::u);
     p2.make(q2, co2, c2, Equation::u);
+    // the same start for the capped pass below (the predictor updates q)
+    ablsteady::State q3, q4;
+    define_state(q3, c1);
+    define_state(q4, c2);
+    for (auto [d, f] : std::initializer_list<std::pair<amrex::MultiFab*, const amrex::MultiFab*>>{
+             {&q3.u, &q1.u}, {&q3.v, &q1.v}, {&q3.w, &q1.w}, {&q3.p, &q1.p}, {&q3.theta, &q1.theta}, {&q3.tke, &q1.tke},
+             {&q4.u, &q2.u}, {&q4.v, &q2.v}, {&q4.w, &q2.w}, {&q4.p, &q2.p}, {&q4.theta, &q2.theta}, {&q4.tke, &q2.tke}}) {
+        amrex::MultiFab::Copy(*d, *f, 0, 0, 1, f->nGrow());
+    }
     ablsteady::PredictorFields ap1, ap2;
     const auto r1 = ablsteady::momentum_predictor(q1, p1.R, {&p1.F[0], &p1.F[1], &p1.F[2]}, co1.in, df1, c1.mesh, c1.geom, 3, ap1);
     const auto r2 = ablsteady::momentum_predictor(q2, p2.R, {&p2.F[0], &p2.F[1], &p2.F[2]}, co2.in, df2, c2.mesh, c2.geom, 3, ap2);
@@ -940,6 +1148,27 @@ TEST (Predictor, IndependentOfTheBoxLayout)
         EXPECT_LT(max_abs(on1), tol(1e-12, 1e-5) * (max_abs(*a[n]) + 1e-30)) << n;
     }
     EXPECT_NEAR(r1.max_du, r2.max_du, tol(1e-12, 1e-5) * r1.max_du);
+    // the w rows' cap with its slope margin (simplec.w_vnn_cap_slope_margin) reads the face's node heights: the
+    // same on both layouts
+    ablsteady::PredictorFields ap3, ap4;
+    const ablsteady::LineSweepOptions sweep;
+    ablsteady::momentum_predictor(q3, p1.R, {&p1.F[0], &p1.F[1], &p1.F[2]}, co1.in, df1, c1.mesh, c1.geom, 3, ap3,
+                                  nullptr, nullptr, 1, sweep, 16, 4);
+    ablsteady::momentum_predictor(q4, p2.R, {&p2.F[0], &p2.F[1], &p2.F[2]}, co2.in, df2, c2.mesh, c2.geom, 3, ap4,
+                                  nullptr, nullptr, 1, sweep, 16, 4);
+    const amrex::MultiFab* e[3] = {&q3.w, &ap3.ap_w, &ap3.d_w};
+    const amrex::MultiFab* f[3] = {&q4.w, &ap4.ap_w, &ap4.d_w};
+    for (int n = 0; n < 3; ++n) {
+        amrex::MultiFab on1(e[n]->boxArray(), e[n]->DistributionMap(), 1, 0);
+        on1.ParallelCopy(*f[n], 0, 0, 1, 0, 0);
+        amrex::MultiFab::Subtract(on1, *e[n], 0, 0, 1, 0);
+        EXPECT_LT(max_abs(on1), tol(1e-12, 1e-5) * (max_abs(*e[n]) + 1e-30)) << "capped " << n;
+    }
+    // not vacuous: the cap changed the w rows
+    amrex::MultiFab dap(ap1.ap_w.boxArray(), ap1.ap_w.DistributionMap(), 1, 0);
+    amrex::MultiFab::Copy(dap, ap3.ap_w, 0, 0, 1, 0);
+    amrex::MultiFab::Subtract(dap, ap1.ap_w, 0, 0, 1, 0);
+    EXPECT_GT(max_abs(dap), 0);
 }
 
 // ---------------------------------------------------------------------------

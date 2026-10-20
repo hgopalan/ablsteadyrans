@@ -27,8 +27,8 @@ Summary of recommended settings
    * - Initial field, flat with an inversion
      - ``init.first_guess = profile``
      - `Initial field: profile or column`_
-   * - Thin first cells (flat ground)
-     - ``simplec.w_vnn_cap = 16``
+   * - Thin first cells
+     - ``simplec.w_vnn_cap = 16`` (slope margin 4, the default)
      - `Vertical-velocity cap`_
    * - Grid sequencing (terrain)
      - ``steady.sequencing = 1``, 2–3 levels
@@ -445,7 +445,10 @@ Vertical-velocity cap
 *Setup.* Askervein mesh (140 × 140 cells at 43 m, layers stretched by 1.08), LU-SGS with two sweeps at a CFL cap of
 16, ``gmres_mlmg``. Iterations to the verdict for several caps :math:`V` (``simplec.w_vnn_cap``). "Diverged" means
 the residuals rose to 0.2–0.8 after the CFL reached its cap; "—" means not run. :math:`V = 4` and 8 were measured
-before the lower limit of 16 was introduced; they can no longer be set.
+before the lower limit of 16 was introduced; they can no longer be set. This table was measured without the slope
+margin (``simplec.w_vnn_cap_slope_margin = 0``) on earlier builds; `Slope margin`_ below has the default, measured
+later (the Askervein 1 m run with :math:`V = 16` and no margin now takes 219 iterations, and the 0.4 m run with
+:math:`V = 64` 338).
 
 .. list-table::
    :header-rows: 1
@@ -499,8 +502,66 @@ before the lower limit of 16 was introduced; they can no longer be set.
 - On flat ground the cap reduces the iterations 2.2 to 8.3 times.
 - The capped and uncapped steady states agree to the convergence tolerance: 2.7e-7 m/s in the velocity at 0.4 m, and
   3e-6 in the 10 m speed-ups on lines A, AA and B at 1 m.
-- Over steep terrain with very thin cells a small cap can diverge; a larger cap (64) is safer.
+- Over steep terrain with very thin cells a small cap without the slope margin can diverge. The margin
+  (`Slope margin`_) removes this.
 - With z-line Jacobi (four sweeps, CFL cap 4) the cap has little effect: at that CFL the VNN number is small.
+
+.. _slope-margin:
+
+Slope margin
+""""""""""""
+
+*Setup.* As above, on this change's branch (after #38), with the cap :math:`V = 16` and several slope margins :math:`s`
+(``simplec.w_vnn_cap_slope_margin``, :doc:`solution_algorithm`). "Off" is the run without the
+cap. The steep ridge is ``Tests/Canonical_RANS/Steep_Ridge_Thin_Cell`` (32.5° maximum slope, 0.4 m first cell); its
+verdict is 3 orders, the Askervein verdicts are the default. "Stalled" means the residual ratio stayed between 0.1
+and 0.7 and the run was stopped.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 12 14 12 12 12 12
+
+   * - Case
+     - Off
+     - :math:`s = 0`
+     - :math:`s = 1`
+     - :math:`s = 2`
+     - :math:`s = 4`
+     - :math:`s = 8`
+   * - Askervein, 1 m first cell
+     - 324
+     - 219
+     - —
+     - 219
+     - **219**
+     - —
+   * - Askervein, 0.4 m first cell
+     - about 2800
+     - diverged
+     - —
+     - stalled
+     - **225**
+     - 225
+   * - Steep ridge, 0.4 m first cell
+     - 3983
+     - not steady at 3500
+     - stalled
+     - 2714
+     - **2568**
+     - 3111
+
+*Findings.*
+
+- The margin changes only the iteration path. On flat ground the cap is unchanged and the results are
+  bit-identical. On the ridge (6-order verdict) the steady states with the cap off, with :math:`s = 2` and with
+  :math:`V = 64` and no margin agree to 3e-8 m/s.
+- :math:`s = 1` (the bound itself) is not enough. The bound assumes frozen coefficients and the horizontal and
+  vertical coefficients both at :math:`1/\Delta\tau` (:doc:`solution_algorithm`). :math:`s = 2` stalls on
+  Askervein at 0.4 m. :math:`s = 4` is the smallest margin tried that converges on all three cases.
+- On Askervein at 0.4 m, :math:`s = 4` needs 225 iterations against 338 with the larger cap :math:`V = 64` and no
+  margin.
+- On the ridge about 85 % of the iterations are a transient that is the same in every configuration: the lee
+  separation forms while the SER law lowers the CFL to about 0.08. The margin shortens only the tail.
 
 Poisson back end
 ^^^^^^^^^^^^^^^^
@@ -576,11 +637,11 @@ with the coarse-level iterations in brackets (coarsest first). Default settings 
      - 220
      - **124** (100)
      - 2
-   * - Askervein, 1 m first cell, ``w_vnn_cap = 16``
+   * - Askervein, 1 m first cell, ``w_vnn_cap = 16``, no slope margin
      - 200
      - **157** (100)
      - 2
-   * - Askervein, 1 m first cell, ``w_vnn_cap = 16``
+   * - Askervein, 1 m first cell, ``w_vnn_cap = 16``, no slope margin
      - 200
      - **151** (100, 40)
      - 3

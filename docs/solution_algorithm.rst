@@ -173,12 +173,41 @@ pressure correction (there is no Rhie–Chow interpolation on the staggered grid
 :math:`R = 0`. It is off by default. Values below 16 are refused: on flat ground the iteration diverges for
 :math:`V \le 2` at a CFL of 16 and for :math:`V = 4` at a CFL of 64.
 
-.. note::
+*Sloping ground.* On a :math:`z`-face the pressure correction scales the whole normal gradient, slope term included,
+by :math:`\beta_z = 1/d_w`, while the :math:`x`- and :math:`y`-faces use :math:`\beta_h = 1/d_u, 1/d_v`. For one
+Fourier mode (wavenumber :math:`k` along a slope :math:`h`, :math:`m` in :math:`\zeta`) the operator's quadratic form
+is
 
-   Over terrain, the cap can make the pressure correction unstable where thin cells meet steep slopes (roughly when
-   :math:`1 + \mathrm{VNN}/V > 1/h^2`, with :math:`h` the local slope). Over terrain, the run prints a warning when
-   the cap is on and the mesh aspect ratio is above the tested 50.78. A larger :math:`V` is safer. See :doc:`results` for the
-   tested cases.
+.. math::
+
+   \beta_h k^2 + \beta_z (1 + h^2)\, m^2 - h (\beta_h + \beta_z)\, k\, m ,
+
+which is definite only while :math:`r = \beta_z/\beta_h` exceeds
+
+.. math::
+
+   r_c = \frac{h^2}{\left(\sqrt{1 + h^2} + 1\right)^2} .
+
+Without the cap :math:`r \approx 1`. With it :math:`r = 1/(1 + \mathrm{VNN}/V)`, so thin cells on steep slopes cross
+:math:`r_c`: on Askervein's steepest slope (23°, :math:`r_c = 0.041`) a cap of 16 fails once VNN exceeds 370, as with
+a 0.4 m first cell. ``simplec.w_vnn_cap_slope_margin`` = :math:`s` (default 4) limits the term on each :math:`w` row
+to
+
+.. math::
+
+   \min\left(\frac{a_{ZM} + a_{ZP}}{V},\; \frac{\max\bigl(0,\, 1/(s\,r_c) - 1\bigr)}{\Delta\tau}\right),
+
+with :math:`h^2 = h_x^2 + h_y^2` from the face's node heights (the slope the operator's cross term uses). The limit
+assumes that the horizontal coefficient and the vertical one without the cap are both :math:`1/\Delta\tau`. Then
+:math:`r \ge s\,r_c` wherever :math:`s\,r_c < 1` (below 53° at :math:`s = 4`; steeper rows get no cap). On the
+solver's own coefficients the margin is smaller where the vertical coefficient is stiffer (stable stratification,
+the Rayleigh layer: at :math:`s = 4` and 32.5°, :math:`r \ge 3.0\,r_c` when it is twice :math:`1/\Delta\tau` and
+:math:`1.7\,r_c` at five times), and larger in the first layer, where the surface drag stiffens the horizontal
+coefficient. The definite band is also bounded above, :math:`r < 1/r_c`. On steep slopes the cap acts as a larger
+local :math:`V`, and flat ground keeps :math:`(a_{ZM} + a_{ZP})/V` exactly. Giving the slope term :math:`\beta_h` instead (``FaceCoeffs::z_cross``) would
+keep the operator definite for any :math:`r`, but the default Poisson back end has no split coefficient. With
+:math:`s = 0` (the cap of #32) the run warns over terrain when the mesh aspect ratio is above the tested 50.78. See
+:doc:`results` for the tested cases.
 
 Pressure Poisson solver
 -----------------------
