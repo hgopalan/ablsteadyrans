@@ -420,7 +420,9 @@ TEST(NewtonPreconditioner, ConstantPressureShiftLeavesTheSolveUnchanged)
     pc->apply(b, rc);
     for (int f = 0; f < 6; ++f) {
         const double s = static_cast<double>(a.f[f].norm0(0, 0));
-        EXPECT_LE(max_diff(a.f[f], b.f[f]), tol(1e-8, 1e-3) * s) << "(a) " << f;
+        // theta (f = 4) in single: step 3's directional derivative of the
+        // convection about theta ~ 300 K keeps about two digits (2e-2).
+        EXPECT_LE(max_diff(a.f[f], b.f[f]), tol(1e-8, f == 4 ? 2e-2 : 1e-3) * s) << "(a) " << f;
     }
     const double pa = static_cast<double>(a.f[3].norm0(0, 0));
     EXPECT_GT(pa, 0);
@@ -525,7 +527,10 @@ TEST(NewtonPreconditioner, ApplyIsLinearInR)
     amrex::Print() << "apply(s r) / s - apply(r), relative: diagonal " << el << ", stage " << es << "\n";
     // 1e-5 measured in double: the finite-difference truncation of step 3
     // and the Poisson solve to a relative tolerance; stage mode gives 1.03.
-    EXPECT_LE(el, tol(1e-4, 1e-2));
+    // Single: 0.21 measured, the round-off of step 3's difference of the
+    // theta convections (theta ~ 300 K) divided by sigma = sqrt(eps) U /
+    // max|du|; the bound still separates it from the stage's 1.03.
+    EXPECT_LE(el, tol(1e-4, 0.5));
     EXPECT_GT(es, 1e-3);
 }
 

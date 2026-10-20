@@ -1352,7 +1352,9 @@ GoogleTest suite
        ``identity`` keeps the 8 steps of UT-3.2 (b), and ``simplec`` needs 54 GMRES iterations against 976 (pinned:
        8 steps, at most 70 iterations, at most a fifth of the identity's). ``NewtonPreconditioner.ApplyIsLinearInR``
        (Pressel review): on the stratified hill, :math:`\mathrm{apply}(s\,r)/s = \mathrm{apply}(r)` for
-       :math:`s = 2, -1, 10^3` to 1e-4 with the default denominators (1e-5 measured); the stage's denominators
+       :math:`s = 2, -1, 10^3` to 1e-4 with the default denominators (1e-5 measured; 0.5 in single precision, 0.21
+       measured, where step 3's difference of the :math:`\theta` convections about 300 K keeps about one digit); the
+       stage's denominators
        miss it (1.03), and so does the full-increment step 3 this test replaced (1.04, the mutant check). The
        preconditioner is set up once per attempt. ``NewtonPreconditioner.ReaderFactoryAndRangeChecks``: the
        default, ``identity``, an unknown value aborting with the key named, the range checks of the class, and

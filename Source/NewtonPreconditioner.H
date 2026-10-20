@@ -73,7 +73,9 @@
 // whose upwind sides and weights depend on the size of du); FGMRES allows
 // that (Newton.H). With the diagonal denominators apply is linear in r up to
 // the finite-difference truncation of step 3 and the Poisson tolerance
-// (NewtonPreconditioner.ApplyIsLinearInR).
+// (NewtonPreconditioner.ApplyIsLinearInR); in single precision step 3's
+// difference of the theta convections (theta ~ 300 K) keeps about one digit,
+// which FGMRES tolerates (UT-3.3.3 passes in single).
 //
 // The pressure gauge (Newton.H): in a domain without a Dirichlet pressure
 // face the Poisson problem is singular. The J-weighted mean of its
