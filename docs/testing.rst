@@ -944,13 +944,14 @@ GoogleTest suite
      - A level gathered onto one box equals the distributed level (8 boxes) bit for bit: node heights with ghost
        nodes, ``detJ``, the three face areas, ``z_cc`` and the quality report, for BTF and STF, on 1, 2 and 4 ranks.
    * - UT-2.4.1
-     - ``Transfer.RestrictionConservesFaceFlux``. A 24 × 16 × 10 mesh in 6 boxes (non-periodic x, periodic y), three
+     - ``Transfer.RestrictionConservesFaceFlux``. A 32 × 24 × 10 mesh in 6 boxes of unequal size (non-periodic x, periodic y), three
        levels, flat and over a round STF hill (150 m, half width 300 m), level pairs 0 → 1, 1 → 2 and 0 → 2: every
        coarse face flux equals the sum of the fine ones it covers (:math:`a_x u`, :math:`a_y v`, :math:`a_z \Omega`)
        to 1e-12 of the largest flux; θ, k and p′ equal the ``detJ``-weighted means; the coarse divergence of the
-       restricted fluxes (u, v and the returned :math:`\Omega_c`) equals :math:`\sum J_f D_f / (r^2 J_c)` to 1e-12.
+       restricted fluxes (u, v and the returned :math:`\Omega_c`) equals :math:`\sum J_f D_f / (r^2 J_c)` to 1e-12
+       (2e-5 in single precision).
        Over the hill the test checks that the coarse areas are not sums of the fine ones and that J varies within
-       a coarse cell, so the weights matter. 1, 2 and 4 ranks (6 boxes: uneven).
+       a coarse cell, so the weights matter. 1, 2 and 4 ranks (6 boxes: uneven on 4).
    * - UT-2.4.2
      - ``Transfer.ProlongationAndProjectionIsDivergenceFree``. Prolongation of a smooth level-1 state onto level 0
        (inflow, outflow, surface layer, slip top, periodic y), flat and over the hill, with ``gmres_mlmg`` and
@@ -962,12 +963,13 @@ GoogleTest suite
      - ``Transfer.ProlongationOfBilinearFieldsIsExact``. Flat ground, periodic in x or in y, the three level pairs:
        a field bilinear in x and y (a tent of the period in the periodic direction, with its kinks on coarse points
        of the field's type) is reproduced at every fine point of each of the six fields, up to the non-periodic faces
-       and across the seam, to 1e-13. The coarse ghost cells are set to 1e30, so a read of them would show.
+       and across the seam, to 1e-13 (2e-6 in single precision). The coarse ghost cells are set to 1e30, so a read of them would show.
    * - UT-2.4.4
      - ``Transfer.ProlongedTkeIsAboveTheFloor``. A coarse k between −6e-5 and 1.8e-4 against a floor of 1e-4 (the
        interpolant is negative somewhere and below the floor in more than 100 fine cells): after ``prolong_state``
        every fine k is at least the floor, the reported count equals the number of cells clipped, and the other
-       cells keep their interpolated values bit for bit.
+       cells keep their interpolated values bit for bit. A floor of −1e-6, NaN or infinity aborts, naming
+       ``turb.tke_floor``.
    * - UT-2.4.5
      - *Beyond the plan* (``Transfer.GatheredLevelEqualsDistributed``). With levels 1 and 2 gathered onto one box,
        restriction and interpolation between every pair, and ``prolong_state`` into level 0, give the distributed
@@ -976,7 +978,7 @@ GoogleTest suite
      - *Beyond the plan* (``Transfer.RoundTripIsTheClosedFormSmoother``). restrict(prolong(c)) on flat ground, periodic
        in x or in y, against the closed form: :math:`(c_{I-1} + 6c_I + c_{I+1})/8` along a cell-centred direction
        (the identity in the first and last cells next to a non-periodic face), the identity along a nodal one, for a
-       non-smooth coarse field; to 2e-14.
+       non-smooth coarse field; to 2e-14 (2e-6 in single precision).
    * - UT-1.15.7 (revised in 1.16)
      - The rotation's pin now holds the planar-mean split: :math:`a_P` with :math:`f^2\max(\tau_c, \tau_{\mathrm{own}})`
        and the right-hand side with the unique-face horizontal mean of the other residual per level at :math:`\tau_c`

@@ -243,6 +243,7 @@ void restrict_state (const MeshHierarchy& h, int lf, const State& fine, int lc, 
     check_operator_field(op, "fine.u", fine.u, Loc::xface, h.mesh(lf), 1);
     check_operator_field(op, "fine.v", fine.v, Loc::yface, h.mesh(lf), 1);
     const int r = hierarchy_ratio(lc - lf);
+    amrex::MultiFab::Copy(coarse.z_phys_nd, h.z_phys_nd(lc), 0, 0, 1, ngrow_nodal);
     const Mesh& mf = h.mesh(lf);
     const Mesh& mc = h.mesh(lc);
     const amrex::Geometry& gc = h.geom(lc);
@@ -309,6 +310,7 @@ void prolong_fields (const MeshHierarchy& h, int lc, const State& coarse, int lf
     const amrex::Geometry& gc = h.geom(lc);
     const Axis cx = make_axis(gf, gc, 0, r, false), cy = make_axis(gf, gc, 1, r, false);
     const Axis nx = make_axis(gf, gc, 0, r, true), ny = make_axis(gf, gc, 1, r, true);
+    amrex::MultiFab::Copy(fine.z_phys_nd, h.z_phys_nd(lf), 0, 0, 1, ngrow_nodal);
 
     // The coarse values on the coarse image of the fine layout, with one
     // ghost cell: the neighbouring boxes and the periodic images.
@@ -329,8 +331,8 @@ ProlongResult prolong_state (const MeshHierarchy& h, int lc, const State& coarse
                              const BoundaryConditions& bc, const SurfaceLayerOptions* surface,
                              const BuoyancyOptions& buoyancy, PoissonSolver& solver, amrex::Real tke_floor)
 {
-    if (std::isnan(tke_floor) || !(tke_floor >= 0)) {
-        amrex::Abort("ablsteady: prolong_state: tke_floor must be >= 0 (turb.tke_floor)");
+    if (!std::isfinite(tke_floor) || !(tke_floor >= 0)) {
+        amrex::Abort("ablsteady: prolong_state: tke_floor must be finite and >= 0 (turb.tke_floor)");
     }
     ProlongResult res;
     prolong_fields(h, lc, coarse, lf, fine);

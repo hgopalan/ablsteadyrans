@@ -25,7 +25,8 @@
 // coarse mesh's own, not sums of the fine ones; the identity holds because
 // each coarse face's velocity is set from its own area). A divergence-free
 // fine field gives a divergence-free coarse field, to round-off. The ground
-// and top rows: the fine Omega there is 0 (no flux), so Omega_c = 0 and
+// and top rows: when the fine state has its no-flux boundary condition
+// (fill_ghosts), the fine Omega there is 0, so Omega_c = 0 and
 // w_c is the no-flux value of the coarse (smoothed) ground. Its slope term
 // reads u and v below the ground and above the top, which this function
 // takes from the nearest row (zero gradient): BoundaryConditions::fill_ghosts
@@ -44,7 +45,9 @@
 //    used. Along a direction where the field is nodal (u in x, v in y) the
 //    fine faces lie on or between coarse faces, from face 0 to face N, and
 //    no extrapolation is needed. A bilinear field a + b x + c y + d x y is
-//    reproduced exactly (to round-off) at every point.
+//    reproduced exactly (to round-off) at every point, when every
+//    non-periodic cell-centred direction has at least two coarse cells; with
+//    one, the field is constant along it.
 //  * k is clipped at the floor (turb.tke_floor);
 //  * the fine level's boundary conditions (fill_ghosts): the Dirichlet
 //    normal velocities of inflow faces, walls, the ground and the top take
@@ -64,8 +67,10 @@
 // DistributionMapping, so the fine boxes and their coarse images share a
 // rank. A gathered level (MeshHierarchy, gather_from) sits on one box; every
 // transfer goes through the coarse image of the fine BoxArray on the fine
-// DistributionMapping and ParallelCopy, so a gathered level gives the same
-// result, bit for bit, as the distributed one. This assumes the input is
+// DistributionMapping and ParallelCopy, so restrict_state and prolong_fields
+// give the same result, bit for bit, with a gathered level as with the
+// distributed one. prolong_state into a gathered fine level does not: its
+// Poisson solve depends on the layout. This assumes the input is
 // periodic bit for bit: the two copies of a face on a periodic seam (face 0
 // and face N) hold the same value, as the solver keeps them (OverrideSync).
 // Otherwise ParallelCopy takes one of them, and which one depends on the
@@ -85,8 +90,8 @@ namespace ablsteady {
 
 //! Restrict fine (on level lf's layout) to coarse (on level lc's, lc > lf;
 //! both States defined with State::define). theta, k, p', u, v and w of
-//! coarse's valid points are set; its ghost cells and z_phys_nd are not
-//! touched. fine's u and v need one ghost cell filled (the fine Omega reads
+//! coarse's valid points are set, and coarse.z_phys_nd is set to level lc's
+//! node heights; coarse's other ghost cells are not touched. fine's u and v need one ghost cell filled (the fine Omega reads
 //! them, as velocity_divergence does). omega, when given, receives Omega_c
 //! on the coarse z-faces (defined here if empty, no ghost cells). Aborts,
 //! naming the argument, on a wrong level or layout.
@@ -95,7 +100,8 @@ void restrict_state (const MeshHierarchy& h, int lf, const State& fine, int lc, 
 
 //! The interpolation alone: theta, k, p', u, v and w of fine's valid points
 //! (level lf, lf < lc) from coarse (level lc), bilinear per zeta-level as
-//! above. coarse's ghost cells are not read; fine's are not filled.
+//! above, and fine.z_phys_nd is set to level lf's node heights. coarse's
+//! ghost cells are not read; fine's are not filled.
 void prolong_fields (const MeshHierarchy& h, int lc, const State& coarse, int lf, State& fine);
 
 struct ProlongResult
@@ -108,7 +114,10 @@ struct ProlongResult
 //! level's boundary conditions (bc.fill_ghosts with surface and buoyancy, as
 //! the SIMPLEC stage calls it), then the projection with solver (built on
 //! level lf's mesh, e.g. MeshHierarchy::make_poisson(lf, popt); level 0's is
-//! the run's). bc must be built on level lf's geometry and mesh. fine.p is
+//! the run's). bc must be built on level lf's geometry and mesh; surface
+//! must not be null when bc's ground is surface_layer (fill_ghosts aborts).
+//! tke_floor is the run's turb.tke_floor (finite, >= 0; else an abort
+//! naming it). fine.p is
 //! the interpolated p'. The fine state's ghost cells hold the boundary
 //! conditions of the interpolated field; after the projection only the
 //! periodic images of u, v and w are refreshed (the next fill_ghosts does

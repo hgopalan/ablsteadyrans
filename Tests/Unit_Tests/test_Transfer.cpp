@@ -31,7 +31,9 @@
 #include <algorithm>
 #include <cmath>
 #include <functional>
+#include <limits>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <type_traits>
 #include <vector>
@@ -67,18 +69,19 @@ struct TCase
     }
 };
 
-// 24 x 16 x 10 cells in boxes of 8: 6 boxes on level 0 (uneven on 4 ranks),
-// three levels (level 2: 6 x 4 cells). periodic_x / periodic_y choose the
+// 32 x 24 x 10 cells in boxes of at most 12: 6 boxes of unequal size on
+// level 0 (12, 12, 8 by 12, 12; uneven on 4 ranks), three levels (level 2:
+// 8 x 6 cells). periodic_x / periodic_y choose the
 // periodic direction; hill: a round Agnesi hill (STF) instead of flat ground.
 // The caller calls make(): the hierarchy keeps references to level 0.
 TCase case_inputs (bool periodic_x, bool periodic_y, bool hill)
 {
     TCase c;
-    c.in.mesh.n_cell = amrex::IntVect(24, 16, 10);
+    c.in.mesh.n_cell = amrex::IntVect(32, 24, 10);
     c.in.mesh.prob_lo = {0, 0, 0};
-    c.in.mesh.prob_hi = {2400, 1600, 1000};
+    c.in.mesh.prob_hi = {3200, 2400, 1000};
     c.in.mesh.is_periodic = {periodic_x ? 1 : 0, periodic_y ? 1 : 0, 0};
-    c.in.mesh.max_grid_size = {8, 8};
+    c.in.mesh.max_grid_size = {12, 12};
     c.in.mesh.dz0 = 40;
     c.in.mesh.hierarchy_levels = 3;
     if (hill) {
@@ -186,7 +189,7 @@ void define_level (const TCase& c, int l, ablsteady::State& q)
 void smooth_state (const TCase& c, int l, ablsteady::State& q)
 {
     const amrex::Geometry& g = c.h->geom(l);
-    const double Lx = 2400, Ly = 1600, pi = 3.14159265358979;
+    const double Lx = 3200, Ly = 2400, pi = 3.14159265358979;
     fill_xy(q.u, g, [=] (double x, double y, int k) { return 8.0 + 0.3 * k + 1.5 * std::sin(2 * pi * x / Lx) * std::cos(2 * pi * y / Ly); });
     fill_xy(q.v, g, [=] (double x, double y, int k) { return 1.0 - 0.1 * k + 0.8 * std::cos(2 * pi * x / Lx + 0.3) * std::sin(4 * pi * y / Ly); });
     fill_xy(q.w, g, [=] (double x, double y, int k) { return 0.2 * std::sin(2 * pi * x / Lx) * std::sin(2 * pi * y / Ly + 0.1 * k); });
@@ -282,7 +285,7 @@ TEST (Transfer, RestrictionConservesFaceFlux)
             }
             EXPECT_LT(ex, rel * sx) << "x-face flux, " << where;
             EXPECT_LT(ey, rel * sy) << "y-face flux, " << where;
-            EXPECT_LT(ez, rel * sx) << "z-face flux, " << where;
+            EXPECT_LT(ez, rel * sz) << "z-face flux, " << where;
             EXPECT_GT(sz, 1e-3 * sx) << "the vertical flux is not vacuous, " << where;
             // Over the hill the coarse areas are not the sums of the fine ones
             // (the coarse ground is smoothed): the area weight matters.
@@ -502,7 +505,7 @@ TEST (Transfer, ProlongedTkeIsAboveTheFloor)
     smooth_state(c, lc, qc);
     const double pi = 3.14159265358979;
     fill_xy(qc.tke, c.h->geom(lc), [=] (double x, double y, int k) {
-        return 1e-4 * (0.6 + 1.2 * std::sin(2 * pi * x / 2400 + 0.4 * k) * std::cos(2 * pi * y / 1600));
+        return 1e-4 * (0.6 + 1.2 * std::sin(2 * pi * x / 3200 + 0.4 * k) * std::cos(2 * pi * y / 2400));
     });
     // Periodic x, walls in y, slip ground and top: no wall model needed.
     ablsteady::BoundaryInputs bin;
@@ -529,6 +532,16 @@ TEST (Transfer, ProlongedTkeIsAboveTheFloor)
     EXPECT_LT(kimin, 0.0) << "not vacuous: the interpolant dips below 0";
     EXPECT_GT(below, 100);
     EXPECT_EQ(res.tke_clipped, below);
+    // The floor's range check aborts, naming turb.tke_floor.
+    for (const amrex::Real bad : {amrex::Real(-1e-6), std::numeric_limits<amrex::Real>::quiet_NaN(),
+                                  std::numeric_limits<amrex::Real>::infinity()}) {
+        try {
+            (void)ablsteady::prolong_state(*c.h, lc, qc, lf, qf, bc, nullptr, ablsteady::BuoyancyOptions{}, *solver, bad);
+            ADD_FAILURE() << "no abort for tke_floor = " << bad;
+        } catch (const std::runtime_error& e) {
+            EXPECT_NE(std::string(e.what()).find("turb.tke_floor"), std::string::npos) << e.what();
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -634,6 +647,7 @@ TEST (Transfer, GatheredLevelEqualsDistributed)
     b.make(1);
     ASSERT_TRUE(b.h->gathered(1));
     ASSERT_GT(a.h->boxArray(1).size(), 1);
+    ASSERT_NE(a.h->boxArray(0)[0].numPts(), a.h->boxArray(0)[a.h->boxArray(0).size() - 1].numPts()) << "unequal boxes";
     // A gathered field copied back onto the distributed layout.
     auto back = [] (const amrex::MultiFab& src, const amrex::MultiFab& like) {
         amrex::MultiFab out(like.boxArray(), like.DistributionMap(), 1, 0);

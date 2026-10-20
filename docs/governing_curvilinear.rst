@@ -197,8 +197,10 @@ J-weighted mean of the fine one,
 
 over flat ground and over terrain alike. The coarse areas and :math:`J_c` are the coarse mesh's own (its ground is
 smoothed, so they are not sums of the fine ones); the identity holds because each coarse velocity is set from its own
-area. A divergence-free fine field gives a divergence-free coarse one to round-off. The fine Ω is 0 on the ground and
-the top, so :math:`\Omega_c = 0` there: :math:`w_c` is the no-flux value of the coarse, smoothed ground.
+area. A divergence-free fine field gives a divergence-free coarse one to round-off. When the fine state has its
+boundary conditions applied, the fine Ω is 0 on the ground and the top, so :math:`\Omega_c = 0` there: :math:`w_c`
+is the no-flux value of the coarse, smoothed ground. The fine u and v need one ghost cell filled (the fine Ω reads
+them). The coarse ghost cells are not filled.
 
 **Prolongation** (``prolong_fields``, then ``prolong_state``, coarse → fine).
 
@@ -208,7 +210,8 @@ the top, so :math:`\Omega_c = 0` there: :math:`w_c` is the no-flux value of the 
    and the line through the two nearest ones is extended (linear extrapolation; constant extrapolation would not
    reproduce a linear field there). Across a periodic seam the coarse periodic images are used. Along a direction
    where the field is nodal (u in x, v in y) the fine faces lie on or between coarse faces 0 … N, and no
-   extrapolation is needed. A field :math:`a + bx + cy + dxy` is reproduced exactly at every fine point.
+   extrapolation is needed. A field :math:`a + bx + cy + dxy` is reproduced exactly at every fine point when every
+   non-periodic cell-centred direction has at least two coarse cells; with one, the field is constant along it.
 2. k is clipped at ``turb.tke_floor``.
 3. The fine level's boundary conditions (``BoundaryConditions::fill_ghosts``): inflow, walls, the ground and the top
    set their Dirichlet normal velocities, and every ghost cell is filled.
@@ -217,7 +220,8 @@ the top, so :math:`\Omega_c = 0` there: :math:`w_c` is the no-flux value of the 
    boundary types. The interpolated p′ is restored afterwards. The initializer's projection (``Initializer.H``) is
    not used: it puts a Dirichlet condition on the potential at inflow faces, which changes the inflow normal
    velocity. The fine divergence after the projection is the Poisson solver's residual: ``gmres_mlmg`` stops on
-   its J-weighted 2-norm, ``gmres_fft`` on the plain one.
+   its J-weighted 2-norm, ``gmres_fft`` on the plain one. After the projection only the periodic images of u, v
+   and w are refreshed; the solver's next ``fill_ghosts`` fills the rest.
 
 **Round trip.** Bilinear interpolation is not conservative, so :math:`R(P(c)) \ne c`. On flat ground with
 :math:`r = 2`, the round trip is :math:`S_x S_y` along the cell-centred directions, with
