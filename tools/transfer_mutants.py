@@ -3,20 +3,12 @@
 Sub-phase 2.4: the one-line mutants of the transfer operators
 (Source/Transfer.cpp).
 
-Each mutant replaces one line (the old text must occur exactly once), rebuilds
-unit_tests, runs Transfer.* on two ranks with the unit-test flags of
-Tests/CMakeLists.txt (SNaN fill, FPE trap), restores the file and prints one
-row: id | change | killed, SURVIVED or survived (equivalent) | failing
-tests. It exits 1 when a mutant not listed as equivalent survives. The table is in
-docs/testing.rst.
+Run against Transfer.* by the shared runner tools/mutants.py (two ranks, the
+unit-test flags). The table is in docs/testing.rst.
 
     python3 tools/transfer_mutants.py BUILD_DIR [T1 T4 ...]
 """
-import os
-import re
-import signal
-import subprocess
-import sys
+import mutants
 
 F = "Source/Transfer.cpp"
 M = [
@@ -94,79 +86,6 @@ M = [
 EQUIVALENT = {"T6", "T9", "T24"}
 
 
-def build_and_run(build):
-    """Rebuild unit_tests and run Transfer.* on two ranks. Returns
-    (result, failing tests); result is "build error", "timeout", "crash",
-    "failed" or "passed"."""
-    b = subprocess.run(["cmake", "--build", build, "--target", "unit_tests"], capture_output=True, text=True)
-    if b.returncode:
-        return "build error", []
-    # Its own process group, so a timeout kills mpirun and every rank.
-    p = subprocess.Popen(["mpirun", "--oversubscribe", "-np", "2", os.path.join(build, "unit_tests"),
-                          "--gtest_filter=Transfer.*", "amrex.the_arena_init_size=0", "amrex.init_snan=1",
-                          "amrex.fpe_trap_invalid=1"],
-                         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=build,
-                         start_new_session=True)
-    try:
-        out, _ = p.communicate(timeout=900)
-    except subprocess.TimeoutExpired:
-        os.killpg(p.pid, signal.SIGKILL)
-        p.communicate()
-        return "timeout", []
-    failed = sorted(set(re.findall(r"\[  FAILED  \] (\S+\.\S+)", out)))
-    if failed:
-        return "failed", failed
-    if p.returncode:
-        # A crash (FPE trap, abort) inside a test: the one that was running.
-        started = re.findall(r"\[ RUN      \] (\S+\.\S+)", out)
-        done = set(re.findall(r"\[       OK \] (\S+\.\S+)", out))
-        running = [n for n in started if n not in done][:1]
-        if running:
-            return "crash", [f"{n} (crash)" for n in running]
-        return "launch error", []
-    return "passed", []
-
-
-def main():
-    if len(sys.argv) < 2:
-        sys.exit(__doc__)
-    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    build = os.path.abspath(sys.argv[1])
-    only = sys.argv[2:]
-    # The unmutated code must pass, or every mutant would look killed.
-    base, failed = build_and_run(build)
-    if base != "passed":
-        sys.exit(f"baseline: {base} {', '.join(failed)}")
-    survived = 0
-    try:
-        for mid, what, f, old, new in M:
-            if only and mid not in only:
-                continue
-            path = os.path.join(root, f)
-            with open(path) as fh:
-                src = fh.read()
-            if src.count(old) != 1:
-                sys.exit(f"{mid}: the original line occurs {src.count(old)} times in {f}")
-            try:
-                with open(path, "w") as fh:
-                    fh.write(src.replace(old, new))
-                res, failed = build_and_run(build)
-            finally:
-                with open(path, "w") as fh:
-                    fh.write(src)
-            if res == "launch error":
-                sys.exit(f"{mid}: launch error (no test started)")
-            res = {"failed": "killed", "crash": "killed", "timeout": "killed (timeout)", "passed": "SURVIVED",
-                   "build error": "not compiled"}[res]
-            if res == "SURVIVED" and mid in EQUIVALENT:
-                res = "survived (equivalent)"
-            survived += res == "SURVIVED"
-            print(f"{mid} | {what} | {res} | {', '.join(failed)}", flush=True)
-    finally:
-        # Leave the binary built from the unmutated file.
-        subprocess.run(["cmake", "--build", build, "--target", "unit_tests"], capture_output=True)
-    sys.exit(1 if survived else 0)
-
 
 if __name__ == "__main__":
-    main()
+    mutants.run(M, "Transfer.*", EQUIVALENT, __doc__)
