@@ -128,6 +128,14 @@ FaceType face_type_from_name (const std::string& name, const std::string& key)
 const char* const kSurfaceKeys[] = {"surface_z0", "surface_zref", "surface_stability", "surface_heat_flux", "surface_wall_k",
                                     "surface_denominator_floor"};
 
+void use_closure_constants (BoundaryInputs& bin, SurfaceLayerOptions& surf, amrex::Real Cmu0, amrex::Real kappa)
+{
+    surf.Cmu0 = Cmu0;
+    surf.kappa = kappa;
+    bin.inflow.Cmu0 = Cmu0;
+    bin.inflow.kappa = kappa;
+}
+
 BoundaryInputs read_boundary_inputs ()
 {
     BoundaryInputs in;

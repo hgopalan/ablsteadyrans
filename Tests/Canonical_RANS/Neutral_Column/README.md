@@ -17,8 +17,9 @@ A second deck runs the same column for 40 iterations, continues it to 80 from th
 | `check_steady_column.py` | Runs the application and checks the verdict, residual drop, force balance and wall law. |
 
 ## CTest
-`rt_steady_column`, `rt_steady_column_rough`, `rt_steady_column_rough_floor_one` (double precision only); `rt_steady_column_restart_first`, `rt_steady_column_restart_continued`,
-`rt_steady_column_restart_straight`, `rt_steady_column_restart_matches` (both precisions).
+`rt_steady_column`, `rt_steady_column_constants`, `rt_steady_column_rough`, `rt_steady_column_rough_floor_one` (double precision only); `rt_steady_column_restart_first`, `rt_steady_column_restart_continued`,
+`rt_steady_column_restart_straight`, `rt_steady_column_restart_matches` (both precisions). `abort_repeated_turb_key` and
+`abort_repeated_surface_key` run the column deck with a repeated `turb.*` or `bc.surface_*` key, which must stop the run.
 
 ## Expected Results
 - The steady verdict; the u residual down 6 orders from its reference (the Driver history of the checkpoint).

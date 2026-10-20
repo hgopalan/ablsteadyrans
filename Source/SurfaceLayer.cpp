@@ -226,6 +226,7 @@ SurfaceLayerOptions read_surface_layer_options ()
     amrex::ParmParse pp("bc");
     for (const char* key : {"surface_z0", "surface_zref", "surface_stability", "surface_heat_flux", "surface_wall_k",
                             "surface_denominator_floor"}) {
+        if (pp.countname(key) > 1) { amrex::Abort(std::string("ablsteady: bc.") + key + " is given more than once"); }
         if (pp.contains(key) && pp.countval(key) != 1) {
             amrex::Abort(std::string("ablsteady: bc.") + key + " takes exactly one value");
         }
