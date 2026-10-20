@@ -70,8 +70,10 @@ void copy_state (ablsteady::State& to, ablsteady::State& from)
 // max |a - b| over the valid points (a and b on the same layout).
 double max_diff (const amrex::MultiFab& a, const amrex::MultiFab& b)
 {
+    // b on a's layout first: two cases built apart may map boxes to ranks differently.
     amrex::MultiFab d(a.boxArray(), a.DistributionMap(), 1, 0);
-    amrex::MultiFab::LinComb(d, 1, a, 0, -1, b, 0, 0, 1, 0);
+    d.ParallelCopy(b, 0, 0, 1);
+    amrex::MultiFab::LinComb(d, 1, a, 0, -1, d, 0, 0, 1, 0);
     return static_cast<double>(d.norm0(0, 0));
 }
 
