@@ -59,7 +59,8 @@
 // under the budget.
 //
 // Inputs (steady.*, read by read_newton_options): newton_gmres_restart,
-// newton_fd_eps_scale, newton_krylov_rtol, newton_mem_budget_gb. The
+// newton_gmres_max_iters, newton_fd_eps_scale, newton_krylov_rtol,
+// newton_mem_budget_gb. The
 // application does not run the Newton step yet (sub-phase 3.5 switches to
 // it), so it does not read them: setting them stops the run as unknown keys.
 
@@ -72,6 +73,7 @@
 #include <AMReX_MultiFab.H>
 #include <AMReX_iMultiFab.H>
 
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -83,6 +85,11 @@ namespace ablsteady {
 struct NewtonOptions
 {
     int gmres_restart{30};                    //!< steady.newton_gmres_restart (5..200)
+    //! steady.newton_gmres_max_iters (>= 1): the GMRES iteration limit of one
+    //! step (amrex::GMRES's own default). A solve that reaches it is an
+    //! unconverged step (gmres_status 1); its update still goes through
+    //! newton_update_usable.
+    int gmres_max_iters{2000};
     //! steady.newton_fd_eps_scale (>= newton_fd_eps_scale_min(), machine
     //! epsilon of amrex::Real to the power 3/4: 1.8e-12 in double, 6.4e-6 in
     //! single; <= 1e-2): jvp's relative step h, sqrt(machine epsilon) by
@@ -259,6 +266,17 @@ public:
     //! null for plain Newton. pc: null for the identity.
     NewtonStepInfo step (State& q, const amrex::MultiFab* dtau, NewtonPreconditioner* pc = nullptr);
 
+    //! The search direction of step without the update (sub-phase 3.2,
+    //! Continuation.H): q's ghost cells are filled, then dq (a State on q's
+    //! layout) gets S x on its valid points, or 0 when the update is not
+    //! usable (info.applied false); its ghost cells are 0. q's valid points
+    //! are unchanged except what the fill resets. The same solve and
+    //! diagnostics as step.
+    NewtonStepInfo direction (State& q, const amrex::MultiFab* dtau, State& dq, NewtonPreconditioner* pc = nullptr);
+    //! |T^-1 R(fill(q))|_2, the residual_norm of a step from q (q's ghost
+    //! cells filled first): the norm of the line search.
+    amrex::Real residual_norm (State& q);
+
     [[nodiscard]] const NewtonStepInfo& last () const { return m_last; }
     [[nodiscard]] const KrylovMemory& memory () const { return m_mem; }
     [[nodiscard]] const NewtonOptions& options () const { return m_opt; }
@@ -266,6 +284,13 @@ public:
     [[nodiscard]] const ResidualInputs& residual_inputs () const { return m_in; }
 
 private:
+    //! R0 = R(fill(q)) on a copy of q (q's ghost cells already filled).
+    void base_residual (const State& q, ResidualFields& R0) const;
+    //! fill(q), R0, the GMRES solve; use(op, x) when the update is usable.
+    NewtonStepInfo solve (State& q, const amrex::MultiFab* dtau, NewtonPreconditioner* pc,
+                          const std::function<void (const NewtonOperator&, const NewtonVector&)>& use);
+    void report (const NewtonStepInfo& info) const;
+
     NewtonOptions m_opt;
     ResidualInputs m_in;
     const Mesh& m_mesh;

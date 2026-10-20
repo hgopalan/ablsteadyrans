@@ -32,6 +32,19 @@ inline constexpr amrex::Real kMinRate = amrex::Real(1.0e-12);
 void local_dtau (const State& q, const amrex::MultiFab* nu, const Mesh& mesh, const amrex::Geometry& geom,
                  amrex::Real cfl, amrex::MultiFab& dtau);
 
+//! The SER law of the CFL (steady.cfl0, cfl_max, ser_exponent p,
+//! ser_max_growth g) after an iteration with relative residual r (> 0, or
+//! 0 for a vanished residual), from the current CFL cfl:
+//!
+//!   min(cfl_max, g cfl, cfl0 r^-p).
+//!
+//! Below r_min = (cfl0 / cfl_max)^(1/p) the law already gives the cap, so the
+//! power is never taken there (it would overflow for a vanished residual and
+//! p > 1); with p = 0 the law is cfl0. The driver (Driver.H) and the
+//! pseudo-transient continuation (Continuation.H) share it.
+amrex::Real ser_cfl (amrex::Real cfl, amrex::Real r, amrex::Real cfl0, amrex::Real cfl_max, amrex::Real p,
+                     amrex::Real growth);
+
 } // namespace ablsteady
 
 #endif

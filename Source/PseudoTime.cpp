@@ -50,4 +50,14 @@ void local_dtau (const State& q, const amrex::MultiFab* nu, const Mesh& mesh, co
     }
 }
 
+amrex::Real ser_cfl (amrex::Real cfl, amrex::Real r, amrex::Real cfl0, amrex::Real cfl_max, amrex::Real p,
+                     amrex::Real growth)
+{
+    const amrex::Real capped = amrex::min(cfl_max, growth * cfl);
+    if (p == 0) { return amrex::min(capped, cfl0); }
+    const amrex::Real r_min = std::pow(cfl0 / cfl_max, amrex::Real(1) / p);
+    if (!(r > r_min)) { return capped; }
+    return amrex::min(capped, cfl0 * std::pow(r, -p));
+}
+
 } // namespace ablsteady

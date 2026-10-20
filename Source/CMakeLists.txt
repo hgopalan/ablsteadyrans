@@ -35,6 +35,7 @@ set(ABLSTEADY_SOURCES
     Simplec.cpp
     Transfer.cpp
     Newton.cpp
+    Continuation.cpp
     TurbulenceOutput.cpp
     App.cpp
     # Copied from ERF (extern_erf/EXTRACTED.md)

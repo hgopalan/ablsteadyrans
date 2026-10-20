@@ -41,6 +41,7 @@ add_executable(unit_tests
     Unit_Tests/test_Simplec.cpp
     Unit_Tests/test_Newton.cpp
     Unit_Tests/test_NewtonCoverage.cpp
+    Unit_Tests/test_Continuation.cpp
     Unit_Tests/test_Terrain.cpp
     Unit_Tests/test_Transfer.cpp
 )

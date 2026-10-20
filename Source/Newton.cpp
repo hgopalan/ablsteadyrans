@@ -166,6 +166,10 @@ std::vector<std::string> check_newton_options (const NewtonOptions& opt)
         err.emplace_back("steady.newton_gmres_restart = " + std::to_string(opt.gmres_restart)
                          + ": must be an integer >= 5 and <= 200");
     }
+    if (opt.gmres_max_iters < 1) {
+        err.emplace_back("steady.newton_gmres_max_iters = " + std::to_string(opt.gmres_max_iters)
+                         + ": must be an integer >= 1");
+    }
     // isnan first: NaN fails every ordered comparison.
     // The lower bound, machine epsilon to the power 3/4 (1.8e-12 in double,
     // 6.4e-6 in single): there J v keeps about three digits (relative error
@@ -207,6 +211,7 @@ NewtonOptions read_newton_options ()
         amrex::Abort(all);
     }
     pp.query("newton_gmres_restart", opt.gmres_restart);
+    pp.query("newton_gmres_max_iters", opt.gmres_max_iters);
     pp.query("newton_fd_eps_scale", opt.fd_eps_scale);
     pp.query("newton_krylov_rtol", opt.krylov_rtol);
     pp.query("newton_mem_budget_gb", opt.mem_budget_gb);
@@ -463,9 +468,8 @@ NewtonKrylov::NewtonKrylov (const NewtonOptions& opt, const ResidualInputs& in, 
     }
 }
 
-NewtonStepInfo NewtonKrylov::step (State& q, const amrex::MultiFab* dtau, NewtonPreconditioner* pc)
+void NewtonKrylov::base_residual (const State& q, ResidualFields& R0) const
 {
-    m_in.bc->fill_ghosts(q, m_in.surface, m_in.buoyancy);
     // R0 = R(fill(q)), the base point of every jvp (which refills q + eps dq).
     // On terrain with bc.zlo = surface_layer one fill is not a fixed point
     // (the surface state reads the ground w face, which the no-flux rule then
@@ -473,19 +477,24 @@ NewtonStepInfo NewtonKrylov::step (State& q, const amrex::MultiFab* dtau, Newton
     // (R(fill(q)) - R(q)) / eps to every J v. A second fill of a copy gives
     // the same function on both sides of the difference. Where the fill is
     // idempotent (flat ground, the walls) R0 is R(q) bit for bit.
-    ResidualFields R0;
-    {
-        State qf;
-        qf.define(q.p.boxArray(), q.p.DistributionMap());
-        auto to = qf.fields();
-        const auto from = q.fields();
-        for (std::size_t n = 0; n < to.size(); ++n) {
-            amrex::MultiFab::Copy(*to[n].mf, *from[n].mf, 0, 0, 1, to[n].mf->nGrowVect());
-        }
-        m_in.bc->fill_ghosts(qf, m_in.surface, m_in.buoyancy);
-        residual(qf, m_in, m_mesh, m_geom, R0);
-        amrex::Gpu::streamSynchronize();   // qf goes out of scope
+    State qf;
+    qf.define(q.p.boxArray(), q.p.DistributionMap());
+    auto to = qf.fields();
+    const auto from = const_cast<State&>(q).fields();
+    for (std::size_t n = 0; n < to.size(); ++n) {
+        amrex::MultiFab::Copy(*to[n].mf, *from[n].mf, 0, 0, 1, to[n].mf->nGrowVect());
     }
+    m_in.bc->fill_ghosts(qf, m_in.surface, m_in.buoyancy);
+    residual(qf, m_in, m_mesh, m_geom, R0);
+    amrex::Gpu::streamSynchronize();   // qf goes out of scope
+}
+
+NewtonStepInfo NewtonKrylov::solve (State& q, const amrex::MultiFab* dtau, NewtonPreconditioner* pc,
+                                    const std::function<void (const NewtonOperator&, const NewtonVector&)>& use)
+{
+    m_in.bc->fill_ghosts(q, m_in.surface, m_in.buoyancy);
+    ResidualFields R0;
+    base_residual(q, R0);
 
     NewtonStepInfo info;
     {
@@ -498,6 +507,7 @@ NewtonStepInfo NewtonKrylov::step (State& q, const amrex::MultiFab* dtau, Newton
 
         amrex::GMRES<NewtonVector, NewtonOperator> gmres;
         gmres.setRestartLength(m_opt.gmres_restart);
+        gmres.setMaxIters(m_opt.gmres_max_iters);
         gmres.setFlexible(true);
         gmres.define(op);
         gmres.solve(x, b, m_opt.krylov_rtol, amrex::Real(0));
@@ -514,12 +524,18 @@ NewtonStepInfo NewtonKrylov::step (State& q, const amrex::MultiFab* dtau, Newton
         // means x does worse than no step: q's valid points are left as they
         // are. The same values on every rank (the GMRES norms come from the
         // all-reduced inner products), so every rank takes the same branch.
+        // A solve stopped by steady.newton_gmres_max_iters (status 1) goes
+        // through the same rule.
         info.applied = std::isfinite(static_cast<double>(info.residual_norm))
                        && newton_update_usable(info.krylov_relative);
-        if (info.applied) { op.add_update(q, x); }
+        if (info.applied) { use(op, x); }
         amrex::Gpu::streamSynchronize();   // the Krylov vectors go out of scope
     }
-    m_in.bc->fill_ghosts(q, m_in.surface, m_in.buoyancy);
+    return info;
+}
+
+void NewtonKrylov::report (const NewtonStepInfo& info) const
+{
     if (m_verbose > 0 || !info.applied) {
         amrex::Print() << "ablsteady: Newton step: |R| = " << info.residual_norm << ", GMRES "
                        << info.gmres_iterations << " iterations (status " << info.gmres_status
@@ -528,8 +544,40 @@ NewtonStepInfo NewtonKrylov::step (State& q, const amrex::MultiFab* dtau, Newton
                        << info.eps_max << (info.applied ? "" : "; the update is not applied (|R| or the Krylov residual not finite, or the Krylov residual above |R|)")
                        << "\n";
     }
+}
+
+NewtonStepInfo NewtonKrylov::step (State& q, const amrex::MultiFab* dtau, NewtonPreconditioner* pc)
+{
+    NewtonStepInfo info = solve(q, dtau, pc, [&] (const NewtonOperator& op, const NewtonVector& x) { op.add_update(q, x); });
+    m_in.bc->fill_ghosts(q, m_in.surface, m_in.buoyancy);
+    report(info);
     m_last = info;
     return info;
+}
+
+NewtonStepInfo NewtonKrylov::direction (State& q, const amrex::MultiFab* dtau, State& dq, NewtonPreconditioner* pc)
+{
+    if (dq.p.boxArray() != q.p.boxArray() || dq.p.DistributionMap() != q.p.DistributionMap()) {
+        amrex::Abort("ablsteady: NewtonKrylov::direction: dq is not on q's layout");
+    }
+    for (int f = 0; f < n_newton_fields; ++f) { state_field(dq, f).setVal(0.0); }
+    NewtonStepInfo info = solve(q, dtau, pc, [&] (const NewtonOperator& op, const NewtonVector& x) { op.add_update(dq, x); });
+    report(info);
+    m_last = info;
+    return info;
+}
+
+amrex::Real NewtonKrylov::residual_norm (State& q)
+{
+    m_in.bc->fill_ghosts(q, m_in.surface, m_in.buoyancy);
+    ResidualFields R0;
+    base_residual(q, R0);
+    NewtonOperator op(q, R0, m_in, m_mesh, m_geom, nullptr);
+    NewtonVector b = op.makeVecRHS();
+    op.rhs(R0, b);
+    const amrex::Real r = op.norm2(b);
+    amrex::Gpu::streamSynchronize();   // b goes out of scope
+    return r;
 }
 
 } // namespace ablsteady
