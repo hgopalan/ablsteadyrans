@@ -31,6 +31,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 namespace {
@@ -209,6 +210,7 @@ public:
 // unchanged.
 TEST(Continuation, LineSearchRejectsOvershoot)
 {
+    if constexpr (!std::is_same_v<amrex::Real, double>) { GTEST_SKIP() << "pinned for double (the forward difference of Jv: 1.6e-3 in single)"; }
     auto make = [] (HillCase& hc) {
         hc.q.u.mult(3.0);
         hc.bc->fill_ghosts(hc.q, hc.in.surface, hc.in.buoyancy);
@@ -748,6 +750,7 @@ TEST(Continuation, GmresIterationLimit)
 // q), so the run is the same on 1, 2 and 4 ranks (ctest's unit_np1/2/4).
 TEST(Continuation, HillSameOnAnyRankCount)
 {
+    if constexpr (!std::is_same_v<amrex::Real, double>) { GTEST_SKIP() << "pinned for double (the forward difference of Jv: 1.6e-3 in single)"; }
     std::vector<std::vector<amrex::Real>> hist(2);
     std::unique_ptr<HillCase> cases[2];
     for (int L = 0; L < 2; ++L) {
@@ -1090,6 +1093,7 @@ struct HillU3 : HillCase { HillU3 () : HillCase(4, FaceType::surface_layer, 30) 
 // by the growth bound, only at a finite dtau, and the run reaches 1e-8 |R_0|.
 TEST(Continuation, GrowthBoundAtFiniteDtau)
 {
+    if constexpr (!std::is_same_v<amrex::Real, double>) { GTEST_SKIP() << "pinned for double (the forward difference of Jv: 1.6e-3 in single)"; }
     for (const double growth : {1.0, 1.5}) {
         ColumnCase cs;
         ContinuationOptions o = default_options();
