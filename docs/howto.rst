@@ -18,8 +18,7 @@ Add ``key=value`` after the input file:
    mpirun -n 4 build-rel/ablsteady inputs steady.max_iterations=500 io.plot_file=test_plt
 
 Use this for keys that the input file does not set: a key given twice is refused. To change a key the file sets,
-edit the file (or a copy of it). (The ``turb.*`` and ``bc.surface_*`` keys are currently an exception: there the
-last value wins.)
+edit the file (or a copy of it).
 
 Restart a run
 -------------

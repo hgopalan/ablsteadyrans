@@ -22,8 +22,7 @@ The run stops before doing any work, naming the input, when:
 - a key is misspelled or not used by this version;
 - a key's namespace is unknown (the AMReX namespaces ``amrex``, ``fab``, ``fabarray``, ``vismf``, ``tiny_profiler``,
   ``DistributionMapping``, ``device`` and ``hypre`` are allowed);
-- a key is given twice (except ``turb.*`` and ``bc.surface_*``, where the last value currently wins), or a
-  single-value key is given several values;
+- a key is given twice, or a single-value key is given several values;
 - a value is outside its range;
 - a key has no effect with the other inputs (for example ``terrain.hill_height`` with ``terrain.type = flat``).
 
@@ -621,8 +620,9 @@ types, the inflow profile and the sounding; the other keys act in the SIMPLEC st
      - ``log_law`` (:math:`m = \min(\ln((d + z_0)/z_0), 1)`) or ``one`` (:math:`m = 1`): the floor of the MOST
        denominator. They differ only where :math:`\ln((d + z_0)/z_0) < 1`.
 
-The wall model and the inflow profile use the fixed constants :math:`C_{\mu 0} = 0.5562` and :math:`\kappa =
-0.41`; ``turb.Cmu0`` and ``turb.kappa`` act on the turbulence model only.
+The wall model and the inflow profile's equilibrium :math:`k` and :math:`\nu_t` use the turbulence model's
+``turb.Cmu0`` and ``turb.kappa``. Without the SIMPLEC stage (``turb.*`` is then refused) they use the defaults, 0.5562
+and 0.41.
 
 ``forcing``
 -----------
@@ -678,7 +678,7 @@ See :doc:`turbulence_model`. Read with the SIMPLEC stage only.
      - Range and meaning
    * - ``turb.Cmu0``
      - ``0.5562``
-     - Finite, > 0: :math:`C_{\mu 0}`.
+     - Finite, > 0: :math:`C_{\mu 0}`; also used by the wall k and the inflow profile's equilibrium :math:`k`.
    * - ``turb.Cb``
      - ``0.35``
      - Finite, > 0: :math:`C_b` of the stable and unstable length scales.
@@ -702,7 +702,7 @@ See :doc:`turbulence_model`. Read with the SIMPLEC stage only.
      - Finite, ≥ 0 (m²/s): molecular viscosity and heat diffusivity.
    * - ``turb.kappa``
      - ``0.41``
-     - Finite, > 0: von Kármán constant.
+     - Finite, > 0: von Kármán constant; also used by the wall law and the inflow profile's :math:`\nu_t`.
    * - ``turb.nut_relax``
      - ``1``
      - In (0, 1]: under-relaxation of :math:`\nu_t` (1: none).

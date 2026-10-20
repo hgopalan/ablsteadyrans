@@ -28,8 +28,7 @@ Command-line inputs
 -------------------
 
 Inputs after the file name are added to the file's inputs. A key that the file already sets cannot be given again
-on the command line: a repeated key is refused. (``turb.*`` and ``bc.surface_*`` keys are currently an exception:
-the last value wins.)
+on the command line: a repeated key is refused.
 
 Restarting
 ----------
