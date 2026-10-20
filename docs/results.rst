@@ -750,6 +750,9 @@ finite CFL into convergence (:math:`p` = 0.5: 26 steps) or slow progress (no lin
 converges on all three cases; it is the recommended setting until the defaults are tuned.
 
 In UT-3.2.1 (one box, GMRES(30), :math:`u \times 3`, plain Newton throughout) ``NewtonKrylov::step`` raises
-:math:`|R|` by 3.53 on the first step, where :math:`k` goes negative. The continuation keeps :math:`k` at its floor,
-takes three full steps (reductions 0.670, 0.783, 0.826) and then three steps at :math:`\lambda = 1/2`, where the full
-step would raise :math:`|R|` by 2.77.
+:math:`|R|` about 3.5-fold on the first step, where :math:`k` goes negative. The continuation keeps :math:`k` at its
+floor; full steps alternate with backtracked ones (:math:`\lambda` = 1/2 or 1/4). These GMRES solves stop at their
+iteration limit, so the exact sequence depends on the platform's rounding. With the 2000-iteration limit, Linux GCC
+took three full steps (reductions 0.670, 0.783, 0.826) and then three at :math:`\lambda = 1/2`, where the full step
+would raise :math:`|R|` by 2.77; macOS arm64 took :math:`\lambda = 1/4` on the sixth. The test now stops GMRES at 200
+iterations and checks the properties (Armijo, monotone :math:`|R|`, at least one backtrack), not the sequence.
