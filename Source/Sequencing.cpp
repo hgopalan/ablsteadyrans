@@ -14,7 +14,12 @@ namespace ablsteady {
 
 namespace {
 
-const char* const kKeys[] = {"sequencing", "sequencing_drop_orders", "sequencing_monitor_tol"};
+//! The fewest iterations before the loose residual branch of a released
+//! seeded level (steady.sequencing_hold = 0) may hold.
+constexpr int kReleasedMinIterations = 3;
+
+const char* const kKeys[] = {"sequencing", "sequencing_drop_orders", "sequencing_monitor_tol", "sequencing_hold",
+                             "sequencing_cfl_start"};
 
 std::string fmt (double x)
 {
@@ -69,6 +74,16 @@ ResidualInputs residual_inputs (const RunSetup& s, const Closure& closure, const
     return r;
 }
 
+//! A finer level's driver before its first step: the coarsest level's
+//! references, then (steady.sequencing_hold = 0) no reference hold and
+//! (steady.sequencing_cfl_start = previous) the previous level's CFL.
+void start_seeded (Driver& driver, const std::vector<amrex::Real>& ref, const SequencingOptions& seq, amrex::Real cfl_prev)
+{
+    driver.seed_reference(ref);
+    if (seq.hold == 0) { driver.release_reference_hold(); }
+    if (seq.cfl_previous) { driver.start_cfl(cfl_prev); }
+}
+
 } // namespace
 
 // ---------------------------------------------------------------------------
@@ -91,6 +106,15 @@ SequencingOptions read_sequencing_options ()
     opt.enabled = (on == 1);
     pp.query("sequencing_drop_orders", opt.drop_orders);
     pp.query("sequencing_monitor_tol", opt.monitor_tol);
+    if (pp.query("sequencing_hold", opt.hold) && opt.hold != 0 && opt.hold != 1) {
+        abort_inputs({"steady.sequencing_hold = " + std::to_string(opt.hold) + ": must be 0 or 1"});
+    }
+    std::string start;
+    if (pp.query("sequencing_cfl_start", start)) {
+        if (start == "cfl0") { opt.cfl_previous = false; }
+        else if (start == "previous") { opt.cfl_previous = true; }
+        else { abort_inputs({"steady.sequencing_cfl_start = " + start + ": must be cfl0 or previous"}); }
+    }
     return opt;
 }
 
@@ -126,8 +150,14 @@ std::vector<std::string> check_sequencing_options (const SequencingOptions& opt,
                              + std::to_string(cy) + "; use fewer levels");
         }
     }
+    // With the hold the first residual_ref_iterations iterations run at
+    // cfl0 whatever the first one ran at.
+    if (opt.enabled && opt.cfl_previous && opt.hold == 1) {
+        err.emplace_back("steady.sequencing_cfl_start = previous needs steady.sequencing_hold = 0 "
+                         "(the hold runs the first steady.residual_ref_iterations iterations at steady.cfl0)");
+    }
     if (!opt.enabled) {
-        for (const char* key : {"sequencing_drop_orders", "sequencing_monitor_tol"}) {
+        for (const char* key : {"sequencing_drop_orders", "sequencing_monitor_tol", "sequencing_hold", "sequencing_cfl_start"}) {
             if (std::find(opt.given.begin(), opt.given.end(), key) != opt.given.end()) {
                 err.emplace_back(std::string("steady.") + key + " has no effect unless steady.sequencing = 1");
             }
@@ -138,12 +168,21 @@ std::vector<std::string> check_sequencing_options (const SequencingOptions& opt,
 
 // ---------------------------------------------------------------------------
 LooseStop loose_stop (const SteadyHistory& h, const SteadyParams& p, const std::vector<MonitorSpec>& monitors,
-                      const SequencingOptions& opt)
+                      const SequencingOptions& opt, int hold_iterations)
 {
     LooseStop out;
     if (h.count == 0 || h.nonfinite) { return out; }
-    // (a) every residual dropped drop_orders below its floored reference, or below the tolerance.
-    if (h.count >= p.residual_ref_iterations && !h.res_last.empty()) {
+    // (a) every residual dropped drop_orders below its floored reference, or
+    // below the tolerance; after the level's reference hold. Without the
+    // hold (a released seeded level) the test runs against the seed raised
+    // by the residuals so far, after kReleasedMinIterations iterations (or
+    // residual_ref_iterations if fewer): one iteration at cfl0 barely moves
+    // a prolonged field, and a stop there would hand it on unrelaxed. A
+    // residual that rises after the stop is not seen; the threshold at the
+    // stop is never above the held one (the reference is a maximum over
+    // fewer values).
+    const int first = hold_iterations > 0 ? hold_iterations : std::min(p.residual_ref_iterations, kReleasedMinIterations);
+    if (h.count >= first && !h.res_last.empty()) {
         const amrex::Real drop = std::pow(amrex::Real(10), -opt.drop_orders);
         bool all = true;
         for (std::size_t q = 0; q < h.res_last.size(); ++q) {
@@ -159,7 +198,7 @@ LooseStop loose_stop (const SteadyHistory& h, const SteadyParams& p, const std::
     }
     // (b) every monitor within monitor_tol of its latest value over a full window.
     const auto need = static_cast<std::size_t>(p.monitor_window) + 1;
-    // Not before the reference is taken, as (a): the monitors right after a
+    // Not before residual_ref_iterations, whatever the hold: the monitors right after a
     // prolongation say nothing yet.
     if (opt.monitor_tol > 0 && h.count >= p.residual_ref_iterations && !monitors.empty()
         && h.mon_hist.size() == monitors.size()) {
@@ -229,6 +268,7 @@ std::vector<LevelSummary> sequence_coarse_levels (const MeshHierarchy& h, const 
     std::vector<LevelSummary> out;
     std::unique_ptr<State> coarse;   // the state of level l + 1, once solved
     std::vector<amrex::Real> ref;    // the coarsest level's residual references
+    amrex::Real cfl_prev = 0;        // the CFL the last level would have run its next iteration with
     for (int l = L - 1; l >= 1; --l) {
         const amrex::Box dom = h.geom(l).Domain();
         LevelSummary s;
@@ -254,7 +294,7 @@ std::vector<LevelSummary> sequence_coarse_levels (const MeshHierarchy& h, const 
         }
         coarse.reset();
         Driver& driver = ls.driver();
-        if (!ref.empty()) { driver.seed_reference(ref); }
+        if (!ref.empty()) { start_seeded(driver, ref, seq, cfl_prev); }
         const SteadyParams& strict = setup.sopt.criterion;
         while (static_cast<int>(driver.history().records.size()) < setup.sopt.max_iterations) {
             const SteadyVerdict v = driver.step(*ql);
@@ -266,7 +306,8 @@ std::vector<LevelSummary> sequence_coarse_levels (const MeshHierarchy& h, const 
             }
             if (v.status == SteadyStatus::Steady) { s.stop = "steady"; }
             else {
-                const LooseStop stop = loose_stop(driver.history().criterion, strict, ls.stage().monitor_specs(), seq);
+                const LooseStop stop = loose_stop(driver.history().criterion, strict, ls.stage().monitor_specs(), seq,
+                                                  driver.hold_iterations());
                 if (stop.stop) { s.stop = stop.reason; }
             }
             const bool last = !s.stop.empty()
@@ -290,6 +331,7 @@ std::vector<LevelSummary> sequence_coarse_levels (const MeshHierarchy& h, const 
         }
         out.push_back(s);
         if (ref.empty()) { ref = dh.criterion.res_ref; }
+        cfl_prev = driver.cfl();
         coarse = std::move(ql);
     }
     // Level 0: the prolongation; the run's driver does the iterations.
@@ -303,7 +345,7 @@ std::vector<LevelSummary> sequence_coarse_levels (const MeshHierarchy& h, const 
                                    setup.copt.tke_floor);
     }
     s0.prolonged = true;
-    finest.driver().seed_reference(ref);
+    start_seeded(finest.driver(), ref, seq, cfl_prev);
     out.push_back(s0);
     return out;
 }

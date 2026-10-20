@@ -29,14 +29,15 @@ using Fn = std::function<double(int)>;
 // The first iteration (0-based) after which loose_stop holds, or -1.
 int first_loose (SteadyCriterion& c, const SteadyParams& p, const std::vector<MonitorSpec>& specs,
                  const SequencingOptions& o, const std::vector<Fn>& res, const std::vector<Fn>& mon, int n_max,
-                 std::string* reason = nullptr)
+                 std::string* reason = nullptr, int hold = -1)
 {
+    if (hold < 0) { hold = p.residual_ref_iterations; }
     for (int n = 0; n < n_max; ++n) {
         std::vector<amrex::Real> r, m;
         for (const auto& f : res) { r.push_back(static_cast<amrex::Real>(f(n))); }
         for (const auto& f : mon) { m.push_back(static_cast<amrex::Real>(f(n))); }
         c.add(r, m);
-        const LooseStop s = ablsteady::loose_stop(c.history(), p, specs, o);
+        const LooseStop s = ablsteady::loose_stop(c.history(), p, specs, o, hold);
         if (s.stop) {
             if (reason != nullptr) { *reason = s.reason; }
             return n;
@@ -150,7 +151,7 @@ TEST (Sequencing, NonFiniteHistoryNeverStops)
     SteadyCriterion c2(p, {"u", "v"}, kOneMon);
     for (int n = 0; n < 200; ++n) {
         c2.add({static_cast<amrex::Real>(res[0](n)), static_cast<amrex::Real>(res[1](n))}, {amrex::Real(1)});
-        if (n >= 7) { EXPECT_FALSE(ablsteady::loose_stop(c2.history(), p, kOneMon, o).stop) << n; }
+        if (n >= 7) { EXPECT_FALSE(ablsteady::loose_stop(c2.history(), p, kOneMon, o, p.residual_ref_iterations).stop) << n; }
     }
     EXPECT_EQ(c2.verdict().status, SteadyStatus::Diverged);
 }
@@ -176,6 +177,62 @@ TEST (Sequencing, SeededReferenceIsTheDropOrigin)
     raised.seed_reference({amrex::Real(1)});
     raised.add({amrex::Real(5)}, {amrex::Real(1)});
     EXPECT_EQ(raised.history().res_ref[0], amrex::Real(5));
+}
+
+// Beyond the plan (steady.sequencing_hold = 0): on a released seeded level
+// (hold 0) the loose residual branch tests from the third iteration
+// (min(3, residual_ref_iterations)) instead of after residual_ref_iterations;
+// the monitor branch still waits residual_ref_iterations.
+TEST (Sequencing, ReleasedHoldStopsFromTheFirstIteration)
+{
+    const SteadyParams p = params();   // residual_ref_iterations = 5
+    SequencingOptions o;
+    o.enabled = true;
+    const std::vector<Fn> res{[] (int) { return 1.0e-2; }};
+    auto seeded = [&] {
+        SteadyCriterion c(p, {"u"}, kOneMon);
+        c.seed_reference({amrex::Real(1)});
+        return c;
+    };
+    SteadyCriterion held = seeded();
+    EXPECT_EQ(first_loose(held, p, kOneMon, o, res, kNoisyMon, 100, nullptr, 5), 4);
+    SteadyCriterion released = seeded();
+    EXPECT_EQ(first_loose(released, p, kOneMon, o, res, kNoisyMon, 100, nullptr, 0), 2);
+    // with residual_ref_iterations = 1 the reference iterations are the fewer
+    SteadyParams p1 = p;
+    p1.residual_ref_iterations = 1;
+    SteadyCriterion one(p1, {"u"}, kOneMon);
+    one.seed_reference({amrex::Real(1)});
+    EXPECT_EQ(first_loose(one, p1, kOneMon, o, res, kNoisyMon, 100, nullptr, 0), 0);
+    // A residual 1.5 orders down stops only once it is 2 down (n = 3).
+    const std::vector<Fn> falling{[] (int n) { return n < 3 ? 3.0e-2 : 1.0e-2; }};
+    SteadyCriterion f = seeded();
+    EXPECT_EQ(first_loose(f, p, kOneMon, o, falling, kNoisyMon, 100, nullptr, 0), 3);
+    // A residual above the seed raises it within the window: after 5, 0.1 at
+    // n = 2 is not two orders below 5; 4e-2 at n = 3 is.
+    const std::vector<Fn> rising{[] (int n) { return n == 0 ? 5.0 : (n <= 2 ? 0.1 : 4.0e-2); }};
+    SteadyCriterion r = seeded();
+    EXPECT_EQ(first_loose(r, p, kOneMon, o, rising, kNoisyMon, 100, nullptr, 0), 3);
+    // The monitor branch: constant monitors meet a 1 % window after
+    // monitor_window + 1 values whatever the hold; with a residual that never
+    // drops it is the only branch, so it stops at n = 50 with either hold.
+    SequencingOptions om = o;
+    om.monitor_tol = amrex::Real(0.01);
+    const std::vector<Fn> flat{[] (int) { return 1.0; }};
+    const std::vector<Fn> mon{[] (int) { return 2.0; }};
+    for (const int hold : {0, 5}) {
+        SteadyCriterion m = seeded();
+        std::string why;
+        EXPECT_EQ(first_loose(m, p, kOneMon, om, flat, mon, 100, &why, hold), 50) << hold;
+        EXPECT_NE(why.find("every monitor"), std::string::npos) << hold;
+    }
+    // with a window shorter than the hold, the monitor branch waits for the
+    // reference iterations even when the residual hold is 0
+    SteadyParams ps = p;
+    ps.monitor_window = 2;
+    SteadyCriterion m2(ps, {"u"}, kOneMon);
+    m2.seed_reference({amrex::Real(1)});
+    EXPECT_EQ(first_loose(m2, ps, kOneMon, om, flat, mon, 100, nullptr, 0), 4);
 }
 
 // Beyond the plan: the range checks name their keys.
@@ -226,10 +283,22 @@ TEST (Sequencing, InputChecksNameTheirKeys)
         EXPECT_TRUE(ablsteady::check_sequencing_options(SequencingOptions{}, q, m1).empty()) << strict_orders;
     }
     SequencingOptions off;
-    off.given = {"sequencing_drop_orders", "sequencing_monitor_tol"};
+    off.given = {"sequencing_drop_orders", "sequencing_monitor_tol", "sequencing_hold", "sequencing_cfl_start"};
     const auto err = ablsteady::check_sequencing_options(off, p, m1);
     EXPECT_TRUE(has(err, "steady.sequencing_drop_orders has no effect unless steady.sequencing = 1"));
     EXPECT_TRUE(has(err, "steady.sequencing_monitor_tol has no effect unless steady.sequencing = 1"));
+    EXPECT_TRUE(has(err, "steady.sequencing_hold has no effect unless steady.sequencing = 1"));
+    EXPECT_TRUE(has(err, "steady.sequencing_cfl_start has no effect unless steady.sequencing = 1"));
+    // The previous level's CFL needs the hold off; both hold values and
+    // cfl0 are accepted.
+    for (const int hold : {0, 1}) {
+        SequencingOptions o = ok;
+        o.hold = hold;
+        EXPECT_TRUE(ablsteady::check_sequencing_options(o, p, m3).empty()) << hold;
+        o.cfl_previous = true;
+        EXPECT_EQ(has(ablsteady::check_sequencing_options(o, p, m3),
+                      "steady.sequencing_cfl_start = previous needs steady.sequencing_hold = 0"), hold == 1) << hold;
+    }
 }
 
 } // namespace

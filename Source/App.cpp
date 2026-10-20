@@ -248,7 +248,9 @@ void run ()
             driver.restore(read_driver_history(in.io.restart), state);
             closure.read_checkpoint(in.io.restart, ba, dm, geom);
             amrex::Print() << "ablsteady: driver history restored: " << driver.history().records.size()
-                           << " iterations, cfl " << driver.cfl() << "\n";
+                           << " iterations, cfl " << driver.cfl() << ", reference hold " << driver.hold_iterations()
+                           << " iterations" << (driver.history().hold == 0 ? " (released: a seeded level of grid sequencing)" : "")
+                           << "\n";
         }
         amrex::Print() << "ablsteady: SIMPLEC stage: " << sopt.zline_sweeps << " " << sweep_name(sopt.sweep) << " sweeps";
         if (sopt.sweep == SweepKind::lusgs) {
@@ -268,11 +270,15 @@ void run ()
             amrex::Print() << "ablsteady: grid sequencing over " << hierarchy->num_levels() << " levels: loose stop at "
                            << seq.drop_orders << " orders";
             if (seq.monitor_tol > 0) { amrex::Print() << " or monitors within " << seq.monitor_tol; }
-            amrex::Print() << ", strict stop on level 0\n";
+            amrex::Print() << ", strict stop on level 0; "
+                           << (seq.hold == 1 ? "every level holds steady.cfl0 for the reference iterations"
+                                             : "the seeded levels without the reference hold")
+                           << (seq.cfl_previous ? ", starting at the previous level's CFL" : "") << "\n";
             levels = sequence_coarse_levels(*hierarchy, setup, seq, iopt, column.get(), level0, state);
         } else if (solve && seq.enabled) {
             amrex::Print() << "ablsteady: grid sequencing: the restart continues on level 0; the coarse levels are not run"
-                           << " (steady.sequencing, sequencing_drop_orders and sequencing_monitor_tol have no effect)\n";
+                           << " (steady.sequencing, sequencing_drop_orders, sequencing_monitor_tol, sequencing_hold and sequencing_cfl_start"
+                           << " have no effect; the checkpoint keeps level 0's reference hold)\n";
         }
         SteadyVerdict v = driver.verdict();
         int done = 0;
