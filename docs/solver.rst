@@ -380,6 +380,213 @@ capped and uncapped steady states agree to the convergence tolerance: at 0.4 m w
 agree to 3e-6 (:doc:`testing`, ``rt_thin_cell_w_vnn_cap``). The pressure correction takes more Poisson iterations
 with the cap (1 m hill: 2.83 per correction against 2.14), fewer in all (566 against 693).
 
+Grid sequencing
+---------------
+
+With ``steady.sequencing = 1`` and ``mesh.hierarchy_levels`` = L ≥ 2 (sub-phase 2.5; ``Source/Sequencing.H``), a
+fresh run solves on the coarse levels of the x/y hierarchy (:doc:`governing_curvilinear`) first and starts each finer
+level from the coarser solution:
+
+1. Level L − 1 (the coarsest): the initializer (``init.*``) on that level's mesh, then the SIMPLEC stage under its own
+   driver to the *loose stop*.
+2. Levels L − 2 … 1: ``prolong_state`` from the level above (bilinear per ζ-level, k clipped, the level's boundary
+   conditions and a projection; :doc:`governing_curvilinear`), then SIMPLEC to the loose stop.
+3. Level 0 (the run's mesh): ``prolong_state`` from level 1, then the run's driver to the strict stop
+   (``steady.residual_*``, ``steady.monitor_*``), as without sequencing.
+
+Every level has its own boundary conditions, closure (its :math:`\nu_t` history starts empty), wall distance,
+pressure solver and driver, built from the run's inputs; the SER ramp starts at ``steady.cfl0`` on every level (or,
+with ``steady.sequencing_cfl_start = previous``, at the previous level's CFL; see *The reference hold* below).
+``init.*`` acts on the coarsest level only: every finer level starts from a prolonged, projected state, so
+``init.projection = 0`` leaves only the coarsest start unprojected. ``steady.max_iterations`` caps each level
+separately; the closing line ``steady after N iterations`` and the checkpoint count level 0's iterations, and a
+summary table after it lists every level's iterations, wall time, allocation units and how it stopped. A coarse
+level that reaches the cap is prolonged as it is, with a warning; one that diverges aborts the run.
+
+**The residual reference.** The strict criterion asks each scaled residual :math:`R_q` to drop
+``steady.residual_drop_orders`` orders below its reference :math:`R_q^{\mathrm{ref}}`, the largest of its first
+``steady.residual_ref_iterations`` values. A prolonged start is already close to the solution, so a level's own
+first residuals are small, and level 0 would be held to a lower absolute residual than a run without sequencing. With
+sequencing every finer level starts its references at the coarsest level's (``Driver::seed_reference``), which, like
+a run without sequencing, starts from the initializer; the first ``residual_ref_iterations`` values can still raise
+them. So the drop is measured from the initial field's residual on every level. The relative residual
+:math:`r_n` of the SER ramp uses the same reference: after the reference iterations it is already small on a finer
+level, and the CFL then climbs to ``steady.cfl_max`` at ``steady.ser_max_growth`` per iteration (on
+``Neutral_Hill_3D`` within 10 iterations, against about 200 without sequencing; part of the measured gain,
+about 50–100 iterations, comes from this faster ramp). Compared with the references of a run without sequencing (whose level 0
+starts from the initializer), the seeds are close: 0.66–1.0 of them on ``Neutral_Hill_3D`` (the coarse terrain is
+smoother), 0.55–1.15 on the neutral Askervein deck and 0.51–1.53 on the conventionally neutral one. A seed above that
+reference loosens the drop test by at most :math:`\log_{10}(\text{seed}/\text{reference})` orders, and the absolute
+and monitor tests not at all. The summary table's last line prints the seeds beside the largest of level 0's first
+residuals after the prolongation; those are small by construction (the start is close to the solution) and are not
+the reference of a run without sequencing.
+
+Equal verdicts do not mean equal end states: each run stops at the first iteration that meets every test. On the
+conventionally neutral Askervein deck (two levels, 30 × 30 and 15 × 15) the sequenced run reaches the verdict in 147
+level-0 iterations against 220, but its final residuals are up to 13 times larger (θ; u 3 times), within the same
+criterion (these are the numbers with the reference hold on every level, ``steady.sequencing_hold = 1``; the
+default is in the table below). On the neutral Askervein deck it needs 164 against 156 and ends with smaller
+residuals.
+
+**The reference hold.** A driver runs its first ``steady.residual_ref_iterations`` iterations at ``steady.cfl0``
+with :math:`r_n = 1` while it takes its reference, and the loose stop waits for them. The coarsest level needs this:
+it takes the reference. A seeded level does not: its reference is there before its first iteration. With
+``steady.sequencing_hold = 0`` (the default) every seeded level, level 0 included, skips the hold:
+
+.. math::
+
+   r_n = \max_q \frac{R_q^n}{\max\bigl(R_q^{\mathrm{ref},n}, \tau\bigr)}, \qquad
+   R_q^{\mathrm{ref},n} = \max\bigl(S_q, R_q^0, \dots, R_q^{\min(n, N_{\mathrm{ref}} - 1)}\bigr)
+   \qquad (n \ge 0),
+
+with :math:`S_q` the seed (the coarsest level's reference), :math:`N_{\mathrm{ref}}` =
+``steady.residual_ref_iterations`` and :math:`\tau` = ``steady.residual_tol``. So :math:`r_n \le 1` while the
+first :math:`N_{\mathrm{ref}}` values can still raise the reference, and the SER law
+:math:`\mathrm{CFL}_{n+1} = \min(\mathrm{CFL}_{\max}, g\,\mathrm{CFL}_n, \mathrm{CFL}_0 r_n^{-p})` applies from the
+first iteration (:math:`g` = ``steady.ser_max_growth`` still caps the climb). A residual that rises above the
+seed sends the CFL back to ``steady.cfl0`` at once (the law has no cap on a decrease). The loose stop's residual
+branch may hold from the third iteration (or after :math:`N_{\mathrm{ref}}` if fewer): one iteration at
+``steady.cfl0`` barely moves a prolonged field, and a stop there would hand it on unrelaxed. At the stop the threshold
+is never above the held one (its reference is a maximum over fewer values); a residual that rises after the stop is
+not seen. The monitor branch still waits :math:`N_{\mathrm{ref}}` iterations. ``steady.sequencing_hold = 1`` keeps the
+hold on every level, as in sub-phase 2.5. ``steady.sequencing_cfl_start = previous`` (hold 0 only) starts each
+seeded level at the CFL the previous level would have run its next iteration with, raised to ``steady.cfl0`` if
+below. The checkpoint keeps level 0's hold (driver history format 2; a format-1 history reads as the hold on), so a
+restart continues with it, with or without ``steady.sequencing``, and the log prints it.
+
+Measured level-0 iterations to the strict stop (coarse-level iterations in brackets, coarsest first):
+
+.. list-table::
+   :header-rows: 1
+
+   * - Case
+     - 1 level
+     - Hold on every level (``sequencing_hold = 1``)
+     - **Default** (``sequencing_hold = 0``)
+     - ``sequencing_cfl_start = previous``
+   * - ``Neutral_Hill_3D``, 3 levels
+     - 2091
+     - 774 (383, 127)
+     - **706 (383, 51)**
+     - 704 (383, 51)
+   * - Truly neutral hill (round-off), 3 levels
+     - 3495
+     - 2773 (239, 101)
+     - **2688 (239, 38)**
+     - 2709 (239, 28)
+   * - Askervein, neutral deck, 2 levels
+     - 156
+     - 164 (100)
+     - **130 (100)**
+     - 130 (100)
+   * - Askervein, conventionally neutral deck, 2 levels
+     - 220
+     - 147 (100)
+     - **124 (100)**
+     - 124 (100)
+   * - Askervein 1 m first cell, ``w_vnn_cap = 16``, 2 levels
+     - 200
+     - 173 (100)
+     - **157 (100)**
+     - 157 (100)
+   * - Askervein 1 m first cell, ``w_vnn_cap = 16``, boxes 28, 3 levels
+     - 200
+     - 172 (100, 100)
+     - **151 (100, 40)**
+     - 150 (100, 40)
+
+The seeded coarse levels gain most (101 → 38, 127 → 51, 100 → 40): with the hold their loose stop could not come
+before iteration 100, and their residuals are two orders down well before. The coarsest level is unchanged (it
+holds). On the k-clipping decks (``Neutral_Hill_3D``, the conventionally neutral Askervein deck) the number of
+clipped k values per iteration stays within 1 % of the held run's, and no level diverges. ``previous`` gains on
+some coarse levels but not on level 0 (2688 → 2709 on the truly neutral hill), so the default start stays
+``steady.cfl0``. Wall time with the coarse levels, hold on every level against the default (one machine, serial
+runs): ``Neutral_Hill_3D`` 60.5 → 54.2 s, the truly neutral hill 32.7 → 31.6 s (four ranks), the Askervein decks
+3.0 → 2.5 s and 4.3 → 3.7 s (two ranks), the 1 m first-cell mesh 85.5 → 75.3 s with two levels and 68.9 → 54.7 s
+with three (eight ranks). The 1 m first-cell Askervein mesh is the one of the ``simplec.w_vnn_cap`` study (140 × 140 × 54 at
+43 m, line LU-SGS, CFL cap 16, eight ranks); without the cap and with the hold, two levels cut level 0 from 324
+iterations to 168.
+
+**The loose stop.** A coarse level stops after an iteration when
+
+.. math::
+
+   R_q^n \le \max\!\left(R_q^{\mathrm{ref}}, \tau\right) 10^{-d_\ell} \quad\text{or}\quad R_q^n < \tau
+   \qquad \text{for every residual } q,
+
+after at least ``steady.residual_ref_iterations`` iterations (both branches; on a seeded level without the
+reference hold, three for the residual branch, see above), with :math:`\tau` = ``steady.residual_tol`` and
+:math:`d_\ell` = ``steady.sequencing_drop_orders`` (2), or when the strict criterion holds. With
+``steady.sequencing_monitor_tol`` = :math:`\mu > 0` it also stops when every monitor :math:`m` changed by at most
+:math:`\mu \max(|m|, s_m)` over the last ``steady.monitor_window`` iterations (the strict monitor test without its
+extrapolation). That branch is off by default: right after a prolongation the monitors (largest face speed, mean k,
+mean :math:`u_*`) are already near their limits and change by less than 1 % over a window while the residuals have
+not dropped. On ``Neutral_Hill_3D`` with :math:`\mu = 0.01`, level 1 stopped after 51 iterations with no residual
+drop and level 0 took 985 iterations, against 774 with the residual branch alone.
+
+**Cost.** An iteration on level l costs about :math:`4^{-l}` of a level-0 iteration (the same z column, a quarter
+of the columns per level), plus the Poisson solve. Measured on four ranks (Apple M-series, double precision), with
+the reference hold on every level (``steady.sequencing_hold = 1``, sub-phase 2.5; the default without it gains
+further, see *The reference hold* above and the wall times there):
+
+.. list-table::
+   :header-rows: 1
+
+   * - Case (strict stop)
+     - Levels
+     - Coarse iterations (2, 1)
+     - Level-0 iterations
+     - Wall time (s)
+   * - ``Neutral_Hill_3D`` (2 orders)
+     - 1
+     - —
+     - 2091
+     - 144.8
+   * - ``Neutral_Hill_3D``
+     - **3**
+     - **383, 127**
+     - **774**
+     - **57.1**
+   * - ``Neutral_Hill_3D``
+     - 2
+     - 692 (level 1)
+     - 843
+     - 69.4
+   * - Truly neutral hill (round-off)
+     - 1
+     - —
+     - 3495
+     - 39.6
+   * - Truly neutral hill
+     - 3
+     - 239, 101
+     - 2773
+     - 32.5
+   * - Truly neutral hill, ``sequencing_drop_orders = 3``
+     - 3
+     - 323, 147
+     - 2472
+     - 28.8
+
+The ``Neutral_Hill_3D`` deck stops at two orders (with its monitor test), the truly neutral deck
+(``Truly_Neutral_Hill_3D/inputs_steady_hill3d_neutral``) at round-off (1e-11 and eight orders). The starting field
+matters with sequencing (PT-2.5.2, ``Neutral_Hill_3D``, three levels): the plain projection (``init.projection = 1``,
+:math:`\alpha_v = \alpha_h`, the default) needs 774 level-0 iterations, the first guess without projection
+(``init.projection = 0``) 1442, and the mass-consistent field with ``init.alpha_v = 0.1`` 1007. Without sequencing
+the three need 2091, 2042 and 2044. The default stays the plain projection.
+
+The gain is the transient the coarse levels remove. Once the error is down to the slowest mode of the level-0
+iteration, every run converges at the same rate, so a deep stop (round-off, 8 orders) gains less in proportion than
+an engineering stop (2 orders). The converged state does not depend on sequencing: ``rt_steady_hill3d_neutral_sequencing``
+matches the run without it to 1e-8 (:doc:`testing`).
+
+**Restart and memory.** The coarse levels run on a fresh start only: a checkpoint holds the level-0 state and its
+driver history (with the seeded references), and a restart with ``steady.sequencing = 1`` continues level 0 and says
+so. The coarse levels' wall time and allocation units are in the log, not in the checkpoint. The level-0 solver
+(stage, pressure solver, wall distance) is built before the coarse levels run and stays allocated while they do, and
+the prolongation into level 0 builds a second level-0 pressure solver for its projection, so the peak memory is
+above that of level 0 alone.
+
 Poisson solver
 --------------
 

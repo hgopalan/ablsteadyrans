@@ -12,6 +12,7 @@
 #include "Mesh.H"
 #include "MeshHierarchy.H"
 #include "Poisson.H"
+#include "Sequencing.H"
 #include "Simplec.H"
 #include "State.H"
 #include "SurfaceLayer.H"
@@ -30,50 +31,11 @@ namespace ablsteady {
 
 namespace {
 
-//! Fill dist's ghost ring by zero gradient outside the domain (periodic
-//! images first), for the Tucker distance (the height above the ground fills
-//! its own ghosts).
-void extend_by_zero_gradient (amrex::MultiFab& dist, const amrex::Geometry& geom)
-{
-    dist.FillBoundary(geom.periodicity());
-    amrex::Box inside = geom.Domain();
-    for (int d = 0; d < AMREX_SPACEDIM; ++d) { if (geom.isPeriodic(d)) { inside.grow(d, 1024); } }
-    for (amrex::MFIter mfi(dist, false); mfi.isValid(); ++mfi) {
-        const auto arr = dist.array(mfi);
-        amrex::ParallelFor(mfi.fabbox(), [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
-        {
-            if (!inside.contains(amrex::IntVect(i, j, k))) {
-                const int ic = amrex::max(inside.smallEnd(0), amrex::min(inside.bigEnd(0), i));
-                const int jc = amrex::max(inside.smallEnd(1), amrex::min(inside.bigEnd(1), j));
-                const int kc = amrex::max(inside.smallEnd(2), amrex::min(inside.bigEnd(2), k));
-                arr(i, j, k) = arr(ic, jc, kc);
-            }
-        });
-    }
-}
-
 std::string fmt (double x)
 {
     char b[32];
     std::snprintf(b, sizeof(b), "%.3e", x);
     return b;
-}
-
-//! One log line per iteration (the first ten, then every tenth, and the last).
-void print_iteration (const Driver& driver, const SimplecStage& stage, bool last)
-{
-    const DriverHistory& h = driver.history();
-    const IterationRecord& r = h.records.back();
-    if (!(r.iteration < 10 || r.iteration % 10 == 9 || last)) { return; }
-    std::string line = "ablsteady: it " + std::to_string(r.iteration + 1) + " cfl " + fmt(double(r.cfl)) + " r "
-                     + fmt(double(r.relative_residual)) + " res";
-    for (const amrex::Real v : r.residuals) { line += " " + fmt(double(v)); }
-    line += " mon";
-    for (const amrex::Real v : r.monitors) { line += " " + fmt(double(v)); }
-    const SimplecIterationInfo& info = stage.last();
-    line += " poisson " + std::to_string(info.pressure.poisson.iterations) + " div " + fmt(double(info.pressure.divergence_before))
-          + " -> " + fmt(double(info.pressure.divergence_after)) + " clipped " + std::to_string(info.tke.clipped) + "\n";
-    amrex::Print() << line;
 }
 
 } // namespace
@@ -90,6 +52,7 @@ void run ()
     auto err = validate(in);
     const InitOptions iopt = read_init_options();
     const SteadyOptions sopt = read_steady_options();
+    const SequencingOptions seq = read_sequencing_options();
     const bool initialize = (iopt.first_guess != InitOptions::FirstGuess::none);
     const bool solve = (sopt.stage == StageKind::simplec);
     BoundaryInputs bin;
@@ -127,6 +90,10 @@ void run ()
         for (const auto& k : sopt.given) {
             if (k != "stage") { err.emplace_back("steady." + k + " has no effect without steady.stage = simplec"); }
         }
+        for (const auto& k : seq.given) { err.emplace_back("steady." + k + " has no effect without steady.stage = simplec"); }
+    }
+    if (solve) {
+        for (auto& e : check_sequencing_options(seq, sopt.criterion, in.mesh)) { err.push_back(std::move(e)); }
     }
     for (const auto& e : unknown_inputs(parmparse_entries())) {
         // The stage's namespaces were reported above with their reason.
@@ -155,9 +122,17 @@ void run ()
     const amrex::Geometry geom = make_geometry(in.mesh);
     // With a grid hierarchy, boxes every level coarsens exactly.
     const amrex::BoxArray ba = hierarchy_box_array(in.mesh);
+    // Grid sequencing runs the coarse levels on a fresh start only.
+    const bool sequencing = solve && seq.enabled && in.io.restart.empty();
     if (solve && sopt.sweep == SweepKind::lusgs) {
-        // The overlap against the layout (LineSweeps.H), before any work.
-        const std::string lay = check_line_overlap_layout(ba, sopt.line_overlap);
+        // The overlap against the layout (LineSweeps.H), before any work;
+        // with sequencing also against every coarse level's boxes.
+        std::string lay = check_line_overlap_layout(ba, sopt.line_overlap);
+        for (int l = 1; sequencing && lay.empty() && l < in.mesh.hierarchy_levels; ++l) {
+            const int r = hierarchy_ratio(l);
+            lay = check_line_overlap_layout(amrex::BoxArray(ba).coarsen(amrex::IntVect(AMREX_D_DECL(r, r, 1))), sopt.line_overlap);
+            if (!lay.empty()) { lay += " (on grid hierarchy level " + std::to_string(l) + ", steady.sequencing = 1)"; }
+        }
         if (!lay.empty()) { amrex::Abort("ablsteady: invalid inputs:\n  " + lay); }
     }
     const amrex::DistributionMapping dm(ba);
@@ -170,13 +145,14 @@ void run ()
     Mesh mesh;
     mesh.define(ba, dm);
     const bool restart = !in.io.restart.empty();
+    std::unique_ptr<InflowProfile> column;
     if (!restart) {
         mesh.build(in, geom, state.z_phys_nd);
         if (initialize) {
             // The converged column as the profile (ColumnGuess.H), then the
             // mass-consistent initial field (Initializer.H) or the first
-            // guess alone (init.projection = 0).
-            std::unique_ptr<InflowProfile> column;
+            // guess alone (init.projection = 0). With grid sequencing the
+            // initializer runs on the coarsest level instead.
             if (iopt.first_guess == InitOptions::FirstGuess::column) {
                 const ColumnGuessResult cg = run_column_guess(in, iopt, sopt, bin, surf, surface_layer, copt, fopt, "column_guess.dat");
                 char cl[256];
@@ -192,28 +168,10 @@ void run ()
                 }
                 column = std::make_unique<InflowProfile>(cg.z, cg.u, cg.v, cg.theta, cg.tke, bin.theta_ref);
             }
+        }
+        if (initialize && !sequencing) {
             const InitResult r = initialize_state(iopt, bin, popt, mesh, geom, state, nullptr, fopt.coriolis, column.get());
-            char line[256];
-            if (iopt.projection) {
-                std::snprintf(line, sizeof(line),
-                              "ablsteady: initializer: %d Poisson iterations (%s, reltol %.3e), divergence %.9e before, %.9e after\n",
-                              r.poisson.iterations, r.poisson_backend.c_str(), static_cast<double>(popt.reltol),
-                              static_cast<double>(r.divergence_before), static_cast<double>(r.divergence_after));
-            } else {
-                std::snprintf(line, sizeof(line), "ablsteady: initializer: no projection (init.projection = 0), divergence %.9e\n",
-                              static_cast<double>(r.divergence_before));
-            }
-            amrex::Print() << line;
-            if (r.backend_fallback) {
-                amrex::Print() << "ablsteady: initializer: init.alpha_v / init.alpha_h = " << iopt.alpha_v / iopt.alpha_h
-                               << " needs the split z-face coefficient, which only solver.poisson_backend = gmres_fft has;"
-                               << " the projection used gmres_fft, the SIMPLEC stage keeps " << popt.backend << "\n";
-            }
-            if (iopt.obrien) {
-                std::snprintf(line, sizeof(line), "ablsteady: initializer: O'Brien removed a top residual of %.6e m/s\n",
-                              static_cast<double>(r.obrien_top_residual));
-                amrex::Print() << line;
-            }
+            print_initializer(r, iopt, popt, "");
         }
     } else {
         read_checkpoint(in.io.restart, state, in.mesh);
@@ -250,8 +208,9 @@ void run ()
     }
 
     // The x/y grid hierarchy (mesh.hierarchy_levels > 1): built from level 0's
-    // node heights, reported and written with the plotfile. The stage runs on
-    // level 0 (grid sequencing over the levels is sub-phase 2.5).
+    // node heights, reported and written with the plotfile. With
+    // steady.sequencing = 1 the stage runs on every level, coarse to fine
+    // (Sequencing.H); otherwise on level 0 alone.
     std::unique_ptr<MeshHierarchy> hierarchy;
     if (in.mesh.hierarchy_levels > 1) {
         hierarchy = std::make_unique<MeshHierarchy>(in, geom, state.z_phys_nd, mesh);
@@ -265,42 +224,33 @@ void run ()
     };
 
     if (solve) {
-        // The run's models.
-        const BoundaryConditions bc(bin, geom, mesh, fopt.coriolis);
-        Closure closure(copt);
-        amrex::MultiFab dist;
-        if (copt.wall_distance == WallDistanceKind::tucker) {
-            dist.define(ba, dm, 1, 1);
-            const PoissonResult wd = tucker_wall_distance(mesh, geom, state.z_phys_nd, dist, popt);
-            amrex::Print() << "ablsteady: Tucker wall distance: " << wd.iterations << " Poisson iterations\n";
-            extend_by_zero_gradient(dist, geom);
-        } else {
-            height_above_ground(state.z_phys_nd, dist);
-        }
-        ResidualInputs res_in;
-        res_in.closure = &closure;
-        res_in.wall_distance = &dist;
-        res_in.theta_ref = bin.theta_ref;
-        res_in.momentum = cin.momentum;
-        res_in.theta = cin.theta;
-        res_in.buoyancy = fopt.buoyancy;
-        res_in.coriolis = fopt.coriolis;
-        res_in.pressure_gradient = fopt.pressure_gradient;
-        res_in.surface = surface_layer ? &surf : nullptr;
-        res_in.bc = &bc;
-        auto stage = std::make_unique<SimplecStage>(simplec, sopt.zline_sweeps, res_in, &closure, popt, mesh, geom,
-                                                    state.z_phys_nd, copt.tke_floor, ba, dm, line_sweep_options(sopt));
-        const SimplecStage& simplec_stage = *stage;
-        std::vector<std::unique_ptr<Stage>> stages;
-        stages.push_back(std::move(stage));
-        Driver driver(sopt, std::move(stages), mesh, geom, &simplec_stage.nu());
+        // The run's models on level 0 (Sequencing.H: LevelSolver).
+        RunSetup setup;
+        setup.bin = bin;
+        setup.popt = popt;
+        setup.surf = surf;
+        setup.surface_layer = surface_layer;
+        setup.copt = copt;
+        setup.fopt = fopt;
+        setup.cin = cin;
+        setup.simplec = simplec;
+        setup.sopt = sopt;
+        LevelSolver level0(setup, mesh, geom, state.z_phys_nd, ba, dm, "");
+        const BoundaryConditions& bc = level0.bc;
+        Closure& closure = level0.closure;
+        const amrex::MultiFab& dist = level0.dist;
+        const ResidualInputs& res_in = level0.res_in;
+        const SimplecStage& simplec_stage = level0.stage();
+        Driver& driver = level0.driver();
         if (restart) {
             // The histories: the driver's and the closure's nu_t (both
             // written with the checkpoint; the driver's must exist).
             driver.restore(read_driver_history(in.io.restart), state);
             closure.read_checkpoint(in.io.restart, ba, dm, geom);
             amrex::Print() << "ablsteady: driver history restored: " << driver.history().records.size()
-                           << " iterations, cfl " << driver.cfl() << "\n";
+                           << " iterations, cfl " << driver.cfl() << ", reference hold " << driver.hold_iterations()
+                           << " iterations" << (driver.history().hold == 0 ? " (released: a seeded level of grid sequencing)" : "")
+                           << "\n";
         }
         amrex::Print() << "ablsteady: SIMPLEC stage: " << sopt.zline_sweeps << " " << sweep_name(sopt.sweep) << " sweeps";
         if (sopt.sweep == SweepKind::lusgs) {
@@ -313,6 +263,23 @@ void run ()
         if (simplec.w_vnn_cap > 0) { amrex::Print() << simplec.w_vnn_cap; } else { amrex::Print() << "off"; }
         amrex::Print() << ", cfl0 " << sopt.cfl0
                        << ", cfl_max " << sopt.cfl_max << "\n";
+        // Grid sequencing: the coarse levels to the loose stop, then the
+        // prolongation into the level-0 state (Sequencing.H).
+        std::vector<LevelSummary> levels;
+        if (sequencing) {
+            amrex::Print() << "ablsteady: grid sequencing over " << hierarchy->num_levels() << " levels: loose stop at "
+                           << seq.drop_orders << " orders";
+            if (seq.monitor_tol > 0) { amrex::Print() << " or monitors within " << seq.monitor_tol; }
+            amrex::Print() << ", strict stop on level 0; "
+                           << (seq.hold == 1 ? "every level holds steady.cfl0 for the reference iterations"
+                                             : "the seeded levels without the reference hold")
+                           << (seq.cfl_previous ? ", starting at the previous level's CFL" : "") << "\n";
+            levels = sequence_coarse_levels(*hierarchy, setup, seq, iopt, column.get(), level0, state);
+        } else if (solve && seq.enabled) {
+            amrex::Print() << "ablsteady: grid sequencing: the restart continues on level 0; the coarse levels are not run"
+                           << " (steady.sequencing, sequencing_drop_orders, sequencing_monitor_tol, sequencing_hold and sequencing_cfl_start"
+                           << " have no effect; the checkpoint keeps level 0's reference hold)\n";
+        }
         SteadyVerdict v = driver.verdict();
         int done = 0;
         while (static_cast<int>(driver.history().records.size()) < sopt.max_iterations) {
@@ -334,6 +301,7 @@ void run ()
             amrex::Print() << "ablsteady: stage account: " << acc.iterations << " iterations, " << acc.wall_seconds
                            << " s, " << acc.au << " AU\n";
         }
+        if (!levels.empty()) { amrex::Print() << sequencing_report(levels, driver.history(), status, sopt.criterion.residual_ref_iterations); }
         check_overwrite();   // the step is final here, before any output
         if (in.io.write_plotfile == 1) {
             const auto name = write_plotfile(in.io.plot_file, state, geom, &mesh.detJ);

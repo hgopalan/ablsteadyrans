@@ -19,9 +19,15 @@ It also carries the old-against-new test of the default `solver.poisson_backend`
 with `solver.poisson_backend = gmres_fft` (the default before `gmres_mlmg`), and `check_line_match.py` compares it
 with `rt_steady_hill3d_neutral_lusgs` (the default, `gmres_mlmg`, checked in its log) at 1e-8.
 
+RT-2.5.1 runs the z-line Jacobi deck a third time with grid sequencing (`mesh.hierarchy_levels=3
+steady.sequencing=1` on the command line: 8 x 8 and 16 x 16 to the loose stop, then 32 x 32 to the strict stop),
+and `check_line_match.py` compares it with `rt_steady_hill3d_neutral_zjacobi` at 1e-8. The checker counts only
+`PREFIX<step>`, not the per-level plotfiles `PREFIX_level<l>_<step>` a hierarchy run also writes.
+
 ## CTest
 `rt_steady_hill3d_neutral_clean`, `rt_steady_hill3d_neutral_zjacobi`, `rt_steady_hill3d_neutral_lusgs`,
-`rt_poisson_default_gmres_fft` (four ranks each), `rt_steady_hill3d_neutral_matches`, `rt_poisson_default_matches`. Label `nightly`, double precision only. The clean step empties
+`rt_poisson_default_gmres_fft`, `rt_steady_hill3d_neutral_sequencing` (four ranks each), `rt_steady_hill3d_neutral_matches`,
+`rt_poisson_default_matches`, `rt_steady_hill3d_neutral_sequencing_matches`. Label `nightly`, double precision only. The clean step empties
 the run directories first, so a stale plotfile cannot be compared, and the checker requires exactly one plotfile
 per run.
 

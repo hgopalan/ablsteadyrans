@@ -11,8 +11,8 @@
 //   3. its scaled residual norms and monitors go to the SteadyCriterion
 //      (SteadyCriterion.H) and the history;
 //   4. the relative residual r_n = max_q R_q^n / max(R_q^ref, residual_tol)
-//      (R^ref the criterion's reference, 1 while the reference iterations
-//      run, unchanged once the run has diverged) drives
+//      (R^ref the criterion's reference, 1 while the reference hold runs,
+//      unchanged once the run has diverged) drives
 //      the SER ramp, CFL_{n+1} = min(cfl_max, growth CFL_n, cfl0 r_n^-p), and
 //      the switch rules;
 //   5. the switch rules: forward to the next stage after switch_window
@@ -144,6 +144,11 @@ struct DriverHistory
     amrex::Real cfl{0};                   //!< the CFL of the next iteration
     int below_count{0};                   //!< consecutive iterations with r_n <= switch_residual
     int last_switch{-1};                  //!< iteration of the last switch (-1: none)
+    //! The reference hold: for this many first iterations the CFL stays at
+    //! cfl0 and r_n = 1. -1: steady.residual_ref_iterations (the default);
+    //! 0: none (release_reference_hold, a seeded level of grid sequencing).
+    //! No other value is written or read.
+    int hold{-1};
 };
 
 //! <dir>/Driver, text, hex floats. Aborts, naming the directory, on a file
@@ -185,6 +190,25 @@ public:
     //! lives in q, so the checkpoint of q restores it). Aborts on a history
     //! that does not fit the stages or is inconsistent.
     void restore (const DriverHistory& h, State& q);
+    //! Start the criterion's residual references at ref before the first
+    //! step (SteadyCriterion::seed_reference; grid sequencing). Aborts after
+    //! a step or a restore.
+    void seed_reference (const std::vector<amrex::Real>& ref);
+    //! Skip the reference hold (history().hold = 0) before the first step:
+    //! r_n is measured against the (seeded) reference from the first
+    //! iteration on, and the SER ramp starts at once. Grid sequencing
+    //! (steady.sequencing_hold = 0) calls it after seed_reference only.
+    //! Aborts after a step or a restore, or when no reference entry is > 0
+    //! (a seeded entry of 0 is measured against residual_tol, as unseeded).
+    void release_reference_hold ();
+    //! The CFL of the first iteration (steady.sequencing_cfl_start =
+    //! previous), brought up to cfl0 (as restore does; the SER law gives less
+    //! than cfl0 when r_n > 1). Before the first step only; aborts unless cfl
+    //! is finite, > 0 and <= cfl_max, or when the hold is still on (next_cfl
+    //! would put the CFL back to cfl0).
+    void start_cfl (amrex::Real cfl);
+    //! The iterations of the reference hold (history().hold resolved).
+    [[nodiscard]] int hold_iterations () const;
     //! The relative residual r of the last record (0 before the first).
     [[nodiscard]] amrex::Real relative_residual () const;
 
