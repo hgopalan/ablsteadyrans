@@ -134,6 +134,99 @@ is killed:
      - ``steady.line_alternate = 1`` with ``steady.zline_sweeps = 1`` accepted (the option read and ignored)
      - UT-2.2.5 (``Driver``)
 
+The one-line mutants of sub-phase 2.4 (``Source/Transfer.cpp``), each run against ``Transfer.*`` on two ranks with the
+unit-test flags (SNaN fill, FPE trap) by ``tools/transfer_mutants.py``. 23 are killed. Three survive and the script
+lists them as equivalent: T6 and T9 change no value, and T24 changes only the ``gmres_fft`` solver's path, so its result
+agrees with the original's to the solver tolerance. A first run, without the SNaN and FPE flags and before UT-2.4.7 to
+UT-2.4.9 were added, left T10, T14, T18 and T19 alive as well. "Crash" marks a mutant that stops the run with a
+signal in that test (SIGILL on macOS arm64), so the tests after it did not run.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 6 50 44
+
+   * - Mutant
+     - Change
+     - Failing tests
+   * - T1
+     - Cell means not ``detJ``-weighted
+     - UT-2.4.1
+   * - T2
+     - x/y-face flux without the fine area factor
+     - UT-2.4.1, UT-2.4.6
+   * - T3
+     - x/y-face flux not divided by r
+     - UT-2.4.1, UT-2.4.6
+   * - T4
+     - z-face flux divided by r instead of :math:`r^2`
+     - UT-2.4.1, UT-2.4.6
+   * - T5
+     - Coarse u not divided by the coarse area factor
+     - UT-2.4.1, UT-2.4.6
+   * - T6
+     - Coarse Ω not divided by the coarse area factor
+     - Equivalent: :math:`a_z = 1` on every mesh
+   * - T7
+     - w restricted in place of Ω
+     - UT-2.4.1
+   * - T8
+     - No zero-gradient rows for the slope term's u
+     - UT-2.4.1 (crash)
+   * - T9
+     - No periodic fill for the slope term's u
+     - Equivalent: the slope term reads u on its own cell's x-faces, no horizontal ghost
+   * - T10
+     - Coarse ``z_phys_nd`` not set by ``restrict_state``
+     - UT-2.4.7
+   * - T11
+     - Cell-centred position shifted by half a fine cell
+     - UT-2.4.3, UT-2.4.6, UT-2.4.8
+   * - T12
+     - No linear extrapolation at a non-periodic face (reads past the last centre)
+     - UT-2.4.3 (crash)
+   * - T13
+     - Periodic direction extrapolates instead of reading the periodic image
+     - UT-2.4.6
+   * - T14
+     - One-cell direction reads a second coarse cell (zero weight, unfilled ghost)
+     - UT-2.4.8 (crash)
+   * - T15
+     - x weights swapped on the upper y row
+     - UT-2.4.3, UT-2.4.4, UT-2.4.6, UT-2.4.8
+   * - T16
+     - w interpolated with the nodal x axis
+     - UT-2.4.3 (crash)
+   * - T17
+     - Coarse image filled without the periodic images
+     - UT-2.4.3 (crash)
+   * - T18
+     - Fine ``z_phys_nd`` not set by ``prolong_fields``
+     - UT-2.4.7
+   * - T19
+     - Fine-below-coarse level check dropped
+     - UT-2.4.9
+   * - T20
+     - k not clipped
+     - UT-2.4.4
+   * - T21
+     - Clipped-cell count not summed over ranks
+     - UT-2.4.4
+   * - T22
+     - Infinite ``turb.tke_floor`` accepted
+     - UT-2.4.4
+   * - T23
+     - No boundary fill before the projection
+     - UT-2.4.2
+   * - T24
+     - Projection corrects the Dirichlet rows too (d = 1 + mask)
+     - Equivalent with ``gmres_mlmg`` and ``mlmg``: every Dirichlet row is a domain face with a Neumann condition on p′, so the flux there is 0. With ``gmres_fft`` only to the Poisson tolerance: its preconditioner's cell coefficients next to the face change
+   * - T25
+     - No projection off the Dirichlet rows (d = −mask)
+     - UT-2.4.2, UT-2.4.4, UT-2.4.5
+   * - T26
+     - p′ not restored after the projection
+     - UT-2.4.2
+
 The tests run with the GPU CI flags (see :doc:`running`). Each test runs in its own directory under
 ``<build>/Tests/run/``.
 
@@ -1016,6 +1109,18 @@ GoogleTest suite
        in x or in y, against the closed form: :math:`(c_{I-1} + 6c_I + c_{I+1})/8` along a cell-centred direction
        (the identity in the first and last cells next to a non-periodic face), the identity along a nodal one, for a
        non-smooth coarse field; to 2e-14 (2e-6 in single precision).
+   * - UT-2.4.7
+     - *Beyond the plan* (``Transfer.TargetNodeHeightsComeFromTheHierarchy``). Over the hill, for the three level
+       pairs: ``restrict_state`` and ``prolong_fields`` set the target State's ``z_phys_nd``, ghost nodes included,
+       to its level's bit for bit, from a target that held −1.
+   * - UT-2.4.8
+     - *Beyond the plan* (``Transfer.OneCellDirectionIsConstant``). 32 × 4 cells, periodic x, walls in y, three
+       levels: level 2 is one cell wide in y. A tent in x, constant in y, prolonged from level 2 to levels 1 and 0, is
+       reproduced at every fine point of each field to 1e-13 (2e-6 in single precision). A read of the coarse
+       image's unfilled ghost cells shows as a NaN under ``amrex.init_snan``, even with a zero weight.
+   * - UT-2.4.9
+     - *Beyond the plan* (``Transfer.WrongLevelPairsAbort``). Level pairs (1, 1), (2, 1), (−1, 1) and (0, 3) abort
+       in ``restrict_state`` and ``prolong_fields``, with the message naming the rule 0 ≤ fine < coarse < levels.
    * - UT-1.15.7 (revised in 1.16)
      - The rotation's pin now holds the planar-mean split: :math:`a_P` with :math:`f^2\max(\tau_c, \tau_{\mathrm{own}})`
        and the right-hand side with the unique-face horizontal mean of the other residual per level at :math:`\tau_c`
