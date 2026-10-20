@@ -479,7 +479,8 @@ The surface-layer keys (refused unless ``bc.zlo = surface_layer``), read by ``re
        :math:`m = 1`, sub-phase 1.7's form, which lowers the neutral :math:`u_*` below :math:`d = 1.72\,z_0`.
        The two are identical where :math:`\ln((d + z_0)/z_0) \ge 1`. ``init.first_guess = column`` uses the same floor.
 
-The wall model uses the closure's ``turb.Cmu0`` and ``turb.kappa``.
+The wall model and the inflow profile's equilibrium k and :math:`\nu_t` use the closure's ``turb.Cmu0`` and ``turb.kappa``.
+Without the SIMPLEC stage (``turb.*`` is then refused) they use the defaults, 0.5562 and 0.41.
 
 ``turb``
 --------
@@ -498,7 +499,8 @@ regression tool ``closure_column``; without the stage, setting them stops the ru
      - Range and effect
    * - ``turb.Cmu0``
      - 0.5562
-     - Finite, > 0: :math:`C_{\mu 0}` (AL01, ERF).
+     - Finite, > 0: :math:`C_{\mu 0}` (AL01, ERF), in the closure, the wall k and the inflow profile's
+       equilibrium k.
    * - ``turb.Cb``
      - 0.35
      - Finite, > 0: :math:`C_b` of the stable and unstable lengths.
@@ -523,7 +525,8 @@ regression tool ``closure_column``; without the stage, setting them stops the ru
      - Finite, ≥ 0 (m²/s): molecular viscosity and heat diffusivity added to the turbulent ones.
    * - ``turb.kappa``
      - 0.41
-     - Finite, > 0: von Kármán's constant in :math:`l_g`.
+     - Finite, > 0: von Kármán's constant in :math:`l_g`, the wall law and the inflow profile's equilibrium
+       :math:`\nu_t`.
    * - ``turb.nut_relax``
      - 1
      - Finite, in (0, 1]: the relaxation weight of :math:`\nu_t` (1: none).

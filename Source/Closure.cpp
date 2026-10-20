@@ -104,6 +104,7 @@ ClosureOptions read_closure_options ()
     ClosureOptions opt;
     amrex::ParmParse pp("turb");
     for (const char* key : kKeys) {
+        if (pp.countname(key) > 1) { amrex::Abort(std::string("ablsteady: turb.") + key + " is given more than once"); }
         if (pp.contains(key) && pp.countval(key) != 1) {
             amrex::Abort(std::string("ablsteady: turb.") + key + " takes exactly one value");
         }

@@ -227,6 +227,28 @@ TEST(InflowProfile, AnalyticKindsAndEquilibriumTurbulence)
     EXPECT_NEAR(k, ul05 * ul05 / (0.5562 * 0.5562), tol(1e-12, 1e-5) * k);
 }
 
+// The application hands turb.Cmu0 and turb.kappa to the inflow profile and the
+// wall model (use_closure_constants). Before, both kept 0.5562 and 0.41 when
+// the closure's constants were changed: the inflow k and nu_t below would be
+// 0.16/0.5562^2 and 0.41 u* (z + z0).
+TEST(InflowProfile, TakesTheClosureConstants)
+{
+    BoundaryInputs bin;
+    ablsteady::SurfaceLayerOptions surf;
+    bin.inflow.ustar = amrex::Real(0.4);
+    bin.inflow.z0 = amrex::Real(0.1);
+    ablsteady::use_closure_constants(bin, surf, amrex::Real(0.55), amrex::Real(0.40));
+    EXPECT_EQ(surf.Cmu0, amrex::Real(0.55));
+    EXPECT_EQ(surf.kappa, amrex::Real(0.40));
+    ablsteady::InflowProfile log(bin.inflow, bin.theta_ref);
+    const auto p = log.host_view();
+    amrex::Real u, v, t, k, nut;
+    p.eval(50, u, v, t, k, nut);
+    EXPECT_NEAR(u, 0.4 / 0.40 * std::log(50.1 / 0.1), tol(1e-14, 1e-6) * u);
+    EXPECT_NEAR(k, 0.16 / (0.55 * 0.55), tol(1e-14, 1e-6));
+    EXPECT_NEAR(nut, 0.40 * 0.4 * 50.1, tol(1e-14, 1e-6) * nut);
+}
+
 TEST(InflowProfile, FileTableWithAndWithoutK)
 {
     const std::string fname = "ut_inflow_profile.txt";

@@ -253,6 +253,10 @@ Current tests
    * - ``abort_unknown_key``, ``abort_range``, ``abort_repeated_key``, ``abort_restart_mesh``,
        ``abort_restart_overwrite``
      - Decks that must stop, with the input named in the message.
+   * - ``abort_repeated_turb_key``, ``abort_repeated_surface_key``
+     - The column deck with ``turb.max_geom_lscale`` and ``bc.surface_z0`` repeated on the command line: each stops,
+       naming the key. Before, these two readers checked only the value count and the last value won (since
+       sub-phases 1.9 and 1.7).
    * - ``warn_w_vnn_cap_terrain``, ``warn_w_vnn_cap_terrain_below``, ``abort_w_vnn_cap_floor``
      - *Beyond the plan.* The thin-cell strip on a 50 m ridge
        (``Tests/Infrastructure/Input_Validation/inputs_w_vnn_cap_terrain``, max aspect ratio about 134), one
@@ -383,6 +387,11 @@ Current tests
        (1e-6); ν_t of the second cell within 6 % of κ u* (z + z₀); every column identical (1e-10); every field finite.
        Measured: 2231 iterations, u* = 0.3499999, second cell 0.9 % low, cells 2–7 1.3–1.9 % low. Double precision
        only (six orders and 1e-8 are below single's floor); the restart chain below runs in both.
+   * - ``rt_steady_column_constants``
+     - The column of ``rt_steady_column`` with ``turb.kappa = 0.40`` and ``turb.Cmu0 = 0.55``: the same checks, with
+       the wall law, the wall k and ν_t taken with those constants (``--kappa``, ``--cmu0``). The wall model now
+       takes the closure's constants; before, it kept 0.41 and 0.5562, and the first cell was 2.4 % off the wall law (0.40/0.41 − 1).
+       Double precision only.
    * - ``rt_steady_column_rough``, ``rt_steady_column_rough_floor_one``
      - *Beyond the plan.* The column on rough ground (``inputs_steady_column_rough``: 4 × 4 × 64, 1 m layers, 64 m,
        z₀ = 0.5 m, F = u*²/H with u* = √0.125 = 0.354 m/s). The first centre, 0.5 m, is below (e − 1) z₀, where

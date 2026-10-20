@@ -100,13 +100,12 @@ int main (int argc, char* argv[])
         auto err = ablsteady::validate(in);
         // The tool works on level 0 alone: a grid hierarchy would be ignored.
         if (in.mesh.hierarchy_levels != 1) { err.emplace_back("mesh.hierarchy_levels has no effect in closure_column"); }
-        const ablsteady::BoundaryInputs bin = ablsteady::read_boundary_inputs();
+        ablsteady::BoundaryInputs bin = ablsteady::read_boundary_inputs();
         ablsteady::SurfaceLayerOptions sopt = ablsteady::read_surface_layer_options();
         const ablsteady::ClosureOptions copt = ablsteady::read_closure_options();
         // One Cmu0 and kappa for the wall law, the wall k and the closure (the
-        // state is their common equilibrium).
-        sopt.Cmu0 = copt.Cmu0;
-        sopt.kappa = copt.kappa;
+        // state is their common equilibrium), as in the application.
+        ablsteady::use_closure_constants(bin, sopt, copt.Cmu0, copt.kappa);
         amrex::Real ustar = amrex::Real(0.4), direction = 0;
         {
             amrex::ParmParse pp("fixed_state");

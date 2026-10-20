@@ -2,7 +2,7 @@
 """Run ablsteady on the 1-D neutral column deck and check the steady state (RT-1.15.1).
 
     check_steady_column.py --ustar U --z0 Z0 --force F --height H --dz DZ --orders N [--floor log_law|one]
-                           [--stress-profile] -- COMMAND [ARGS ...]
+                           [--stress-profile] [--kappa K] [--cmu0 C] -- COMMAND [ARGS ...]
 
 Runs COMMAND (the application on Tests/Canonical_RANS/Neutral_Column/inputs_steady_column) and checks:
   * the driver reached the steady verdict ("ablsteady: steady after" in its output);
@@ -34,6 +34,9 @@ Runs COMMAND (the application on Tests/Canonical_RANS/Neutral_Column/inputs_stea
   * nu_t in the second cell is kappa u* (z + z0) within 6 %;
   * every column is identical (the planar standard deviation of u is below
     1e-10 of u*) and every field finite.
+--kappa and --cmu0 (default 0.41 and 0.5562) are the run's turb.kappa and
+turb.Cmu0: the wall law, the wall k and nu_t are checked with them, so a wall
+model that ignored the closure's constants fails the wall-law checks.
 Prints one row per check; the exit code is the verdict.
 """
 import math
@@ -46,8 +49,8 @@ sys.path.insert(0, os.path.join(HERE, "..", "..", "..", "extern_erf"))
 sys.dont_write_bytecode = True
 import erf_plotfile  # noqa: E402
 
-CMU0 = 0.5562
-KAPPA = 0.41
+CMU0_DEFAULT = 0.5562
+KAPPA_DEFAULT = 0.41
 
 
 def read_history(path):
@@ -72,6 +75,7 @@ def read_history(path):
 
 def main(argv):
     opts = {"--ustar": None, "--z0": None, "--force": None, "--height": None, "--dz": None, "--orders": None}
+    consts = {"--kappa": KAPPA_DEFAULT, "--cmu0": CMU0_DEFAULT}
     floor = "log_law"
     stress_profile = False
     i = 1
@@ -82,6 +86,9 @@ def main(argv):
         elif argv[i] == "--stress-profile":
             stress_profile = True
             i += 1
+        elif argv[i] in consts and i + 1 < len(argv):
+            consts[argv[i]] = float(argv[i + 1])
+            i += 2
         elif argv[i] in opts:
             opts[argv[i]] = float(argv[i + 1])
             i += 2
@@ -90,6 +97,8 @@ def main(argv):
     if any(v is None for v in opts.values()) or i >= len(argv):
         raise SystemExit(__doc__)
     cmd = argv[i + 1:]
+    KAPPA = consts["--kappa"]
+    CMU0 = consts["--cmu0"]
     print("check_steady_column: running", " ".join(cmd))
     run = subprocess.run(cmd, check=False, capture_output=True, text=True)
     sys.stdout.write(run.stdout)

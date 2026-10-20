@@ -341,6 +341,18 @@ ablsteady_add_test(NAME abort_repeated_key NP 1 LABELS "regression;smoke"
                           "io\\.restart takes exactly one value" --
                    COMMAND $<TARGET_FILE:ablsteady> ${VALIDATION_CASE}/inputs_abort_repeated_key
                            ${ABLSTEADY_TEST_AMREX_FLAGS})
+# The turb.* and bc.surface_* readers stop at their first error, so one
+# test each: the deck sets the key and the command line repeats it.
+ablsteady_add_test(NAME abort_repeated_turb_key NP 1 LABELS "regression;smoke"
+                   PREFIX ${EXPECT_ABORT}
+                          "turb\\.max_geom_lscale is given more than once" --
+                   COMMAND $<TARGET_FILE:ablsteady> ${COLUMN_CASE}/inputs_steady_column turb.max_geom_lscale=5
+                           ${ABLSTEADY_TEST_AMREX_FLAGS})
+ablsteady_add_test(NAME abort_repeated_surface_key NP 1 LABELS "regression;smoke"
+                   PREFIX ${EXPECT_ABORT}
+                          "bc\\.surface_z0 is given more than once" --
+                   COMMAND $<TARGET_FILE:ablsteady> ${COLUMN_CASE}/inputs_steady_column bc.surface_z0=0.2
+                           ${ABLSTEADY_TEST_AMREX_FLAGS})
 ablsteady_add_test(NAME abort_restart_mesh NP 1 LABELS "regression;smoke" RUN_DIR ${SMOKE_DIR}
                    FIXTURES_REQUIRED smoke
                    PREFIX ${EXPECT_ABORT}
@@ -592,6 +604,19 @@ if(ABLSTEADY_PRECISION STREQUAL "DOUBLE")
                        PREFIX ${Python3_EXECUTABLE} ${COLUMN_CASE}/check_steady_column.py
                               --ustar 0.35 --z0 0.1 --force 1.225e-4 --height 1000 --dz 15.625 --orders 6 --
                        COMMAND $<TARGET_FILE:ablsteady> ${COLUMN_CASE}/inputs_steady_column ${ABLSTEADY_TEST_AMREX_FLAGS})
+    # The column with turb.kappa and turb.Cmu0 off their defaults: the wall
+    # model and the inflow profile take the closure's constants, so the first
+    # cell is on the wall law with kappa = 0.40 and the wall k is u*^2/0.55^2.
+    # Before, they kept 0.41 and 0.5562 (2.4 % and 2.2 % off). The pair is
+    # chosen inside the swept range kappa 0.38-0.42, Cmu0 0.53-0.58, where the
+    # discretization checks (log law over k < 8 within 2 %, nu_t within 6 %)
+    # keep their margin; the wall law and wall k hold to round-off there.
+    ablsteady_add_test(NAME rt_steady_column_constants NP 2 LABELS "regression;smoke"
+                       PREFIX ${Python3_EXECUTABLE} ${COLUMN_CASE}/check_steady_column.py
+                              --ustar 0.35 --z0 0.1 --force 1.225e-4 --height 1000 --dz 15.625 --orders 6
+                              --kappa 0.40 --cmu0 0.55 --
+                       COMMAND $<TARGET_FILE:ablsteady> ${COLUMN_CASE}/inputs_steady_column turb.kappa=0.40
+                               turb.Cmu0=0.55 ${ABLSTEADY_TEST_AMREX_FLAGS})
     # Beyond the plan: the rough column (z0 = 0.5 m, 1 m layers, the first
     # centre below (e - 1) z0). The default floor follows the log law in the
     # first cell, and the profile of the shallow column's stress u*^2 (1 - z/H)

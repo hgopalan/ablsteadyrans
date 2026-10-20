@@ -76,6 +76,7 @@ void run ()
     }
     if (solve) {
         copt = read_closure_options();
+        use_closure_constants(bin, surf, copt.Cmu0, copt.kappa);
         fopt = read_forcing_options();
         cin = read_convection_options();
         simplec = read_simplec_options();
