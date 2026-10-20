@@ -301,18 +301,18 @@ The continuation of sub-phase 3.2 (:doc:`solver`) on the same hill (six uneven b
      - Hill
      - Hill, :math:`u \times 3`
      - Column
-   * - **Defaults** (:math:`c` 1e-4, :math:`\beta` 0.5, :math:`p` 1, CFL cap 10, infinite :math:`\Delta\tau` at the cap)
+   * - **Defaults, GMRES(200)** (:math:`c` 1e-4, :math:`\beta` 0.5, :math:`p` 1, CFL cap 10, infinite :math:`\Delta\tau` at the cap)
      - **8, 976**
      - **8, 967**
      - **17, 510** (11 backtracks)
    * - No line search (``steady.newton_lambda_min = 0.99``)
      - 8, 976
      - 8, 967
-     - fails at 3.0e-2
+     - fails at :math:`|R|/|R_0|` = 3.0e-2
    * - ``steady.newton_dtau_inf_at_cap = 0``
      - 17, 1790
      - 16, 1395
-     - 9.1e-4 after 60
+     - :math:`|R|/|R_0|` = 9.1e-4 after 60
    * - :math:`c` = 0.1
      - 8, 976
      - 8, 967
@@ -332,7 +332,7 @@ The continuation of sub-phase 3.2 (:doc:`solver`) on the same hill (six uneven b
    * - :math:`p` = 0.5
      - 9, 1126
      - 9, 1088
-     - fails at 3.5e-2
+     - fails at :math:`|R|/|R_0|` = 3.5e-2
    * - :math:`p` = 2
      - 8, 976
      - 8, 967
@@ -345,7 +345,7 @@ The continuation of sub-phase 3.2 (:doc:`solver`) on the same hill (six uneven b
      - 10, 1282
      - 10, 1168
      - 20, 337
-   * - ``steady.cfl0 = 10`` (Newton from the start)
+   * - ``steady.cfl0 = 10`` (CFL 10, then Newton)
      - 6, 940
      - 13, 2585
      - 11, 370
@@ -359,7 +359,7 @@ The continuation of sub-phase 3.2 (:doc:`solver`) on the same hill (six uneven b
 0.760, 0.568, 0.387, 0.223, 0.0912, 0.0241, 0.0232, 0.0178, 0.0167, 1.1e-3, 1.06e-3, 9.95e-4, 9.61e-4,
 9.38e-4, 4.5e-4, 4.5e-6, 5.2e-7, 5.0e-9 (eleven backtracks, the slow steps at :math:`\lambda < 1`). No setting showed limit cycling (a CFL alternating between cut and growth); the
 failures are retries running out at a small CFL. GMRES(30) on the hill: 23 steps to 6.6e-9 without the switch to
-infinite :math:`\Delta\tau`; with it, twelve steps at the 2000-iteration limit near 6e-3 and a failure at 7.3e-8.
+infinite :math:`\Delta\tau`; with it (the default restart of 30 with the default switch), twelve steps at the 2000-iteration limit near 6e-3 and a failure at 7.3e-8.
 
 In UT-3.2.1 (one box, GMRES(30), :math:`u \times 3`, plain Newton throughout) ``NewtonKrylov::step`` raises
 :math:`|R|` by 3.53 on the first step, where :math:`k` goes negative. The continuation keeps :math:`k` at its floor,

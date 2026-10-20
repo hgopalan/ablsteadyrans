@@ -304,9 +304,12 @@ TEST(Continuation, LineSearchRejectsOvershoot)
 // dtau: cfl_cut cfl_max).
 TEST(Continuation, DtauRampFollowsSer)
 {
-    struct Ser { double cfl0, cfl_max, p, g; };
+    // grows / caps: whether the growth limit / the cap binds on some step of
+    // this |R| sequence (from the closed form by hand).
+    struct Ser { double cfl0, cfl_max, p, g; bool grows, caps; };
     const std::vector<double> rs = {10, 8, 2, 1.5, 0.9, 0.1, 1e-30, 0};
-    for (const Ser ser : {Ser{1, 10, 1, 2}, Ser{0.5, 50, 2, 1.5}, Ser{2, 2, 1, 2}, Ser{1, 10, 0, 2}}) {
+    for (const Ser ser : {Ser{1, 10, 1, 2, true, true}, Ser{0.5, 50, 2, 1.5, true, false}, Ser{2, 2, 1, 2, false, true},
+                          Ser{1, 10, 0, 2, false, false}}) {
         for (const int inf : {0, 1}) {
             ContinuationOptions o = default_options();
             o.cfl0 = static_cast<amrex::Real>(ser.cfl0);
@@ -336,10 +339,8 @@ TEST(Continuation, DtauRampFollowsSer)
                 EXPECT_EQ(st.steps, static_cast<int>(n));
                 EXPECT_EQ(st.r_last, static_cast<amrex::Real>(rs[n]));
             }
-            if (ser.p == 1 && ser.cfl0 == 1) {
-                EXPECT_TRUE(grew);
-                EXPECT_TRUE(capped);
-            }
+            EXPECT_EQ(grew, ser.grows) << ser.cfl0 << " " << ser.p;
+            EXPECT_EQ(capped, ser.caps) << ser.cfl0 << " " << ser.p;
             // a failure: the cut, finite again
             const ContinuationState cut = ablsteady::continuation_after_failure(o, st);
             EXPECT_FALSE(cut.infinite);
@@ -371,6 +372,15 @@ TEST(Continuation, DtauRampFollowsSer)
     inf_st = ablsteady::continuation_after_accept(o, inf_st, amrex::Real(1e-3));
     EXPECT_EQ(inf_st.cfl, 10);
     EXPECT_TRUE(inf_st.infinite);
+    // Repeated cuts stop at the smallest normal Real, never 0.
+    {
+        ContinuationOptions x = default_options();
+        x.cfl_cut = std::numeric_limits<amrex::Real>::min();
+        ContinuationState f;
+        f.cfl = 1;
+        for (int n = 0; n < 3; ++n) { f = ablsteady::continuation_after_failure(x, f); }
+        EXPECT_EQ(f.cfl, std::numeric_limits<amrex::Real>::min());
+    }
     // ser_cfl is the driver's law: a vanished residual gives the cap without
     // the power (no overflow), p = 0 gives cfl0.
     EXPECT_EQ(ablsteady::ser_cfl(4, 0, 1, 10, 3, 2), amrex::Real(8));
@@ -446,7 +456,7 @@ TEST(Continuation, SkippedStepCutsCflAndKeepsState)
 // ---------------------------------------------------------------------------
 // The Armijo test on a known quadratic: along the direction, |R(q + lambda
 // dq)| = r (1 - lambda + K lambda^2) (the residual of a quadratic model whose
-// full step overshoots for K > c). The condition r (1 - lambda + K lambda^2)
+// full step is rejected for K > 1 - c). The condition r (1 - lambda + K lambda^2)
 // <= (1 - c lambda) r holds for lambda <= (1 - c) / K, so backtracking from 1
 // by beta accepts the largest beta^j at or below it: K = 3, c = 1e-4, beta =
 // 1/2 gives 1/4 (two backtracks); beta = 0.3 gives 0.3; K = 0.5 takes the full
@@ -717,14 +727,15 @@ TEST(Continuation, HillSameOnAnyRankCount)
 }
 
 // ---------------------------------------------------------------------------
-// The restart: K steps, the continuation state to <dir>/Continuation (hex
-// floats), a new Continuation restores it and continues on a copy of q; the
-// records after the restart and the final q have the same bits as the
-// uninterrupted run. The reader aborts on a missing file and a corrupt one,
-// and restore on an inconsistent state.
+// The restart: K = 5 steps (the CFL at the cap, dtau infinite), the
+// continuation state to <dir>/Continuation (hex floats), a new Continuation
+// restores every field of it and run() continues on a copy of q; the records
+// after the restart and the final q have the same bits as the uninterrupted
+// run. The reader aborts on a missing file and a corrupt one, restore on an
+// inconsistent state, and step on a q of another layout.
 TEST(Continuation, RestartIsBitIdentical)
 {
-    const int K = 3, N = 6;
+    const int K = 5, N = 7;   // the state at K is already at infinite dtau
     HillCase ha(4, FaceType::surface_layer, 30);
     Continuation a(default_options(), hill_newton(), ha.in, ha.c.mesh, ha.c.geom, &ha.nu, 0, ha.c.ba, ha.c.dm, 0);
     for (int n = 0; n < N; ++n) { ASSERT_EQ(a.step(ha.q), ContinuationStatus::accepted); }
@@ -738,17 +749,29 @@ TEST(Continuation, RestartIsBitIdentical)
     amrex::ParallelDescriptor::Barrier();
     ablsteady::State qsave;
     qsave.define(hb.c.ba, hb.c.dm);
+    ContinuationState saved;
     {
         Continuation b(default_options(), hill_newton(), hb.in, hb.c.mesh, hb.c.geom, &hb.nu, 0, hb.c.ba, hb.c.dm, 0);
         for (int n = 0; n < K; ++n) { ASSERT_EQ(b.step(hb.q), ContinuationStatus::accepted); }
         ablsteady::write_continuation_state(dir, b.state());
+        saved = b.state();
         copy_state(qsave, hb.q);
     }
     Continuation c(default_options(), hill_newton(), hb.in, hb.c.mesh, hb.c.geom, &hb.nu, 0, hb.c.ba, hb.c.dm, 0);
     const ContinuationState rd = ablsteady::read_continuation_state(dir);
     EXPECT_EQ(rd.steps, K);
     c.restore(rd);
-    for (int n = K; n < N; ++n) { ASSERT_EQ(c.step(qsave), ContinuationStatus::accepted); }
+    // every field restored, the switch to infinite dtau included
+    EXPECT_TRUE(saved.infinite);
+    EXPECT_EQ(c.state().steps, saved.steps);
+    EXPECT_EQ(c.state().cfl, saved.cfl);
+    EXPECT_EQ(c.state().infinite, saved.infinite);
+    EXPECT_EQ(c.state().r0, saved.r0);
+    EXPECT_EQ(c.state().r_last, saved.r_last);
+    // run() reads the restored r_last before its first step
+    const auto res = c.run(qsave, N - K, amrex::Real(1e-30));
+    EXPECT_EQ(res.status, ContinuationStatus::accepted);
+    EXPECT_EQ(res.steps, N - K);
     EXPECT_EQ(valid_diff(ha.q, qsave), 0);
     ASSERT_EQ(c.records().size(), static_cast<std::size_t>(N - K));
     for (int n = K; n < N; ++n) {
@@ -778,6 +801,22 @@ TEST(Continuation, RestartIsBitIdentical)
     bad = rd;
     bad.r0 = std::numeric_limits<amrex::Real>::infinity();
     EXPECT_THROW(c.restore(bad), std::runtime_error);
+    // The refusal comes from Continuation::step itself, not from a later
+    // AMReX check.
+    const auto refuses = [&c] (ablsteady::State& q) {
+        try {
+            c.step(q);
+        } catch (const std::runtime_error& e) {
+            return std::string(e.what()).find("Continuation::step: q is not on") != std::string::npos;
+        }
+        return false;
+    };
+    HillCase other(64, FaceType::surface_layer, 30);   // one box, not six
+    EXPECT_TRUE(refuses(other.q));
+    if (amrex::ParallelDescriptor::NProcs() > 1) {   // same boxes, all on rank 0
+        HillCase moved(4, FaceType::surface_layer, 30, true);
+        EXPECT_TRUE(refuses(moved.q));
+    }
     if (amrex::ParallelDescriptor::IOProcessor()) { amrex::FileSystem::RemoveAll(dir); }
     amrex::ParallelDescriptor::Barrier();
 }

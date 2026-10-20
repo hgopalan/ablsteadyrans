@@ -199,7 +199,9 @@ ContinuationState continuation_after_accept (const ContinuationOptions& opt, Con
 
 ContinuationState continuation_after_failure (const ContinuationOptions& opt, ContinuationState st)
 {
-    st.cfl = opt.cfl_cut * (st.infinite ? opt.cfl_max : st.cfl);
+    // Floored at the smallest normal Real: repeated cuts must not reach 0,
+    // which local_dtau refuses.
+    st.cfl = amrex::max(opt.cfl_cut * (st.infinite ? opt.cfl_max : st.cfl), std::numeric_limits<amrex::Real>::min());
     st.infinite = false;
     return st;
 }
@@ -315,6 +317,10 @@ void Continuation::log (const ContinuationRecord& rec) const
 ContinuationStatus Continuation::step (State& q, NewtonPreconditioner* pc)
 {
     const ResidualInputs& in = m_nk.residual_inputs();
+    // MultiFab::Copy checks layouts only in debug builds.
+    if (q.p.boxArray() != m_qb.p.boxArray() || q.p.DistributionMap() != m_qb.p.DistributionMap()) {
+        amrex::Abort("ablsteady: Continuation::step: q is not on the BoxArray and DistributionMapping given to the constructor");
+    }
     for (int attempt = 0; attempt <= m_opt.max_retries; ++attempt) {
         ContinuationRecord rec;
         rec.step = m_st.steps;

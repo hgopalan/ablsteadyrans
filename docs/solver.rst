@@ -547,8 +547,13 @@ switch to infinite :math:`\Delta\tau`, :math:`|R_0|` and the last :math:`|R|`) d
 :math:`\Delta\tau`; ``write_continuation_state`` and ``read_continuation_state`` keep it in a checkpoint
 directory (``Continuation``, hex floats), and a restart from it gives the uninterrupted run's bits.
 
-**Limits.** At a small CFL the direction is not guaranteed to reduce :math:`|R|` (:math:`D + J` is not
-:math:`J`), so an attempt can be rejected at any CFL. With GMRES(30) and infinite :math:`\Delta\tau` the 30 m hill
+**Limits.** At a finite CFL the direction is not guaranteed to reduce :math:`|R|` (:math:`D + J` is not
+:math:`J`; for a non-normal :math:`J` the slope of :math:`|R(q + \lambda\,\delta q)|` at :math:`\lambda = 0` can be
+positive), so an attempt can be rejected at any CFL and a CFL cut need not help. Repeated cuts stop at the
+smallest normal ``Real``. Once :math:`\Delta\tau` is infinite it stays infinite through damped
+(:math:`\lambda < 1`) steps; only a failed attempt returns it to a finite CFL. ``run``'s relative tolerance and
+the SER law use the continuation's own :math:`|R_0|` (its first step), not the residual at the start of the
+solve. With GMRES(30) and infinite :math:`\Delta\tau` the 30 m hill
 stagnates near 6e-3 of :math:`|R_0|` for twelve steps, each solve at the 2000-iteration limit, before it converges
 to 7e-8 and then fails (the retries run out); with ``steady.newton_dtau_inf_at_cap = 0`` it reaches 1e-8 in 23
 steps, and with GMRES(200) in 8 (:doc:`results`). On the Ekman column the cap of 10 without the switch to infinite

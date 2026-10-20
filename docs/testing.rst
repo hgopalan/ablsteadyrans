@@ -1115,9 +1115,9 @@ GoogleTest suite
    * - UT-3.2.2
      - ``Continuation.DtauRampFollowsSer``: given a sequence of :math:`|R|`, the CFL after each accepted step
        equals the closed form :math:`\min(\mathrm{CFL}_\mathrm{max}, g\,\mathrm{CFL}_n, \mathrm{CFL}_0(|R_0|/|R_n|)^p)`
-       for four SER settings, with the growth limit and the cap reached; the switch to infinite :math:`\Delta\tau`
+       for four SER settings, with a flag per setting for whether the growth limit and the cap bind (each asserted); the switch to infinite :math:`\Delta\tau`
        at the cap (and not with ``steady.newton_dtau_inf_at_cap = 0``), the law from the cap while infinite, and
-       the CFL cut after a failure. The defaults give 1.25, 2.5, 5, 10, then infinite.
+       the CFL cut after a failure, floored at the smallest normal ``Real``. The defaults give 1.25, 2.5, 5, 10, then infinite.
    * - UT-3.2 (a)
      - *Beyond the plan.* ``Continuation.SkippedStepCutsCflAndKeepsState``: a NaN preconditioner (the update is
        skipped) gives four skipped attempts at CFL 1, 1/4, 1/16, 1/64, a final CFL of 1/256, the status *failed*
@@ -1133,8 +1133,10 @@ GoogleTest suite
      - *Beyond the plan.* ``Continuation.HillSameOnAnyRankCount``: the hill on six uneven boxes reaches
        :math:`10^{-8}|R_0|` in 8 steps at :math:`\lambda = 1`, each CFL from the SER law; the run with every box on
        rank 0 has the same :math:`|R|` history and :math:`q`, bit for bit (on 1, 2 and 4 ranks).
-       ``Continuation.RestartIsBitIdentical``: 3 steps, the continuation state written and read back, and 3 more
-       give the bits of 6 uninterrupted steps; a missing or corrupt file and an inconsistent state are refused.
+       ``Continuation.RestartIsBitIdentical``: 5 steps (already at infinite :math:`\Delta\tau`), the continuation
+       state written and read back with every field compared, and ``run`` for 2 more give the bits of 7
+       uninterrupted steps; a missing or corrupt file and an inconsistent state are refused, and ``step``
+       refuses a :math:`q` on another BoxArray or DistributionMapping.
        ``Newton.TrueLinearResidualMatchesEstimate``: the true linear residual :math:`|b - Ax|/|b|` of a GMRES
        solve on the hill agrees with GMRES's estimate to 1e-6 (on one and six boxes).
        ``Continuation.DISABLED_ParameterSweep`` (on request): the sweep of :doc:`results`.

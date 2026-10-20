@@ -23,7 +23,8 @@
 //   5. a skipped Newton update (newton_update_usable false: a non-finite or
 //      growing Krylov residual, Newton.H) or a line search that accepts no
 //      lambda leaves q as it is (every attempt works on a copy), cuts the CFL by
-//      steady.newton_cfl_cut (from infinite dtau: cfl_cut cfl_max) and
+//      steady.newton_cfl_cut (from infinite dtau: cfl_cut cfl_max; never
+//      below the smallest normal Real) and
 //      retries, up to steady.newton_max_retries times. Then the step
 //      returns ContinuationStatus::failed (sub-phase 3.5 falls back to
 //      SIMPLEC on it).
