@@ -91,7 +91,7 @@ void thomas (std::vector<double>& lower, std::vector<T>& diag, std::vector<doubl
 
 //! The nodal heights of the deck's vertical grid over flat ground: the mesh
 //! of a 4 x 4 column, read from its box and shared with every rank; ztop
-//! receives the computational top (the Rayleigh ramp's end, as the stage's).
+//! receives the top level (the Rayleigh ramp's end, as the stage's).
 std::vector<double> flat_levels (const Inputs& in, double& ztop)
 {
     Inputs cin_in = in;
@@ -107,7 +107,6 @@ std::vector<double> flat_levels (const Inputs& in, double& ztop)
     cin_in.terrain.type = "flat";
     cin_in.io.restart.clear();
     const amrex::Geometry geom = make_geometry(cin_in.mesh);
-    ztop = geom.ProbHi(2);
     const amrex::BoxArray ba = make_box_array(cin_in.mesh);
     const amrex::DistributionMapping dm(ba);
     State state;
@@ -125,6 +124,7 @@ std::vector<double> flat_levels (const Inputs& in, double& ztop)
         for (int k = 0; k <= nz; ++k) { zn[k] = h(amrex::IntVect(b.smallEnd(0), b.smallEnd(1), k)); }
     }
     amrex::ParallelDescriptor::ReduceRealMax(zn.data(), nz + 1);   // one rank holds the box; flat: every column alike
+    ztop = zn[nz];
     return zn;
 }
 

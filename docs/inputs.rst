@@ -582,7 +582,8 @@ types, the inflow profile and the sounding; the other keys act in the SIMPLEC st
      - Finite (K/m): θ gradient through a ``slip_wall`` or ``geostrophic`` top.
    * - ``bc.rayleigh_zdamp``
      - ``0`` (off)
-     - In [0, ``mesh.prob_hi`` z): start height of the Rayleigh layer (m); > 0 needs ``bc.rayleigh_dampcoef`` > 0.
+     - In [0, top level): start height of the Rayleigh layer (m); > 0 needs ``bc.rayleigh_dampcoef`` > 0. The top
+       level is ``mesh.prob_hi`` z, or where the layers end with ``mesh.stretch_ratio`` or ``mesh.zlevels_file``.
    * - ``bc.rayleigh_dampcoef``
      - ``0``
      - Finite, ≥ 0 (1/s); needs ``bc.rayleigh_zdamp`` > 0.

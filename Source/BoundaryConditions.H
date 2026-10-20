@@ -140,7 +140,13 @@ BoundaryInputs read_boundary_inputs ();
 //! on lateral faces only; the ground surface_layer, slip_wall or
 //! no_slip_wall; the top slip_wall, no_slip_wall or geostrophic (which needs
 //! Coriolis with geostrophic forcing); damping values in range; keys that
-//! have no effect for the chosen types.
+//! have no effect for the chosen types. ztop is the mesh's top level
+//! (Mesh::zlevels().back()), where the Rayleigh layer ends: with
+//! mesh.stretch_ratio or mesh.zlevels_file it differs from prob_hi z.
+std::vector<std::string> check_boundary_inputs (const BoundaryInputs& in, const amrex::Geometry& geom,
+                                                const CoriolisOptions& coriolis, amrex::Real ztop);
+//! The same for a mesh whose top level is prob_hi z (uniform layers, or
+//! mesh.dz0 without mesh.stretch_ratio).
 std::vector<std::string> check_boundary_inputs (const BoundaryInputs& in, const amrex::Geometry& geom,
                                                 const CoriolisOptions& coriolis);
 
