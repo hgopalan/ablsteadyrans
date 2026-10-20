@@ -134,8 +134,16 @@ std::vector<std::string> unknown_inputs (const std::vector<InputEntry>& entries,
 //! The Newton–Krylov keys of read_newton_options (Newton.H), without the
 //! "steady." prefix. The application does not read them before sub-phase
 //! 3.5; unknown_inputs names that sub-phase for these keys only.
-inline constexpr const char* kNewtonInputKeys[] = {"newton_gmres_restart", "newton_fd_eps_scale",
-                                                   "newton_krylov_rtol", "newton_mem_budget_gb"};
+inline constexpr const char* kNewtonInputKeys[] = {"newton_gmres_restart", "newton_gmres_max_iters",
+                                                   "newton_fd_eps_scale", "newton_krylov_rtol",
+                                                   "newton_mem_budget_gb"};
+
+//! The pseudo-transient continuation keys of read_continuation_options
+//! (Continuation.H, sub-phase 3.2), without the "steady." prefix; read from
+//! sub-phase 3.5 as kNewtonInputKeys.
+inline constexpr const char* kContinuationInputKeys[] = {"newton_armijo_c", "newton_backtrack", "newton_lambda_min",
+                                                         "newton_cfl_cut", "newton_max_retries",
+                                                         "newton_dtau_inf_at_cap", "newton_ptc_growth"};
 
 //! The current ParmParse table as InputEntry records.
 std::vector<InputEntry> parmparse_entries ();

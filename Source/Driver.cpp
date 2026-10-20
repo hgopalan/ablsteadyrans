@@ -273,16 +273,9 @@ amrex::Real Driver::next_cfl (amrex::Real r) const
     // The robust start: cfl0 while the criterion's reference is still being
     // taken (the first residual_ref_iterations, the hold; none on a level
     // whose reference is seeded and released), then the SER law capped by
-    // cfl_max and by the growth per iteration.
+    // cfl_max and by the growth per iteration (ser_cfl, PseudoTime.H).
     if (m_criterion.iterations() <= hold_iterations()) { return m_opt.cfl0; }
-    const amrex::Real capped = amrex::min(m_opt.cfl_max, m_opt.ser_max_growth * m_h.cfl);
-    // Below r_min = (cfl0 / cfl_max)^(1/p) the law already gives the cap, so
-    // the power is never taken there (it would overflow for a vanished
-    // residual and p > 1); with p = 0 the law is cfl0.
-    if (m_opt.ser_exponent == 0) { return amrex::min(capped, m_opt.cfl0); }
-    const amrex::Real r_min = std::pow(m_opt.cfl0 / m_opt.cfl_max, amrex::Real(1) / m_opt.ser_exponent);
-    if (!(r > r_min)) { return capped; }
-    return amrex::min(capped, m_opt.cfl0 * std::pow(r, -m_opt.ser_exponent));
+    return ser_cfl(m_h.cfl, r, m_opt.cfl0, m_opt.cfl_max, m_opt.ser_exponent, m_opt.ser_max_growth);
 }
 
 void Driver::apply_switch_rules (int iteration, amrex::Real r, const std::vector<amrex::Real>& residuals, State& q)

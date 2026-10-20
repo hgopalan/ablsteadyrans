@@ -288,6 +288,66 @@ by GMRES, with the Jacobian–vector products of :doc:`discretization`.
 The step is implemented and tested; the application does not run it yet. Its inputs (``steady.newton_*``) are
 listed in :doc:`inputs`.
 
+``steady.newton_gmres_max_iters`` bounds the GMRES iterations of one solve over all its restarts. A solve that
+reaches it is unconverged; its update is used when the Krylov residual is finite and below :math:`|b|`, like any
+other.
+
+Pseudo-transient continuation
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+A continuation loop (``Continuation``, ``Source/Continuation.H``) wraps the Newton step. The application does not
+run it yet. One continuation step from :math:`q_n`:
+
+1. :math:`\Delta\tau` from the local time step at :math:`\mathrm{CFL}_n`, or no pseudo-time term (:math:`D = 0`)
+   once the CFL has reached its cap and ``steady.newton_dtau_inf_at_cap = 1``.
+2. The direction :math:`\delta q` from :math:`(D + J)\,\delta q = -R(q_n)` (one GMRES solve).
+3. A backtracking line search on :math:`|R| = |T^{-1}R(\mathrm{fill}(q))|_2`, the norm of the Newton step:
+
+   .. math::
+
+      |R(q_n + \lambda\,\delta q)| \le (1 - c\,\lambda)\,|R(q_n)|, \qquad \lambda = 1, \beta, \beta^2, \ldots
+      \ge \lambda_\mathrm{min},
+
+   with :math:`c` = ``steady.newton_armijo_c``, :math:`\beta` = ``steady.newton_backtrack`` and
+   :math:`\lambda_\mathrm{min}` = ``steady.newton_lambda_min``. Each trial point keeps :math:`k` at or above
+   ``turb.tke_floor`` and goes through the ghost fill before :math:`R` is evaluated. At a finite
+   :math:`\Delta\tau` the direction is a pseudo-time step and need not reduce :math:`|R|`. With :math:`\gamma` =
+   ``steady.newton_ptc_growth`` > 1, when no :math:`\lambda` meets the condition there, the full step is accepted
+   if :math:`|R(q_n + \delta q)| \le \gamma\,|R(q_n)|`; the CFL law then lowers the next CFL.
+4. Accepted: :math:`q_{n+1} = q_n + \lambda\,\delta q`, and the CFL follows the SER law of the SIMPLEC stage,
+
+   .. math::
+
+      \mathrm{CFL}_{n+1} = \min\!\left(\mathrm{CFL}_\mathrm{max},\; g\,\mathrm{CFL}_n,\;
+      \mathrm{CFL}_0 \left(\frac{|R_0|}{|R_{n+1}|}\right)^{p}\right),
+
+   with ``steady.cfl0``, ``steady.cfl_max``, :math:`g` = ``steady.ser_max_growth`` and :math:`p` =
+   ``steady.ser_exponent``. :math:`|R_0|` is the first finite :math:`|R|`, or one the caller supplies
+   (``set_reference_residual``). While :math:`\Delta\tau` is infinite the law starts from
+   :math:`\mathrm{CFL}_\mathrm{max}`.
+5. A skipped update or a line search that accepts no :math:`\lambda` leaves :math:`q_n` unchanged, multiplies the
+   CFL by ``steady.newton_cfl_cut`` (from infinite :math:`\Delta\tau`, :math:`\mathrm{CFL}_\mathrm{max}` times it)
+   and retries, up to ``steady.newton_max_retries`` times. Then the step returns *failed*, and the Newton stage
+   will fall back to SIMPLEC.
+
+Every attempt prints one line: the step, :math:`|R|` before and after, the CFL (``inf`` for :math:`D = 0`),
+:math:`\lambda`, the backtracks, the GMRES iterations and status, the Krylov relative residual and the outcome
+(accepted, skipped or rejected). The continuation state (step count, CFL, the switch to infinite
+:math:`\Delta\tau`, :math:`|R_0|` and the last :math:`|R|`) is written to and read from a checkpoint directory
+(``Continuation``, hex floats); a restart gives the uninterrupted run's bits.
+
+**Limits.**
+
+- With ``steady.newton_ptc_growth = 1`` (the default) a pseudo-time direction that raises :math:`|R|` for every
+  :math:`\lambda` is rejected, and a CFL cut need not help. On the Ekman column with ``steady.ser_exponent = 0.5``
+  the retries run out at 3.5e-2 of :math:`|R_0|`; with 1.5 the column converges (:doc:`results`).
+- Once :math:`\Delta\tau` is infinite it stays infinite through damped steps and unconverged solves; only a failed
+  attempt returns it to a finite CFL. Returning to :math:`\mathrm{CFL}_\mathrm{max}` after such a step was tried
+  and measured worse.
+- With GMRES(30) and infinite :math:`\Delta\tau`, the 30 m hill stagnates near 6e-3 of :math:`|R_0|` for twelve
+  steps at the 2000-iteration limit, then fails at 7e-8. With ``steady.newton_dtau_inf_at_cap = 0`` it reaches
+  1e-8 in 23 steps, and with GMRES(200) in 8. The restart length and the cap will be tuned with the Newton stage.
+
 .. _convergence-criteria:
 
 Convergence criteria

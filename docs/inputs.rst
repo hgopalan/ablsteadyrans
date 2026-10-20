@@ -859,9 +859,39 @@ writes them and stops; the other ``steady.*`` keys are then refused.
    * - ``steady.newton_mem_budget_gb``
      - ``70``
      - > 0 and ≤ 80. Krylov memory per rank (GB); the run stops if the estimate exceeds it.
+   * - ``steady.newton_gmres_max_iters``
+     - ``2000``
+     - Integer, ≥ 1. GMRES iteration limit of one Newton step (all restarts). A solve that reaches it is unconverged;
+       its update goes through the usual usability rule.
+   * - ``steady.newton_armijo_c``
+     - ``1e-4``
+     - > 0 and < 0.5. Armijo constant :math:`c` of the continuation's line search.
+   * - ``steady.newton_backtrack``
+     - ``0.5``
+     - > 0 and < 1. Backtracking factor :math:`\beta`: :math:`\lambda = 1, \beta, \beta^2, \ldots`
+   * - ``steady.newton_lambda_min``
+     - ``1e-2``
+     - > 0 and < 1. The smallest :math:`\lambda` tried; below it the attempt is rejected.
+   * - ``steady.newton_cfl_cut``
+     - ``0.25``
+     - > 0 and < 1. A rejected or skipped attempt multiplies the CFL by this factor (from infinite
+       :math:`\Delta\tau`: ``steady.cfl_max`` times it) and retries.
+   * - ``steady.newton_max_retries``
+     - ``4``
+     - Integer, ≥ 1. Retries of one continuation step; after the last the step returns *failed*.
+   * - ``steady.newton_dtau_inf_at_cap``
+     - ``1``
+     - 0 or 1. 1: once the CFL reaches ``steady.cfl_max``, the next steps run without a pseudo-time term
+       (:math:`D = 0`, plain Newton) until an attempt fails. 0: the CFL stays at the cap.
+   * - ``steady.newton_ptc_growth``
+     - ``1``
+     - Finite, ≥ 1. At a finite :math:`\Delta\tau`, when no :math:`\lambda` meets the Armijo condition, accept the
+       full step if :math:`|R|` grows by at most this factor. 1: off. Not used at infinite :math:`\Delta\tau`.
 
 The ``steady.newton_*`` keys belong to the Newton–Krylov stage, which the application does not run yet; until then
-they are refused as unknown keys. Their defaults are provisional.
+they are refused as unknown keys. Their defaults are provisional. The last seven rows are the pseudo-transient
+continuation of :doc:`solution_algorithm`; its CFL ramp reuses ``steady.cfl0``, ``steady.cfl_max``,
+``steady.ser_exponent`` and ``steady.ser_max_growth``, with the same range checks.
 
 ``simplec``
 -----------

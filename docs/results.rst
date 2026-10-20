@@ -654,3 +654,102 @@ GMRES iterations over ten Newton steps on the column (Krylov tolerance 1e-2):
      - **346**
 
 The defaults are provisional and will be tuned together with the Newton stage.
+
+Pseudo-transient continuation
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The continuation (:doc:`solution_algorithm`) on the same hill (six uneven boxes), on the hill with
+:math:`u` three times larger, and on the Ekman column, GMRES(200), up to :math:`|R| \le 10^{-8}|R_0|`
+(``Continuation.DISABLED_ParameterSweep``; steps accepted, GMRES iterations in all):
+
+.. list-table::
+   :header-rows: 1
+
+   * - Settings
+     - Hill
+     - Hill, :math:`u \times 3`
+     - Column
+   * - **Defaults, GMRES(200)** (:math:`c` 1e-4, :math:`\beta` 0.5, :math:`p` 1, CFL cap 10, infinite :math:`\Delta\tau` at the cap)
+     - **8, 976**
+     - **8, 967**
+     - **17, 510** (11 backtracks)
+   * - No line search (``steady.newton_lambda_min = 0.99``)
+     - 8, 976
+     - 8, 967
+     - fails at :math:`|R|/|R_0|` = 3.0e-2
+   * - ``steady.newton_dtau_inf_at_cap = 0``
+     - 17, 1790
+     - 16, 1395
+     - :math:`|R|/|R_0|` = 9.1e-4 after 60
+   * - :math:`c` = 0.1
+     - 8, 976
+     - 8, 967
+     - 15, 318
+   * - :math:`c` = 0.4
+     - 8, 976
+     - 8, 967
+     - fails on the first step
+   * - :math:`\beta` = 0.3
+     - 8, 976
+     - 8, 967
+     - 17, 437
+   * - :math:`\beta` = 0.8
+     - 8, 976
+     - 8, 967
+     - 19, 628
+   * - :math:`p` = 0.5
+     - 9, 1126
+     - 9, 1088
+     - fails at :math:`|R|/|R_0|` = 3.5e-2
+   * - :math:`p` = 2
+     - 8, 976
+     - 8, 967
+     - 15, 355
+   * - CFL cap 100
+     - 9, 1119
+     - 9, 1036
+     - 22, 700
+   * - CFL cap 1000
+     - 10, 1282
+     - 10, 1168
+     - 20, 337
+   * - ``steady.cfl0 = 10`` (CFL 10, then Newton)
+     - 6, 940
+     - 13, 2585
+     - 11, 370
+   * - ``steady.newton_ptc_growth = 1.5``
+     - 8, 976
+     - 8, 967
+     - 17, 510
+   * - **steady.newton_ptc_growth = 1.5, p = 0.5**
+     - **9, 1126**
+     - **9, 1088**
+     - **26, 475**
+   * - ``steady.newton_ptc_growth = 1.5``, no line search
+     - 8, 976
+     - 8, 967
+     - :math:`|R|/|R_0|` = 2.8e-3 after 60
+   * - Leave infinite :math:`\Delta\tau` after a damped or unconverged step (tried, not kept)
+     - 8, 976
+     - 8, 967
+     - fails at :math:`|R|/|R_0|` = 8.8e-5
+   * - Plain Newton (``NewtonKrylov::step``, no globalization)
+     - 6 steps
+     - diverges (:math:`|R|` 99.5, 377, 12 971, ...)
+     - 9 steps, :math:`|R|` rises once
+
+:math:`|R|` with the defaults: hill 11.3, 2.18, 0.842, 0.282, 0.124, 0.0403, 4.0e-4, 4.0e-6, 3.9e-8 (CFL 1, 2, 4,
+8, then infinite); hill :math:`u \times 3` 99.5, 42.1, 12.3, 2.42, 0.928, 0.0734, 2.0e-3, 1.9e-5, 1.9e-7; column
+0.760, 0.568, 0.387, 0.223, 0.0912, 0.0241, 0.0232, 0.0178, 0.0167, 1.1e-3, 1.06e-3, 9.95e-4, 9.61e-4,
+9.38e-4, 4.5e-4, 4.5e-6, 5.2e-7, 5.0e-9 (eleven backtracks, the slow steps at :math:`\lambda < 1`). No setting showed limit cycling (a CFL alternating between cut and growth); the
+failures are retries running out at a small CFL. GMRES(30) on the hill: 23 steps to 6.6e-9 without the switch to
+infinite :math:`\Delta\tau`; with it (the default restart of 30 with the default switch), twelve steps at the 2000-iteration limit near 6e-3 and a failure at 7.3e-8;
+leaving infinite :math:`\Delta\tau` after a damped or unconverged step fails earlier, at 2.6e-5 after 11 steps.
+``steady.newton_ptc_growth = 1.5`` changes no result of the defaults above and turns the two column failures at a
+finite CFL into convergence (:math:`p` = 0.5: 26 steps) or slow progress (no line search). With :math:`p` = 0.5 it
+converges on all three cases; it is the recommended setting until the defaults are tuned.
+
+In UT-3.2.1 (one box, GMRES(30), :math:`u \times 3`, plain Newton throughout) ``NewtonKrylov::step`` raises
+:math:`|R|` by 3.53 on the first step, where :math:`k` goes negative. The continuation keeps :math:`k` at its floor,
+takes three full steps (reductions 0.670, 0.783, 0.826) and then three steps at :math:`\lambda = 1/2`, where the full
+step would raise :math:`|R|` by 2.77.

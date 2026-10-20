@@ -1282,3 +1282,45 @@ GoogleTest suite
        ``Newton.StepDiagnosticsAndEpsRange``: the step's Krylov residual and eps range.
        ``Newton.NonUniformDtauOnFaces``: a non-uniform :math:`\Delta\tau` gives :math:`x/\Delta\tau_f` with the
        face mean of the two cells.
+   * - UT-3.2.1
+     - ``Continuation.LineSearchRejectsOvershoot``: the 30 m hill with :math:`u` three times larger, plain Newton
+       throughout. The six reductions (0.670, 0.783, 0.826, 0.834, 0.615, 0.909) and :math:`\lambda` (1, 1, 1, 1/2,
+       1/2, 1/2) are pinned to 1e-4, :math:`|R|` is monotone, and each step meets the Armijo condition. With
+       ``steady.newton_lambda_min = 0.9`` the fourth step's full step raises :math:`|R|` by 2.77 and is rejected,
+       the retry runs at CFL 2.5 with a finite :math:`\Delta\tau`, and after the last retry the step fails with
+       :math:`q` unchanged, bit for bit.
+   * - UT-3.2.2
+     - ``Continuation.DtauRampFollowsSer``: given a sequence of :math:`|R|`, the CFL after each accepted step
+       equals the closed form :math:`\min(\mathrm{CFL}_\mathrm{max}, g\,\mathrm{CFL}_n, \mathrm{CFL}_0(|R_0|/|R_n|)^p)`
+       for four SER settings, with a flag per setting for whether the growth limit and the cap bind (each asserted); the switch to infinite :math:`\Delta\tau`
+       at the cap (and not with ``steady.newton_dtau_inf_at_cap = 0``), the law from the cap while infinite, the growth bound at a finite :math:`\Delta\tau` only, and
+       the CFL cut after a failure, floored at the smallest normal ``Real``. The defaults give 1.25, 2.5, 5, 10, then infinite.
+   * - UT-3.2 (a)
+     - *Beyond the plan.* ``Continuation.SkippedStepCutsCflAndKeepsState``: a NaN preconditioner (the update is
+       skipped) gives four skipped attempts at CFL 1, 1/4, 1/16, 1/64, a final CFL of 1/256, the status *failed*
+       and :math:`q` unchanged; a NaN in :math:`q` is skipped the same way and does not set :math:`|R_0|`.
+       ``Continuation.ArmijoOnKnownQuadratic``: on :math:`\phi(\lambda) = r(1 - \lambda + K\lambda^2)` the accepted
+       :math:`\lambda` is the largest :math:`\beta^j \le (1 - c)/K` (six cases, one rejected); NaN and infinite
+       trials fail without raising the invalid flag. ``Continuation.InputReadersAndRangeChecks``: the defaults, the
+       seven new keys read, each range check refusing a value just outside its range (and NaN) and naming the
+       key, the reader aborting on those and on repeated or two-valued keys, the SER checks of the driver, and
+       the application's unknown-input hint. The line search's growth bound (``steady.newton_ptc_growth``) on the
+       same quadratic with :math:`K` = 100: a bound of 100 accepts the full step, ``nextafter(100, 0)`` and 1 do
+       not, a NaN full step never is. ``Continuation.GmresIterationLimit``: a limit of 3 stops GMRES at 3
+       iterations with status 1.
+   * - UT-3.2 (b)
+     - *Beyond the plan.* ``Continuation.HillSameOnAnyRankCount``: the hill on six uneven boxes reaches
+       :math:`10^{-8}|R_0|` in 8 steps at :math:`\lambda = 1`, each CFL from the SER law; the run with every box on
+       rank 0 has the same :math:`|R|` history and :math:`q`, bit for bit (on 1, 2 and 4 ranks).
+       ``Continuation.RestartIsBitIdentical``: 5 steps (already at infinite :math:`\Delta\tau`), the continuation
+       state written and read back with every field compared, and ``run`` for 2 more give the bits of 7
+       uninterrupted steps; a missing or corrupt file and an inconsistent state are refused, and ``step``
+       refuses a :math:`q` on another BoxArray or DistributionMapping.
+       ``Newton.TrueLinearResidualMatchesEstimate``: the true linear residual :math:`|b - Ax|/|b|` of a GMRES
+       solve on the hill agrees with GMRES's estimate to 1e-6 (on one and six boxes).
+       ``Continuation.ReferenceResidualFromCaller``: a caller's :math:`|R_0|` (ten times the first :math:`|R|`)
+       stays, gives a CFL ten times that of the step's own :math:`|R_0|` and is the reference of ``run``'s
+       tolerance; a zero, negative, infinite or NaN one is refused. ``Continuation.GrowthBoundAtFiniteDtau``: the
+       Ekman column with ``steady.ser_exponent = 0.5`` fails after 7 steps without the growth bound and converges
+       in 26 with 1.5, each step accepted by the bound at a finite :math:`\Delta\tau` with :math:`\lambda = 1`.
+       ``Continuation.DISABLED_ParameterSweep`` (on request): the sweep of :doc:`results`.
