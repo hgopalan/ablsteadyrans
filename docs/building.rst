@@ -4,9 +4,10 @@ Building
 Requirements
 ------------
 
-- CMake 3.25 or newer and a C++20 compiler (GCC, Clang, AppleClang; nvcc for CUDA).
-- MPI (Open MPI, MPICH or Cray MPICH).
-- FFTW, for AMReX's FFT module (cuFFT is used in CUDA builds).
+- CMake 3.25 or newer and a C++20 compiler (GCC, Clang, AppleClang, MSVC; nvcc for CUDA, ROCm ``clang++`` for HIP,
+  ``icpx`` for SYCL).
+- MPI (Open MPI, MPICH or Cray MPICH), unless ``ABLSTEADY_MPI=OFF``.
+- An FFT library for AMReX's FFT module: FFTW on the CPU, cuFFT (CUDA), rocFFT (HIP) or oneMKL (SYCL).
 - Python 3, for the test scripts.
 
 AMReX and GoogleTest are git submodules. AMReX is pinned to the commit the development plan was checked against.
@@ -48,7 +49,8 @@ An option outside its allowed values stops the configuration.
      - ``DOUBLE`` or ``SINGLE``. The steady stop needs double precision; single precision is kept compiling only.
    * - ``ABLSTEADY_GPU_BACKEND``
      - ``NONE``
-     - ``NONE`` or ``CUDA``. For an H100 add ``-DAMReX_CUDA_ARCH=9.0``.
+     - ``NONE``, ``CUDA``, ``HIP`` or ``SYCL``. For an H100 add ``-DAMReX_CUDA_ARCH=9.0``; HIP needs
+       ``-DAMReX_AMD_ARCH`` (for example ``gfx90a``) and ROCm's ``clang++`` as the C++ compiler; SYCL needs ``icpx``.
    * - ``ABLSTEADY_FFT``
      - ``ON``
      - AMReX FFT. Required: the Poisson layer (sub-phase 1.10) uses its preconditioner. Configuring with ``OFF`` stops
@@ -68,6 +70,26 @@ An option outside its allowed values stops the configuration.
    * - ``ABLSTEADY_USE_INTERNAL_AMREX``
      - ``ON``
      - Use the AMReX submodule. ``OFF`` uses an installed AMReX found through ``AMReX_ROOT``.
+
+Windows
+-------
+
+On Windows the solver builds with MSVC and no MPI. FFTW comes from vcpkg. From a "Developer PowerShell for VS"
+(or after ``ilammy/msvc-dev-cmd`` in CI):
+
+.. code-block:: powershell
+
+   vcpkg install fftw3:x64-windows
+   cmake -S . -B build-rel -G Ninja -DCMAKE_BUILD_TYPE=Release `
+     -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake `
+     -DVCPKG_TARGET_TRIPLET=x64-windows -DABLSTEADY_MPI=OFF
+   cmake --build build-rel
+   $env:PATH = "C:/vcpkg/installed/x64-windows/bin;$env:PATH"
+   ctest --test-dir build-rel -L "unit|smoke" --output-on-failure
+
+The FFTW DLLs are found through ``PATH``. The Kestrel shell-script tests are not registered on Windows. A CUDA
+build on Windows uses ``cl`` with ``nvcc``; with CUDA 12.6 and C++20 use Windows SDK 10.0.22621.0
+(``-DCMAKE_SYSTEM_VERSION=10.0.22621.0``), as the CI job does.
 
 Kestrel
 -------
