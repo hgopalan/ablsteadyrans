@@ -42,6 +42,7 @@ add_executable(unit_tests
     Unit_Tests/test_Newton.cpp
     Unit_Tests/test_NewtonCoverage.cpp
     Unit_Tests/test_Terrain.cpp
+    Unit_Tests/test_Transfer.cpp
 )
 target_include_directories(unit_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Unit_Tests)
 target_link_libraries(unit_tests PRIVATE ablsteady_core GTest::gtest)
