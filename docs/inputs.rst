@@ -338,6 +338,9 @@ Quick reference
    * - ``steady.newton_*``
      - see `steady`_
      - Newton–Krylov inputs (not yet used by the application)
+   * - ``steady.newton_preconditioner``
+     - ``simplec``
+     - Newton preconditioner: ``identity`` or ``simplec`` (not yet used by the application)
    * - **SIMPLEC** (`simplec`_)
      -
      -
@@ -887,9 +890,15 @@ writes them and stops; the other ``steady.*`` keys are then refused.
      - ``1``
      - Finite, ≥ 1. At a finite :math:`\Delta\tau`, when no :math:`\lambda` meets the Armijo condition, accept the
        full step if :math:`|R|` grows by at most this factor. 1: off. Not used at infinite :math:`\Delta\tau`.
+   * - ``steady.newton_preconditioner``
+     - ``simplec``
+     - ``identity`` or ``simplec``; any other value aborts and names the key. The preconditioner of each GMRES
+       solve of the Newton step (:doc:`solution_algorithm`). ``simplec``: one SIMPLEC iteration with
+       ``steady.sweep`` and ``steady.zline_sweeps``. ``identity``: none.
 
 The ``steady.newton_*`` keys belong to the Newton–Krylov stage, which the application does not run yet; until then
-they are refused as unknown keys. Their defaults are provisional. The last seven rows are the pseudo-transient
+they are refused as unknown keys. ``steady.newton_preconditioner`` is read and range-checked, then refused with
+"has no effect until the run can switch to Newton". Their defaults are provisional. The last seven rows are the pseudo-transient
 continuation of :doc:`solution_algorithm`; its CFL ramp reuses ``steady.cfl0``, ``steady.cfl_max``,
 ``steady.ser_exponent`` and ``steady.ser_max_growth``, with the same range checks.
 

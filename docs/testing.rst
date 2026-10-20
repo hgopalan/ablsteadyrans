@@ -1329,3 +1329,27 @@ GoogleTest suite
        Ekman column with ``steady.ser_exponent = 0.5`` fails after 7 steps without the growth bound and converges
        in 26 with 1.5, each step accepted by the bound at a finite :math:`\Delta\tau` with :math:`\lambda = 1`.
        ``Continuation.DISABLED_ParameterSweep`` (on request): the sweep of :doc:`results`.
+   * - UT-3.3.1
+     - *Changed from the plan.* ``NewtonPreconditioner.ApplyIsOneSimplecIteration``: on a terrain hill split into
+       six boxes (shared and periodic faces), with non-uniform fields and :math:`\Delta\tau`, ``apply`` on
+       :math:`r = -R(q)` with the stage's denominator equals one SIMPLEC stage iteration from :math:`q` to 1e-9
+       (1e-14 measured). Both ``zjacobi`` and ``lusgs`` are checked; :math:`p` is compared modulo its mean.
+       :math:`\delta q = r` on the Dirichlet rows, and every shared-face copy equals its owner's.
+   * - UT-3.3.2
+     - *Changed from the plan.* ``NewtonPreconditioner.ConstantPressureShiftLeavesTheSolveUnchanged``: on the
+       periodic hill (singular pressure problem), a constant added to :math:`r_p` or to :math:`q`'s :math:`p`
+       leaves ``apply`` unchanged, and :math:`\delta p` has zero :math:`J`-weighted mean. A Newton step from
+       :math:`q` and from :math:`q + c` takes the same GMRES iterations (53) and gives the same increment.
+   * - UT-3.3.3
+     - ``NewtonPreconditioner.IterationsBoundedOverCfl``: four Newton steps on the open hill (9 × 6 × 8, six boxes)
+       at CFL 10, 1e2, 1e3 and 1e4. With ``simplec`` the mean GMRES iterations per step grow by less than 50 %
+       (10.25 to 10.5). The mutant check: the stage's denominator fails the bound (18 to 360–381, run to run). ``identity`` needs
+       at least five times as many iterations at each CFL.
+   * - UT-3.3 (a)
+     - *Beyond the plan.* ``NewtonPreconditioner.ContinuationIdentityVersusSimplec``: the continuation loop on the
+       open hill with each preconditioner. Both converge to :math:`10^{-8}|R_0|` in 8 steps to the same state;
+       ``identity`` keeps the pins of UT-3.2 (b), and ``simplec`` needs 56 GMRES iterations against 976. The
+       preconditioner is set up once per attempt. ``NewtonPreconditioner.ReaderFactoryAndRangeChecks``: the
+       default, ``identity``, an unknown value aborting with the key named, the range checks of the class, and
+       ``apply`` before ``setup``. CTest ``abort_newton_preconditioner_value``, ``_no_newton`` and ``_no_stage``:
+       the application's messages.
