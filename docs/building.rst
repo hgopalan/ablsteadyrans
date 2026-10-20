@@ -1,5 +1,5 @@
-Building
-========
+Installation
+============
 
 Requirements
 ------------
@@ -51,11 +51,11 @@ An option outside its allowed values stops the configuration.
      - ``NONE`` or ``CUDA``. For an H100 add ``-DAMReX_CUDA_ARCH=9.0``.
    * - ``ABLSTEADY_FFT``
      - ``ON``
-     - AMReX FFT. Required: the Poisson layer (sub-phase 1.10) uses its preconditioner. Configuring with ``OFF`` stops
+     - AMReX FFT. Required: the Poisson solver uses its FFT preconditioner. Configuring with ``OFF`` stops
        with an error, and an external AMReX must have been built with FFT (``find_package`` asks for it).
    * - ``ABLSTEADY_HYPRE``
      - ``OFF``
-     - AMReX with hypre, for the optional Newton preconditioner (sub-phase 3.3).
+     - AMReX with hypre, for the optional Newton–Krylov preconditioner (in development).
    * - ``ABLSTEADY_TESTING``
      - ``OFF``
      - ``AMReX_TESTING`` and assertions on, as in GPU CI.

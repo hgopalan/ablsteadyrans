@@ -417,7 +417,7 @@ Current tests
        u*²/C_μ0², the log law in the lowest four cells within 10 %, K_mv of the second cell within 30 % of κ u* z.
        Measured: the verdict after about 2850 iterations (13 s on two ranks), u* = 0.377 m/s, every ERF check
        passing, on one to three ranks with both compilers (the bursts of an earlier version of the predictor's
-       rotation step are explained and removed in :doc:`solver`). Label ``regression`` (the run time); double only.
+       rotation step are explained and removed in :doc:`solution_algorithm`). Label ``regression`` (the run time); double only.
        The 1 % comparison with an ERF reference run is not in this version.
    * - ``rt_thin_cell_w_vnn_cap``
      - *Beyond the plan.* The w rows' VNN cap on a flat inflow/outflow strip with a 0.7 m first cell
@@ -438,7 +438,7 @@ Current tests
        three lowest cells within 0.2–0.8 (Jackson and Hunt's 0.4), the speed-up positive in the lowest ten, the
        upstream u* within 0.25–0.55 m/s, the upstream log law in the lowest three cells within 15 %. Measured: the
        verdict after 4590 iterations (49 s on two ranks), speed-up 0.59/0.50/0.43, u* = 0.354 m/s, every check
-       passing (:doc:`solver`). Label ``regression``; double only.
+       passing (:doc:`solution_algorithm`). Label ``regression``; double only.
    * - ``rt_steady_hill2d_lusgs``
      - RT-2.1.1: the 2-D hill with the line LU-SGS sweeps (``inputs_steady_hill2d_lusgs``: two symmetric sweeps,
        CFL cap 16) to the verdict with a two-order drop and ERF's ``check_hill.py --physics``. Measured: 3062
@@ -482,7 +482,7 @@ Current tests
        ``steady.sequencing = 1`` (8 × 8 and 16 × 16 to the loose stop, then 32 × 32 to round-off), its log checked
        for the loose stops of levels 2 and 1, the strict verdict and the summary table; ``check_line_match.py``
        compares its plotfile with ``rt_steady_hill3d_neutral_zjacobi`` at 1e-8 of each field's maximum (the
-       per-level plotfiles ``…_plt_level<l>_<step>`` are not counted). Measured: see :doc:`solver` (grid
+       per-level plotfiles ``…_plt_level<l>_<step>`` are not counted). Measured: see :doc:`solution_algorithm` (grid
        sequencing). Label ``nightly``; double only.
    * - ``rt_steady_hill3d_sequencing``
      - RT-2.5.1 (the ERF half): ``inputs_steady_hill3d`` with three levels (16 × 16, 32 × 32, 64 × 64) and
@@ -748,7 +748,7 @@ GoogleTest suite
    * - UT-1.10.1b
      - *Beyond the plan.* With a tangential gradient at sloped ground: order 2 on flat ground (≥ 1.95), between 0.8 and
        1.2 over a 120 m hill (64 → 128 → 256 cells), and a fine-mesh error 3 to 6 times that over a 60 m hill (slope²).
-       Double precision only. Pins ERF's ground treatment (:doc:`solver`).
+       Double precision only. Pins ERF's ground treatment (:doc:`solution_algorithm`).
    * - UT-1.10.2
      - The anisotropic operator with :math:`\beta_v/\beta_h` = 1, 0.5, 0.1 (``z_cross`` set) on flat ground and over
        the hill, and a spatially varying :math:`\beta` over the hill: order ≥ 1.9 (single: 1.8, 1.6). Without
@@ -933,7 +933,7 @@ GoogleTest suite
        through the ghost exchange) gives the same corrected u, v, w, :math:`a_P`, :math:`d` and face step to 1e-12
        (single 1e-5).
    * - ``Predictor.WVnnCapAddsToTheWDiagonalAndD``
-     - *Beyond the plan.* The w rows' VNN cap (``simplec.w_vnn_cap``, :doc:`solver`) on the boundary-condition state
+     - *Beyond the plan.* The w rows' VNN cap (``simplec.w_vnn_cap``, :doc:`solution_algorithm`) on the boundary-condition state
        of UT-1.14.7 with :math:`\Delta\tau` of 400–1600 s (an uncapped VNN above the cap): with :math:`V = 16` every
        interior w row has :math:`a_P = 1/\Delta\tau + (a_{ZM} + a_{ZP})/V + \mathrm{diag}(A_1)` and :math:`d` larger by
        :math:`(a_{ZM} + a_{ZP})/V` (1e-13; single 1e-5), the Dirichlet ground and top rows keep :math:`a_P = 1` and

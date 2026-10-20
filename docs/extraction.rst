@@ -30,7 +30,7 @@ Copied in sub-phase 1.10, unchanged: ERF's terrain Poisson operator (``ERF_Terra
 the FFT preconditioner's boundaries (``Outflow``/``Open``: odd, periodic: periodic, any other name: even). The copy
 includes the zero total flux through Neumann faces, terrain cross term included (ERF#4272, merged as ERF#4279).
 ``ERF_SolveWithGMRES.cpp`` is an ERF member function and is not copied; ``Source/Poisson.cpp`` drives GMRES the same
-way (:doc:`solver`). Two shim headers in ``Source/erf_shims/`` stand
+way (:doc:`solution_algorithm`). Two shim headers in ``Source/erf_shims/`` stand
 in for ERF headers the copies include.
 
 Copied in sub-phase 1.7, unchanged: ``ERF_MOSTUtils.H``, whose ``similarity_funs`` give the surface layer's

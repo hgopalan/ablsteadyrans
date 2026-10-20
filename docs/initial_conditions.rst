@@ -1,28 +1,112 @@
 Initial conditions
 ==================
 
-``init.first_guess = profile`` builds a mass-consistent, WindNinja-style starting field: a first guess from the
-inflow profile, made divergence-free by a variational correction (``init.projection = 0`` keeps the first guess as it
-is); ``init.first_guess = column`` takes the first guess from a converged 1-D column instead (below). The method follows
-`FastWindTerrain <https://github.com/hgopalan/FastWindTerrain>`__. No code is copied (FastWindTerrain uses a
-Cartesian immersed-boundary mesh), but every parameter has the same meaning. The code is ``Source/Initializer``.
+The steady solver starts from an initial field. A good initial field is already close to the solution, so the solver
+needs fewer iterations. ablsteady builds the initial field in two steps:
 
-First guess
------------
+#. **Initial profile.** A wind profile is placed on the mesh by height above the local ground.
+#. **Mass-consistent adjustment.** The field is corrected so that it conserves mass, which bends the flow over and
+   around the terrain.
 
-- :math:`u_0, v_0` are the inflow profile (:doc:`boundary_conditions`) at each face's height above the ground,
-  :math:`h = \max(z_\mathrm{face} - z_\mathrm{ground}, h_\mathrm{min})`, with :math:`h_\mathrm{min}` =
+The method is that of mass-consistent wind models such as WindNinja (Forthofer et al. 2014) and follows
+FastWindTerrain. No FastWindTerrain code is copied (it uses a Cartesian immersed-boundary mesh), but every parameter
+has the same meaning. The code is in ``Source/Initializer`` and ``Source/ColumnGuess``; the inputs are in the
+``init`` namespace (:doc:`inputs`).
+
+Options
+-------
+
+``init.first_guess`` selects the initial profile:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 18 52 30
+
+   * - Value
+     - Initial profile
+     - Recommended for
+   * - ``none`` (default)
+     - Fluid at rest.
+     - Tests only.
+   * - ``profile``
+     - The inflow profile of :doc:`boundary_conditions` (log law, power law or file).
+     - Cases without Coriolis forcing; flat cases with an inversion.
+   * - ``column``
+     - The steady solution of a single vertical column, computed first (below).
+     - Terrain cases with Coriolis forcing.
+
+``init.projection`` (default 1) switches the mass-consistent adjustment on or off. With 0, the solver's own pressure
+correction removes the divergence in its first iteration.
+
+Initial profile from the inflow profile
+---------------------------------------
+
+With ``init.first_guess = profile``:
+
+- :math:`u_0, v_0` are the inflow profile at each face's height above the ground,
+  :math:`h = \max(z_\mathrm{face} - z_\mathrm{ground}, h_\mathrm{min})`, where :math:`h_\mathrm{min}` is
   ``init.z_agl_min``.
-- :math:`w_0` is 0, except on the ground faces, where it takes the no-flux value :math:`u_0 z_x + v_0 z_y`.
+- :math:`w_0 = 0`, except on the ground faces, where :math:`w_0 = u_0 z_x + v_0 z_y` (no flow through the ground).
 - :math:`\theta` is the sounding ``bc.theta_profile`` at the absolute height, and :math:`p = 0`.
-- :math:`k` is the profile's equilibrium value, decaying above :math:`z_i` = ``init.k_decay_height``:
+- :math:`k` is the profile's equilibrium value. Above :math:`z_i` = ``init.k_decay_height`` (0: no decay) it decays:
 
   .. math::
 
      k = k_\mathrm{prof}(h)\, e^{-(h - z_i)/z_i} \quad (h > z_i), \qquad k = k_\mathrm{prof}(h) \quad (h \le z_i).
 
-Mass-consistent correction
+Initial profile from a single column
+------------------------------------
+
+With Coriolis forcing, the steady wind turns with height (the Ekman spiral). The inflow profile has no such turning,
+so the solver must first spend many iterations on the slow inertial adjustment. ``init.first_guess = column`` avoids
+this: it first solves the horizontally uniform problem of the case, a single vertical column, and uses its steady
+profile as the initial profile.
+
+The column has the vertical grid of the case over flat ground. It solves for the horizontal wind, written as the
+complex number :math:`u + iv`, and for :math:`k`:
+
+.. math::
+
+   \frac{\partial (u + iv)}{\partial t} = \frac{\partial}{\partial z}\Bigl(\nu\,\frac{\partial (u + iv)}{\partial z}\Bigr)
+   - i f\,\bigl((u + iv) - (u_g + i v_g)\bigr) + F_x + i F_y, \qquad
+   \frac{\partial k}{\partial t} = \frac{\partial}{\partial z}\Bigl(\gamma_k\,\frac{\partial k}{\partial z}\Bigr)
+   + P_s + P_b - \varepsilon .
+
+- :math:`\theta` is held at the sounding.
+- :math:`\nu`, :math:`\gamma_k`, :math:`P_s`, :math:`P_b`, :math:`\varepsilon` come from the turbulence model of
+  :doc:`turbulence_model`.
+- The ground uses the neutral log law; the top and the Rayleigh layer are those of the case.
+
+The column is marched to steady state with implicit (backward Euler) steps that grow from 10 s to :math:`10^5` s. It
+has converged when the largest change of :math:`u, v` and :math:`k` over a step, relative to their scale, is below
+``init.column_tol``. This typically takes 100–200 steps and a few hundredths of a second. If it has not converged
+after ``init.column_max_iterations`` steps, the run stops.
+
+The converged :math:`u, v, k` are then placed on the mesh by height above the local ground, exactly as the inflow
+profile is; :math:`\theta` stays the sounding. The table is written to ``column_guess.dat`` in the run directory.
+An inflow face keeps the case's inflow profile; the solver reconciles the two.
+
+**Requirements.** The column option needs:
+
+- a horizontal forcing: ``forcing.geostrophic = 1`` or a non-zero ``forcing.pressure_gradient``;
+- the SIMPLEC stage (``steady.stage = simplec``);
+- a neutral ``surface_layer`` ground with the default wall :math:`k` (``bc.surface_zref`` is not supported);
+- a ``slip_wall``, ``geostrophic`` or ``no_slip_wall`` top;
+- ``bc.rayleigh_fields`` either containing both ``u`` and ``v`` or neither;
+- with a pressure gradient but no Coriolis force: a neutral sounding or a Rayleigh layer on ``u`` and ``v``.
+
+``init.k_decay_height`` cannot be used with it. Otherwise the run stops with a message naming
+``init.first_guess``.
+
+**When to use it.** On the 2-D and 3-D hills the column start halves the iterations (:doc:`results`). On the flat
+``Neutral_ABL_Flat`` case it does not converge: the column's :math:`k` at the sharp inversion base differs from the
+3-D solution, and a slow oscillation of :math:`k` develops there. Use ``profile`` for that case.
+
+Mass-consistent adjustment
 --------------------------
+
+The initial profile :math:`\mathbf u_0` does not conserve mass over terrain. The adjustment finds the field
+:math:`\mathbf u` closest to :math:`\mathbf u_0` that does (Sherman 1978):
 
 .. math::
 
@@ -30,147 +114,39 @@ Mass-consistent correction
    \mathbf u = \mathbf u_0 - \Sigma\nabla\lambda, \qquad
    \Sigma = \mathrm{diag}(\alpha_h^2, \alpha_h^2, \alpha_v^2) .
 
-- :math:`\alpha_h, \alpha_v` are ``init.alpha_h`` and ``init.alpha_v``.
-- :math:`\lambda = 0` on inflow and outflow faces; no flux through walls, the ground and the top.
-- The equation is solved by the Poisson solver of :doc:`solver`, terrain cross terms included.
+- :math:`\lambda`: a Lagrange multiplier (a potential), with :math:`\lambda = 0` on inflow and outflow faces and no
+  flux through walls, the ground and the top.
+- :math:`\alpha_h, \alpha_v`: horizontal and vertical transmissivity (``init.alpha_h``, ``init.alpha_v``).
 
-**What α does.** :math:`\alpha` is a transmissivity. A smaller :math:`\alpha_v/\alpha_h` means less vertical
-adjustment, so the flow goes around steep terrain rather than over it. Only the ratio matters. In Sherman's (1978)
-notation :math:`\alpha_v/\alpha_h` is :math:`\alpha_1/\alpha_2`, WindNinja's stability parameter. Ratios of 0.1 and
-above are practical; smaller ratios need more Poisson iterations.
+The equation is solved by the Poisson solver of :doc:`solution_algorithm`, terrain cross terms included.
 
-**Which Poisson back end.** With :math:`\alpha_v \ne \alpha_h` the z-face flux needs a separate coefficient on its
-terrain cross part, which only back end A has, so the projection runs on ``gmres_fft`` whatever
-``solver.poisson_backend`` says, and the log prints a line saying so; the SIMPLEC stage keeps
-``solver.poisson_backend`` (default ``gmres_mlmg``, :doc:`solver`). With :math:`\alpha_v = \alpha_h` the projection
-uses ``solver.poisson_backend``.
+**Choosing α.** Only the ratio :math:`\alpha_v/\alpha_h` matters. A smaller ratio allows less vertical motion, so
+the flow goes around steep terrain rather than over it, as in stable air. In Sherman's notation
+:math:`\alpha_v/\alpha_h` is :math:`\alpha_1/\alpha_2`, WindNinja's stability parameter. Ratios of 0.1 and above are
+practical; smaller ratios need more Poisson iterations.
 
-O'Brien column correction
--------------------------
+With :math:`\alpha_v \ne \alpha_h` this one solve always uses the ``gmres_fft`` back end, whatever
+``solver.poisson_backend`` says, and the log says so. The SIMPLEC stage keeps ``solver.poisson_backend``.
 
-``init.obrien = 1`` (off by default, as in FastWindTerrain) first sets :math:`\Omega_0` from the column continuity
-of :math:`(u_0, v_0)` from the ground up, and removes the column's top residual :math:`E` with the weight
-:math:`f_k^2`:
+O'Brien correction
+------------------
+
+``init.obrien = 1`` (off by default) first sets the vertical flux :math:`\Omega_0` from column continuity, integrating
+from the ground up, and removes the remaining flux at the top with a weight that grows with height (O'Brien 1970):
 
 .. math::
 
    a_z\Omega_{k+1/2} = a_z\Omega_{k-1/2} - J_k D^h_k\,\Delta\zeta, \qquad
    f_k = \frac{z_k - z_\mathrm{ground}}{z_\mathrm{top} - z_\mathrm{ground}} ,
 
-where :math:`D^h` is the horizontal part of the divergence (O'Brien 1970). It is meant for first guesses from
-soundings or fields.
+where :math:`D^h` is the horizontal part of the divergence and the top residual is removed with the weight
+:math:`f_k^2`. It is meant for initial profiles taken from soundings or other models.
 
-The converged column as the first guess
----------------------------------------
+The resulting field
+-------------------
 
-``init.first_guess = column`` (sub-phase 2.1b, ``Source/ColumnGuess.H``) solves the deck's horizontally uniform
-column as a 1-D problem first: on the cells of the deck's vertical grid (its nodal heights from the mesh builder
-over flat ground), with :math:`u + iv`, :math:`k` at the cell centres and :math:`\theta` held at the sounding,
+The initial field is divergence-free to the Poisson tolerance, and :math:`\theta`, :math:`k`, :math:`p` are
+consistent with the sounding. It is a starting point, not a RANS solution: it does not satisfy the momentum
+equations.
 
-.. math::
-
-   \frac{\partial (u + iv)}{\partial t} = \frac{\partial}{\partial z}\Bigl(\nu\,\frac{\partial (u + iv)}{\partial z}\Bigr)
-   - i f\,\bigl((u + iv) - (u_g + i v_g)\bigr) + F_x + i F_y, \qquad
-   \frac{\partial k}{\partial t} = \frac{\partial}{\partial z}\Bigl(\gamma_k\,\frac{\partial k}{\partial z}\Bigr)
-   + P_s + P_b - \varepsilon ,
-
-by backward Euler steps of growing size (10 s to :math:`10^5` s): the diffusion, the Coriolis term (implicit through
-the complex unknown), the wall drag and the Rayleigh layer implicit (a complex and a real tridiagonal solve per
-step), the :math:`k` sinks point-implicit (Patankar), the closure's point kernels (:doc:`governing_cartesian`, the same algebra as
-the 3-D closure with :math:`N^2` from the sounding and :math:`S^2` from the cell's two faces) lagged one step and
-:math:`\nu_t` relaxed by a half against the previous step. The ground is the neutral wall law (:math:`u_* = \kappa
-|U_1| / \ln((d_1 + z_0)/z_0)`, the stress :math:`u_*^2` along :math:`U_1` as an implicit drag, the first cell's
-:math:`k = u_*^2/C_{\mu 0}^2`), the top the deck's (slip: zero flux; geostrophic: :math:`u_g, v_g`; no slip: 0),
-the Rayleigh layer the deck's on the fields ``bc.rayleigh_fields`` selects (:math:`\nu_t` is relaxed by a half
-between steps and the face diffusivities are arithmetic means whatever ``turb.nut_relax`` and ``turb.face_mean``
-say: the column is a first guess). The asymptotic contraction is about 0.88 per step, set by the lagged
-:math:`k`–:math:`\nu_t`–:math:`S^2` loop (the review's Jacobian of the step map), not by the step size. The column
-converges when the largest
-change of :math:`u, v` (scaled by the geostrophic or first-cell speed) and :math:`k` (by its maximum) over a step
-is below ``init.column_tol`` (1e-8; lifted to 100 epsilon of ``Real``, 1.2e-5 in single precision, since the closure's
-point kernels run in ``Real``), typically in 100–200 steps and a few hundredths of a second; it aborts, naming
-``init.column_max_iterations`` and the last change, otherwise. The converged :math:`u, v, k` per level with a
-ground row (:math:`u = v = 0`, the first cell's :math:`k`) become the first guess's profile in place of the inflow
-profile, applied by height above the local ground exactly as the inflow profile is (``init.z_agl_min`` and
-``init.obrien`` act as for the profile; ``init.k_decay_height`` is refused, it would decay the converged k again;
-below the first cell centre the table is linear from the ground row, where the log law is logarithmic, a
-difference confined to a crest's thinnest cells); :math:`\theta` stays the sounding at the absolute height. The
-projection then runs as for ``profile`` unless ``init.projection = 0``. An inflow face keeps the deck's inflow
-profile on the face while the interior starts from the column; the stage reconciles the two as it does for any
-first guess. The application writes the table to ``column_guess.dat`` in the run directory.
-
-**Why.** The inflow profile has u along the geostrophic wind and v = 0 at every height, and the mass-consistent
-correction knows nothing of the Coriolis balance, so a Coriolis-driven case starts out of Ekman balance and the
-stage spends the inertial adjustment in pseudo-time: the point-implicit rotation damps that mode by about
-:math:`f\Delta\tau` per iteration, and on ERF's 2-D hill the cross-wind residual sits on a plateau for the first
-1500 of 3062 iterations (:doc:`results`). The column has the balance (and the closure's equilibrium k) built in,
-to round-off on the flat case. The two switches are independent: ``profile`` with the projection (the earlier
-default), ``column`` alone (the balanced profile on the terrain-following mesh, the stage's first pressure correction
-removing the divergence) and ``column`` with the projection (the balanced profile bent over the terrain by the
-α-weighted correction). Over a hill the lifted spiral carries an advective imbalance on the flanks that neither the
-projection nor the profile guess has, so the first iteration's residual is larger than the profile guess's; the
-balance shows after the CFL ramp (:doc:`testing`, the spin-up check).
-
-**Where it does not help.** On the flat Neutral_ABL_Flat deck the column seed is the 1-D steady state of u and v to
-round-off, but its k, equilibrated with the sounding's sharp inversion base, differs from the 3-D closure's at the
-two cells there (the first iteration's k residual is 8e-2), and the 3-D run then falls into a slow oscillation of
-k at the inversion (the k residual swinging between 1e-5 and 5e-4 with a period of about 2500 iterations, the mean
-speed between 11.03 and 11.16 m/s) that neither the rotation relaxation, the LU-SGS sweeps nor skipping the
-projection removes, and the verdict is not reached in 20 000 iterations where the profile start takes 2839. The
-flat deck therefore keeps ``profile``; the terrain cases, whose residual is set by the hill rather than by the
-inversion base, converge in a third of the iterations (:doc:`results`). Seeding k at the inversion base is left
-for a later sub-phase.
-
-**Why θ stays the sounding.** A column with an inversion warms without end (the entrainment of :doc:`results`), so
-its θ has no fixed point; the Rayleigh layer and the top condition reference the sounding; and the column's θ
-applied by height above the ground would lift the inversion over a crest against them. The price is a
-:math:`k`–θ mismatch in the two cells at the inversion base, where the column's k equilibrated with the sounding's
-sharper base, gone within about a hundred iterations.
-
-The column needs a horizontal forcing (``forcing.geostrophic = 1`` or a non-zero ``forcing.pressure_gradient``),
-the stage (``steady.stage = simplec``, whose closure and forcing it uses), the neutral surface layer with the
-Dirichlet wall k at the first cell centre (``bc.surface_zref`` is not supported), a slip, geostrophic or no-slip
-top, and ``bc.rayleigh_fields`` holding u and v together or neither; a pressure gradient without Coriolis is allowed
-only with a neutral sounding or a Rayleigh layer holding u and v, because above an inversion the stress
-:math:`F(H - z)` falls on a layer whose :math:`k` sits at the floor and the column has no steady state (the review's
-finding); ``check_column_guess`` refuses the option otherwise, naming ``init.first_guess``, and a column whose
-change stops decreasing aborts after 200 stalled steps. An inflow face in the deck is no obstacle: the column is a
-profile by height. A surface heat flux and the source wall k are not in this version.
-
-Inputs
-------
-
-Every key is in ``init`` (:doc:`inputs` has the table). The keys other than ``first_guess`` have no effect without
-``first_guess = profile`` and are refused then. With the initializer on, the application also reads ``bc.*`` and
-``solver.poisson_*``. Of the ``bc`` keys the initial field uses the face types (which must fit the mesh's periodicity),
-the inflow profile and the sounding; the top gradient, the Rayleigh and sponge damping and the surface layer's options
-(``bc.zhi_theta_grad``, ``bc.rayleigh_*``, ``bc.sponge_*``, ``bc.surface_*``) are range-checked but have no effect on
-the initial field: the SIMPLEC stage of sub-phase 1.14 applies them. The ``init``, ``bc`` and ``solver`` readers each stop at
-their first error, after the mesh, terrain and io inputs have been reported together. A restart (``io.restart``) with
-the initializer on is refused: the checkpoint holds the state.
-
-References
-----------
-
-O'Brien, J. J. (1970). Alternative solutions to the classical vertical velocity problem. *J. Appl. Meteorol.* 9,
-197–203.
-
-Sherman, C. A. (1978). A mass-consistent model for wind fields over complex terrain. *J. Appl. Meteorol.* 17, 312–319.
-
-Forthofer, J. M., Butler, B. W., Wagenbrenner, N. S. (2014). A comparison of three approaches for simulating fine-scale
-surface winds in support of wildland fire management. Part I. Model formulation and comparison against measurements
-(WindNinja). *Int. J. Wildland Fire* 23, 969–981.
-
-What the field is
------------------
-
-The field is divergence-free to the Poisson tolerance and has :math:`\theta, k, p` consistent with the sounding. It
-is a starting point for the steady solver, not a RANS solution: it has no momentum balance. A restart with the
-initializer on is refused, since the checkpoint holds the state.
-
-References
-----------
-
-- O'Brien, J. J. (1970). *J. Appl. Meteorol.* 9, 197–203.
-- Sherman, C. A. (1978). *J. Appl. Meteorol.* 17, 312–319.
-- Forthofer, J. M., Butler, B. W., Wagenbrenner, N. S. (2014). *Int. J. Wildland Fire* 23, 969–981.
+A restart (``io.restart``) cannot be combined with ``init.first_guess``: the checkpoint already holds the state.
