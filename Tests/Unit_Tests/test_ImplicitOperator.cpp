@@ -99,7 +99,7 @@ TEST(ImplicitOperator, DiagonallyDominantForRandomWindAndNu)
     for (Loc loc : kLocs) {
         amrex::MultiFab A;
         ablsteady::implicit_coefficients(loc, {&f.F[0], &f.F[1], &f.F[2]}, f.nu, c.z, c.mesh, c.geom, A);
-        long bad_sign = 0, bad_sum = 0, rows = 0;
+        amrex::Long bad_sign = 0, bad_sum = 0, rows = 0;
         double max_rel = 0;
         for (amrex::MFIter mfi(A, false); mfi.isValid(); ++mfi) {
             const amrex::Box vb = mfi.validbox();
