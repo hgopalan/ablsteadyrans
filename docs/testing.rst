@@ -306,6 +306,17 @@ Current tests
        orders against the strict 8, a monitor tolerance of 1 and sequencing without a hierarchy, all three named
        in one abort; a coarsest level of 4 × 1 cells (64 × 16 over five levels); ``steady.sequencing_drop_orders``
        without ``steady.sequencing = 1``; ``steady.sequencing = 2``; ``steady.sequencing`` without the stage.
+       The range test also refuses ``steady.sequencing_cfl_start = previous`` with ``steady.sequencing_hold = 1``,
+       and the unused test the two keys without sequencing.
+   * - ``abort_sequencing_hold_value``, ``abort_sequencing_cfl_start_value``
+     - ``steady.sequencing_hold = 2`` and ``steady.sequencing_cfl_start = last``: each refused, naming its input.
+   * - ``rt_sequencing_hold_kept``, ``rt_sequencing_hold_released``, ``rt_sequencing_cfl_previous``
+     - Old against new ``steady.sequencing_hold`` (beyond the plan), on the two-level restart deck of the truly
+       neutral hill (only level 0 is seeded): with the hold (``1``) level 0's first three iterations run at
+       ``steady.cfl0`` with r = 1; without it (``0``, the default) r < 1 from the first iteration and the CFL leaves
+       ``steady.cfl0`` at the second; with ``steady.sequencing_cfl_start = previous`` level 0 starts at level 1's
+       last CFL (4, after 150 iterations). Seconds. ``rt_sequencing_restart`` also checks that the restored level-0
+       history keeps the released hold.
    * - ``abort_poisson_options``
      - ``poisson_projection`` with ``solver.poisson_reltol`` repeated and out of range: both named.
        (``abort_unknown_key`` checks that the application refuses ``solver.poisson_reltol``.)
@@ -1158,6 +1169,21 @@ GoogleTest suite
        level of 4 × 2 is accepted and 2 × 1 refused. Mutants: 12 one-line mutants of
        ``loose_stop``, ``seed_reference`` and the checks; 11 killed, 1 equivalent (the floor of the reference at
        ``residual_tol``, which matters only where the below-tolerance branch already holds).
+   * - UT-2.5.1 (beyond the plan, the reference hold)
+     - ``Driver.ReleasedHoldRampsFromTheFirstIteration``: residuals 1/4, 1/16, … with a seed of 1 give the CFLs
+       1, 1, 1, 4, 16, 64 with the hold and 1, 4, 16, 64, 64 without it (r = 0.25, 0.0625); a seed of 0.1 is
+       raised to the first residual (r = 1, then 0.25: 1, 1, 4, 16, 64); ``start_cfl(8)`` gives 8, 4, 16, 64, and
+       a start below ``steady.cfl0`` is raised to it; the released hold survives a write, read and restore (the
+       continued run is the uninterrupted one), a format-1 history reads as the hold on, a hold other than −1 or 0
+       is refused on read and on restore; the calls are refused after a step, without a seed and (``start_cfl``)
+       with the hold on or out of range. ``Sequencing.ReleasedHoldStopsFromTheFirstIteration``: a residual of 1e-2
+       under a seed of 1 stops at iteration 4 with the hold and at 2 without (the third-iteration minimum; at 0
+       with one reference iteration); a falling and a rising residual stop at 3; the monitor branch waits for the
+       reference iterations with either hold. ``Sequencing.InputChecksNameTheirKeys`` also checks
+       ``steady.sequencing_cfl_start = previous`` against the hold and the has-no-effect messages. All pins were
+       re-derived by an independent Python script. Mutants: 21 one-line mutants of the driver, the checkpoint
+       format, ``loose_stop`` and the checks, all killed; 4 more of the application wiring are killed by the
+       ``rt_sequencing_hold_*``, ``rt_sequencing_cfl_previous`` and ``rt_sequencing_restart`` tests.
    * - UT-1.15.7 (revised in 1.16)
      - The rotation's pin now holds the planar-mean split: :math:`a_P` with :math:`f^2\max(\tau_c, \tau_{\mathrm{own}})`
        and the right-hand side with the unique-face horizontal mean of the other residual per level at :math:`\tau_c`

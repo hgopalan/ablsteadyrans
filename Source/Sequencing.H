@@ -26,7 +26,7 @@
 //   (a) every scaled residual R_q has dropped steady.sequencing_drop_orders
 //       orders below its reference, or is below steady.residual_tol; or
 //   (b) (with steady.sequencing_monitor_tol > 0, and after
-//       steady.residual_ref_iterations iterations, as (a)) every monitor has a full
+//       steady.residual_ref_iterations iterations whatever the hold) every monitor has a full
 //       window (steady.monitor_window + 1 values) and changed over it by at
 //       most steady.sequencing_monitor_tol of max(|value|, scale), as the
 //       strict test but without its Aitken extrapolation. Off by default:
@@ -40,15 +40,24 @@
 //
 // Every level has its own boundary conditions, closure (its nu_t history
 // starts empty), wall distance, SIMPLEC stage (with its Poisson solver) and
-// driver, built from the run's inputs on the level's mesh (LevelSolver). The
-// SER ramp restarts at steady.cfl0 on every level. Coarse levels run only on
+// driver, built from the run's inputs on the level's mesh (LevelSolver).
+// The reference hold (the first steady.residual_ref_iterations iterations at
+// steady.cfl0 with r_n = 1, before which (a) cannot hold) runs on the
+// coarsest level, which takes the reference. On the seeded levels (level 0
+// included) steady.sequencing_hold = 0 (the default) skips it: r_n is
+// measured against the seed from the first iteration, the SER ramp starts at
+// once and (a) may hold from the third iteration (or after
+// residual_ref_iterations if fewer); 1 keeps it on every level.
+// The SER ramp starts at steady.cfl0, or (steady.sequencing_cfl_start =
+// previous, hold 0 only) at the previous level's CFL. Coarse levels run only on
 // a fresh start: a restart continues the level-0 run from its checkpoint
 // (the checkpoint is the level-0 state and history); nothing of the coarse
 // levels is checkpointed.
 //
 // Inputs (steady.*): sequencing (0 | 1; 0), sequencing_drop_orders (> 0 and
 // <= steady.residual_drop_orders; 2), sequencing_monitor_tol (0, off, or in
-// (0, 1); 0). See check_sequencing_options.
+// (0, 1); 0), sequencing_hold (0 | 1; 0), sequencing_cfl_start (cfl0 |
+// previous; cfl0). See check_sequencing_options.
 
 #include "BoundaryConditions.H"
 #include "Closure.H"
@@ -82,13 +91,16 @@ struct SequencingOptions
     bool enabled{false};                                //!< steady.sequencing (0 | 1)
     amrex::Real drop_orders{2};                         //!< steady.sequencing_drop_orders: loose residual drop
     amrex::Real monitor_tol{0};                         //!< steady.sequencing_monitor_tol: loose monitor change (0: off)
+    int hold{0};                                        //!< steady.sequencing_hold (0 | 1): seeded levels' hold
+    bool cfl_previous{false};                           //!< steady.sequencing_cfl_start (cfl0 | previous)
     std::vector<std::string> given;                     //!< the steady.sequencing* keys given
 };
 
-//! Read steady.sequencing, sequencing_drop_orders and sequencing_monitor_tol
-//! (always, so that unknown_inputs sees them read). Aborts, naming the key,
-//! on a repeated key, a key with more than one value, or steady.sequencing
-//! other than 0 or 1. The other range checks are check_sequencing_options.
+//! Read steady.sequencing, sequencing_drop_orders, sequencing_monitor_tol,
+//! sequencing_hold and sequencing_cfl_start (always, so that unknown_inputs
+//! sees them read). Aborts, naming the key, on a repeated key, a key with
+//! more than one value, steady.sequencing or sequencing_hold other than 0 or
+//! 1, or sequencing_cfl_start other than cfl0 or previous. The other range checks are check_sequencing_options.
 SequencingOptions read_sequencing_options ();
 
 //! Problems with the sequencing inputs (empty: none), each naming its key:
@@ -96,8 +108,10 @@ SequencingOptions read_sequencing_options ();
 //! sequencing_monitor_tol 0 or finite, > 0 and < 1; steady.sequencing = 1 needs
 //! mesh.hierarchy_levels >= 2 and, on the coarsest level, at least 2 cells
 //! in x and in y (n_cell / 2^(L-1): with one cell the prolonged field is
-//! constant along that direction, Transfer.H); sequencing_drop_orders and
-//! sequencing_monitor_tol have no effect unless steady.sequencing = 1.
+//! constant along that direction, Transfer.H); sequencing_cfl_start =
+//! previous needs sequencing_hold = 0; sequencing_drop_orders,
+//! sequencing_monitor_tol, sequencing_hold and sequencing_cfl_start have no
+//! effect unless steady.sequencing = 1.
 std::vector<std::string> check_sequencing_options (const SequencingOptions& opt, const SteadyParams& strict,
                                                    const MeshInputs& mesh);
 
@@ -112,8 +126,12 @@ struct LooseStop
 //! stage's monitor specs. Never stops on a history with a NaN or infinite
 //! value (the driver reports Diverged) or with fewer than
 //! p.residual_ref_iterations iterations for branch (a).
+//! hold_iterations: the level's reference hold (Driver::hold_iterations).
+//! Branch (a) waits for it: residual_ref_iterations, or, on a seeded level
+//! with steady.sequencing_hold = 0 (hold 0), min(3, residual_ref_iterations)
+//! iterations. Branch (b) always waits residual_ref_iterations.
 LooseStop loose_stop (const SteadyHistory& h, const SteadyParams& p, const std::vector<MonitorSpec>& monitors,
-                      const SequencingOptions& opt);
+                      const SequencingOptions& opt, int hold_iterations);
 
 //! The run's inputs a level's solver is built from (the application's).
 struct RunSetup

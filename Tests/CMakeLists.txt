@@ -227,14 +227,17 @@ ablsteady_add_test(NAME abort_stage_no_guess NP 1 LABELS "regression;smoke"
                    COMMAND $<TARGET_FILE:ablsteady> ${VALIDATION_CASE}/inputs_abort_stage_no_guess
                            ${ABLSTEADY_TEST_AMREX_FLAGS})
 # Grid sequencing (Sequencing.H): the range checks, a key without
-# steady.sequencing = 1, a value other than 0 or 1, and the keys without the stage.
+# steady.sequencing = 1, a value other than 0 or 1 (or cfl0 or previous), and
+# the keys without the stage.
 ablsteady_add_test(NAME abort_sequencing_range NP 1 LABELS "regression;smoke"
                    PREFIX ${EXPECT_ABORT}
                           "steady\\.sequencing_drop_orders = 9\\.000e\\+00: must be > 0 and <= steady\\.residual_drop_orders = 8\\.000e\\+00"
                           "steady\\.sequencing_monitor_tol = 1\\.000e\\+00: must be 0 \\(off\\) or > 0 and < 1"
-                          "steady\\.sequencing = 1 needs mesh\\.hierarchy_levels >= 2 \\(it is 1\\)" --
+                          "steady\\.sequencing = 1 needs mesh\\.hierarchy_levels >= 2 \\(it is 1\\)"
+                          "steady\\.sequencing_cfl_start = previous needs steady\\.sequencing_hold = 0" --
                    COMMAND $<TARGET_FILE:ablsteady> ${HILL3D_NEUTRAL_CASE}/inputs_steady_hill3d_neutral steady.sequencing=1
-                           steady.sequencing_drop_orders=9 steady.sequencing_monitor_tol=1 ${ABLSTEADY_TEST_AMREX_FLAGS})
+                           steady.sequencing_drop_orders=9 steady.sequencing_monitor_tol=1 steady.sequencing_hold=1
+                           steady.sequencing_cfl_start=previous ${ABLSTEADY_TEST_AMREX_FLAGS})
 ablsteady_add_test(NAME abort_sequencing_coarsest NP 1 LABELS "regression;smoke"
                    PREFIX ${EXPECT_ABORT}
                           "steady\\.sequencing = 1 needs at least 2 cells in x and in y on the coarsest level: mesh\\.n_cell x and y / 2\\^\\(mesh\\.hierarchy_levels - 1\\) = 4 1" --
@@ -242,13 +245,24 @@ ablsteady_add_test(NAME abort_sequencing_coarsest NP 1 LABELS "regression;smoke"
                            mesh.hierarchy_levels=5 "mesh.n_cell=64 16 16" ${ABLSTEADY_TEST_AMREX_FLAGS})
 ablsteady_add_test(NAME abort_sequencing_unused NP 1 LABELS "regression;smoke"
                    PREFIX ${EXPECT_ABORT}
-                          "steady\\.sequencing_drop_orders has no effect unless steady\\.sequencing = 1" --
+                          "steady\\.sequencing_drop_orders has no effect unless steady\\.sequencing = 1"
+                          "steady\\.sequencing_hold has no effect unless steady\\.sequencing = 1"
+                          "steady\\.sequencing_cfl_start has no effect unless steady\\.sequencing = 1" --
                    COMMAND $<TARGET_FILE:ablsteady> ${HILL3D_NEUTRAL_CASE}/inputs_steady_hill3d_neutral
-                           steady.sequencing_drop_orders=1 ${ABLSTEADY_TEST_AMREX_FLAGS})
+                           steady.sequencing_drop_orders=1 steady.sequencing_hold=0 steady.sequencing_cfl_start=cfl0
+                           ${ABLSTEADY_TEST_AMREX_FLAGS})
 ablsteady_add_test(NAME abort_sequencing_value NP 1 LABELS "regression;smoke"
                    PREFIX ${EXPECT_ABORT} "steady\\.sequencing = 2: must be 0 or 1" --
                    COMMAND $<TARGET_FILE:ablsteady> ${HILL3D_NEUTRAL_CASE}/inputs_steady_hill3d_neutral
                            steady.sequencing=2 ${ABLSTEADY_TEST_AMREX_FLAGS})
+ablsteady_add_test(NAME abort_sequencing_hold_value NP 1 LABELS "regression;smoke"
+                   PREFIX ${EXPECT_ABORT} "steady\\.sequencing_hold = 2: must be 0 or 1" --
+                   COMMAND $<TARGET_FILE:ablsteady> ${HILL3D_NEUTRAL_CASE}/inputs_steady_hill3d_neutral
+                           steady.sequencing=1 mesh.hierarchy_levels=2 steady.sequencing_hold=2 ${ABLSTEADY_TEST_AMREX_FLAGS})
+ablsteady_add_test(NAME abort_sequencing_cfl_start_value NP 1 LABELS "regression;smoke"
+                   PREFIX ${EXPECT_ABORT} "steady\\.sequencing_cfl_start = last: must be cfl0 or previous" --
+                   COMMAND $<TARGET_FILE:ablsteady> ${HILL3D_NEUTRAL_CASE}/inputs_steady_hill3d_neutral
+                           steady.sequencing=1 mesh.hierarchy_levels=2 steady.sequencing_cfl_start=last ${ABLSTEADY_TEST_AMREX_FLAGS})
 ablsteady_add_test(NAME abort_sequencing_no_stage NP 1 LABELS "regression;smoke"
                    PREFIX ${EXPECT_ABORT} "steady\\.sequencing has no effect without steady\\.stage = simplec" --
                    COMMAND $<TARGET_FILE:ablsteady> ${VALIDATION_CASE}/inputs_abort_no_stage steady.sequencing=1
@@ -273,9 +287,32 @@ ablsteady_add_test(NAME rt_sequencing_restart NP 2 LABELS "regression;smoke" RUN
                    FIXTURES_REQUIRED sequencing_restart
                    PREFIX ${EXPECT_ABORT} --success "ablsteady: restarted from seq_chk00003"
                           "grid sequencing: the restart continues on level 0; the coarse levels are not run"
-                          "ablsteady: not steady after 3 iterations \\(6 over the run\\)" --
+                          "ablsteady: not steady after 3 iterations \\(6 over the run\\)"
+                          "driver history restored: 3 iterations, cfl .*, reference hold 0 iterations \\(released" --
                    COMMAND $<TARGET_FILE:ablsteady> ${HILL3D_NEUTRAL_CASE}/inputs_sequencing_restart steady.max_iterations=6
                            io.restart=seq_chk00003 io.chk_file=seq_chk_b ${ABLSTEADY_TEST_AMREX_FLAGS})
+# Old against new steady.sequencing_hold on the same two-level deck (only
+# level 0 is seeded; seconds): with the hold (1, sub-phase 2.5) level 0 runs
+# its first iterations at steady.cfl0 with r = 1; without it (0, the
+# default) r is below 1 from the first iteration and the CFL leaves cfl0 at
+# the second; with steady.sequencing_cfl_start = previous level 0 starts at
+# the CFL level 1 ended with (steady.cfl_max = 4 after its 150 iterations).
+ablsteady_add_test(NAME rt_sequencing_hold_kept NP 2 LABELS "regression;smoke"
+                   PREFIX ${EXPECT_ABORT} --success "every level holds steady\\.cfl0 for the reference iterations"
+                          "ablsteady: it 1 cfl 1\\.000e\\+00 r 1\\.000e\\+00" "ablsteady: it 3 cfl 1\\.000e\\+00 r 1\\.000e\\+00" --
+                   COMMAND $<TARGET_FILE:ablsteady> ${HILL3D_NEUTRAL_CASE}/inputs_sequencing_restart steady.max_iterations=3
+                           init.first_guess=profile steady.sequencing_hold=1 ${ABLSTEADY_TEST_AMREX_FLAGS})
+ablsteady_add_test(NAME rt_sequencing_hold_released NP 2 LABELS "regression;smoke"
+                   PREFIX ${EXPECT_ABORT} --success "the seeded levels without the reference hold"
+                          "ablsteady: it 1 cfl 1\\.000e\\+00 r [1-9]\\.[0-9]+e-0[1-9]" "!ablsteady: it 2 cfl 1\\.000e\\+00"
+                          "ablsteady: it 2 cfl [1-9]\\.[0-9]+e\\+00 r [1-9]\\.[0-9]+e-0[1-9]" --
+                   COMMAND $<TARGET_FILE:ablsteady> ${HILL3D_NEUTRAL_CASE}/inputs_sequencing_restart steady.max_iterations=3
+                           init.first_guess=profile ${ABLSTEADY_TEST_AMREX_FLAGS})
+ablsteady_add_test(NAME rt_sequencing_cfl_previous NP 2 LABELS "regression;smoke"
+                   PREFIX ${EXPECT_ABORT} --success "starting at the previous level's CFL"
+                          "ablsteady: level 1: it 150 cfl 4\\.000e\\+00" "ablsteady: it 1 cfl 4\\.000e\\+00 r [1-9]\\.[0-9]+e-0[1-9]" --
+                   COMMAND $<TARGET_FILE:ablsteady> ${HILL3D_NEUTRAL_CASE}/inputs_sequencing_restart steady.max_iterations=150
+                           init.first_guess=profile steady.sequencing_cfl_start=previous ${ABLSTEADY_TEST_AMREX_FLAGS})
 # simplec.w_vnn_cap over terrain above the tested aspect ratio: the run goes
 # on with a warning; below its floor of 16 the cap is refused.
 ablsteady_add_test(NAME warn_w_vnn_cap_terrain NP 1 LABELS "regression;smoke"
@@ -705,7 +742,7 @@ if(ABLSTEADY_PRECISION STREQUAL "DOUBLE")
     # 16 x 16, then 32 x 32 to round-off); the loose stops of levels 2 and 1
     # (by the residual branch) and the strict stop of level 0 are checked in
     # the log, level 0 in fewer than 3000 iterations (the z-line Jacobi run of
-    # RT-2.2.1 takes 3495; sequencing about 2800, so a lost coarse start or
+    # RT-2.2.1 takes 3495; sequencing 2688 (2773 with steady.sequencing_hold = 1), so a lost coarse start or
     # reference shows), and the steady state must match RT-2.2.1's to 1e-8;
     # p after subtracting each run's mean (no face fixes its level: the
     # prolonged start carries another constant, -1.8e-3 here).
