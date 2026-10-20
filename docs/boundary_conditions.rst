@@ -1,12 +1,14 @@
 Boundary conditions
 ===================
 
-Each of the six domain faces has one type (``bc.xlo`` … ``bc.zhi``). The types are ERF's, and the pressure types
-follow ERF's ``get_fft_bc``. The input table is in :doc:`inputs`. The code is ``Source/BoundaryConditions``,
-``Source/InflowProfile`` and ``Source/SurfaceLayer``.
+The computational domain is a box with six faces: west and east (``xlo``, ``xhi``), south and north (``ylo``,
+``yhi``), the ground (``zlo``) and the top (``zhi``). Each face gets one boundary type. The typical ABL setup is
+periodic sides, a rough ground described by a wall model, and a slip top. The boundary types are ERF's. The code is
+in ``Source/BoundaryConditions``, ``Source/InflowProfile`` and ``Source/SurfaceLayer``; the inputs are in the ``bc``
+namespace (:doc:`inputs`).
 
-Face types
-----------
+Boundary types
+--------------
 
 .. list-table::
    :header-rows: 1
@@ -14,105 +16,80 @@ Face types
 
    * - Type
      - Faces
-     - Meaning
+     - Condition
    * - ``periodic``
      - x, y
-     - The directions with ``mesh.is_periodic = 1``.
+     - The flow leaving one side enters the opposite side. Used where ``mesh.is_periodic = 1``.
    * - ``inflow``
      - x, y
-     - :math:`u, v, \theta, k` from the inflow profile at their height above the ground; normal velocity given;
-       :math:`p` even.
+     - :math:`u, v, \theta, k` from the inflow profile at their height above the ground.
    * - ``outflow``
      - x, y
-     - Zero gradient for every field; :math:`p = 0` on the face.
+     - Zero normal gradient for every field; :math:`p = 0`.
    * - ``slip_wall``
      - all
-     - No normal flux; tangential velocity, :math:`\theta` and :math:`k` even. At the top :math:`\theta` may take
-       the gradient ``bc.zhi_theta_grad``.
+     - No flow through the face; no stress along it. At the top, :math:`\theta` may have a given gradient
+       (``bc.zhi_theta_grad``).
    * - ``no_slip_wall``
      - all
-     - Velocity equal to the wall's (0, or a moving lid ``bc.<face>_wall_velocity``).
+     - The velocity equals the wall velocity (0, or a moving lid set by ``bc.<face>_wall_velocity``).
    * - ``surface_layer``
      - ground
-     - The wall model (below). The default ground.
+     - Monin–Obukhov wall model (below). The default ground.
    * - ``geostrophic``
      - top
      - :math:`u, v` held at the geostrophic wind.
 
-The defaults are periodic sides, a ``surface_layer`` ground and a ``slip_wall`` top, ERF's canonical ABL setup.
+The defaults are periodic sides, a ``surface_layer`` ground and a ``slip_wall`` top, as in ERF's canonical ABL
+cases.
 
-**No flux through the ground and the top.** On a terrain-following mesh the normal velocity there is
-:math:`\Omega`, not :math:`w`. The Dirichlet value of :math:`w` is therefore
+**No flow through the ground and the top.** On a terrain-following mesh the velocity normal to the ground is the
+contravariant velocity :math:`\Omega` (:doc:`terrain_coordinates`), not :math:`w`. The ground and top values of
+:math:`w` are therefore
 
 .. math::
 
    w_\mathrm{face} = z_x\,\bar u + z_y\,\bar v ,
 
-so :math:`\Omega = 0` on the face. Over flat ground it is 0.
-
-Ghost cells
------------
-
-The state has two ghost layers. With interior values :math:`c_0, c_1` and ghosts :math:`g_1, g_2` along the normal:
-
-.. list-table::
-   :header-rows: 1
-   :widths: 20 80
-
-   * - Rule
-     - Ghosts
-   * - even
-     - :math:`g_1 = c_0,\ g_2 = c_1`
-   * - odd
-     - :math:`g_1 = -c_0,\ g_2 = -c_1` (0 on the face)
-   * - value :math:`V`
-     - :math:`g_1 = 2V - c_0,\ g_2 = 2V - c_1`
-   * - profile
-     - :math:`g = P(h)` at the ghost's height above the ground
-   * - gradient :math:`G`
-     - the centred difference at :math:`c_0` equals :math:`G`
-
-Directions are filled x, then y, then z, so every corner ghost gets a value. A perturbation (for :math:`Jv`) uses the
-same rules with :math:`V = P = G = 0`. The first interior row of :math:`A_1` folds its ghost coupling the same way
-(added to :math:`a_P` for value/odd, subtracted for even, dropped for profile).
+which gives :math:`\Omega = 0`. Over flat ground :math:`w_\mathrm{face} = 0`.
 
 Wall model
 ----------
 
-The ground uses Monin–Obukhov similarity (MOST) on every column:
+The first cell above the ground is usually much thicker than the thin layer where the wind drops to zero. A wall
+model bridges this layer: it gives the stress at the ground from the wind in the first cell, using Monin–Obukhov
+similarity theory (MOST). In each column,
 
 .. math::
 
-   u_* = \frac{\kappa\,U}{\max\left(\ln\dfrac{d + z_0}{z_0} - \psi_m(d/L),\; m\right)}, \qquad
-   \frac1L = -\frac{\kappa\,g\,q}{u_*^3\,\theta_0} .
+   u_* = \frac{\kappa\,U}{\max\left(\ln\dfrac{d + z_0}{z_0} - \psi_m(d/L_O),\; m\right)}, \qquad
+   \frac{1}{L_O} = -\frac{\kappa\,g\,q}{u_*^3\,\theta_0} .
 
-- :math:`U = \max(|\mathbf U_t|, 0.1)` m/s is the wind parallel to the ground at the reference height
+- :math:`u_*`: friction velocity.
+- :math:`U = \max(|\mathbf U_t|, 0.1~\mathrm{m/s})`: wind speed parallel to the ground at the reference height
   (``bc.surface_zref``; by default the first cell centre).
-- :math:`d = h/|A|` is the normal distance, with :math:`|A| = \sqrt{1 + z_x^2 + z_y^2}`.
-- :math:`z_0` is ``bc.surface_z0``, :math:`q` the kinematic heat flux ``bc.surface_heat_flux`` and :math:`\psi_m`
-  ERF's Businger–Dyer function.
-- ``bc.surface_stability = heat_flux`` solves :math:`u_*` by Newton's method to round-off.
-- :math:`m` is the floor of the denominator. Strong convection at low wind would otherwise give :math:`u_* < 0`.
-  ``bc.surface_denominator_floor = log_law`` (the default) uses :math:`m = \min(\ln((d + z_0)/z_0),\, 1)`;
-  ``one`` uses :math:`m = 1`.
+- :math:`d = h/|A|`: distance from the ground along its normal, with :math:`|A| = \sqrt{1 + z_x^2 + z_y^2}`.
+- :math:`z_0`: roughness length (``bc.surface_z0``).
+- :math:`q`: kinematic surface heat flux (``bc.surface_heat_flux``).
+- :math:`L_O`: Obukhov length.
+- :math:`\psi_m`: ERF's Businger–Dyer stability function.
+- :math:`m`: a floor on the denominator (below).
 
-**Why the floor is** :math:`\min(\ln((d+z_0)/z_0), 1)`. For neutral flow (:math:`\psi_m = 0`) the floor then never
-acts, and :math:`u_*` is the log law's at every height, as in the inflow profile and the column guess. The floor
-:math:`m = 1` acts on neutral flow when the reference point is below :math:`(e-1)\,z_0 \approx 1.72\,z_0`, i.e. a
-first layer thinner than :math:`3.44\,z_0`. Then :math:`u_*` is :math:`\ln((d+z_0)/z_0)` times the log law's value.
-For example, :math:`z_0 = 0.5` m over a 1 m first layer gives 0.69 of the log law's :math:`u_*` and 0.48 of its
-stress. The range is a first layer under 1.72 m for :math:`z_0 = 0.5` m, under 1.03 m for :math:`z_0 = 0.3` m and
-under 0.34 m for :math:`z_0 = 0.1` m. With a heat flux and :math:`\ln((d+z_0)/z_0) < 1`, an unstable
-:math:`\psi_m > 0` meets either floor at once, so :math:`u_*` takes no convective increase there (with ``log_law``
-it is the neutral value; with ``one`` it is :math:`\kappa U`, below the neutral value). On the stable side
-(:math:`\psi_m < 0`) ``log_law`` never binds, while ``one`` also bound weakly stable cases there. Where
-:math:`\ln((d+z_0)/z_0) \ge 1` the two floors give the same answer, bit for bit. ``one`` keeps the form of
-sub-phase 1.7.
+With ``bc.surface_stability = heat_flux``, :math:`u_*` and :math:`L_O` are solved together by Newton's method to
+round-off. (ERF uses a relaxed fixed point to 1e-5; a converged :math:`u_*` keeps the residual smooth, which a
+finite-difference Jacobian needs.)
 
-**Why Newton.** ERF iterates a relaxed fixed point to 1e-5. That makes :math:`u_*` a step function of the wind,
-which spoils a finite-difference Jacobian.
+**Denominator floor.** Without a floor, strong convection at low wind gives :math:`u_* < 0`.
+``bc.surface_denominator_floor`` selects the floor:
 
-The wall model replaces the diffusive ground fluxes:
+- ``log_law`` (default): :math:`m = \min(\ln((d + z_0)/z_0),\, 1)`. In neutral flow the floor never acts, so
+  :math:`u_*` is the log-law value at every height.
+- ``one``: :math:`m = 1`. In neutral flow this lowers :math:`u_*` when the reference point is below
+  :math:`(e - 1)\,z_0 \approx 1.72\,z_0`, for example a 1 m first layer over :math:`z_0 = 0.5` m.
+
+The two give identical results where :math:`\ln((d + z_0)/z_0) \ge 1`.
+
+The wall model replaces the diffusive fluxes through the ground:
 
 .. list-table::
    :header-rows: 1
@@ -125,49 +102,79 @@ The wall model replaces the diffusive ground fluxes:
    * - :math:`\theta`
      - :math:`-q\,|A|`
    * - :math:`k`
-     - 0; the first cells relax to :math:`k_w = (u_*^3 + \kappa B d_0)^{2/3}/C_{\mu 0}^2`
-       (AL01 Eq. 16, :math:`B = gq/\theta_0` for :math:`q > 0`)
+     - 0; the first cell relaxes to :math:`k_w = (u_*^3 + \kappa B d_0)^{2/3}/C_{\mu 0}^2` (AL01 Eq. 16),
+       with :math:`d_0` the first-cell-centre distance and :math:`B = gq/\theta_0` for :math:`q > 0`. With
+       ``bc.surface_wall_k = dirichlet`` (default) this replaces the first cell's :math:`k` equation; with
+       ``source`` it is added to it.
 
-The ghost cells below the ground continue the MOST profile, with gradient :math:`u_*\phi_m/(\kappa(d_0 + z_0))` for
-the wind and :math:`-q\,\phi_h/(\kappa u_*(d_0 + z_0))` for :math:`\theta`.
+The ghost cells below the ground continue the MOST profile.
 
 Inflow profile
 --------------
 
-The inflow profile gives the wind, :math:`\theta` and :math:`k` at height :math:`z` above the ground. The wind is
-:math:`S(z)` along the direction ``bc.inflow_direction``:
+The inflow profile gives the wind, :math:`\theta` and :math:`k` as functions of the height :math:`z` above the
+ground. It is used on inflow faces, in the damping layers and for the initial field (:doc:`initial_conditions`). The
+wind speed :math:`S(z)` points along ``bc.inflow_direction``:
 
 .. math::
 
    \text{log\_law:}\quad S = \frac{u_*}{\kappa}\ln\frac{z + z_0}{z_0}, \qquad
    \text{power\_law:}\quad S = S_\mathrm{ref}\left(\frac{z}{z_\mathrm{ref}}\right)^\alpha .
 
-A ``file`` profile tabulates ``z u v theta [k]``. Without a :math:`k` column, :math:`k = u_{*l}^2/C_{\mu 0}^2` with
-the local friction velocity :math:`u_{*l} = \kappa(z + z_0)\,dS/dz` (production equals dissipation). :math:`\theta`
-is the sounding ``bc.theta_profile`` for the analytic kinds.
+A ``file`` profile tabulates ``z u v theta [k]``. Without a :math:`k` column, :math:`k` is the equilibrium value
+:math:`k = u_{*l}^2/C_{\mu 0}^2`, with the local friction velocity :math:`u_{*l} = \kappa(z + z_0)\,dS/dz`. For the
+analytic profiles :math:`\theta` is the sounding ``bc.theta_profile``.
 
 Damping layers
 --------------
 
-Both are off by default. They relax a field :math:`q` to the inflow profile :math:`q_\mathrm{ref}` (0 for :math:`w`):
+Damping layers absorb waves before they reflect from the top or the sides. Both are off by default. They relax a
+field :math:`q` towards the inflow profile :math:`q_\mathrm{ref}` (0 for :math:`w`) by adding a term to the
+residual:
 
 .. math::
 
-   \text{Rayleigh:}\quad R \mathrel{+}= c_r \sin^2\!\left(\frac{\pi}{2}\,\frac{z - z_d}{z_\mathrm{top} - z_d}\right)
+   \text{Rayleigh (top):}\quad R \mathrel{+}= c_r \sin^2\!\left(\frac{\pi}{2}\,\frac{z - z_d}{z_\mathrm{top} - z_d}\right)
    (q - q_\mathrm{ref}),
    \qquad
-   \text{sponge:}\quad R \mathrel{+}= c_s\left(1 - \frac{s}{w}\right)^2 (q - q_\mathrm{ref}) .
+   \text{sponge (sides):}\quad R \mathrel{+}= c_s\left(1 - \frac{s}{w_s}\right)^2 (q - q_\mathrm{ref}) .
 
-- :math:`z_d` is ``bc.rayleigh_zdamp`` and :math:`c_r` is ``bc.rayleigh_dampcoef``; ``bc.rayleigh_fields`` selects
-  the fields.
-- :math:`s` is the distance to an inflow or outflow face and :math:`w` is ``bc.sponge_width``.
+- :math:`z_d`: start height of the Rayleigh layer (``bc.rayleigh_zdamp``).
+- :math:`c_r`: Rayleigh coefficient (``bc.rayleigh_dampcoef``); ``bc.rayleigh_fields`` selects the fields.
+- :math:`s`: distance to an inflow or outflow face; :math:`w_s` is the sponge width (``bc.sponge_width``) and
+  :math:`c_s` its strength (``bc.sponge_strength``).
 - :math:`\theta` is relaxed to the sounding at the absolute height by default (``bc.rayleigh_height``).
 
-**Why damp θ as well as w.** A stratified layer over a hill carries internal gravity waves. Damping :math:`w` alone
-leaves the :math:`\theta` half of the oscillator free, and the pseudo-time iteration over ERF's 2-D hill grew.
+In stratified flow over a hill, damp :math:`\theta` together with :math:`w`. Gravity waves exchange energy between
+the two, and on ERF's 2-D hill damping :math:`w` alone let the pseudo-time iteration grow.
 
 Pressure
 --------
 
-The pressure correction is periodic where the mesh is, Dirichlet (:math:`p = 0`) on ``outflow`` faces and Neumann
-on every other face.
+The pressure correction is periodic where the mesh is periodic, Dirichlet (:math:`p = 0`) on ``outflow`` faces and
+Neumann on all other faces. The types follow ERF's ``get_fft_bc``.
+
+Ghost cells
+-----------
+
+The solution has two layers of ghost cells outside each face. With interior values :math:`c_0, c_1` and ghost
+values :math:`g_1, g_2` along the face normal:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 80
+
+   * - Rule
+     - Ghost values
+   * - even
+     - :math:`g_1 = c_0,\ g_2 = c_1`
+   * - odd
+     - :math:`g_1 = -c_0,\ g_2 = -c_1` (0 on the face)
+   * - value :math:`V`
+     - :math:`g_1 = 2V - c_0,\ g_2 = 2V - c_1`
+   * - profile
+     - :math:`g = P(h)` at the ghost's height above the ground
+   * - gradient :math:`G`
+     - the centred difference at :math:`c_0` equals :math:`G`
+
+The directions are filled in the order x, y, z, so corner ghosts get values too.
