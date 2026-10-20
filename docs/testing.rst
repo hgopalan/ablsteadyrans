@@ -1339,7 +1339,8 @@ GoogleTest suite
      - *Changed from the plan.* ``NewtonPreconditioner.ConstantPressureShiftLeavesTheSolveUnchanged``: on the
        periodic hill (singular pressure problem), a constant added to :math:`r_p` or to :math:`q`'s :math:`p`
        leaves ``apply`` unchanged, and :math:`\delta p` has zero :math:`J`-weighted mean. A Newton step from
-       :math:`q` and from :math:`q + c` takes the same GMRES iterations (53) and gives the same increment.
+       :math:`q` and from :math:`q + c` takes the same GMRES iterations (53) and gives the same increment (to 1e-5;
+       compared in double only, as :math:`p + c` keeps about four digits of :math:`p` in single precision).
    * - UT-3.3.3
      - ``NewtonPreconditioner.IterationsBoundedOverCfl``: four Newton steps on the open hill (9 × 6 × 8, six boxes)
        at CFL 10, 1e2, 1e3 and 1e4. With ``simplec`` the mean GMRES iterations per step grow by less than 50 %
