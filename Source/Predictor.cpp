@@ -132,11 +132,16 @@ MomentumPredictorResult momentum_predictor (State& q, const ResidualFields& R,
                                             const amrex::Array<amrex::MultiFab, AMREX_SPACEDIM>& dtau_faces,
                                             const Mesh& mesh, const amrex::Geometry& geom, int sweeps,
                                             PredictorFields& ap, const SurfaceState* surface, const ClosureFields* fields,
-                                            amrex::Real rotation_relax, const LineSweepOptions& sweep)
+                                            amrex::Real rotation_relax, const LineSweepOptions& sweep,
+                                            amrex::Real w_vnn_cap)
 {
     const char* op = "momentum_predictor";
     if (std::isnan(rotation_relax) || !(rotation_relax > 0 && rotation_relax <= 1)) {
         amrex::Abort("ablsteady: momentum_predictor: rotation_relax must be > 0 and <= 1 (simplec.rotation_relax)");
+    }
+    if (std::isnan(w_vnn_cap) || !(w_vnn_cap == 0 || (w_vnn_cap > 0 && std::isfinite(w_vnn_cap) && std::isfinite(1 / w_vnn_cap)))) {
+        amrex::Abort("ablsteady: momentum_predictor: w_vnn_cap must be 0 (off), or finite and > 0 with a finite reciprocal "
+                     "(simplec.w_vnn_cap)");
     }
     if (sweeps < 1) { amrex::Abort("ablsteady: momentum_predictor: sweeps must be >= 1 (got " + std::to_string(sweeps) + ")"); }
     check_operator_field(op, "dtau_x", dtau_faces[0], Loc::xface, mesh, 0);
@@ -192,6 +197,24 @@ MomentumPredictorResult momentum_predictor (State& q, const ResidualFields& R,
                                        + a(i, j, k, coef_ZM) + a(i, j, k, coef_ZP);
                 dd(i, j, k) = keep * (p(i, j, k) - nb);   // 0 on a Dirichlet row
             });
+        }
+        if (c == 2 && w_vnn_cap > 0) {
+            // The w rows' VNN cap (the header): 1/dtau -> 1/dtau + (a_ZM +
+            // a_ZP)/w_vnn_cap in a_P and d, none on a Dirichlet row.
+            const amrex::Real inv_cap = amrex::Real(1) / w_vnn_cap;
+            for (amrex::MFIter mfi(*aps[c], amrex::TilingIfNotGPU()); mfi.isValid(); ++mfi) {
+                const auto p = aps[c]->array(mfi);
+                const auto dd = ds[c]->array(mfi);
+                const auto a = A.const_array(mfi);
+                const auto m = has_mask ? mask.const_array(mfi) : A.const_array(mfi);   // read only with has_mask
+                amrex::ParallelFor(mfi.tilebox(), [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
+                {
+                    const amrex::Real keep = has_mask ? amrex::Real(1) - m(i, j, k) : amrex::Real(1);
+                    const amrex::Real cap = keep * inv_cap * (a(i, j, k, coef_ZM) + a(i, j, k, coef_ZP));
+                    p(i, j, k) += cap;
+                    dd(i, j, k) += cap;
+                });
+            }
         }
         amrex::MultiFab rhs(A.boxArray(), A.DistributionMap(), 1, 0);
         amrex::MultiFab::Copy(rhs, *res[c], 0, 0, 1, 0);

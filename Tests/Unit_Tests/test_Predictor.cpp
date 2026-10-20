@@ -756,6 +756,134 @@ TEST (Predictor, DirichletRowsAreSetExactly)
 }
 
 // ---------------------------------------------------------------------------
+// Beyond the plan: the w rows' VNN cap (simplec.w_vnn_cap, Predictor.H). With
+// the cap V on, the w rows get a_P = 1/dtau + (a_ZM + a_ZP)/V + diag(A1) and
+// d = a_P - sum a_nb (so d gains the same (a_ZM + a_ZP)/V), on every row but
+// the Dirichlet ground and top rows (a_P = 1, d = 0 as without the cap); the
+// u and v rows and every field with the cap off (0) are bit-identical to the
+// call without the argument; and the w correction is the z-line solve with
+// the capped diagonal. The effective VNN of a capped row, (a_ZM + a_ZP) / (d
+// - (d without the cap) + 1/dtau), stays below V. Negative, NaN and infinite
+// caps are refused.
+TEST (Predictor, WVnnCapAddsToTheWDiagonalAndD)
+{
+    PCase c = make_mesh(8, 4, 6, 40, false, true, 4);   // 2 x 1 boxes
+    ablsteady::State q;
+    define_state(q, c);
+    fill_state(q, c, 61);
+    Coefficients co;
+    co.make(c, 2.0, 63);
+    ablsteady::BoundaryInputs bin;
+    bin.face = {ablsteady::FaceType::inflow, ablsteady::FaceType::periodic, ablsteady::FaceType::slip_wall,
+                ablsteady::FaceType::outflow, ablsteady::FaceType::periodic, ablsteady::FaceType::slip_wall};
+    bin.inflow.kind = ablsteady::InflowProfileOptions::Kind::log_law;
+    bin.inflow.ustar = amrex::Real(0.5);
+    bin.inflow.z0 = amrex::Real(0.1);
+    const ablsteady::CoriolisOptions cor;
+    const ablsteady::BoundaryConditions bc(bin, c.geom, c.mesh, cor);
+    bc.fill_ghosts(q, nullptr, co.in.buoyancy);
+    co.in.bc = &bc;
+    Problem pr;
+    pr.make(q, co, c, Equation::w);   // pr.A: the w rows
+    amrex::MultiFab dtau(c.ba, c.dm, 1, 0);
+    fill_random(dtau, 400, 1600, 67, c);   // VNN = dtau (a_ZM + a_ZP) up to about 40: above the cap
+    amrex::Array<amrex::MultiFab, 3> df;
+    ablsteady::face_dtau(dtau, c.mesh, c.geom, df);
+    amrex::MultiFab mw;
+    bc.dirichlet_rows(Equation::w, Loc::zface, c.mesh, mw);
+    const amrex::Array<const amrex::MultiFab*, 3> F{&pr.F[0], &pr.F[1], &pr.F[2]};
+    auto copy_state = [&] (ablsteady::State& to) {
+        define_state(to, c);
+        for (auto [d, s] : std::initializer_list<std::pair<amrex::MultiFab*, const amrex::MultiFab*>>{
+                 {&to.u, &q.u}, {&to.v, &q.v}, {&to.w, &q.w}, {&to.p, &q.p}, {&to.theta, &q.theta}, {&to.tke, &q.tke}}) {
+            amrex::MultiFab::Copy(*d, *s, 0, 0, 1, 2);
+        }
+    };
+    const ablsteady::LineSweepOptions sweep;
+    const amrex::Real V = 16;
+    ablsteady::State q0, qoff, qcap;
+    copy_state(q0);
+    copy_state(qoff);
+    copy_state(qcap);
+    ablsteady::PredictorFields p0, poff, pcap;
+    ablsteady::momentum_predictor(q0, pr.R, F, co.in, df, c.mesh, c.geom, 3, p0, nullptr, nullptr, 1, sweep);
+    ablsteady::momentum_predictor(qoff, pr.R, F, co.in, df, c.mesh, c.geom, 3, poff, nullptr, nullptr, 1, sweep, 0);
+    ablsteady::momentum_predictor(qcap, pr.R, F, co.in, df, c.mesh, c.geom, 3, pcap, nullptr, nullptr, 1, sweep, V);
+    // Off, and the u and v rows with the cap on: bit-identical.
+    auto same = [] (const amrex::MultiFab& a, const amrex::MultiFab& b) {
+        amrex::MultiFab dff(a.boxArray(), a.DistributionMap(), 1, 0);
+        amrex::MultiFab::Copy(dff, a, 0, 0, 1, 0);
+        amrex::MultiFab::Subtract(dff, b, 0, 0, 1, 0);
+        return dff.norm0() == 0;
+    };
+    EXPECT_TRUE(same(p0.ap_u, poff.ap_u) && same(p0.ap_v, poff.ap_v) && same(p0.ap_w, poff.ap_w));
+    EXPECT_TRUE(same(p0.d_u, poff.d_u) && same(p0.d_v, poff.d_v) && same(p0.d_w, poff.d_w));
+    EXPECT_TRUE(same(q0.u, qoff.u) && same(q0.v, qoff.v) && same(q0.w, qoff.w));
+    EXPECT_TRUE(same(p0.ap_u, pcap.ap_u) && same(p0.d_u, pcap.d_u) && same(p0.ap_v, pcap.ap_v) && same(p0.d_v, pcap.d_v));
+    EXPECT_TRUE(same(q0.u, qcap.u) && same(q0.v, qcap.v));
+    // The w rows with the cap.
+    int capped = 0, dirichlet = 0;
+    double worst_vnn = 0, worst_vnn_off = 0;
+    for (amrex::MFIter mfi(pcap.ap_w, false); mfi.isValid(); ++mfi) {
+        const auto p = host_copy(pcap.ap_w, mfi), d = host_copy(pcap.d_w, mfi), d0 = host_copy(p0.d_w, mfi),
+                   m = host_copy(mw, mfi), dt = host_copy(df[2], mfi), a = host_copy(pr.A, mfi);
+        amrex::LoopOnCpu(mfi.validbox(), [&] (int i, int j, int k) {
+            const amrex::IntVect iv(i, j, k);
+            if (m(iv) == 1) {
+                EXPECT_EQ(p(iv), 1);
+                EXPECT_EQ(d(iv), 0);
+                // Identity rows: no vertical neighbours, so the cap's keep
+                // factor is a guard (a mutant without it is equivalent here).
+                EXPECT_EQ(a(iv, ablsteady::coef_ZM), 0);
+                EXPECT_EQ(a(iv, ablsteady::coef_ZP), 0);
+                ++dirichlet;
+                return;
+            }
+            const double K = double(a(iv, ablsteady::coef_ZM)) + double(a(iv, ablsteady::coef_ZP));
+            const double expect = 1.0 / double(dt(iv)) + K / double(V) + double(a(iv, ablsteady::coef_P));
+            EXPECT_NEAR(p(iv), expect, tol(1e-14, 1e-6) * expect) << i << " " << j << " " << k;
+            double nb = 0;
+            for (int n = 1; n < ablsteady::n_implicit_coefs; ++n) { nb += a(iv, n); }
+            EXPECT_NEAR(d(iv), expect - nb, tol(1e-13, 1e-5) * expect) << i << " " << j << " " << k;
+            EXPECT_NEAR(d(iv) - d0(iv), K / double(V), tol(1e-13, 1e-5) * expect) << i << " " << j << " " << k;
+            // The effective VNN: K times the step the solver's capped d
+            // leaves, 1/(1/dtau + (d - d without the cap)).
+            const double step = 1.0 / (1.0 / double(dt(iv)) + (double(d(iv)) - double(d0(iv))));
+            worst_vnn = std::max(worst_vnn, K * step);
+            worst_vnn_off = std::max(worst_vnn_off, K * double(dt(iv)));
+            if (K > 0) { ++capped; }
+        });
+    }
+    amrex::ParallelDescriptor::ReduceIntSum(capped);
+    amrex::ParallelDescriptor::ReduceIntSum(dirichlet);
+    amrex::ParallelDescriptor::ReduceRealMax(worst_vnn);
+    amrex::ParallelDescriptor::ReduceRealMax(worst_vnn_off);
+    EXPECT_EQ(dirichlet, 2 * 8 * 4);
+    EXPECT_EQ(capped, 8 * 4 * 5);   // every interior w row has vertical neighbours
+    EXPECT_GT(worst_vnn_off, double(V));   // the test's VNN exceeds the cap without it ...
+    EXPECT_LT(worst_vnn, double(V));       // ... and stays below it with it
+    // The w correction is the z-line solve with the capped diagonal.
+    amrex::MultiFab rhs(pr.A.boxArray(), c.dm, 1, 0), delta;
+    amrex::MultiFab::Copy(rhs, pr.R.w, 0, 0, 1, 0);
+    rhs.mult(amrex::Real(-1), 0, 1, 0);
+    ablsteady::zline_jacobi(Loc::zface, pr.A, pcap.ap_w, rhs, 3, c.mesh, c.geom, delta);
+    amrex::MultiFab dw(pr.A.boxArray(), c.dm, 1, 0);
+    amrex::MultiFab::Copy(dw, qcap.w, 0, 0, 1, 0);
+    amrex::MultiFab::Subtract(dw, q.w, 0, 0, 1, 0);
+    amrex::MultiFab::Subtract(dw, delta, 0, 0, 1, 0);
+    EXPECT_LT(max_abs(dw), tol(1e-14, 1e-5) * max_abs(q.w));
+    EXPECT_FALSE(same(q0.w, qcap.w));
+    // Refusals.
+    for (const amrex::Real bad : {amrex::Real(-1), std::numeric_limits<amrex::Real>::quiet_NaN(),
+                                  std::numeric_limits<amrex::Real>::infinity(), std::numeric_limits<amrex::Real>::denorm_min()}) {
+        ablsteady::State qb;
+        copy_state(qb);
+        EXPECT_THROW(ablsteady::momentum_predictor(qb, pr.R, F, co.in, df, c.mesh, c.geom, 3, pcap, nullptr, nullptr, 1, sweep, bad),
+                     std::runtime_error);
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Beyond the plan: the predictor's result does not depend on the box layout:
 // the same state and inputs on one box and on 2 x 2 boxes (the lagged
 // neighbours then cross box seams through the ghost exchange) give the same

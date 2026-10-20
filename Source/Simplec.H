@@ -50,7 +50,8 @@
 // projection with the coefficient dtau (finite velocities, p' ~ 1/dtau).
 //
 // Inputs (simplec.*): pressure_reltol (1e-3), alpha_p (1), rotation_relax
-// (0.3: the rotation's step in inertial times, Predictor.H); the sweeps are
+// (0.3: the rotation's step in inertial times, Predictor.H), w_vnn_cap (0,
+// off: the cap on the w rows' vertical VNN number, Predictor.H); the sweeps are
 // steady.zline_sweeps. The residual norms the stage reports are RMS values
 // per unit volume scaled by U^2/H (momentum), U/H (continuity), U theta_s/H
 // and U k_s/H (theta, k) with U, theta_s, k_s the jvp scales of the residual
@@ -79,8 +80,16 @@ struct SimplecOptions
     amrex::Real pressure_reltol{amrex::Real(1.0e-3)};   //!< simplec.pressure_reltol, in (0, 1): the correction's Poisson reltol
     amrex::Real alpha_p{1};                          //!< simplec.alpha_p, in (0, 1]
     amrex::Real rotation_relax{amrex::Real(0.3)};    //!< simplec.rotation_relax, in (0, 1]: the rotation's step in inertial times (Predictor.H)
+    amrex::Real w_vnn_cap{0};                        //!< simplec.w_vnn_cap, 0 (off) or >= 16: the w rows' VNN cap (Predictor.H)
     std::vector<std::string> given;                  //!< the simplec.* keys given
 };
+
+//! The smallest non-zero simplec.w_vnn_cap (Predictor.H).
+inline constexpr amrex::Real w_vnn_cap_min = 16;
+//! The largest mesh aspect ratio max(dx, dy)/thickness the cap was tested at
+//! over terrain (Askervein, 1 m first cell, max ground slope 22.6 deg); above
+//! it, with terrain, the application warns (Predictor.H).
+inline constexpr amrex::Real w_vnn_cap_tested_aspect = amrex::Real(50.78);
 
 //! Read simplec.*; aborts, naming the key, on a bad value or a repeated key.
 SimplecOptions read_simplec_options ();

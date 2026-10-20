@@ -4,7 +4,8 @@
     expect_abort.py [--success] REGEX [REGEX ...] -- COMMAND [ARGS ...]
 
 By default passes only if COMMAND exits non-zero AND every REGEX matches its
-combined stdout/stderr. With --success, COMMAND must exit 0 instead. CTest's
+combined stdout/stderr. With --success, COMMAND must exit 0 instead. A REGEX
+written as !REGEX must NOT match. CTest's
 PASS_REGULAR_EXPRESSION alone ignores the exit code, and WILL_FAIL alone
 ignores the message; this checks both.
 """
@@ -37,7 +38,11 @@ def main(argv):
         print("FAIL: the command exited 0; it was expected to abort")
         ok = False
     for pat in patterns:
-        if not re.search(pat, out):
+        if pat.startswith("!"):
+            if re.search(pat[1:], out):
+                print(f"FAIL: output matches {pat[1:]!r}, which it must not")
+                ok = False
+        elif not re.search(pat, out):
             print(f"FAIL: output does not match {pat!r}")
             ok = False
     if not ok:

@@ -1,0 +1,52 @@
+# A flat inflow/outflow strip with a thin first cell (0.7 m): the case of
+# simplec.w_vnn_cap (Predictor.H). 16 x 2 x 40 cells over 1500 m x 187.5 m x
+# 742 m (dx = 94 m, dx/dz0 = 134), the layers stretched by 1.2; y periodic,
+# inflow on xlo (the Askervein power law: 8.75 m/s at 10 m, exponent 0.2113,
+# from the x direction), outflow on xhi, the surface layer on the ground
+# (z0 = 0.03 m), a slip top, Rayleigh damping of w above 250 m, no gravity.
+# Line LU-SGS with two sweeps at a CFL cap of 16 (the Askervein settings) and
+# a tight verdict (6 orders below the reference, 5e-7): at that verdict the
+# capped run sits within 5e-11 m/s of its fixed point. The check script gives
+# simplec.w_vnn_cap, steady.max_iterations, init.first_guess and io.restart
+# on the command line.
+# Tests/Canonical_RANS/Thin_Cell_Flat/check_w_vnn_cap.py.
+mesh.n_cell        = 16 2 40
+mesh.prob_lo       = 0. 0. 0.
+mesh.prob_hi       = 1500. 187.5 742.
+mesh.is_periodic   = 0 1 0
+mesh.max_grid_size = 8 2
+mesh.dz0           = 0.7
+mesh.stretch_ratio = 1.2
+terrain.type = flat
+
+bc.xlo = inflow
+bc.xhi = outflow
+bc.zlo = surface_layer
+bc.zhi = slip_wall
+bc.surface_z0       = 0.03
+bc.inflow_profile   = power_law
+bc.inflow_speed     = 8.7502
+bc.inflow_zref      = 10.
+bc.inflow_alpha     = 0.2113
+bc.inflow_z0        = 0.03
+bc.inflow_direction = 0.
+bc.theta_profile_z  = 0.
+bc.theta_profile    = 300.
+bc.rayleigh_zdamp    = 250.
+bc.rayleigh_dampcoef = 0.2
+bc.rayleigh_fields   = w
+
+forcing.gravity = 0.
+turb.tke_floor  = 1.e-6
+
+steady.stage                   = simplec
+steady.sweep                   = lusgs
+steady.zline_sweeps            = 2
+steady.cfl0                    = 1.
+steady.cfl_max                 = 16.
+steady.residual_ref_iterations = 100
+steady.residual_drop_orders    = 6
+steady.residual_tol            = 5.e-7
+
+io.plot_file = thin_cell_flat_plt
+io.chk_file  = thin_cell_flat_chk

@@ -34,6 +34,11 @@ std::vector<std::string> check_simplec_options (const SimplecOptions& opt)
     if (std::isnan(opt.rotation_relax) || !(opt.rotation_relax > 0 && opt.rotation_relax <= 1)) {
         err.emplace_back("simplec.rotation_relax = " + std::to_string(opt.rotation_relax) + ": must be > 0 and <= 1");
     }
+    // The floor: caps of 4 and 8 burst on the Askervein hill with a 1 m first cell (Predictor.H).
+    if (std::isnan(opt.w_vnn_cap) || !(opt.w_vnn_cap == 0 || (opt.w_vnn_cap >= w_vnn_cap_min && std::isfinite(opt.w_vnn_cap)))) {
+        err.emplace_back("simplec.w_vnn_cap = " + std::to_string(opt.w_vnn_cap) + ": must be 0 (off), or finite and >= "
+                         + std::to_string(static_cast<int>(w_vnn_cap_min)));
+    }
     return err;
 }
 
@@ -42,7 +47,7 @@ SimplecOptions read_simplec_options ()
     SimplecOptions opt;
     amrex::ParmParse pp("simplec");
     std::vector<std::string> err;
-    for (const char* key : {"pressure_reltol", "alpha_p", "rotation_relax"}) {
+    for (const char* key : {"pressure_reltol", "alpha_p", "rotation_relax", "w_vnn_cap"}) {
         if (!pp.contains(key)) { continue; }
         opt.given.emplace_back(key);
         if (pp.countname(key) > 1) { err.emplace_back(std::string("simplec.") + key + " is given more than once"); }
@@ -52,6 +57,7 @@ SimplecOptions read_simplec_options ()
         pp.query("pressure_reltol", opt.pressure_reltol);
         pp.query("alpha_p", opt.alpha_p);
         pp.query("rotation_relax", opt.rotation_relax);
+        pp.query("w_vnn_cap", opt.w_vnn_cap);
         err = check_simplec_options(opt);
     }
     if (!err.empty()) {
@@ -361,7 +367,7 @@ void SimplecStage::iterate (State& q, const amrex::MultiFab& dtau)
     const SurfaceState* ss = (m_in.surface != nullptr) ? &m_ss : nullptr;
     const ClosureFields* cf = (m_in.closure != nullptr) ? &m_cf : nullptr;
     m_info.predictor = momentum_predictor(q, m_R, F, m_in, m_w.dtau_faces, m_mesh, m_geom, m_sweeps, m_pf, ss, cf, m_opt.rotation_relax,
-                                          m_sweep);
+                                          m_sweep, m_opt.w_vnn_cap);
     // 4. The pressure correction on u* (its ghosts refilled first).
     m_in.bc->fill_ghosts(q, m_in.surface, m_in.buoyancy, false, nullptr);
     m_info.pressure = pressure_correction(q, m_pf, m_solver, m_pbc, m_opt.alpha_p, m_mesh, m_geom, m_w);

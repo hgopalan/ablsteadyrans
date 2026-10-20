@@ -132,6 +132,7 @@ set(INIT_CASE           ${CMAKE_CURRENT_SOURCE_DIR}/Initialization/Mass_Consiste
 set(BUMP_CASE           ${CMAKE_CURRENT_SOURCE_DIR}/Initialization/Bump_Speedup_Trend)
 set(COLUMN_CASE         ${CMAKE_CURRENT_SOURCE_DIR}/Canonical_RANS/Neutral_Column)
 set(FLAT_CASE           ${CMAKE_CURRENT_SOURCE_DIR}/Canonical_RANS/Neutral_ABL_Flat)
+set(THIN_CELL_CASE      ${CMAKE_CURRENT_SOURCE_DIR}/Canonical_RANS/Thin_Cell_Flat)
 set(HILL2D_CASE         ${CMAKE_CURRENT_SOURCE_DIR}/Canonical_RANS/Neutral_Hill_2D)
 set(HILL3D_CASE         ${CMAKE_CURRENT_SOURCE_DIR}/Canonical_RANS/Neutral_Hill_3D)
 set(HILL3D_NEUTRAL_CASE ${CMAKE_CURRENT_SOURCE_DIR}/Canonical_RANS/Truly_Neutral_Hill_3D)
@@ -223,6 +224,27 @@ ablsteady_add_test(NAME abort_stage_no_guess NP 1 LABELS "regression;smoke"
                    PREFIX ${EXPECT_ABORT}
                           "steady\\.stage = simplec needs a first guess" --
                    COMMAND $<TARGET_FILE:ablsteady> ${VALIDATION_CASE}/inputs_abort_stage_no_guess
+                           ${ABLSTEADY_TEST_AMREX_FLAGS})
+# simplec.w_vnn_cap over terrain above the tested aspect ratio: the run goes
+# on with a warning; below its floor of 16 the cap is refused.
+ablsteady_add_test(NAME warn_w_vnn_cap_terrain NP 1 LABELS "regression;smoke"
+                   PREFIX ${EXPECT_ABORT} --success
+                          "WARNING: simplec\\.w_vnn_cap = 16 over terrain with max aspect ratio .* above the tested 50\\.78"
+                          "without it \\(simplec\\.w_vnn_cap = 0\\) w converges slowly"
+                          "ablsteady: not steady after 1 iterations" --
+                   COMMAND $<TARGET_FILE:ablsteady> ${VALIDATION_CASE}/inputs_w_vnn_cap_terrain simplec.w_vnn_cap=16
+                           mesh.dz0=0.7 ${ABLSTEADY_TEST_AMREX_FLAGS})
+ablsteady_add_test(NAME warn_w_vnn_cap_terrain_below NP 1 LABELS "regression;smoke"
+                   PREFIX ${EXPECT_ABORT} --success
+                          "max aspect ratio max\\(dx,dy\\) / thickness += [1-4]\\.[0-9]+e\\+01"
+                          "!WARNING: simplec\\.w_vnn_cap"
+                          "ablsteady: not steady after 1 iterations" --
+                   COMMAND $<TARGET_FILE:ablsteady> ${VALIDATION_CASE}/inputs_w_vnn_cap_terrain simplec.w_vnn_cap=16
+                           mesh.dz0=4. ${ABLSTEADY_TEST_AMREX_FLAGS})
+ablsteady_add_test(NAME abort_w_vnn_cap_floor NP 1 LABELS "regression;smoke"
+                   PREFIX ${EXPECT_ABORT}
+                          "simplec\\.w_vnn_cap = 4\\.0+: must be 0 \\(off\\), or finite and >= 16" --
+                   COMMAND $<TARGET_FILE:ablsteady> ${VALIDATION_CASE}/inputs_w_vnn_cap_terrain simplec.w_vnn_cap=4 mesh.dz0=0.7
                            ${ABLSTEADY_TEST_AMREX_FLAGS})
 ablsteady_add_test(NAME abort_repeated_key NP 1 LABELS "regression;smoke"
                    PREFIX ${EXPECT_ABORT}
@@ -525,6 +547,16 @@ if(ABLSTEADY_PRECISION STREQUAL "DOUBLE")
     ablsteady_add_test(NAME rt_steady_neutral_flat NP 2 LABELS "regression"
                        PREFIX ${Python3_EXECUTABLE} ${FLAT_CASE}/check_steady_neutral.py --
                        COMMAND $<TARGET_FILE:ablsteady> ${FLAT_CASE}/inputs_steady_neutral_flat ${ABLSTEADY_TEST_AMREX_FLAGS})
+    # Beyond the plan: the w rows' VNN cap (simplec.w_vnn_cap = 16) on a flat
+    # strip with a 0.7 m first cell (about 50 s on two ranks): the verdict
+    # with and without the cap, at least 5 times fewer iterations with it,
+    # u, v, w of the two steady states within 2e-4 m/s, and a restart of the
+    # capped run bit for bit (check_w_vnn_cap.py runs all five).
+    ablsteady_add_test(NAME rt_thin_cell_w_vnn_cap NP 2 LABELS "regression"
+                       PREFIX ${Python3_EXECUTABLE} ${THIN_CELL_CASE}/check_w_vnn_cap.py
+                              --cap 16 --min-ratio 5 --tol 2e-4 --
+                       COMMAND $<TARGET_FILE:ablsteady> ${THIN_CELL_CASE}/inputs_thin_cell_flat ${ABLSTEADY_TEST_AMREX_FLAGS})
+    set_tests_properties(rt_thin_cell_w_vnn_cap PROPERTIES ENVIRONMENT PYTHONDONTWRITEBYTECODE=1 TIMEOUT 300)
     # RT-1.16.1: ERF's Neutral_Hill_2D to steady (about 80 s on two ranks);
     # the verdict, a two-order drop of the u residual and ERF's own
     # check_hill.py --physics (extern_erf/) on the turbulence plotfile.

@@ -160,6 +160,13 @@ Current tests
    * - ``abort_unknown_key``, ``abort_range``, ``abort_repeated_key``, ``abort_restart_mesh``,
        ``abort_restart_overwrite``
      - Decks that must stop, with the input named in the message.
+   * - ``warn_w_vnn_cap_terrain``, ``warn_w_vnn_cap_terrain_below``, ``abort_w_vnn_cap_floor``
+     - *Beyond the plan.* The thin-cell strip on a 50 m ridge
+       (``Tests/Infrastructure/Input_Validation/inputs_w_vnn_cap_terrain``, max aspect ratio about 134), one
+       iteration: with ``simplec.w_vnn_cap = 16`` and a 0.7 m first cell the run exits 0 and prints the warning that
+       names the key, the tested aspect ratio 50.78 and the slow convergence without the cap; with a 4 m first cell
+       (aspect ratio below 50.78) it runs without the warning; with 4 it stops on the floor of 16. The flat
+       strip of ``rt_thin_cell_w_vnn_cap`` (aspect ratio above 50.78, no slope) prints no warning.
    * - ``rt_askervein_mesh``
      - RT-1.4.1 and RT-1.4.2: ERF's Askervein mesh coarsened to 60 × 60 × 18 (20 m × 1.08 layers, BTF, ERF's terrain
        file): statistics of ``z`` and ``detJ`` and the quality report against ``Tests/Discretization/Terrain_Mesh/Gold/askervein_mesh.json``.
@@ -294,6 +301,16 @@ Current tests
        passing, on one to three ranks with both compilers (the bursts of an earlier version of the predictor's
        rotation step are explained and removed in :doc:`solver`). Label ``regression`` (the run time); double only.
        The 1 % comparison with an ERF reference run is not in this version.
+   * - ``rt_thin_cell_w_vnn_cap``
+     - *Beyond the plan.* The w rows' VNN cap on a flat inflow/outflow strip with a 0.7 m first cell
+       (``Tests/Canonical_RANS/Thin_Cell_Flat/inputs_thin_cell_flat``: 16 × 2 × 40, dx/dz₀ = 134, line LU-SGS with
+       two sweeps at CFL 16, the verdict at 6 orders and 5e-7). ``check_w_vnn_cap.py`` runs it with
+       ``simplec.w_vnn_cap`` 0 and 16 to the verdict: both reach it, the banner names the cap, the capped run needs
+       at most a fifth of the iterations, and u, v, w of the two steady states agree to 2e-4 m/s; then a capped run of
+       40 iterations continued to 80 from its checkpoint equals 80 straight in every field, bit for bit. Measured:
+       6487 and 687 iterations (9.4 times fewer), u and w within 5.6e-5 and 3.8e-5 m/s. That difference is the
+       convergence error of the uncapped run at its verdict: the capped run at 687 iterations is within 5e-11 m/s of
+       a 10000-iteration capped run. About 50 s on two ranks; label ``regression``; double only.
    * - ``rt_steady_hill2d``
      - RT-1.16.1: ERF's Neutral_Hill_2D (``Tests/Canonical_RANS/Neutral_Hill_2D/inputs_steady_hill2d``: 128 × 1 × 64, the Witch of Agnesi of
        100 m and 500 m, the flat deck's sounding and forcing, Rayleigh damping of w and θ from 700 m, 16 sweeps, CFL
@@ -784,6 +801,14 @@ GoogleTest suite
      - *Beyond the plan.* The same state on one box and on 2 × 2 boxes (the lagged neighbours cross the box seams
        through the ghost exchange) gives the same corrected u, v, w, :math:`a_P`, :math:`d` and face step to 1e-12
        (single 1e-5).
+   * - ``Predictor.WVnnCapAddsToTheWDiagonalAndD``
+     - *Beyond the plan.* The w rows' VNN cap (``simplec.w_vnn_cap``, :doc:`solver`) on the boundary-condition state
+       of UT-1.14.7 with :math:`\Delta\tau` of 400–1600 s (an uncapped VNN above the cap): with :math:`V = 16` every
+       interior w row has :math:`a_P = 1/\Delta\tau + (a_{ZM} + a_{ZP})/V + \mathrm{diag}(A_1)` and :math:`d` larger by
+       :math:`(a_{ZM} + a_{ZP})/V` (1e-13; single 1e-5), the Dirichlet ground and top rows keep :math:`a_P = 1` and
+       :math:`d = 0`, the effective VNN stays below :math:`V`, and the w correction is the z-line solve with the
+       capped diagonal; u and v, and every field with the cap 0, are bit-identical to the call without the argument;
+       a negative, NaN, infinite or subnormal cap is refused. On 1, 2 and 4 ranks (2 × 1 boxes).
    * - UT-1.15.1
      - One pressure correction of a predicted velocity (random wind, slip ground and top, periodic sides) leaves a
        divergence below the Poisson tolerance of the predicted one (0.1 and 1e-10, 2-norms), the ground and top faces
@@ -823,7 +848,7 @@ GoogleTest suite
        velocity on another face type, a normal component and a non-finite value, and a lateral surface layer.
    * - UT-1.15.9
      - *Beyond the plan.* The readers of ``simplec.*``, ``forcing.*`` and ``convection.*``: values, defaults, range
-       checks naming the key (``rotation_relax`` in (0, 1] included), repeated keys, keys with no effect (``ug``
+       checks naming the key (``rotation_relax`` in (0, 1] and ``w_vnn_cap`` 0 or finite and ≥ 16 included), repeated keys, keys with no effect (``ug``
        without Coriolis and without geostrophic forcing, ``theta0`` without gravity, ``smooth_eps`` without the van
        Albada limiter), the value counts; the
        stage's refusals (sweeps < 1,

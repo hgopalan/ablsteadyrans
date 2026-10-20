@@ -126,6 +126,39 @@
 // stratification (max(dtheta/dz, 0)); the convectively unstable part of the
 // coupling stays explicit through the right-hand side.
 //
+// The w rows' vertical VNN cap (simplec.w_vnn_cap = V > 0; 0, the default,
+// is off): on the w rows alone 1/dtau becomes 1/dtau + (a_ZM + a_ZP)/V, in
+// a_P and in the SIMPLEC denominator d (not on the Dirichlet rows). Why: the
+// vertical neighbour weights of a row appear in both a_P and sum a_nb, so
+// they cancel in d = a_P - sum a_nb and d is about 1/dtau. The z-line solve
+// moves w by about 1/(1/dtau + K) per unit force (K = a_ZM + a_ZP, mostly
+// the vertical diffusion nu_t (1/dz_lo + 1/dz_hi)/dz), while the pressure
+// correction moves it by dtau: a correction that varies from layer to layer
+// is too large by VNN = dtau K, and the next predictor takes most of it back.
+// With thin first cells VNN reaches several hundred a few metres above the
+// ground, and a linear model of one SIMPLEC iteration (one horizontal Fourier
+// mode, a stretched log-law column, an exact z-line solve) gives a slowest
+// decay of 1 - rho = 1/(2 VNN_max). With the cap the effective VNN of the w
+// rows is VNN/(1 + VNN/V) < V. The term is a preconditioner of the
+// pseudo-time path: the delta form keeps the fixed point, and on the C-grid
+// (no Rhie-Chow interpolation) d enters only the pressure correction, so the
+// steady answer is unchanged. u, v, theta and k keep their rows.
+//
+// Limits (the review of the cap): the same linear model diverges for V <= 2
+// at CFL >= 16 and for V = 4 at CFL 64 (the w rows' predictor then lags the
+// pressure correction the other way); capping d alone diverges for V <= 8
+// and capping a_P alone gains nothing, so both get the term. Over terrain the pressure correction's z-face flux scales the
+// whole n . grad p', slope cross term included, by beta_z = 1/d_w: with the
+// cap beta_z << beta_x near the ground, the corrected w gains -h (beta_x -
+// beta_z) dp'/dx (h the slope), and the operator turns indefinite once
+// beta_z/beta_x falls below about h^2: stable roughly while 1 + VNN/V <
+// 1/h^2. Askervein with a 1 m first cell (max aspect ratio 50.78, slopes to
+// 23 deg) converges with V = 16, 32 and 64 (200 iterations) and bursts with
+// V = 4 and 8, hence the input's floor of 16; with a 0.4 m first cell V = 16
+// burst at the CFL jump. The application warns when the cap is
+// on over terrain above the tested aspect ratio (App.cpp, Simplec.H); the
+// aspect ratio is a proxy for VNN, V and the local slope.
+//
 // Invariant: the two copies of a periodic seam face are the same unknown;
 // the sweeps update them independently from identical inputs (A, R and the
 // lagged reads are periodic images) and delta is OverrideSync'd afterwards.
@@ -183,6 +216,9 @@ struct MomentumPredictorResult
 //! rotation_relax (in (0, 1]): the rotation's step tau_c = 1 / max(|f| /
 //! rotation_relax, a_P - sum a_nb), applied to the horizontal mean of the
 //! other component's residual (the header).
+//! w_vnn_cap (0: off, else finite and > 0 with a finite reciprocal; the
+//! input's own range is 0 or >= 16): on the w rows 1/dtau becomes 1/dtau +
+//! (a_ZM + a_ZP)/w_vnn_cap in a_P and d (the header).
 MomentumPredictorResult momentum_predictor (State& q, const ResidualFields& R,
                                             const amrex::Array<const amrex::MultiFab*, AMREX_SPACEDIM>& F,
                                             const ResidualInputs& in,
@@ -190,7 +226,8 @@ MomentumPredictorResult momentum_predictor (State& q, const ResidualFields& R,
                                             const Mesh& mesh, const amrex::Geometry& geom, int sweeps,
                                             PredictorFields& ap, const SurfaceState* surface = nullptr,
                                             const ClosureFields* fields = nullptr, amrex::Real rotation_relax = 1,
-                                            const LineSweepOptions& sweep = LineSweepOptions());
+                                            const LineSweepOptions& sweep = LineSweepOptions(),
+                                            amrex::Real w_vnn_cap = 0);
 
 //! zline_jacobi or, with opt.kind = lusgs, zline_lusgs (LineSweeps.H, the
 //! line LU-SGS solve of sub-phases 2.1 and 2.2) with opt's ghosts, overlap
