@@ -198,101 +198,130 @@ public:
 
 // ---------------------------------------------------------------------------
 // UT-3.2.1. The line search rejects an overshoot. The 30 m hill of #25 (one
-// box, GMRES(30)) with u three times larger, |R_0| = 99.5, under plain Newton
-// (infinite dtau throughout: cfl0 = cfl_max and the state restored at the
-// cap). NewtonKrylov::step alone raises |R| by 3.53 on the first step (k goes
-// negative). The continuation's trial points keep k at its floor; the first
-// three full steps pass the Armijo test, the fourth full step raises |R| by
-// 2.77, and lambda = 1/2 is taken (one backtrack). The |R| sequence is
-// monotone. With newton_lambda_min = 0.9 the fourth step has no lambda to try
-// below 1: it is rejected, the retry runs at CFL = cfl_cut cfl_max = 2.5
-// with a finite dtau and is rejected too, the step fails, and q is
-// unchanged.
+// box) with u three times larger, |R_0| = 99.5, under plain Newton (infinite
+// dtau throughout: cfl0 = cfl_max and the state restored at the cap), with
+// GMRES(30) stopped at 200 iterations. Those solves end at the iteration
+// limit (status 1): the directions are inexact, and their digits depend on
+// the platform's rounding (libm, compiler), so the test checks properties
+// rather than a pinned trajectory (a trajectory pinned to 1e-4 held on Linux
+// and failed on macOS arm64 and Windows MSVC).
+//  * NewtonKrylov::step alone raises |R| more than twofold on the first step.
+//  * Six continuation steps are accepted at infinite dtau, and k stays at or
+//    above its floor (0) where plain Newton drives it negative. Each meets the
+//    Armijo condition, its lambda is beta^backtracks and at least lambda_min,
+//    |R| is monotone, and at least one step backtracks: its full step failed
+//    the Armijo test.
+//  * From the state before the first backtracked step, with
+//    newton_lambda_min = 0.9 (no lambda below 1 to try), attempt 0 is
+//    rejected with lambda = 1 and its full step fails the Armijo test; the
+//    retry runs at the finite CFL cfl_cut cfl_max = 2.5. If it is rejected
+//    too, the step fails and q is unchanged; if it is accepted, it meets the
+//    Armijo condition.
 TEST(Continuation, LineSearchRejectsOvershoot)
 {
-    if constexpr (!std::is_same_v<amrex::Real, double>) { GTEST_SKIP() << "pinned for double (the forward difference of Jv: 1.6e-3 in single)"; }
+    if constexpr (!std::is_same_v<amrex::Real, double>) { GTEST_SKIP() << "double only (the forward difference of Jv: 1.6e-3 in single)"; }
     auto make = [] (HillCase& hc) {
         hc.q.u.mult(3.0);
         hc.bc->fill_ghosts(hc.q, hc.in.surface, hc.in.buoyancy);
     };
+    NewtonOptions nopt;
+    nopt.gmres_max_iters = 200;
     ContinuationState plain;
     plain.cfl = 10;
     plain.infinite = true;
     ContinuationOptions po = default_options();
     po.cfl0 = po.cfl_max;
-    double full = 0;
+    double full = 0, eta = 0;
     {
         HillCase hc(64, FaceType::surface_layer, 30);
         make(hc);
-        ablsteady::NewtonKrylov nk(NewtonOptions{}, hc.in, hc.c.mesh, hc.c.geom, hc.c.ba, hc.c.dm, 0);
+        ablsteady::NewtonKrylov nk(nopt, hc.in, hc.c.mesh, hc.c.geom, hc.c.ba, hc.c.dm, 0);
         const auto info = nk.step(hc.q, nullptr);
         full = static_cast<double>(nk.residual_norm(hc.q) / info.residual_norm);
+        eta = static_cast<double>(info.krylov_relative);
+        EXPECT_LT(hc.q.tke.min(0), 0) << "plain Newton drives k negative";
     }
+    // |R(q + d)| <= eta |R| + |nonlinear remainder|: with eta <= 1, a rise
+    // above 2x comes mostly from the nonlinearity, not from the inexact solve.
+    EXPECT_LE(eta, 1.0);
+    EXPECT_GT(full, 2.0) << "plain Newton overshoots";
+
+    constexpr int nsteps = 6;
     HillCase hc(64, FaceType::surface_layer, 30);
     make(hc);
-    Continuation pt(po, NewtonOptions{}, hc.in, hc.c.mesh, hc.c.geom, &hc.nu, 0, hc.c.ba, hc.c.dm, 0);
+    Continuation pt(po, nopt, hc.in, hc.c.mesh, hc.c.geom, &hc.nu, 0, hc.c.ba, hc.c.dm, 0);
     pt.restore(plain);
-    ablsteady::State at3;
-    at3.define(hc.c.ba, hc.c.dm);
-    ContinuationState st3;
-    for (int n = 0; n < 6; ++n) {
-        if (n == 3) {
-            copy_state(at3, hc.q);
-            st3 = pt.state();
-        }
+    std::vector<std::unique_ptr<ablsteady::State>> before(nsteps);
+    std::vector<ContinuationState> st_before(nsteps);
+    for (int n = 0; n < nsteps; ++n) {
+        before[n] = std::make_unique<ablsteady::State>();
+        before[n]->define(hc.c.ba, hc.c.dm);
+        copy_state(*before[n], hc.q);
+        st_before[n] = pt.state();
         ASSERT_EQ(pt.step(hc.q), ContinuationStatus::accepted) << n;
+        EXPECT_GE(hc.q.tke.min(0), 0) << "the trial points keep k at its floor, " << n;
     }
     const auto& rec = pt.records();
     amrex::Print() << std::setprecision(6) << "UT-3.2.1: NewtonKrylov::step |R_1| / |R_0| = " << full
-                   << "; the continuation: step, |R|, lambda, ratio\n";
+                   << " (Krylov relative " << eta << "); the continuation: step, |R|, lambda, ratio\n";
     for (const auto& r : rec) {
         amrex::Print() << "  " << r.step << "  " << r.residual << "  " << r.lambda << "  " << r.residual_new / r.residual << "\n";
     }
-    ASSERT_EQ(rec.size(), 6U);
-    const double tr = tol(1e-4, 1e-1);
+    ASSERT_EQ(rec.size(), static_cast<std::size_t>(nsteps));
     EXPECT_NEAR(static_cast<double>(rec[0].residual), 99.496, 1e-3);
-    EXPECT_NEAR(full, 3.5335, 1e-3);
-    const double ratio[6] = {0.669619, 0.783479, 0.825959, 0.834067, 0.615220, 0.908579};
-    const amrex::Real lambda[6] = {1, 1, 1, amrex::Real(0.5), amrex::Real(0.5), amrex::Real(0.5)};
-    for (std::size_t n = 0; n < rec.size(); ++n) {
-        EXPECT_EQ(rec[n].outcome, AttemptOutcome::accepted);
+    int first_backtrack = -1;
+    for (int n = 0; n < nsteps; ++n) {
+        EXPECT_EQ(rec[n].outcome, AttemptOutcome::accepted) << n;
         EXPECT_TRUE(rec[n].infinite) << n;
-        EXPECT_EQ(rec[n].lambda, lambda[n]) << n;
-        EXPECT_EQ(rec[n].backtracks, lambda[n] == 1 ? 0 : 1) << n;
-        EXPECT_NEAR(static_cast<double>(rec[n].residual_new / rec[n].residual), ratio[n], tr * ratio[n]) << n;
-        EXPECT_LE(rec[n].residual_new, (1 - amrex::Real(1e-4) * rec[n].lambda) * rec[n].residual) << n;
+        // lambda as the line search builds it (repeated multiplication)
+        amrex::Real lam = 1;
+        for (int b = 0; b < rec[n].backtracks; ++b) { lam = po.backtrack * lam; }
+        EXPECT_EQ(rec[n].lambda, lam) << n;
+        EXPECT_GE(rec[n].lambda, po.lambda_min) << n;
+        // the Armijo condition, written out (not armijo_accepts, which is under test)
+        EXPECT_LE(rec[n].residual_new, (1 - po.armijo_c * rec[n].lambda) * rec[n].residual) << n;
         // monotone (the refill on terrain moves |R| by ~1e-8 relative)
-        if (n + 1 < rec.size()) { EXPECT_LE(rec[n + 1].residual, rec[n].residual_new * (1 + tol(1e-7, 1e-4))) << n; }
+        if (n + 1 < nsteps) { EXPECT_LE(rec[n + 1].residual, rec[n].residual_new * (1 + tol(1e-7, 1e-4))) << n; }
+        if (rec[n].backtracks > 0 && first_backtrack < 0) { first_backtrack = n; }
     }
+    ASSERT_GE(first_backtrack, 0) << "no step backtracked: the overshoot is not exercised";
 
-    // lambda_min above 1/2: the fourth step is rejected, q is unchanged, and
-    // the retry has a finite CFL.
+    // lambda_min above 1/2 from the state before the first backtracked step:
+    // attempt 0 has no lambda below 1 to try and is rejected.
     ContinuationOptions o = po;
     o.lambda_min = amrex::Real(0.9);
     o.max_retries = 1;
-    Continuation p2(o, NewtonOptions{}, hc.in, hc.c.mesh, hc.c.geom, &hc.nu, 0, hc.c.ba, hc.c.dm, 0);
-    p2.restore(st3);
-    ablsteady::State before;
-    before.define(hc.c.ba, hc.c.dm);
-    copy_state(before, at3);
+    Continuation p2(o, nopt, hc.in, hc.c.mesh, hc.c.geom, &hc.nu, 0, hc.c.ba, hc.c.dm, 0);
+    p2.restore(st_before[first_backtrack]);
+    ablsteady::State& at = *before[first_backtrack];
+    ablsteady::State keep;
+    keep.define(hc.c.ba, hc.c.dm);
+    copy_state(keep, at);
     testing::internal::CaptureStdout();
-    const auto st = p2.step(at3);
+    const auto st = p2.step(at);
     const std::string out = testing::internal::GetCapturedStdout();
     ASSERT_EQ(p2.records().size(), 2U);
-    const auto& r3 = p2.records()[0];
-    EXPECT_EQ(r3.outcome, AttemptOutcome::rejected);
-    EXPECT_EQ(r3.lambda, 1);
-    EXPECT_EQ(r3.backtracks, 0);
-    EXPECT_EQ(r3.residual, rec[3].residual);
-    EXPECT_GT(r3.residual_new, r3.residual);   // the full step raises |R|
-    EXPECT_NEAR(static_cast<double>(r3.residual_new / r3.residual), 2.773410, tr * 2.773410);
-    const auto& r4 = p2.records()[1];
-    EXPECT_EQ(r4.attempt, 1);
-    EXPECT_FALSE(r4.infinite);
-    EXPECT_EQ(r4.cfl, amrex::Real(2.5));
-    EXPECT_EQ(r4.outcome, AttemptOutcome::rejected);   // and at CFL 2.5 too
-    EXPECT_EQ(st, ContinuationStatus::failed);
-    EXPECT_EQ(valid_diff(at3, before), 0);
+    const auto& r0 = p2.records()[0];
+    EXPECT_EQ(r0.outcome, AttemptOutcome::rejected);
+    EXPECT_EQ(r0.lambda, 1);
+    EXPECT_EQ(r0.backtracks, 0);
+    EXPECT_EQ(r0.residual, rec[first_backtrack].residual);
+    EXPECT_GT(r0.residual_new, (1 - o.armijo_c) * r0.residual) << "the full step fails the Armijo test";
+    const auto& r1 = p2.records()[1];
+    EXPECT_EQ(r1.attempt, 1);
+    EXPECT_FALSE(r1.infinite);
+    EXPECT_EQ(r1.cfl, amrex::Real(2.5));
+    // Either outcome of the retry is valid; SkippedStepCutsCflAndKeepsState
+    // covers q unchanged after a failed step on every platform.
+    amrex::Print() << "UT-3.2.1: lambda_min 0.9 from step " << first_backtrack << ": the retry at CFL 2.5 was "
+                   << (st == ContinuationStatus::failed ? "rejected (step failed)" : "accepted") << "\n";
+    if (st == ContinuationStatus::failed) {
+        EXPECT_EQ(r1.outcome, AttemptOutcome::rejected);
+        EXPECT_EQ(valid_diff(at, keep), 0);
+    } else {
+        EXPECT_EQ(r1.outcome, AttemptOutcome::accepted);
+        EXPECT_LE(r1.residual_new, (1 - o.armijo_c * r1.lambda) * r1.residual);
+    }
     if (amrex::ParallelDescriptor::IOProcessor()) { EXPECT_NE(out.find("attempt 0"), std::string::npos) << out; }
 }
 
@@ -921,6 +950,39 @@ TEST(Continuation, ReferenceResidualFromCaller)
     ASSERT_GT(own.state().r_last, amrex::Real(0.1) * r_first);
     EXPECT_TRUE(c.run(h.q, 3, amrex::Real(0.1)).converged);
     EXPECT_EQ(c.state().steps, 1);
+}
+
+// ---------------------------------------------------------------------------
+// beyond the plan: restore lowers a checkpointed CFL above the run's
+// cfl_max to the cap (the options may change across a restart), and the
+// constructor refuses a NaN, infinite or negative tke_floor, naming
+// turb.tke_floor.
+TEST(Continuation, RestoreCapsTheCflAndTheFloorIsChecked)
+{
+    ContinuationOptions lo = default_options();
+    lo.cfl_max = 5;
+    HillCase h(4, FaceType::surface_layer, 30);
+    Continuation c(lo, hill_newton(), h.in, h.c.mesh, h.c.geom, &h.nu, 0, h.c.ba, h.c.dm, 0);
+    ContinuationState st;
+    st.steps = 4;
+    st.cfl = 8;
+    st.r0 = 1;
+    st.r_last = amrex::Real(0.5);
+    c.restore(st);
+    EXPECT_EQ(c.state().cfl, amrex::Real(5));
+    EXPECT_EQ(c.state().steps, 4);
+    st.cfl = 3;
+    c.restore(st);
+    EXPECT_EQ(c.state().cfl, amrex::Real(3));
+    for (const amrex::Real bad : {amrex::Real(-1e-6), std::numeric_limits<amrex::Real>::infinity(),
+                                  std::numeric_limits<amrex::Real>::quiet_NaN()}) {
+        try {
+            Continuation b(lo, hill_newton(), h.in, h.c.mesh, h.c.geom, &h.nu, bad, h.c.ba, h.c.dm, 0);
+            ADD_FAILURE() << "no abort for tke_floor = " << bad;
+        } catch (const std::runtime_error& e) {
+            EXPECT_NE(std::string(e.what()).find("turb.tke_floor"), std::string::npos) << e.what();
+        }
+    }
 }
 
 TEST(Newton, TrueLinearResidualMatchesEstimate)

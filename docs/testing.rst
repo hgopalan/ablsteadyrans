@@ -227,6 +227,144 @@ signal in that test (SIGILL on macOS arm64), so the tests after it did not run.
      - p′ not restored after the projection
      - UT-2.4.2
 
+The one-line mutants of sub-phase 3.2 (``Source/Continuation.cpp``, the SER law in ``Source/PseudoTime.cpp`` and the
+GMRES limit in ``Source/Newton.cpp``), each run against ``Continuation.*``, ``Newton.*`` and ``Driver.*`` on two ranks
+with the unit-test flags by ``tools/continuation_mutants.py`` (run on macOS arm64 with AppleClang). #36 reported 40
+mutants killed but kept no list; these 40 are a new set. The first run left C20, C25 and C36 alive: C25 because
+UT-3.2.1 no longer pins the trajectory, and C20 and C36 because no test covered them. UT-3.2.1 now checks the
+:math:`k` floor, and ``RestoreCapsTheCflAndTheFloorIsChecked`` covers the other two. All 40 are killed with GCC; with
+Clang and AppleClang 39 are, and C2 cannot be told apart from the original.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 6 44 50
+
+   * - Mutant
+     - Change
+     - Failing tests
+   * - C1
+     - Armijo without the sufficient decrease (any decrease accepted)
+     - ``ArmijoOnKnownQuadratic``
+   * - C2
+     - Armijo compares a NaN trial (no isfinite guard)
+     - ``ArmijoOnKnownQuadratic`` with GCC (verified with GCC 16 on arm64, one process), whose compare with NaN raises
+       the invalid flag the test checks (``fcmpe`` on aarch64, ``comisd`` on x86-64). Survives with Clang and
+       AppleClang, which emit a quiet compare; the script reports it as expected there
+   * - C3
+     - Backtracking factor fixed at 1/2
+     - ``ArmijoOnKnownQuadratic``
+   * - C4
+     - No lower bound on lambda
+     - ``ArmijoOnKnownQuadratic``, ``GrowthBoundAtFiniteDtau``, UT-3.2.1
+   * - C5
+     - Backtracks not counted
+     - ``ArmijoOnKnownQuadratic``, UT-3.2.1
+   * - C6
+     - Full-step residual not kept (the growth bound never passes)
+     - ``ArmijoOnKnownQuadratic``
+   * - C7
+     - Growth bound strict at the bound
+     - ``ArmijoOnKnownQuadratic``
+   * - C8
+     - Growth-bound step not re-evaluated (last trial kept)
+     - ``ArmijoOnKnownQuadratic``, ``GrowthBoundAtFiniteDtau``
+   * - C9
+     - Growth-bound flag not recorded
+     - ``ArmijoOnKnownQuadratic``, ``GrowthBoundAtFiniteDtau``
+   * - C10
+     - SER restarts from the stored CFL after infinite dtau
+     - UT-3.2.2
+   * - C11
+     - Never switches to infinite dtau
+     - UT-3.2.2, ``GrowthBoundAtFiniteDtau``, ``HillSameOnAnyRankCount``, UT-3.2.1, ``RestartIsBitIdentical``
+   * - C12
+     - Last residual not stored
+     - UT-3.2.2, ``GrowthBoundAtFiniteDtau``, ``HillSameOnAnyRankCount``, ``ReferenceResidualFromCaller``, ``RestartIsBitIdentical``
+   * - C13
+     - Accepted steps not counted
+     - UT-3.2.2, ``GrowthBoundAtFiniteDtau``, ``HillSameOnAnyRankCount``, ``ReferenceResidualFromCaller``, ``RestartIsBitIdentical``
+   * - C14
+     - No CFL cut after a failed attempt
+     - UT-3.2.2, UT-3.2.1, ``SkippedStepCutsCflAndKeepsState``
+   * - C15
+     - No floor on the cut CFL
+     - UT-3.2.2
+   * - C16
+     - A failed attempt keeps infinite dtau
+     - UT-3.2.2, UT-3.2.1
+   * - C17
+     - Growth bound also at infinite dtau
+     - UT-3.2.2
+   * - C18
+     - Checkpoint drops the infinite flag
+     - ``RestartIsBitIdentical``
+   * - C19
+     - Reader ignores r_last
+     - ``RestartIsBitIdentical``
+   * - C20
+     - Restore keeps a CFL above a lowered ``steady.cfl_max``
+     - ``RestoreCapsTheCflAndTheFloorIsChecked``
+   * - C21
+     - ``set_reference_residual`` ignores its argument
+     - ``ReferenceResidualFromCaller``
+   * - C22
+     - ``set_reference_residual`` accepts 0
+     - ``ReferenceResidualFromCaller``
+   * - C23
+     - No layout check in step
+     - ``RestartIsBitIdentical`` (crash)
+   * - C24
+     - :math:`|R_0|` never taken from the first step
+     - ``GrowthBoundAtFiniteDtau``, ``HillSameOnAnyRankCount``, ``ReferenceResidualFromCaller``, ``SkippedStepCutsCflAndKeepsState``
+   * - C25
+     - Trial k not clipped at the floor
+     - UT-3.2.1
+   * - C26
+     - Accepted step not copied back to q
+     - ``GrowthBoundAtFiniteDtau``, ``HillSameOnAnyRankCount``, UT-3.2.1
+   * - C27
+     - Finite dtau even when infinite
+     - ``GrowthBoundAtFiniteDtau``, ``HillSameOnAnyRankCount``
+   * - C28
+     - One retry fewer
+     - UT-3.2.1, ``SkippedStepCutsCflAndKeepsState``
+   * - C29
+     - ``run()`` never stops at the tolerance inside the loop
+     - ``GrowthBoundAtFiniteDtau``, ``HillSameOnAnyRankCount``, ``ReferenceResidualFromCaller``
+   * - C30
+     - ``steady.newton_armijo_c`` accepted up to 1
+     - ``InputReadersAndRangeChecks``
+   * - C31
+     - ``steady.newton_max_retries`` = 0 accepted
+     - ``InputReadersAndRangeChecks``
+   * - C32
+     - ``steady.newton_ptc_growth`` below 1 accepted
+     - ``InputReadersAndRangeChecks``
+   * - C33
+     - ``steady.newton_ptc_growth`` not read
+     - ``InputReadersAndRangeChecks``
+   * - C34
+     - ``steady.newton_dtau_inf_at_cap`` not read
+     - ``InputReadersAndRangeChecks``
+   * - C35
+     - A repeated key accepted
+     - ``InputReadersAndRangeChecks``
+   * - C36
+     - ``turb.tke_floor`` not checked
+     - ``RestoreCapsTheCflAndTheFloorIsChecked``
+   * - C37
+     - SER without the growth limit
+     - UT-3.2.2, ``HillSameOnAnyRankCount``, ``Driver.ReleasedHoldRampsFromTheFirstIteration``, ``Driver.SerRampFollowsTheLawAndItsCaps``
+   * - C38
+     - SER exponent sign flipped
+     - UT-3.2.2, ``GrowthBoundAtFiniteDtau``, ``HillSameOnAnyRankCount``, ``ReferenceResidualFromCaller``, ``RestartIsBitIdentical``, ``Driver.ReleasedHoldRampsFromTheFirstIteration``, ``Driver.SerRampFollowsTheLawAndItsCaps``
+   * - C39
+     - GMRES iteration limit not applied
+     - ``GmresIterationLimit``
+   * - C40
+     - ``steady.newton_gmres_max_iters`` = 0 accepted
+     - ``InputReadersAndRangeChecks``
+
 The tests run with the GPU CI flags (see :doc:`running`). Each test runs in its own directory under
 ``<build>/Tests/run/``.
 
@@ -1315,11 +1453,17 @@ GoogleTest suite
        face mean of the two cells.
    * - UT-3.2.1
      - ``Continuation.LineSearchRejectsOvershoot``: the 30 m hill with :math:`u` three times larger, plain Newton
-       throughout. The six reductions (0.670, 0.783, 0.826, 0.834, 0.615, 0.909) and :math:`\lambda` (1, 1, 1, 1/2,
-       1/2, 1/2) are pinned to 1e-4, :math:`|R|` is monotone, and each step meets the Armijo condition. With
-       ``steady.newton_lambda_min = 0.9`` the fourth step's full step raises :math:`|R|` by 2.77 and is rejected,
-       the retry runs at CFL 2.5 with a finite :math:`\Delta\tau`, and after the last retry the step fails with
-       :math:`q` unchanged, bit for bit.
+       throughout, GMRES(30) stopped at 200 iterations. Plain ``NewtonKrylov::step`` raises :math:`|R|` more than
+       twofold with a Krylov relative residual at most 1, and drives :math:`k` negative. Six continuation steps are
+       accepted, each keeping :math:`k` at or above its floor; each meets the Armijo condition (written out) with
+       :math:`\lambda = \beta^{\text{backtracks}} \ge \lambda_\mathrm{min}`, :math:`|R|` is monotone, and at least one
+       step backtracks. From the state before the first backtracked step, with ``steady.newton_lambda_min = 0.9``,
+       the full step fails the Armijo test and is rejected, and the retry runs at CFL 2.5 with a finite
+       :math:`\Delta\tau`; if it is rejected too, the step fails with :math:`q` unchanged, bit for bit (the test
+       prints which; ``SkippedStepCutsCflAndKeepsState`` covers :math:`q` unchanged after a failure everywhere). The solves
+       end at their iteration limit, so the trajectory's digits depend on the platform's rounding: the test checks
+       these properties rather than the trajectory (pinned to 1e-4 before, it held on Linux and failed on macOS
+       arm64 and Windows MSVC).
    * - UT-3.2.2
      - ``Continuation.DtauRampFollowsSer``: given a sequence of :math:`|R|`, the CFL after each accepted step
        equals the closed form :math:`\min(\mathrm{CFL}_\mathrm{max}, g\,\mathrm{CFL}_n, \mathrm{CFL}_0(|R_0|/|R_n|)^p)`
@@ -1354,4 +1498,37 @@ GoogleTest suite
        tolerance; a zero, negative, infinite or NaN one is refused. ``Continuation.GrowthBoundAtFiniteDtau``: the
        Ekman column with ``steady.ser_exponent = 0.5`` fails after 7 steps without the growth bound and converges
        in 26 with 1.5, each step accepted by the bound at a finite :math:`\Delta\tau` with :math:`\lambda = 1`.
-       ``Continuation.DISABLED_ParameterSweep`` (on request): the sweep of :doc:`results`.
+       ``Continuation.RestoreCapsTheCflAndTheFloorIsChecked``: a checkpointed CFL of 8 restored under
+       ``steady.cfl_max = 5`` becomes 5, and 3 stays 3; a negative, infinite or NaN ``turb.tke_floor`` is refused,
+       naming the key. ``Continuation.DISABLED_ParameterSweep`` (on request): the sweep of :doc:`results`.
+   * - UT-3.3.1
+     - *Changed from the plan.* ``NewtonPreconditioner.ApplyIsOneSimplecIteration``: on a terrain hill split into
+       six boxes (shared and periodic faces), with non-uniform fields and :math:`\Delta\tau`, ``apply`` on
+       :math:`r = -R(q)` with the stage's denominator equals one SIMPLEC stage iteration from :math:`q` to 1e-9
+       (1e-12 measured). Both ``zjacobi`` and ``lusgs`` are checked; :math:`p` is compared modulo its mean.
+       :math:`\delta q = r` on the Dirichlet rows, and every shared-face copy equals its owner's.
+   * - UT-3.3.2
+     - *Changed from the plan.* ``NewtonPreconditioner.ConstantPressureShiftLeavesTheSolveUnchanged``: on the
+       periodic hill (singular pressure problem), a constant added to :math:`r_p` or to :math:`q`'s :math:`p`
+       leaves ``apply`` unchanged, and :math:`\delta p` has zero :math:`J`-weighted mean. A Newton step from
+       :math:`q` and from :math:`q + c` takes the same GMRES iterations (53) and gives the same increment (to 1e-5;
+       compared in double only, as :math:`p + c` keeps about four digits of :math:`p` in single precision).
+   * - UT-3.3.3
+     - ``NewtonPreconditioner.IterationsBoundedOverCfl``: four Newton steps on the open hill (9 × 6 × 8, six boxes)
+       at CFL 10, 1e2, 1e3 and 1e4. With ``simplec`` the mean GMRES iterations per step grow by less than 50 %
+       (10.25 to 10.5). The mutant check: the stage's denominator fails the bound (18 to 360–381, run to run). ``identity`` needs
+       at least five times as many iterations at CFL 10 and 1e4.
+   * - UT-3.3 (a)
+     - *Beyond the plan.* ``NewtonPreconditioner.ContinuationIdentityVersusSimplec``: the continuation loop on the
+       open hill with each preconditioner. Both converge to :math:`10^{-8}|R_0|` in 8 steps to the same state;
+       ``identity`` keeps the 8 steps of UT-3.2 (b), and ``simplec`` needs 54 GMRES iterations against 976 (pinned:
+       8 steps, at most 70 iterations, at most a fifth of the identity's). ``NewtonPreconditioner.ApplyIsLinearInR``
+       (Pressel review): on the stratified hill, :math:`\mathrm{apply}(s\,r)/s = \mathrm{apply}(r)` for
+       :math:`s = 2, -1, 10^3` to 1e-4 with the default denominators (1e-5 measured; 0.5 in single precision, 0.21
+       measured, where step 3's difference of the :math:`\theta` convections about 300 K keeps about one digit); the
+       stage's denominators
+       miss it (1.03), and so does the full-increment step 3 this test replaced (1.04, the mutant check). The
+       preconditioner is set up once per attempt. ``NewtonPreconditioner.ReaderFactoryAndRangeChecks``: the
+       default, ``identity``, an unknown value aborting with the key named, the range checks of the class, and
+       ``apply`` before ``setup``. CTest ``abort_newton_preconditioner_value``, ``_no_newton`` and ``_no_stage``:
+       the application's messages.
