@@ -174,7 +174,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DABLSTEADY_MPI=OFF \
             -DABLSTEADY_GPU_BACKEND=CUDA \
-            -DAMReX_CUDA_ARCH=9.0
+            -DCMAKE_CUDA_ARCHITECTURES=90
           cmake --build build-ci --parallel
 
   # ---------------------------------------------------------------------
@@ -272,7 +272,7 @@ jobs:
             -DCMAKE_CUDA_COMPILER=nvcc `
             -DABLSTEADY_MPI=OFF `
             -DABLSTEADY_GPU_BACKEND=CUDA `
-            -DAMReX_CUDA_ARCH=9.0
+            -DCMAKE_CUDA_ARCHITECTURES=90
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cmake --build build-ci --parallel 4
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -312,7 +312,7 @@ jobs:
       - name: Install ROCm/HIP
         run: |
           sudo apt-get install -y --no-install-recommends \
-            rocm-dev rocrand-dev rocprim-dev rocsparse-dev rocfft-dev rocm-cmake
+            rocm-dev rocrand-dev hiprand-dev rocprim-dev rocsparse-dev rocfft-dev rocm-cmake
 
       - name: Configure and build
         run: |

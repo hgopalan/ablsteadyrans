@@ -49,7 +49,7 @@ An option outside its allowed values stops the configuration.
      - ``DOUBLE`` or ``SINGLE``. The steady stop needs double precision; single precision is kept compiling only.
    * - ``ABLSTEADY_GPU_BACKEND``
      - ``NONE``
-     - ``NONE``, ``CUDA``, ``HIP`` or ``SYCL``. For an H100 add ``-DAMReX_CUDA_ARCH=9.0``; HIP needs
+     - ``NONE``, ``CUDA``, ``HIP`` or ``SYCL``. For an H100 add ``-DCMAKE_CUDA_ARCHITECTURES=90``; HIP needs
        ``-DAMReX_AMD_ARCH`` (for example ``gfx90a``) and ROCm's ``clang++`` as the C++ compiler; SYCL needs ``icpx``.
    * - ``ABLSTEADY_FFT``
      - ``ON``
