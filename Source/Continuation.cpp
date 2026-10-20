@@ -60,7 +60,7 @@ void copy_state (State& to, State& from)
 {
     auto t = to.fields();
     const auto f = from.fields();
-    for (std::size_t n = 0; n < t.size(); ++n) {
+    for (amrex::Long n = 0; n < t.size(); ++n) {
         amrex::MultiFab::Copy(*t[n].mf, *f[n].mf, 0, 0, 1, t[n].mf->nGrowVect());
     }
 }
