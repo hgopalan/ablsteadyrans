@@ -749,10 +749,14 @@ leaving infinite :math:`\Delta\tau` after a damped or unconverged step fails ear
 finite CFL into convergence (:math:`p` = 0.5: 26 steps) or slow progress (no line search). With :math:`p` = 0.5 it
 converges on all three cases; it is the recommended setting until the defaults are tuned.
 
-In UT-3.2.1 (one box, GMRES(30), :math:`u \times 3`, plain Newton throughout) ``NewtonKrylov::step`` raises
-:math:`|R|` by 3.53 on the first step, where :math:`k` goes negative. The continuation keeps :math:`k` at its floor,
-takes three full steps (reductions 0.670, 0.783, 0.826) and then three steps at :math:`\lambda = 1/2`, where the full
-step would raise :math:`|R|` by 2.77.
+In UT-3.2.1 (one box, GMRES(30) stopped at 200 iterations, :math:`u \times 3`, plain Newton throughout)
+``NewtonKrylov::step`` raises :math:`|R|` 3.56-fold on the first step, where :math:`k` goes negative, although its
+Krylov relative residual is 0.013: the rise is nonlinear. The continuation keeps :math:`k` at its floor; on macOS
+arm64 it takes full steps 0–2 and 4 and backtracks on steps 3 (:math:`\lambda = 1/2`) and 5 (:math:`\lambda = 1/4`).
+These solves stop at their iteration limit, so the sequence depends on the platform's rounding. With the former
+2000-iteration limit, Linux GCC took three full steps (reductions 0.670, 0.783, 0.826) and then three at
+:math:`\lambda = 1/2`, where the full step would raise :math:`|R|` by 2.77. The test checks the properties (Armijo,
+monotone :math:`|R|`, the :math:`k` floor, at least one backtrack), not the sequence.
 
 The Newton preconditioner
 ^^^^^^^^^^^^^^^^^^^^^^^^^
