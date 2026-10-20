@@ -1,65 +1,116 @@
 ablsteady
 =========
 
-**ablsteady** is a stand-alone `AMReX <https://github.com/AMReX-Codes/amrex>`__ application for fast steady-state
-RANS of the atmospheric boundary layer (ABL) over complex terrain. It reuses `ERF <https://github.com/erf-model/ERF>`__
-components where they fit: the Axell–Liungman k–L closure, the stretched terrain-following mesh with terrain
-smoothing, the terrain Poisson solver, the MOST surface layer and the column tridiagonal solver. The starting field
-comes from a mass-consistent (WindNinja-style) initializer that builds on
+**ablsteady** computes steady-state wind fields in the atmospheric boundary layer (ABL) over complex terrain. It
+solves the steady Reynolds-averaged Navier–Stokes (RANS) equations with a one-equation k–L turbulence model on a
+terrain-following mesh. It is a stand-alone `AMReX <https://github.com/AMReX-Codes/amrex>`__ application and runs on
+CPUs and GPUs.
+
+A transient ABL code such as `ERF <https://github.com/erf-model/ERF>`__ reaches a steady wind field by integrating in
+time for many hours of simulated flow. ablsteady solves for the steady state directly. It drives the residual of the
+steady equations to zero with a pseudo-time iteration, and accelerates the iteration with line solvers, a good
+initial field and coarse grids.
+
+ablsteady reuses ERF components where they fit:
+
+- the Axell–Liungman k–L turbulence model;
+- the stretched terrain-following mesh with terrain smoothing;
+- the terrain Poisson solver;
+- the Monin–Obukhov surface layer.
+
+The initial field comes from a mass-consistent model in the style of WindNinja, which follows
 `FastWindTerrain <https://github.com/hgopalan/FastWindTerrain>`__.
 
-The steady solver is built in four phases. Each phase ends with a faster solver than the one before.
+Development status
+------------------
+
+The solver is developed in four phases. Each phase adds a faster solution method.
 
 .. list-table::
    :header-rows: 1
-   :widths: 10 90
+   :widths: 10 70 20
 
    * - Phase
-     - Solver at the end of the phase
+     - Solution method
+     - Status
    * - 1
-     - Stand-alone application and pseudo-time SIMPLEC with implicit z (z-line Jacobi)
+     - Pseudo-time SIMPLEC with implicit vertical lines (z-line Jacobi)
+     - Complete
    * - 2
-     - Line LU-SGS sweeps, an x/y grid hierarchy and grid sequencing
+     - Line LU-SGS sweeps, a horizontal grid hierarchy and grid sequencing
+     - In progress
    * - 3
-     - Jacobian-free Newton–Krylov finish, preconditioned by one SIMPLEC iteration
+     - Jacobian-free Newton–Krylov, preconditioned by SIMPLEC
+     - In progress
    * - 4
-     - Nonlinear FAS multigrid, GPU tuning, scaling, benchmark, validation and release
+     - Nonlinear FAS multigrid, GPU tuning, validation and release
+     - Planned
 
-The target machine is NLR Kestrel: CPU nodes with 104 Sapphire Rapids cores, and GPU nodes with four NVIDIA H100.
+The production solver today is the SIMPLEC stage (:doc:`solution_algorithm`). The target machine is NLR Kestrel:
+CPU nodes with 104 Sapphire Rapids cores and GPU nodes with four NVIDIA H100.
 
-**Status.** Phase 1 is under way. The application reads and checks its inputs, builds the stretched
-terrain-following mesh and the solution fields, and writes and restarts from plotfiles and checkpoints. The definition
-of a steady solution, the Poisson layer, the convection and diffusion operators, the residual, the surface layer, the
-domain boundary conditions, the k–L closure and the mass-consistent initial field are in place, and the SIMPLEC
-stage (:doc:`solver`) runs under the steady driver.
+Where to start
+--------------
+
+- **New users:** build the code (:doc:`building`), then work through the tutorials, starting with
+  :doc:`tutorial_column`.
+- **Setting up your own case:** :doc:`howto` and the :doc:`inputs`.
+- **The model and the numerics:** the Mathematical model and Numerical method sections below.
+- **Accuracy and speed:** :doc:`results`.
+
+Contents
+--------
 
 .. toctree::
    :maxdepth: 2
-   :caption: Using ablsteady
+   :caption: Getting started
 
    building
    running
-   inputs
    output
 
 .. toctree::
-   :maxdepth: 2
-   :caption: Model formulation
+   :maxdepth: 1
+   :caption: Tutorials
 
-   governing_cartesian
-   governing_curvilinear
-   discretization
-   boundary_conditions
-   initial_conditions
-   solver
+   tutorial_column
+   tutorial_flat_abl
+   tutorial_hill
+   tutorial_askervein
 
 .. toctree::
    :maxdepth: 2
-   :caption: Verification
+   :caption: How-to guides and reference
 
-   cases
+   howto
+   inputs
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Mathematical model
+
+   governing_equations
+   turbulence_model
+   terrain_coordinates
+   boundary_conditions
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Numerical method
+
+   discretization
+   solution_algorithm
+   initial_conditions
+   grid_hierarchy
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Verification and validation
+
+   test_cases
    results
    references
+   bibliography
 
 .. toctree::
    :maxdepth: 2
