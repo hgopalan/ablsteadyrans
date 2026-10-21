@@ -431,6 +431,42 @@ Every attempt prints one line: the step, :math:`|R|` before and after, the CFL (
   steps at the 2000-iteration limit, then fails at 7e-8. With ``steady.newton_dtau_inf_at_cap = 0`` it reaches
   1e-8 in 23 steps, and with GMRES(200) in 8. The restart length and the cap will be tuned with the Newton stage.
 
+Smoothness handling
+^^^^^^^^^^^^^^^^^^^
+
+The Jacobian-vector product is a forward difference of the residual. Across a kink of the residual it measures the
+jump of the slope, not the derivative, and Newton loses its convergence rate. ``NewtonSmoothness``
+(``Source/Smoothness.H``) handles the two kinks before the switch to Newton:
+
+1. **The limiter.** The van Leer slope :math:`2ab/(a+b)` (0 when :math:`ab \le 0`) has a kink wherever :math:`a`
+   or :math:`b` passes through 0: at every extremum, and in nearly uniform regions where the differences are
+   round-off of either sign. The Newton stage's residual uses the smooth van Albada slope instead
+   (``van_leer`` → ``van_albada``, with ``convection.smooth_eps_*``; ``upwind`` and ``van_albada`` are kept).
+2. **The k floor.** With ``turb.frozen_switch = 1`` (the default) the floor decisions are frozen at the state where
+   Newton starts. A cell at the floor there stays at :math:`k = k_\mathrm{floor}` for the whole stage, so
+   :math:`k_f = \max(k, k_\mathrm{floor})` has no kink as its :math:`k` rises; its branch and :math:`R_t`
+   smoothings are decided at that :math:`k`. A cell above the floor is floored again only if its :math:`k` falls to
+   the floor or below, so no :math:`k \le 0` (from a line-search trial or a Jacobian perturbation) reaches the
+   closure. The stable/unstable branch and the :math:`R_t` smoothing are not frozen: they are continuously
+   differentiable (:doc:`turbulence_model`), and freezing them would replace the state's decisions by those of the
+   switch point.
+
+After the Newton stage the floor thaws and a final SIMPLEC pass with the run's own inputs (van Leer, live decisions)
+converges the run's discrete equations from the Newton solution. ``leave`` reports how many floor decisions moved
+during the stage. The module's state (active, the frozen decisions) goes to the checkpoint
+(``<checkpoint>/Smoothness``, ``Level_0/closure_switches``) and is restored on any layout.
+
+**Variation from the plan.** Plan rev. 6 also freezes the stability branch. In a neutral layer :math:`N^2` is
+round-off and its sign flips: on the 2-D hill 286–507 of 512 cells changed branch during Newton. With the branch
+frozen at the switch state Newton was 64 times further from convergence after 8 steps on the inversion and failed
+at 5.7e-9 on the neutral van Albada run; without it both reach round-off (:doc:`results`).
+
+**Cost.** The two limiters give different discrete solutions (0.4–0.6 % of the largest :math:`u` on the 2-D hill),
+so the verification pass is not short: 3650–4316 SIMPLEC iterations, about as many as SIMPLEC needs from 1e-4 to
+1e-9 on its own. On a van Leer run the swap therefore does not save work; with ``convection.limiter = van_albada``
+for the whole run Newton solves the run's own equations, reaches round-off in about 8 steps, and needs no
+verification pass (:doc:`results`). The application does not run the Newton stage yet (sub-phase 3.5).
+
 .. _convergence-criteria:
 
 Convergence criteria

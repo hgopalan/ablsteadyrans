@@ -1126,3 +1126,142 @@ UT-3.3.3 runs ``identity`` and the stage's denominator only at CFL 10 and 1e4 (�
 loop on the same hill (UT-3.3 (a)) both preconditioners converge in 8 steps; ``simplec`` needs 54 GMRES iterations
 in all and ``identity`` 976. The stage's denominator varies between runs at large CFL (359 and 381 measured at 1e4)
 because GMRES at the 200-vector restart is sensitive to rounding; the bound fails either way.
+
+Smoothness handling before Newton
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+*Setup.* ``Smoothness.DISABLED_Sweep`` (sub-phase 3.4, :doc:`solution_algorithm`): a 2-D periodic hill (16 × 2 × 16
+cells on 1000 × 125 × 500 m, a cosine hill of 40 m) driven by :math:`dp/dx` = −2e-4 m/s², the k–L closure, the
+wall law, ``lusgs`` at ``steady.cfl_max = 8``. Neutral, or θ = 300 K below 300 m with 0.01 K/m above and
+``bc.zhi_theta_grad`` = 0.01 K/m, with Rayleigh damping of w and θ over the top 150 m as in the hill decks. From
+the SIMPLEC state at :math:`r` = 1e-4, plain Newton (infinite :math:`\Delta\tau`, the ``simplec`` preconditioner,
+GMRES(200)). :math:`|R|` is the absolute norm of the Newton step after 4 and 8 Newton steps; it stops falling at
+about 3e-14 (round-off). Counts, not wall times (laptop, CPU).
+
+.. list-table::
+   :header-rows: 1
+
+   * - Run limiter, case
+     - Newton
+     - :math:`|R_0|`
+     - :math:`|R|` after 4
+     - :math:`|R|` after 8
+     - Branch moved
+   * - van Leer, neutral
+     - van Leer
+     - 3.2e-5
+     - 2.8e-7
+     - 1.5e-7
+     - —
+   * - van Leer, neutral
+     - van Albada (swap)
+     - 4.4e-4
+     - 5.9e-8
+     - 1.8e-13
+     - —
+   * - van Leer, neutral
+     - van Leer, every decision frozen
+     - 3.2e-5
+     - 1.5e-6
+     - 8.0e-8
+     - 507 of 512
+   * - van Leer, inversion
+     - van Leer
+     - 2.7e-5
+     - 1.6e-6
+     - 9.4e-8
+     - —
+   * - van Leer, inversion
+     - van Albada (swap)
+     - 4.5e-4
+     - 3.1e-7
+     - 5.0e-12
+     - —
+   * - van Leer, inversion
+     - van Leer, every decision frozen
+     - 2.7e-5
+     - 1.5e-5
+     - 6.0e-6
+     - 286
+   * - **van Albada, neutral**
+     - **van Albada**
+     - **3.2e-5**
+     - **2.5e-9**
+     - **1.4e-13**
+     - —
+   * - **van Albada, inversion**
+     - **van Albada**
+     - **2.6e-5**
+     - **1.7e-9**
+     - **2.6e-12**
+     - —
+   * - van Albada, neutral
+     - van Albada, every decision frozen
+     - 3.2e-5
+     - 7.1e-8
+     - 1.2e-8
+     - 496 (failed at 5.7e-9)
+
+With the floor freeze (the default) no cell is at the floor on this hill, so the floor-only freeze changes nothing
+here. SIMPLEC iterations from the same start:
+
+.. list-table::
+   :header-rows: 1
+
+   * - Case
+     - to 1e-4
+     - to 1e-9
+     - Verification pass after the swap (to 1e-9)
+     - :math:`|q_N - q_S|` / max u after the swap
+   * - van Leer, neutral
+     - 2135
+     - 7946
+     - 4316
+     - 0.59 %
+   * - van Leer, inversion
+     - 3313
+     - 11637
+     - 3650
+     - 0.41 %
+   * - van Leer, inversion, ``turb.ri_gate = 0.01``
+     - 3180
+     - 10891
+     - 4293
+     - 0.41 %
+   * - van Leer, inversion, ``turb.ri_gate = 0.1``
+     - 2758
+     - 9807
+     - 4329
+     - 0.42 %
+   * - van Albada, neutral
+     - 2081
+     - 8094
+     - —
+     - —
+   * - van Albada, inversion
+     - 3131
+     - 8430
+     - —
+     - —
+
+Findings:
+
+- **The smooth limiter makes Newton fast.** With van Albada as the run's limiter, Newton reaches about 1e-12 in 8
+  steps on both cases; with van Leer it is near 1e-7 after 8 steps and falls linearly (about 0.75 per step after
+  the first few). The kinks of van Leer, not the closure, set the rate.
+- **The swap does not pay for itself on a van Leer run.** The van Albada and van Leer solutions differ by 0.4–0.6 %
+  of the largest :math:`u` (first-order at extrema, where van Leer clips the slope), so the verification pass back to
+  van Leer takes 3650–4316 SIMPLEC iterations, about as many as SIMPLEC needs from 1e-4 to 1e-9 on its own. A
+  van Leer Newton finish from the smooth solution costs as much as a van Leer Newton from the start.
+- **Freezing the branch slows or stops Newton.** With every decision frozen (plan rev. 6), 286–507 of 512 cells
+  have changed branch by the end. After 8 steps Newton is 64 times further from convergence on the inversion (van
+  Leer) and 1e5 times on the neutral van Albada run, where it fails at 5.7e-9; on the neutral van Leer run it ends
+  at 1.8e-10 after 30 steps against 4.8e-14. The neutral layer's :math:`N^2` is round-off, and its sign flips. Freezing
+  only the floor, as this sub-phase does, keeps the van Albada rate.
+- **The stratification gate.** ``turb.ri_gate = 0.01`` changes the inversion solution by 0.03 % of the largest
+  :math:`u` (3.6e-5 K in θ) and cuts SIMPLEC's iterations to 1e-9 by 6 %; 0.1 cuts them by 16 % but changes
+  :math:`u` by 1.8 %. It does not speed up Newton consistently (with van Albada, 0.01 leaves :math:`|R|` at 6e-8
+  after 8 steps, where the run without it reaches 3e-12), so it stays off by default.
+- **Recommended for a Newton finish:** ``convection.limiter = van_albada`` for the whole run, so that Newton solves
+  the run's own equations and no verification pass is needed. The van Leer answer by Newton needs a smooth limiter
+  that tends to van Leer (not in this sub-phase).
