@@ -32,6 +32,7 @@
 
 #include "Predictor.H"
 #include "Mesh.H"
+#include "Newton.H"
 #include "Reference.H"
 #include "State.H"
 #include "SteadyCriterion.H"
@@ -64,6 +65,10 @@ struct SteadyOptions
     amrex::Real switch_back_growth{10};  //!< steady.switch_back_growth (> 1): growth of r_n over a window that sends back
     int zline_sweeps{2};                 //!< steady.zline_sweeps (zjacobi 2..100, lusgs 1..100): line sweeps per predictor step, for the SIMPLEC stage of 1.15 (Predictor.H)
     SweepKind sweep{SweepKind::zjacobi}; //!< steady.sweep (zjacobi | lusgs): the line solver of the sweeps (sub-phase 2.1, Predictor.H)
+    //! steady.newton_preconditioner (identity | simplec): the Newton step's
+    //! preconditioner (sub-phase 3.3, NewtonPreconditioner.H); read here, used
+    //! once the run can switch to Newton (sub-phase 3.5).
+    NewtonPreconditionerKind newton_preconditioner{NewtonPreconditionerKind::simplec};
     //! steady.line_ghosts (lagged | zero), line_overlap (0..max_line_overlap,
     //! 0 unless zero) and line_order (sequential | diagonal): the LU-SGS
     //! sweeps' box coupling, overlap and column ordering (sub-phase 2.2,

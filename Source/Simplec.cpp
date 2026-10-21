@@ -39,6 +39,12 @@ std::vector<std::string> check_simplec_options (const SimplecOptions& opt)
         err.emplace_back("simplec.w_vnn_cap = " + std::to_string(opt.w_vnn_cap) + ": must be 0 (off), or finite and >= "
                          + std::to_string(static_cast<int>(w_vnn_cap_min)));
     }
+    // Below 1 the bound itself is crossed (Predictor.H): no margin.
+    if (std::isnan(opt.w_vnn_cap_slope_margin)
+        || !(opt.w_vnn_cap_slope_margin == 0 || (opt.w_vnn_cap_slope_margin >= 1 && std::isfinite(opt.w_vnn_cap_slope_margin)))) {
+        err.emplace_back("simplec.w_vnn_cap_slope_margin = " + std::to_string(opt.w_vnn_cap_slope_margin)
+                         + ": must be 0 (off), or finite and >= 1");
+    }
     return err;
 }
 
@@ -47,7 +53,7 @@ SimplecOptions read_simplec_options ()
     SimplecOptions opt;
     amrex::ParmParse pp("simplec");
     std::vector<std::string> err;
-    for (const char* key : {"pressure_reltol", "alpha_p", "rotation_relax", "w_vnn_cap"}) {
+    for (const char* key : {"pressure_reltol", "alpha_p", "rotation_relax", "w_vnn_cap", "w_vnn_cap_slope_margin"}) {
         if (!pp.contains(key)) { continue; }
         opt.given.emplace_back(key);
         if (pp.countname(key) > 1) { err.emplace_back(std::string("simplec.") + key + " is given more than once"); }
@@ -58,7 +64,13 @@ SimplecOptions read_simplec_options ()
         pp.query("alpha_p", opt.alpha_p);
         pp.query("rotation_relax", opt.rotation_relax);
         pp.query("w_vnn_cap", opt.w_vnn_cap);
+        pp.query("w_vnn_cap_slope_margin", opt.w_vnn_cap_slope_margin);
         err = check_simplec_options(opt);
+        // Read but ignored without the cap: refuse it.
+        const bool margin_given = std::find(opt.given.begin(), opt.given.end(), "w_vnn_cap_slope_margin") != opt.given.end();
+        if (margin_given && opt.w_vnn_cap == 0) {
+            err.emplace_back("simplec.w_vnn_cap_slope_margin has no effect unless simplec.w_vnn_cap > 0; remove it");
+        }
     }
     if (!err.empty()) {
         std::string all = "ablsteady: invalid inputs:";
@@ -121,7 +133,7 @@ amrex::Real max_abs_masked (const amrex::MultiFab& f, const amrex::MultiFab& kee
 
 PressureCorrectionResult pressure_correction (State& q, const PredictorFields& d, PoissonSolver& solver, const PoissonBC& bc,
                                               amrex::Real alpha_p, const Mesh& mesh, const amrex::Geometry& geom,
-                                              SimplecWorkspace& w)
+                                              SimplecWorkspace& w, const amrex::MultiFab* source, bool project_net_source)
 {
     const char* op = "pressure_correction";
     if (std::isnan(alpha_p) || !(alpha_p > 0 && alpha_p <= 1)) {
@@ -134,6 +146,7 @@ PressureCorrectionResult pressure_correction (State& q, const PredictorFields& d
     check_operator_field(op, "v", q.v, Loc::yface, mesh, 1);
     check_operator_field(op, "w", q.w, Loc::zface, mesh, 1);
     check_operator_field(op, "p", q.p, Loc::cell, mesh, 1);
+    if (source != nullptr) { check_operator_field(op, "source", *source, Loc::cell, mesh, 0); }
     const amrex::MultiFab& z = q.z_phys_nd;
     const amrex::BoxArray& ba = q.p.boxArray();
     const amrex::DistributionMapping& dm = q.p.DistributionMap();
@@ -153,6 +166,7 @@ PressureCorrectionResult pressure_correction (State& q, const PredictorFields& d
 
     velocity_divergence(q.u, q.v, q.w, z, mesh, geom, w.rhs);
     res.divergence_before = w.rhs.norm0();
+    if (source != nullptr) { amrex::MultiFab::Subtract(w.rhs, *source, 0, 0, 1, 0); }
     // The scale of the divergence, U / h, for the net-source check.
     amrex::Real speed = amrex::max(q.u.norm0(0, 0, false), q.v.norm0(0, 0, false), q.w.norm0(0, 0, false));
     amrex::ParallelDescriptor::ReduceRealMax(speed);
@@ -167,7 +181,7 @@ PressureCorrectionResult pressure_correction (State& q, const PredictorFields& d
     coeffs.precond_ratio = 1;
     w.phi.setVal(0.0);
     res.poisson = solver.solve(w.rhs, w.phi, coeffs, bc, &w.F);
-    if (res.poisson.singular && std::abs(res.poisson.removed_mean) > amrex::Real(1.0e-8) * speed * inv_h) {
+    if (!project_net_source && res.poisson.singular && std::abs(res.poisson.removed_mean) > amrex::Real(1.0e-8) * speed * inv_h) {
         amrex::Abort("ablsteady: pressure_correction: the predicted velocity has a net source the boundaries cannot carry: "
                      "J-weighted mean divergence " + std::to_string(double(res.poisson.removed_mean)) + " 1/s against the scale "
                      + std::to_string(double(speed * inv_h)) + " 1/s (a boundary condition or the predictor is inconsistent)");
@@ -209,7 +223,7 @@ ScalarSweepResult scalar_sweep (Equation eq, amrex::MultiFab& field, const amrex
                                 const amrex::Array<const amrex::MultiFab*, AMREX_SPACEDIM>& F, const amrex::MultiFab& z_nd,
                                 const ResidualInputs& in, const amrex::MultiFab& dtau, const Mesh& mesh,
                                 const amrex::Geometry& geom, int sweeps, amrex::Real floor, const SurfaceState* surface,
-                                const ClosureFields* fields, SimplecWorkspace& w, const LineSweepOptions& sweep)
+                                const ClosureFields* fields, SimplecWorkspace& w, const LineSweepOptions& sweep, bool clip)
 {
     const char* op = "scalar_sweep";
     if (eq != Equation::theta && eq != Equation::tke) { amrex::Abort("ablsteady: scalar_sweep: eq must be theta or tke"); }
@@ -247,7 +261,7 @@ ScalarSweepResult scalar_sweep (Equation eq, amrex::MultiFab& field, const amrex
     res.last_sweep = line_sweeps(sweep, Loc::cell, w.A, w.ap, rhs, sweeps, mesh, geom, w.delta);
     res.max_dq = w.delta.norm0();
     amrex::MultiFab::Add(field, w.delta, 0, 0, 1, 0);
-    if (eq == Equation::tke) {
+    if (eq == Equation::tke && clip) {
         amrex::ReduceOps<amrex::ReduceOpSum> rop;
         amrex::ReduceData<amrex::Long> data(rop);
         for (amrex::MFIter mfi(field, amrex::TilingIfNotGPU()); mfi.isValid(); ++mfi) {
@@ -367,7 +381,7 @@ void SimplecStage::iterate (State& q, const amrex::MultiFab& dtau)
     const SurfaceState* ss = (m_in.surface != nullptr) ? &m_ss : nullptr;
     const ClosureFields* cf = (m_in.closure != nullptr) ? &m_cf : nullptr;
     m_info.predictor = momentum_predictor(q, m_R, F, m_in, m_w.dtau_faces, m_mesh, m_geom, m_sweeps, m_pf, ss, cf, m_opt.rotation_relax,
-                                          m_sweep, m_opt.w_vnn_cap);
+                                          m_sweep, m_opt.w_vnn_cap, m_opt.w_vnn_cap_slope_margin);
     // 4. The pressure correction on u* (its ghosts refilled first).
     m_in.bc->fill_ghosts(q, m_in.surface, m_in.buoyancy, false, nullptr);
     m_info.pressure = pressure_correction(q, m_pf, m_solver, m_pbc, m_opt.alpha_p, m_mesh, m_geom, m_w);

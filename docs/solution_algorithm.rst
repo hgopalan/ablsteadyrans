@@ -173,12 +173,41 @@ pressure correction (there is no Rhie–Chow interpolation on the staggered grid
 :math:`R = 0`. It is off by default. Values below 16 are refused: on flat ground the iteration diverges for
 :math:`V \le 2` at a CFL of 16 and for :math:`V = 4` at a CFL of 64.
 
-.. note::
+*Sloping ground.* On a :math:`z`-face the pressure correction scales the whole normal gradient, slope term included,
+by :math:`\beta_z = 1/d_w`, while the :math:`x`- and :math:`y`-faces use :math:`\beta_h = 1/d_u, 1/d_v`. For one
+Fourier mode (wavenumber :math:`k` along a slope :math:`h`, :math:`m` in :math:`\zeta`) the operator's quadratic form
+is
 
-   Over terrain, the cap can make the pressure correction unstable where thin cells meet steep slopes (roughly when
-   :math:`1 + \mathrm{VNN}/V > 1/h^2`, with :math:`h` the local slope). Over terrain, the run prints a warning when
-   the cap is on and the mesh aspect ratio is above the tested 50.78. A larger :math:`V` is safer. See :doc:`results` for the
-   tested cases.
+.. math::
+
+   \beta_h k^2 + \beta_z (1 + h^2)\, m^2 - h (\beta_h + \beta_z)\, k\, m ,
+
+which is definite only while :math:`r = \beta_z/\beta_h` exceeds
+
+.. math::
+
+   r_c = \frac{h^2}{\left(\sqrt{1 + h^2} + 1\right)^2} .
+
+Without the cap :math:`r \approx 1`. With it :math:`r = 1/(1 + \mathrm{VNN}/V)`, so thin cells on steep slopes cross
+:math:`r_c`: on Askervein's steepest slope (23°, :math:`r_c = 0.041`) a cap of 16 fails once VNN exceeds 370, as with
+a 0.4 m first cell. ``simplec.w_vnn_cap_slope_margin`` = :math:`s` (default 4) limits the term on each :math:`w` row
+to
+
+.. math::
+
+   \min\left(\frac{a_{ZM} + a_{ZP}}{V},\; \frac{\max\bigl(0,\, 1/(s\,r_c) - 1\bigr)}{\Delta\tau}\right),
+
+with :math:`h^2 = h_x^2 + h_y^2` from the face's node heights (the slope the operator's cross term uses). The limit
+assumes that the horizontal coefficient and the vertical one without the cap are both :math:`1/\Delta\tau`. Then
+:math:`r \ge s\,r_c` wherever :math:`s\,r_c < 1` (below 53° at :math:`s = 4`; steeper rows get no cap). On the
+solver's own coefficients the margin is smaller where the vertical coefficient is stiffer (stable stratification,
+the Rayleigh layer: at :math:`s = 4` and 32.5°, :math:`r \ge 3.0\,r_c` when it is twice :math:`1/\Delta\tau` and
+:math:`1.7\,r_c` at five times), and larger in the first layer, where the surface drag stiffens the horizontal
+coefficient. The definite band is also bounded above, :math:`r < 1/r_c`. On steep slopes the cap acts as a larger
+local :math:`V`, and flat ground keeps :math:`(a_{ZM} + a_{ZP})/V` exactly. Giving the slope term :math:`\beta_h` instead (``FaceCoeffs::z_cross``) would
+keep the operator definite for any :math:`r`, but the default Poisson back end has no split coefficient. With
+:math:`s = 0` (the cap of #32) the run warns over terrain when the mesh aspect ratio is above the tested 50.78. See
+:doc:`results` for the tested cases.
 
 Pressure Poisson solver
 -----------------------
@@ -291,6 +320,60 @@ listed in :doc:`inputs`.
 ``steady.newton_gmres_max_iters`` bounds the GMRES iterations of one solve over all its restarts. A solve that
 reaches it is unconverged; its update is used when the Krylov residual is finite and below :math:`|b|`, like any
 other.
+
+The Newton preconditioner
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+GMRES solves the Newton system with a right preconditioner :math:`M^{-1} \approx (D + J)^{-1}`, chosen by
+``steady.newton_preconditioner`` (``SimplecPreconditioner``, ``Source/NewtonPreconditioner.H``). ``identity`` is
+no preconditioner. ``simplec`` (the default) applies one SIMPLEC iteration to the linearized system
+:math:`(D + J)\,\delta q = r`, starting from :math:`\delta q = 0`:
+
+1. The momentum predictor of the SIMPLEC stage, :math:`(1/\Delta\tau + A_1)\,\delta u^* = r_u`, with the
+   coefficients, rotation and buoyancy terms at :math:`q`.
+2. The pressure correction with the continuity part :math:`r_p` as a source,
+
+   .. math::
+
+      \nabla\cdot\left(\frac{1}{a_P}\nabla p'\right) = \nabla\cdot\delta u^* - r_p, \qquad
+      \delta u = \delta u^* - \frac{1}{a_P}\nabla p', \qquad \delta p = \alpha_p\,p',
+
+   so that :math:`\nabla\cdot\delta u = r_p`. :math:`a_P` is the predictor's diagonal and :math:`\alpha_p` is
+   ``simplec.alpha_p``.
+3. The :math:`\theta` and :math:`k` line steps on their parts of :math:`r`. The change of the :math:`\theta`
+   convection by :math:`\delta u` is a directional derivative,
+   :math:`[C(F(u + \sigma\delta u)) - C(F(u))]/\sigma` with :math:`\sigma` as in the Jacobian-vector product, and
+   the line operators use the transport of :math:`u`, so ``apply`` is linear in :math:`r` (to the finite-difference
+   and Poisson tolerances). With the stage's denominator (below) the full :math:`\delta u` and the transport of
+   :math:`u + \delta u` are used instead, as in the stage. The increment :math:`\delta k` is not clipped.
+4. On the Dirichlet rows of :math:`u, v, w`, which are identity rows of the Newton system, :math:`\delta q = r`.
+
+The sweeps are those of the SIMPLEC stage: ``steady.zline_sweeps`` of ``steady.sweep``. ``setup`` rebuilds the
+coefficients once per Newton step, at the current state and :math:`\Delta\tau`. Inside the continuation loop
+that is every attempt. At infinite :math:`\Delta\tau` the preconditioner uses the local time step at
+``steady.cfl_max``.
+
+**The denominator.** The SIMPLEC stage divides by :math:`d = a_P - \sum a_{nb}`. In the interior that is about
+:math:`1/\Delta\tau`, so the pressure increment vanishes as :math:`\Delta\tau` grows. The preconditioner
+therefore uses the SIMPLE denominator :math:`a_P`. On the 3-D hill of UT-3.3.3 the GMRES iterations per Newton step
+then stay near 10 from CFL 10 to 1e4; with :math:`d` they grow from 18 to more than 350 (:doc:`results`). With :math:`d` the
+preconditioner is exactly one iteration of the stage (UT-3.3.1).
+
+**Shared faces.** A face shared by two boxes, or a periodic seam face and its image, is one unknown. :math:`r`
+arrives with equal copies, and :math:`\delta q` is returned with every copy equal to the owner's.
+
+**The pressure gauge.** Without a Dirichlet pressure face, a constant pressure is the null space of
+:math:`D + J`. The preconditioner removes the net source of :math:`r_p` that the boundaries cannot carry, and
+returns :math:`\delta p` with zero :math:`J`-weighted mean. The Newton update then keeps the mean of :math:`p`, and
+a constant added to :math:`p` changes neither the preconditioner nor the solve (UT-3.3.2).
+
+**Limits.**
+
+- On the horizontally uniform Ekman column the pressure plays no part. The stiff part at large CFL is the balance
+  of rotation and vertical diffusion, and ``simplec`` needs about as many GMRES iterations as ``identity``.
+- The pressure solve's reductions depend on the rank order, so with ``simplec`` the Newton iterates are not bit
+  for bit the same on different rank counts. With ``identity`` they are.
+- Memory: about 25 state-size fields and the Poisson solver's hierarchy, on top of the Krylov vectors.
 
 Pseudo-transient continuation
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

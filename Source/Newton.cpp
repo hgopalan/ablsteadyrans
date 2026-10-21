@@ -430,6 +430,11 @@ bool newton_update_usable (amrex::Real krylov_relative)
     return std::isfinite(static_cast<double>(krylov_relative)) && krylov_relative <= 1;
 }
 
+const char* newton_preconditioner_name (NewtonPreconditionerKind kind) noexcept
+{
+    return (kind == NewtonPreconditionerKind::simplec) ? "simplec" : "identity";
+}
+
 double newton_fd_eps_scale_min ()
 {
     return std::pow(static_cast<double>(std::numeric_limits<amrex::Real>::epsilon()), 0.75);
