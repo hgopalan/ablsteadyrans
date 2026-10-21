@@ -319,7 +319,7 @@ void Driver::apply_switch_rules (int iteration, amrex::Real r, const std::vector
     m_h.below_count = (r <= m_opt.switch_residual) ? m_h.below_count + 1 : 0;
     int to = m_h.stage;
     std::string reason;
-    if (m_h.stage > 0 && m_stages[m_h.stage]->fallback_requested() && !(m_h.last_switch >= 0 && iteration - m_h.last_switch < W)) {
+    if (m_h.stage > 0 && m_stages[m_h.stage]->fallback_requested()) {
         // The stage's own request (the Newton stage's failed steps, or its
         // hand-back for the final pass): at once, whatever the hysteresis.
         to = m_h.stage - 1;

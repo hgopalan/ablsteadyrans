@@ -227,6 +227,51 @@ signal in that test (SIGILL on macOS arm64), so the tests after it did not run.
      - p′ not restored after the projection
      - UT-2.4.2
 
+The one-line mutants of sub-phase 3.5 (``Source/NewtonStage.cpp`` and the switch rules in ``Source/Driver.cpp``),
+each run against ``Driver.*`` and ``NewtonStage.*`` on two ranks with the unit-test flags by
+``tools/newton_stage_mutants.py`` (macOS arm64, AppleClang). All 11 are killed.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 6 44 50
+
+   * - Mutant
+     - Change
+     - Failing tests
+   * - N1
+     - The fallback waits for the hysteresis window
+     - ``Driver.NewtonSwitchOnceAndFallback``
+   * - N2
+     - The forward switch ignores the monitors
+     - ``Driver.NewtonSwitchOnceAndFallback``
+   * - N3
+     - The forward switch ignores ``accepts_switch``
+     - ``Driver.NewtonSwitchOnceAndFallback``
+   * - N4
+     - ``leave`` not called on a switch
+     - ``Driver.NewtonSwitchOnceAndFallback``, ``HandsBackForTheFinalPassAfterTheSwap``
+   * - N5
+     - The monitor test against the window's first record, off by one
+     - ``Driver.NewtonSwitchOnceAndFallback``
+   * - N6
+     - The fallback after one failure whatever the key
+     - ``FallsBackAfterFailedSteps``, ``RestartInsideTheStage``
+   * - N7
+     - A failed step does not count
+     - ``FallsBackAfterFailedSteps``
+   * - N8
+     - Converged before any accepted step
+     - ``FallsBackAfterFailedSteps``
+   * - N9
+     - No hand-back for the final pass
+     - ``HandsBackForTheFinalPassAfterTheSwap``
+   * - N10
+     - The continuation's SER law from ``steady.cfl0``, not the cap
+     - ``HandsBackForTheFinalPassAfterTheSwap``, ``SwitchesOnceAndConvergesInNewton``
+   * - N11
+     - The continuation state not restored on restart
+     - ``RestartInsideTheStage``
+
 The one-line mutants of sub-phase 3.4 (``Source/Smoothness.cpp`` and the floor freeze and stratification gate in
 ``Source/Closure.cpp``), each run against ``Smoothness.*`` and ``Closure.*`` on two ranks with the unit-test flags by
 ``tools/smoothness_mutants.py`` (macOS arm64, AppleClang). 12 of 13 are killed. S5 survives: it removes the gate
