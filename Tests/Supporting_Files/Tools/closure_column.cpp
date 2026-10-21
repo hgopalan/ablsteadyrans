@@ -105,7 +105,7 @@ int main (int argc, char* argv[])
         const ablsteady::ClosureOptions copt = ablsteady::read_closure_options();
         // One Cmu0 and kappa for the wall law, the wall k and the closure (the
         // state is their common equilibrium), as in the application.
-        ablsteady::use_closure_constants(bin, sopt, copt.Cmu0, copt.kappa);
+        ablsteady::use_closure_constants(bin, sopt, copt.Cmu0, copt.kappa, copt.max_geom_lscale);
         amrex::Real ustar = amrex::Real(0.4), direction = 0;
         {
             amrex::ParmParse pp("fixed_state");

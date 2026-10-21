@@ -124,6 +124,9 @@ struct HillCase
         const FaceType xlo = perx ? FaceType::periodic : FaceType::inflow;
         const FaceType xhi = perx ? FaceType::periodic : FaceType::outflow;
         bin.face = {xlo, FaceType::periodic, ground, xhi, FaceType::periodic, FaceType::slip_wall};
+        // The pinned residuals below were measured with the wall-law inflow length (before the
+        // closure's capped length became the default of bc.inflow_tke_length).
+        bin.inflow.length = ablsteady::InflowProfileOptions::Length::unbounded;
         bc = std::make_unique<ablsteady::BoundaryConditions>(bin, c.geom, c.mesh, in.coriolis);
         in.bc = bc.get();
         q.define(c.ba, c.dm);

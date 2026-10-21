@@ -26,8 +26,8 @@ so the spin-up check can read both histories.
   bound, the wall cell's k balance, the crest speed-up in the three lowest cells within 0.2-0.8 (Jackson and Hunt's
   0.4), the speed-up positive in the lowest ten, the upstream u* within 0.25-0.55 m/s, the upstream log law in the
   lowest three cells within 15 %.
-- Jacobi: 4590 iterations (49 s on two ranks), speed-up 0.59 / 0.50 / 0.43, u* = 0.354 m/s.
-- LU-SGS: 3062 iterations (23 s on two ranks).
+- Jacobi: 4576 iterations (49 s on two ranks), speed-up 0.59 / 0.50 / 0.43, u* = 0.354 m/s.
+- LU-SGS: 3048 iterations (23 s on two ranks).
 - Column first guess: 1237 iterations; at iteration 300 the u and v residuals at most half the profile run's
   (measured 0.084 and 0.060).
 

@@ -72,11 +72,11 @@ Over terrain the initial field needs a Poisson solve to conserve mass. The log r
 
    ablsteady: initializer: 12 Poisson iterations (gmres_mlmg, reltol 1.000e-10), divergence 1.815778083e-01 before, 4.144210521e-12 after
 
-and the run ends after about 3080 iterations:
+and the run ends after about 3050 iterations:
 
 .. code-block:: text
 
-   ablsteady: steady after 3077 iterations (3077 over the run)
+   ablsteady: steady after 3048 iterations (3048 over the run)
 
 Check the speed-up
 ------------------
@@ -85,7 +85,7 @@ ERF's check script compares the crest speed-up :math:`U_\mathrm{top}/U_\mathrm{u
 
 .. code-block:: bash
 
-   python3 ../../extern_erf/check_hill.py --physics steady_hill2d_lusgs_turb03077
+   python3 ../../extern_erf/check_hill.py --physics steady_hill2d_lusgs_turb03048
 
 .. code-block:: text
 
@@ -119,7 +119,7 @@ The log reports the column solve, then the 3-D run:
    ablsteady: column guess: converged after 129 steps (0.018 s), 64 levels, u* 0.3785 m/s, u 10.0000 v -0.0000 m/s at the top
    ablsteady: steady after 1231 iterations (1231 over the run)
 
-The run converges in 1231 iterations instead of 3077. The column profile is written to ``column_guess.dat``.
+The run converges in 1231 iterations instead of 3048. The column profile is written to ``column_guess.dat``.
 
 What you have seen
 ------------------

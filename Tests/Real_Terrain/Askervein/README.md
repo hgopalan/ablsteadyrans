@@ -15,7 +15,7 @@ Check script: `Supporting_Files/expect_abort.py --success "ablsteady: steady aft
 `rt_steady_askervein` (labels `regression;smoke`, double precision only).
 
 ## Expected Results
-- The steady verdict. Measured: 156 iterations (2 s on two ranks).
+- The steady verdict. Measured: 175 iterations (2 s on two ranks; 156 with `bc.inflow_tke_length = unbounded`).
 
 ## How to run
 ```bash
