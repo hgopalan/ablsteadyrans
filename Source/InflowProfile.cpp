@@ -130,8 +130,9 @@ InflowProfile::InflowProfile (const amrex::Vector<amrex::Real>& z, const amrex::
 {
     m_opt.kind = InflowProfileOptions::Kind::file;
     m_opt.file = "(column guess)";
-    // m_opt keeps the default Cmu0, kappa and z0: the table always has k, and
-    // its users (the initializer) do not read nu_t, so they are not used.
+    // m_opt keeps the default Cmu0, kappa, z0, length and l_max: the table
+    // always has k, and its users (the initializer) do not read nu_t, so
+    // they are not used.
     for (const auto& e : check_reference_profile(theta_ref)) { amrex::Abort("ablsteady: InflowProfile: " + e); }
     const amrex::Long n = z.size();
     if (n < 2 || u.size() != n || v.size() != n || theta.size() != n || k.size() != n) {

@@ -391,6 +391,13 @@ BoundaryConditions::BoundaryConditions (const BoundaryInputs& in, const amrex::G
                                         const CoriolisOptions& coriolis)
     : m_in(checked(in, geom, mesh, coriolis)), m_geom(geom), m_mesh(mesh), m_coriolis(coriolis), m_profile(m_in.inflow, m_in.theta_ref)
 {
+    // Known only once the table is read: with its own k column the length
+    // changes nothing (the fill, the damping and the first guess take k, not
+    // the profile's nu_t), so the key would be read and ignored.
+    if (m_profile.has_k() && std::find(m_in.given.begin(), m_in.given.end(), "inflow_tke_length") != m_in.given.end()) {
+        amrex::Abort("ablsteady: invalid boundary conditions:\n  bc.inflow_tke_length has no effect with a k column in "
+                     "bc.inflow_file = " + m_in.inflow.file);
+    }
 }
 
 bool BoundaryConditions::has_inflow () const

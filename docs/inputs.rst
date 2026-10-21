@@ -588,8 +588,9 @@ types, the inflow profile and the sounding; the other keys act in the SIMPLEC st
      - ``closure`` or ``unbounded``: the length :math:`l` of the equilibrium :math:`k` and :math:`\nu_t`
        (:doc:`boundary_conditions`). ``closure``: the turbulence model's :math:`\kappa(z + z_0)` capped by
        ``turb.max_geom_lscale``. ``unbounded``: :math:`\kappa(z + z_0)`, the form before this input (for the log law,
-       :math:`k = u_*^2/C_{\mu 0}^2` at every height). With a ``k`` column in ``bc.inflow_file``, the length sets
-       :math:`\nu_t` only.
+       :math:`k = u_*^2/C_{\mu 0}^2` at every height). Refused with a ``k`` column in ``bc.inflow_file`` (no effect).
+       A checkpoint written before this input continues unchanged only with ``unbounded``: the inflow
+       :math:`k` is not stored in the checkpoint.
    * - ``bc.theta_profile_z``, ``bc.theta_profile``
      - ``0``, ``300``
      - Lists of equal length: heights increasing from 0 (m) and θ > 0 (K). The reference sounding.

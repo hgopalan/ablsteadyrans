@@ -137,8 +137,14 @@ wind's shear: shear production equals dissipation in the neutral k–L closure (
   inflow :math:`k` is the closure's equilibrium. ``unbounded`` drops the cap (:math:`l = \kappa(z + z_0)`); the log
   law then has :math:`u_{*l} = u_*` and :math:`k = u_*^2/C_{\mu 0}^2` at every height.
 - **Why the cap.** Without it, :math:`\kappa z\,dS/dz` grows with height on a power law, and so does :math:`k`: on
-  ERF's Askervein inflow it reaches about 9 m²/s² at 316 m, where ERF's flow has 0.31. With the cap, 0.31.
-- A :math:`k` column is used as given; :math:`l` then sets :math:`\nu_t = l\,C_{\mu 0}\sqrt{k}`.
+  ERF's Askervein inflow it reaches about 9 m²/s² at 316 m, where ERF's flow has 0.31; with the cap, 0.31 at 316 m.
+- A :math:`k` column is used as given, and ``bc.inflow_tke_length`` is refused (it would change nothing).
+- The equilibrium is the neutral one, also above an inversion, and the height is the height above the ground (the
+  closure's wall distance with ``turb.wall_distance = terrain_height``). The roughness is ``bc.inflow_z0``, which
+  should equal ``bc.surface_z0``.
+- A log-law wind with the capped length is not a momentum equilibrium (its stress falls with height as
+  :math:`(l/\kappa(z + z_0))^2`); with the unbounded length the :math:`k` equation was out of balance instead. The
+  domain adjusts either way; the capped form at least balances the :math:`k` equation.
 
 Damping layers
 --------------

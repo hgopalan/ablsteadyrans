@@ -202,6 +202,13 @@ TEST(InflowProfile, AnalyticKindsAndEquilibriumTurbulence)
     EXPECT_EQ(t, 300);
     EXPECT_NEAR(k, 0.16 / (0.5562 * 0.5562), tol(1e-14, 1e-6));
     EXPECT_NEAR(nut, 0.41 * 0.4 * 50.1, tol(1e-14, 1e-6));
+    // unbounded reproduces the form before bc.inflow_tke_length bit for bit: the log law's
+    // k is u*^2/Cmu0^2 exactly at every height (u* l / l_raw would round in about 1 in 10).
+    for (const amrex::Real zz : {amrex::Real(0.12), amrex::Real(0.29), amrex::Real(13.3), amrex::Real(1234.5)}) {
+        p.eval(zz, u, v, t, k, nut);
+        EXPECT_EQ(k, opt.ustar * opt.ustar / (opt.Cmu0 * opt.Cmu0)) << zz;
+        EXPECT_EQ(nut, opt.kappa * opt.ustar * (zz + opt.z0)) << zz;
+    }
     p.eval(850, u, v, t, k, nut);
     EXPECT_NEAR(t, 304.5, tol(1e-12, 1e-4));
     p.eval(-5, u, v, t, k, nut);   // below the ground: the ground value
@@ -352,6 +359,18 @@ TEST(InflowProfile, FileTableWithAndWithoutK)
     EXPECT_NEAR(nut, 0.41 * 300.1 * 0.5562 * 0.5, tol(1e-12, 1e-4) * nut);
     p.eval(900, u, v, t, k, nut);   // beyond the table: constant
     EXPECT_NEAR(u, 10, tol(1e-13, 1e-5));
+    {   // bc.inflow_tke_length with a k column has no effect: refused once the table is read
+        BoundaryInputs bk;
+        bk.face = {FaceType::inflow, FaceType::periodic, FaceType::surface_layer, FaceType::outflow, FaceType::periodic,
+                   FaceType::slip_wall};
+        bk.inflow = opt;
+        bk.theta_ref = tref;
+        bk.given = {"inflow_tke_length"};
+        const PCase pk = mesh_over(0, 1, flat);
+        EXPECT_THROW(BoundaryConditions(bk, pk.geom, pk.mesh, kNoCoriolis), std::runtime_error);
+        bk.given = {};
+        EXPECT_NO_THROW(BoundaryConditions(bk, pk.geom, pk.mesh, kNoCoriolis));
+    }
     {   // the closure's length: the table's k as given, nu_t = l Cmu0 sqrt(k)
         InflowProfileOptions oc = opt;
         oc.length = InflowProfileOptions::Length::closure;

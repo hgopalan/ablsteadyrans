@@ -72,7 +72,7 @@ Over terrain the initial field needs a Poisson solve to conserve mass. The log r
 
    ablsteady: initializer: 12 Poisson iterations (gmres_mlmg, reltol 1.000e-10), divergence 1.815778083e-01 before, 4.144210521e-12 after
 
-and the run ends after about 3080 iterations:
+and the run ends after about 3050 iterations:
 
 .. code-block:: text
 
@@ -85,7 +85,7 @@ ERF's check script compares the crest speed-up :math:`U_\mathrm{top}/U_\mathrm{u
 
 .. code-block:: bash
 
-   python3 ../../extern_erf/check_hill.py --physics steady_hill2d_lusgs_turb03077
+   python3 ../../extern_erf/check_hill.py --physics steady_hill2d_lusgs_turb03048
 
 .. code-block:: text
 

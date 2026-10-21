@@ -166,8 +166,9 @@ on two ranks (four for the 3-D hill).
      - 175
      - convergence only (below)
 
-The column, flat, 2-D hill and Askervein counts were re-measured with the closure's inflow length
-(``bc.inflow_tke_length = closure``, October 2026); the column and the flat case do not change. The other numbers on this page were measured when each feature was added; later changes to the
+The 2-D hill and Askervein counts were re-measured with the closure's inflow length
+(``bc.inflow_tke_length = closure``, October 2026); the column does not change, and the flat case keeps the length
+of before (its deck sets ``unbounded``, see :ref:`flat-inflow-length`). The other numbers on this page were measured when each feature was added; later changes to the
 code shift iteration counts by up to about 1 % (for example 3062 → 3077 on the 2-D hill).
 
 The crest speed-ups are those of the z-line Jacobi runs (16 sweeps, CFL cap 4). The LU-SGS runs reach the same
@@ -936,8 +937,8 @@ ablsteady runs the same setup (``Tests/Real_Terrain/Askervein_210``):
      - Hilltop A / AA
      - Upwind masts (d ≤ −480 m)
      - Lee masts (d > 300 m)
-   * - Phase 1 (``zjacobi``, 4 sweeps, cap 2, :math:`K` = 100)
-     - 538
+   * - Phase 1 (``zjacobi``, 4 sweeps, cap 2, :math:`K` = 100), ``bc.inflow_tke_length = unbounded``
+     - 538 (512 with the closure's length)
      - +3.0 % / +1.5 %
      - +0.9 to +1.5 %
      - −4.9 to −7.5 %
@@ -970,7 +971,22 @@ ablsteady runs the same setup (``Tests/Real_Terrain/Askervein_210``):
   it grew with height on ERF's power-law profile (about 9 m²/s² at 316 m, against 0.31 in ERF). The closure's
   capped length (``bc.inflow_tke_length = closure``, the default) gives 0.31; the upwind masts then agree within
   0.6 % and the hilltops within 2 %. With less turbulence coming in, the wake mixes less and the lee masts move
-  further (to −9.2 %).
+  further (to −9.2 %, 0.8 points inside the 10 % lee tolerance). Other contributions in the lee: ERF's own inflow
+  :math:`k` (about 20 % below ours at 18 m, above it from 38 to 169 m), the unsteadiness that ERF's time average
+  includes and a steady solve cannot, and the advection scheme.
+
+.. _flat-inflow-length:
+
+**Periodic decks and the inflow length.** ``Neutral_ABL_Flat`` and the precursor of the conventionally neutral
+Askervein deck use the inflow profile only as the first guess. With the closure's length the first guess is already
+in the closure's equilibrium, so the start-up transient, and with it the reference residuals of the drop criterion
+(:ref:`convergence-criteria`), is smaller. Their θ and :math:`w` residuals settle on a floor set by the slow
+entrainment at the capping inversion, 2.4–2.6 orders below the old reference; against the smaller reference that
+floor is less than the decks' two orders. The runs are then steady in their monitors (the flat case's mean speed between
+10.94 and 11.00 m/s over its last 2000 iterations) but never meet the drop. Both decks therefore keep ``bc.inflow_tke_length =
+unbounded``; for the precursor this also keeps the committed inflow table of the conventionally neutral deck
+reproducible. A drop measured from the start-up transient rewards a worse first guess; a criterion with a physical
+residual scale is left for later.
 
 Newton–Krylov (in development)
 ------------------------------

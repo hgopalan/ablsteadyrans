@@ -24,7 +24,9 @@
 //   1/l = 1/(kappa (z + z0)) + 1/l_max   (Closure_K.H geom_length);
 // unbounded takes l = kappa (z + z0), the wall-law length (the form before
 // it), for which the log law gives u*_l = u* and k = u*^2/Cmu0^2 at every
-// height. A file with a k column uses its k as given; l then sets nu_t only.
+// height. A file with a k column uses its k as given (bc.inflow_tke_length is
+// then refused: the fill, the damping and the first guess use k, not the
+// profile's nu_t, which eval reports for tests and tools).
 
 #include "Forcing.H"
 
@@ -99,15 +101,14 @@ public:
         const amrex::Real* rt;
         int rn;
 
-        //! The equilibrium length at height z: kappa (z + z0) capped
-        //! harmonically, l_raw / (1 + l_raw / l_max) (= geom_length of
-        //! Closure_K.H), written without a select so that unbounded
-        //! (inv_lmax = 0) is the same expression.
+        //! The cap's factor at height z, l / l_raw = 1 / (1 + l_raw / l_max)
+        //! with l_raw = kappa (z + z0) (geom_length of Closure_K.H), written
+        //! without a select: exactly 1 for unbounded (inv_lmax = 0), so the
+        //! old expressions times this factor are the old values bit for bit.
         AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
-        amrex::Real length (amrex::Real z) const noexcept
+        amrex::Real cap_factor (amrex::Real z) const noexcept
         {
-            const amrex::Real l_raw = kappa * (z + z0);
-            return l_raw / (amrex::Real(1) + l_raw * inv_lmax);
+            return amrex::Real(1) / (amrex::Real(1) + kappa * (z + z0) * inv_lmax);
         }
         //! The values at height z (>= 0) above the ground.
         AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
@@ -163,23 +164,23 @@ void InflowProfile::View::eval (amrex::Real z, amrex::Real& u, amrex::Real& v, a
         const amrex::Real s0 = std::sqrt(tu[m - 1] * tu[m - 1] + tv[m - 1] * tv[m - 1]);
         const amrex::Real s1 = std::sqrt(tu[m] * tu[m] + tv[m] * tv[m]);
         const amrex::Real dsdz = (n > 1) ? (s1 - s0) / (tz[m] - tz[m - 1]) : amrex::Real(0);
-        const amrex::Real l = length(z);
-        ustar_l = l * amrex::max(dsdz, amrex::Real(0));
+        const amrex::Real c = cap_factor(z);
+        ustar_l = kappa * (z + z0) * amrex::max(dsdz, amrex::Real(0)) * c;
         if (has_k) {
             k = table_interp(tz, tk, n, z);
             ustar_l = Cmu0 * std::sqrt(amrex::max(k, amrex::Real(0)));
         } else {
             k = ustar_l * ustar_l / (Cmu0 * Cmu0);
         }
-        nut = l * ustar_l;
+        nut = kappa * ustar_l * (z + z0) * c;   // l u*_l (diagnostic: the fill and the first guess take k)
         return;
     }
     amrex::Real S;
-    const amrex::Real l = length(z);
+    const amrex::Real c = cap_factor(z);
     if (kind == 0) {
         S = ustar / kappa * std::log((z + z0) / z0);
-        // dS/dz = u* / (kappa (z + z0)): u*_l = l dS/dz, u* for the unbounded length.
-        ustar_l = ustar * l / (kappa * (z + z0));
+        // dS/dz = u* / (kappa (z + z0)): u*_l = l dS/dz = u* l / l_raw.
+        ustar_l = ustar * c;
     } else {
         S = speed_ref * std::pow(z / z_ref, alpha);
         // dS/dz = alpha S / z diverges at the ground: below z0 the slope at
@@ -187,13 +188,13 @@ void InflowProfile::View::eval (amrex::Real z, amrex::Real& u, amrex::Real& v, a
         // max(z, z0) in arithmetic: a select would let the compiler evaluate
         // S/z at z = 0 (0/0, the invalid trap) although unused.
         const amrex::Real dsdz = alpha * S / (amrex::Real(0.5) * (z + z0 + std::abs(z - z0)));
-        ustar_l = l * dsdz;
+        ustar_l = kappa * (z + z0) * dsdz * c;
     }
     u = S * cosd;
     v = S * sind;
     theta = table_interp(rz, rt, rn, z);
     k = ustar_l * ustar_l / (Cmu0 * Cmu0);
-    nut = l * ustar_l;
+    nut = kappa * ustar_l * (z + z0) * c;   // l u*_l (diagnostic: the fill and the first guess take k)
 }
 
 } // namespace ablsteady

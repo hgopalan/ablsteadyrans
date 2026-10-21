@@ -88,7 +88,7 @@ The run converges in 175 iterations:
 Look at the result
 ------------------
 
-Open ``steady_askervein_plt00156`` in ParaView or VisIt and color a horizontal slice near the ground by ``u``. The
+Open ``steady_askervein_plt00175`` in ParaView or VisIt and color a horizontal slice near the ground by ``u``. The
 wind speeds up over the hilltop and slows in the lee.
 The variable ``z`` holds the height of each cell centre.
 

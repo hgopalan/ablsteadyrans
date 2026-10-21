@@ -964,6 +964,14 @@ if(ABLSTEADY_PRECISION STREQUAL "DOUBLE")
     set_tests_properties(rt_askervein_210_erf_lines PROPERTIES LABELS "nightly"
                          FIXTURES_REQUIRED askervein_210_phase2 FIXTURES_SETUP askervein_210_lines
                          ENVIRONMENT PYTHONDONTWRITEBYTECODE=1)
+    # The same lines against their own gold to 1e-4 (Gold/askervein_210_lines.csv):
+    # the ERF tolerances alone would pass the run with the inflow k of before.
+    add_test(NAME rt_askervein_210_lines_gold
+             COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/askervein_lines.py compare lines.csv
+                     ${ASKERVEIN_210_CASE}/Gold/askervein_210_lines.csv --rel_tol 1e-4
+             WORKING_DIRECTORY ${ASK210_DIR}/phase2)
+    set_tests_properties(rt_askervein_210_lines_gold PROPERTIES LABELS "nightly"
+                         FIXTURES_REQUIRED askervein_210_lines ENVIRONMENT PYTHONDONTWRITEBYTECODE=1)
     # RT-2.6.2: the level history (cells, stop reasons, iterations within
     # 10 %) and the stage switches against the gold sequence.
     add_test(NAME rt_askervein_210_level_history
