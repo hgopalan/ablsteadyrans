@@ -317,7 +317,11 @@ SimplecStage::SimplecStage (const SimplecOptions& opt, int sweeps, const Residua
     m_R.define(ba, dm);
     m_cf.define(ba, dm);
     m_cf.nu.setVal(0.0);
-    m_height = geom.ProbHi(2) - geom.ProbLo(2);
+    // The depth of the layers: the top level, not prob_hi z, which with
+    // mesh.stretch_ratio or mesh.zlevels_file sets only the computational
+    // spacing (the same top as the Rayleigh layer's, BoundaryConditions.cpp).
+    if (mesh.zlevels().empty()) { amrex::Abort("ablsteady: SimplecStage: the mesh has no levels (not built)"); }
+    m_height = mesh.zlevels().back() - mesh.zlevels().front();
     m_names = {"u", "v", "w", "p", "theta", "tke"};
     const JvpScales& s = in.jvp_scales;
     m_specs = {{"max_speed", s.velocity}, {"mean_tke", s.tke}};

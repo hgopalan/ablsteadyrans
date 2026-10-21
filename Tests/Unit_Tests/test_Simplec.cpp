@@ -276,6 +276,65 @@ TEST (Simplec, OneCorrectionRemovesTheDivergence)
 }
 
 // ---------------------------------------------------------------------------
+// The residual scales take H as the depth of the layers, the mesh's top level:
+// with mesh.stretch_ratio the layers end above prob_hi z (here 16 layers of
+// 20 m stretched by 1.08 end at 606.5 m over a prob_hi z of 500 m), and prob_hi
+// z then sets only the computational spacing. Before, H was prob_hi z, so the
+// norms of a stretched mesh were too small by 500/606.5 and the absolute
+// steady.residual_tol was met early.
+TEST (Simplec, ResidualScalesUseTheDepthOfTheLayers)
+{
+    PCase c;
+    c.in.mesh.n_cell = amrex::IntVect(8, 4, 16);
+    c.in.mesh.prob_hi = {1000, 800, 500};
+    c.in.mesh.is_periodic = {1, 1, 0};
+    c.in.mesh.max_grid_size = {4, 4};
+    c.in.mesh.dz0 = 20;
+    c.in.mesh.stretch_ratio = amrex::Real(1.08);
+    c.in.mesh.stretch_ratio_given = true;
+    c.make([] (double, double) { return 0.0; });
+    c.z.FillBoundary(c.geom.periodicity());
+    c.mesh.build_from_ground(c.in, c.geom, c.z);
+    ablsteady::trtest::smooth_vertical_ghost_nodes(c);
+    const double H = 20 * (std::pow(1.08, 16) - 1) / 0.08;
+    ASSERT_NEAR(static_cast<double>(c.mesh.zlevels().back()), H, tol(1e-9, 1e-3) * H);
+    Laminar lam;
+    lam.make(c, 1.0, FaceType::slip_wall, FaceType::slip_wall);
+    ablsteady::State q;
+    define_state(q, c);
+    fill_random(q.u, 5, 10, 21, c);
+    fill_random(q.v, -2, 2, 22, c);
+    fill_random(q.w, -0.5, 0.5, 23, c);
+    fill_random(q.p, -5, 5, 24, c);
+    fill_random(q.theta, 299, 301, 25, c);
+    fill_random(q.tke, 0.5, 1.5, 26, c);
+    lam.bc->fill_ghosts(q, nullptr, lam.in.buoyancy);
+    amrex::MultiFab dtau(c.ba, c.dm, 1, 0);
+    fill_random(dtau, 20, 60, 27, c);
+    ablsteady::SimplecOptions opt;
+    ablsteady::SimplecStage stage(opt, 2, lam.in, nullptr, lam.popt, c.mesh, c.geom, c.z, 0, c.ba, c.dm);
+    ablsteady::State q2;
+    define_state(q2, c);
+    copy_state(q2, q);
+    stage.init(q2);
+    stage.iterate(q2, dtau);
+    ablsteady::State q3;
+    define_state(q3, c);
+    copy_state(q3, q);
+    lam.bc->fill_ghosts(q3, nullptr, lam.in.buoyancy);
+    ablsteady::ResidualFields R3;
+    ablsteady::residual(q3, lam.in, c.mesh, c.geom, R3);
+    const double U = lam.in.jvp_scales.velocity, ts = lam.in.jvp_scales.theta, ks = lam.in.jvp_scales.tke;
+    const amrex::MultiFab* fields[6] = {&R3.u, &R3.v, &R3.w, &R3.p, &R3.theta, &R3.tke};
+    const double scale[6] = {U * U / H, U * U / H, U * U / H, U / H, U * ts / H, U * ks / H};
+    for (int n = 0; n < 6; ++n) {
+        const double rms = std::sqrt(amrex::MultiFab::Dot(*fields[n], 0, 1, 0) / double(fields[n]->boxArray().numPts()));
+        ASSERT_GT(rms, 0) << n;
+        EXPECT_NEAR(stage.residual_norms()[n], rms / scale[n], tol(1e-12, 1e-4) * (rms / scale[n])) << n;
+    }
+}
+
+// ---------------------------------------------------------------------------
 // UT-1.15.2. Laminar Poiseuille flow between no-slip walls (the ground and
 // the top), driven by the constant force F with viscosity nu on a uniform
 // mesh: the discrete steady solution with the odd mirror of the walls is the
