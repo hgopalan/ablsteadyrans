@@ -68,6 +68,7 @@ forcing.vg              = -7.380863
 turb.tke_floor = 1.e-6
 
 steady.stage                   = simplec
+steady.sweep                   = zjacobi   # Phase 1 sweep (the CPU default is lusgs since sub-phase 2.6)
 steady.cfl0                    = 1.
 steady.cfl_max                 = 2.
 steady.zline_sweeps            = 4

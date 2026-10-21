@@ -77,10 +77,22 @@ struct SteadyOptions
     std::vector<std::string> given;      //!< the steady.* keys given (for the application's has-no-effect checks, 1.15)
 };
 
+//! The application's default steady.sweep (sub-phase 2.6, the Phase 2
+//! checkpoint): lusgs on a CPU build (PT-2.6.1: fewer iterations at a
+//! higher CFL cap than zjacobi); zjacobi on a GPU build until PR-32 measures
+//! the sweeps on H100. The SteadyOptions member keeps zjacobi, so options
+//! built in code are unchanged; read_steady_options applies this default.
+SweepKind default_sweep () noexcept;
+//! The application's default steady.cfl_max for a sweep: 8 for lusgs (the
+//! cap with the fewest iterations in PT-2.6.1), 10 for zjacobi (Phase 1's).
+amrex::Real default_cfl_max (SweepKind s) noexcept;
+
 //! The line solver options of opt (steady.sweep and steady.line_*).
 LineSweepOptions line_sweep_options (const SteadyOptions& opt);
 
 //! Read steady.*; aborts, naming the key, on a bad value or a repeated key.
+//! steady.sweep and steady.cfl_max, when not given, take default_sweep()
+//! and default_cfl_max() of that sweep.
 SteadyOptions read_steady_options ();
 //! Range checks, each message naming steady.<key>.
 std::vector<std::string> check_steady_options (const SteadyOptions& opt);

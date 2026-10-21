@@ -94,6 +94,20 @@ std::vector<std::string> check_steady_options (const SteadyOptions& opt)
     return err;
 }
 
+SweepKind default_sweep () noexcept
+{
+#ifdef AMREX_USE_GPU
+    return SweepKind::zjacobi;
+#else
+    return SweepKind::lusgs;
+#endif
+}
+
+amrex::Real default_cfl_max (SweepKind s) noexcept
+{
+    return s == SweepKind::lusgs ? amrex::Real(8) : amrex::Real(10);
+}
+
 LineSweepOptions line_sweep_options (const SteadyOptions& opt)
 {
     LineSweepOptions o(opt.sweep);
@@ -136,11 +150,13 @@ SteadyOptions read_steady_options ()
     pp.query("nodes", opt.nodes);
     pp.query("zline_sweeps", opt.zline_sweeps);
     std::string sweep;
+    opt.sweep = default_sweep();
     if (pp.query("sweep", sweep)) {
         if (sweep == "zjacobi") { opt.sweep = SweepKind::zjacobi; }
         else if (sweep == "lusgs") { opt.sweep = SweepKind::lusgs; }
         else { amrex::Abort("ablsteady: steady.sweep = " + sweep + ": must be zjacobi or lusgs"); }
     }
+    if (!pp.contains("cfl_max")) { opt.cfl_max = default_cfl_max(opt.sweep); }
     std::string word;
     if (pp.query("line_ghosts", word)) {
         if (word == "lagged") { opt.line_ghosts = LineGhosts::lagged; }
