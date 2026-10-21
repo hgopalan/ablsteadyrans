@@ -408,8 +408,7 @@ Current tests
    * - ``rt_askervein_mesh``
      - RT-1.4.1 and RT-1.4.2: ERF's Askervein mesh coarsened to 60 × 60 × 18 (20 m × 1.08 layers, BTF, ERF's terrain
        file): statistics of ``z`` and ``detJ`` and the quality report against ``Tests/Discretization/Terrain_Mesh/Gold/askervein_mesh.json``.
-       Double-precision builds only: the statistics use ERF's plotfile reader, which reads double-precision
-       plotfiles.
+       Double-precision builds only: the statistics are compared at double-precision tolerances.
    * - ``rt_steep_ridge_quality``
      - RT-1.4.2: a 600 m ridge under STF: the report against its gold, including both warnings (STF capped, top
        not flat). Double-precision builds only.

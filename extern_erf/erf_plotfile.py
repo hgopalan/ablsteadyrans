@@ -4,8 +4,9 @@ Standard library only, so the regression check scripts run on a bare CI
 runner. Returns planar (x-y) averages of cell-centred fields as a function
 of the vertical index, plus the cell-centre heights of a flat mesh.
 
-Limitations: one AMR level, double precision, native byte order as written
-in the FAB headers (little endian on every platform ERF is tested on).
+Limitations: one AMR level; IEEE double or float data in plain little- or
+big-endian byte order, as written in the FAB headers (other descriptors are
+refused).
 """
 
 import array
@@ -80,7 +81,10 @@ def _read_fab(path, offset, ncomp):
         # (4 3 2 1) a little-endian float; (1 2 ... n) is big endian.
         order = re.search(r"\(\d+, \(([\d ]+)\)\)\)\(", htxt).group(1).split()
         nbytes = len(order)
-        little = order[0] == str(nbytes)
+        little = order == [str(b) for b in range(nbytes, 0, -1)]
+        if nbytes not in (4, 8) or not (little or order == [str(b) for b in range(1, nbytes + 1)]):
+            raise ValueError("%s: FAB byte order (%s) is not a plain little- or big-endian float or double"
+                             % (path, " ".join(order)))
         lo, hi = re.findall(r"\(([-\d,]+)\)", htxt.split(")))")[1])[:2]
         lo = [int(v) for v in lo.split(",")]
         hi = [int(v) for v in hi.split(",")]

@@ -414,8 +414,7 @@ ablsteady_add_test(NAME abort_restart_overwrite NP 1 LABELS "regression;smoke" R
 set(CHECK_MESH ${Python3_EXECUTABLE} ${SUPPORT}/check_mesh.py)
 # The mesh golds are double-precision values: a single-precision build
 # compares the plotfile at a single-precision tolerance and skips the
-# statistics checks, whose reader (ERF's extern_erf/erf_plotfile.py) handles
-# double-precision plotfiles only.
+# statistics checks, whose golds and tolerances are double-precision ones.
 if(ABLSTEADY_PRECISION STREQUAL "SINGLE")
     set(FCOMPARE_RTOL 1e-5)
 else()
@@ -589,8 +588,8 @@ if(ABLSTEADY_PRECISION STREQUAL "DOUBLE")
                                terrain.file=${BUMP_CASE}/terrain_bump_fwt.txt ${ABLSTEADY_TEST_AMREX_FLAGS})
     # RT-1.11.2: the Tucker wall distance on ERF's Neutral_Hill_2D mesh: ERF's
     # wall-distance checks (Tests/Discretization/Wall_Distance/check_walldist.py), and the field against
-    # Gold/walldist_hill2d_plt00000. ERF's reader takes double-precision
-    # plotfiles only.
+    # Gold/walldist_hill2d_plt00000, at double-precision tolerances (double
+    # builds only).
     set(WALLDIST_DIR ${CMAKE_CURRENT_BINARY_DIR}/run/rt_walldist_hill2d)
     ablsteady_add_test(NAME rt_walldist_hill2d NP 2 LABELS "regression;smoke" RUN_DIR ${WALLDIST_DIR}
                        FIXTURES_SETUP walldist_hill2d
