@@ -27,7 +27,9 @@ cap on sloping ground just enough to keep the operator definite.
 Both have the label `regression`.
 
 ## Expected Results
-- With the margin: steady in 1895 iterations (the tests stop at 3500) (margin 2: 2035; 8: 1940; cap off: 2881).
+- With the margin: steady in 1765 iterations (the tests stop at 3500); 1652 before the residual scales used the
+  depth of the layers, 1895 before the inflow k took the closure's length (#44). Measured before #44 (not
+  re-measured): margin 2: 2035; 8: 1940; cap off: 2881.
   Before the Rayleigh layer ended at the mesh's top level (the layers end at 2.9 km, above `mesh.prob_hi` z): 2568
   (margin 2: 2714; 8: 3111; cap off: 3983).
 - Without it: the residual ratio stays between 0.1 and 0.7 after the transient and the CFL keeps being cut.

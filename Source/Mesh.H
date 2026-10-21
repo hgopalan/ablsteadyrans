@@ -110,6 +110,15 @@ private:
 amrex::Real free_stream_divergence (const Mesh& mesh, const amrex::Geometry& geom,
                                     const amrex::MultiFab& z_phys_nd, amrex::Real U, amrex::Real V);
 
+//! The height H of the residual scales (U^2/H, U/H, ...): the depth of the
+//! layers, zlevels().back() - zlevels().front(). With mesh.stretch_ratio or
+//! mesh.zlevels_file the top level is not prob_hi z, which then sets only the
+//! computational spacing. Where the two agree to 1000 machine epsilons (a uniform
+//! mesh, whose top nz dz can differ from prob_hi z in the last bits) it is
+//! prob_hi z - prob_lo z, so uniform meshes keep their scales bit for bit.
+//! Aborts on a mesh without levels.
+amrex::Real residual_scale_height (const Mesh& mesh, const amrex::Geometry& geom);
+
 } // namespace ablsteady
 
 #endif

@@ -553,7 +553,9 @@ and 0.7 and the run was stopped.
 
 The steep-ridge row was re-measured after the Rayleigh layer was made to end at the mesh's top level (the ridge's
 stretched layers end at 2.9 km, above ``mesh.prob_hi`` z); before, it read 3983, not steady, stalled, 2714, 2568
-and 3111.
+and 3111. The table was measured before #44 (the inflow k) and before the residual scales used the depth of the
+layers. Since then the default-margin run takes 1765 iterations (1652 with #44 alone); the other columns are not
+re-measured.
 
 *Findings.*
 
@@ -938,13 +940,13 @@ ablsteady runs the same setup (``Tests/Real_Terrain/Askervein_210``):
      - Upwind masts (d ≤ −480 m)
      - Lee masts (d > 300 m)
    * - Phase 1 (``zjacobi``, 4 sweeps, cap 2, :math:`K` = 100), ``bc.inflow_tke_length = unbounded``
-     - 538 (512 with the closure's length)
+     - 565 (533 with the closure's length)
      - +3.0 % / +1.5 %
      - +0.9 to +1.5 %
      - −4.9 to −7.5 %
    * - Phase 2 (``lusgs`` and its default cap 8, the default :math:`K` = 5, ``steady.sequencing = 1`` on 2 levels),
        ``bc.inflow_tke_length = unbounded``
-     - 96 (42)
+     - 97 (42)
      - +3.0 % / +1.5 %
      - +0.9 to +1.5 %
      - −4.9 to −7.5 %

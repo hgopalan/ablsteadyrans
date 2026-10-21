@@ -22,8 +22,9 @@ diffusion is stiff. The cap bounds that ratio (the VNN number) and leaves the st
 
 ## Expected Results
 - Both runs reach the verdict; the stage banner says `w_vnn_cap off` and `w_vnn_cap 16 (slope margin 4)`.
-- The capped run needs at most a fifth of the iterations. Measured: 6519 without, 224 with (29 times fewer;
-  6487 and 687 before the Rayleigh layer ended at the mesh's top level, 5.1 km here, instead of `mesh.prob_hi` z).
+- The capped run needs at most a fifth of the iterations. Measured: 7038 without, 322 with (22 times fewer;
+  7038 and 299 before the residual scales used the depth of the layers, 5.1 km here, instead of `mesh.prob_hi` z;
+  6487 and 687 before the Rayleigh layer ended at the mesh's top level).
 - u, v and w of the two steady states within 2e-4 m/s. Measured: 8.5e-9 (u), 5.8e-9 (w), 3e-15 (v) (before the
   Rayleigh change: 5.6e-5 and 3.8e-5).
 - A capped run of 40 iterations continued to 80 from its checkpoint equals 80 straight in every field, bit for bit.

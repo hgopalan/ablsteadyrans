@@ -451,6 +451,24 @@ satisfy
 - :math:`K`: ``steady.residual_ref_iterations`` (5). The reference is the peak over the first :math:`K` iterations,
   so the drop does not depend on how low the first iteration happened to start.
 
+The scaled norm is the root mean square of the equation's residual over the cells (faces for the velocities),
+divided by a fixed scale:
+
+.. math::
+
+   R_q = \frac{1}{s_q}\Bigl(\frac{1}{N_q}\sum_i r_{q,i}^2\Bigr)^{1/2}, \qquad
+   s_{u,v,w} = \frac{U^2}{H}, \quad s_p = \frac{U}{H}, \quad s_\theta = \frac{U\,\theta_s}{H}, \quad
+   s_k = \frac{U\,k_s}{H} .
+
+- :math:`r_{q,i}`: the residual of equation :math:`q` at cell or face :math:`i`; :math:`N_q`: their number.
+- :math:`U` = 10 m/s, :math:`\theta_s` = 10 K, :math:`k_s` = 0.1 m²/s²: fixed scales, not inputs.
+- :math:`H`: the depth of the layers, from the ground level to the top level. On a uniform mesh this is
+  ``mesh.prob_hi`` z; with ``mesh.stretch_ratio`` or ``mesh.zlevels_file`` it is where the layers end, which can be
+  well above ``mesh.prob_hi`` z (749 m against 440 m on Askervein). Before this was fixed, :math:`H` was
+  ``mesh.prob_hi`` z on every mesh, so on a stretched mesh the norms were smaller by that ratio.
+- :math:`H` is a property of the mesh, not of the flow. The same flow on a taller mesh has larger norms, so
+  :math:`\tau_R` is a tighter test there. The drop :math:`N` does not depend on :math:`H`.
+
 **Monitors.** Quantities of interest, such as the hilltop speed-up or :math:`u_*`, must also settle. Each monitor
 :math:`M_j` must stay within :math:`T_j = \tau_M\max(|M_j|, s_j)` over the last :math:`W` iterations, and its
 extrapolated limit (Aitken's method) must lie within the same distance:
@@ -474,6 +492,10 @@ Stage switching, restart and reproducibility
   ``steady.switch_residual``, and back when the residual grows by ``steady.switch_back_growth`` over a window.
 - **Restart.** The driver records every iteration (stage, CFL, residuals, monitors, wall time, allocation units) in
   the checkpoint. A restarted run reproduces the uninterrupted run bit for bit on the same ranks and box layout.
+  The checkpoint also records :math:`H`. A checkpoint written before it did (driver history format 1 or 2) had
+  its norms scaled with ``mesh.prob_hi`` z; on a stretched mesh the restart multiplies the stored reference and
+  residuals by :math:`H` / ``prob_hi`` z and says so in the log. That run then continues in the new scale, and so
+  is not bit for bit the run it was.
 - **Reproducibility.** Norms and monitors are reduced over all ranks, so every rank reaches the same verdict at the
   same iteration. A run on a different number of ranks agrees with the original to round-off, not bit for bit.
   ``steady.line_order = diagonal`` reproduces ``sequential`` bit for bit.
