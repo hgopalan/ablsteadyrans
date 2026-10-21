@@ -86,6 +86,10 @@ void run ()
                 err.emplace_back("steady.newton_preconditioner has no effect until the run can switch to Newton (sub-phase 3.5)");
             }
         }
+        // turb.frozen_switch freezes the k floor in the Newton stage (Smoothness.H).
+        if (amrex::ParmParse("turb").contains("frozen_switch")) {
+            err.emplace_back("turb.frozen_switch has no effect until the run can switch to Newton (sub-phase 3.5)");
+        }
     } else {
         // Keys of the stage alone have no effect without it.
         for (const InputEntry& e : parmparse_entries()) {

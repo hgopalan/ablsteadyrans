@@ -3,7 +3,9 @@
 #include "CVFluxes.H"
 #include "Stencil_K.H"
 
+#include <AMReX_ParallelDescriptor.H>
 #include <AMReX_ParmParse.H>
+#include <AMReX_Reduce.H>
 #include <AMReX_VisMF.H>
 
 #include <algorithm>
@@ -17,7 +19,12 @@ namespace {
 
 const char* const kKeys[] = {"Cmu0", "Cb", "Rt_crit", "Rt_min", "max_geom_lscale", "tke_floor", "sigma_k",
                              "nu_molecular", "alpha_molecular", "kappa", "nut_relax", "frozen_switch", "face_mean",
-                             "wall_distance"};
+                             "wall_distance", "ri_gate"};
+
+//! The bits of encode() that FreezeScope holds.
+constexpr int kFloorBit = 16;
+constexpr int kAllBits = 31;
+int scope_mask (FreezeScope scope) { return scope == FreezeScope::floor ? kFloorBit : kAllBits; }
 
 //! Encode and decode the switches of one point.
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE int encode (const Switches& s) noexcept
@@ -36,6 +43,49 @@ AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE Switches decode (int code) noexcept
 
 //! The valid box grown by one cell in x and y only (the closure's cells).
 amrex::Box lateral_grown (const amrex::Box& vb) { return amrex::grow(vb, amrex::IntVect(1, 1, 0)); }
+
+//! The decisions at the state, encoded, on the closure's cells: out(k, N2).
+void live_decisions (const amrex::MultiFab& tke, const amrex::MultiFab& N2, const amrex::MultiFab& dist, amrex::Real z0,
+                     const ClosureConstants& c, amrex::iMultiFab& out)
+{
+    for (amrex::MFIter mfi(out, false); mfi.isValid(); ++mfi) {
+        const amrex::Box bx = lateral_grown(mfi.validbox());
+        const auto o = out.array(mfi);
+        const auto kk = tke.const_array(mfi);
+        const auto n2 = N2.const_array(mfi);
+        const auto d = dist.const_array(mfi);
+        amrex::ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
+        {
+            const amrex::Real l_g = closure::geom_length(c.kappa * (d(i, j, k) + z0), c.l_g_max);
+            o(i, j, k) = encode(closure::switches_for(kk(i, j, k), n2(i, j, k), l_g, c));
+        });
+    }
+}
+
+//! The decisions with the floor held (FreezeScope::floor): a cell frozen as
+//! floored is decided at k = floor, so its branch and both Rt smoothings are
+//! those of the k the point kernel uses; any other cell from its own k,
+//! which floors it if k has fallen to the floor or below (no k <= 0 reaches
+//! the kernel).
+void floor_held_decisions (const amrex::MultiFab& tke, const amrex::MultiFab& N2, const amrex::MultiFab& dist,
+                           amrex::Real z0, const ClosureConstants& c, const amrex::iMultiFab& frozen,
+                           amrex::iMultiFab& out)
+{
+    for (amrex::MFIter mfi(out, false); mfi.isValid(); ++mfi) {
+        const amrex::Box bx = lateral_grown(mfi.validbox());
+        const auto o = out.array(mfi);
+        const auto sw = frozen.const_array(mfi);
+        const auto kk = tke.const_array(mfi);
+        const auto n2 = N2.const_array(mfi);
+        const auto d = dist.const_array(mfi);
+        amrex::ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
+        {
+            const amrex::Real l_g = closure::geom_length(c.kappa * (d(i, j, k) + z0), c.l_g_max);
+            const amrex::Real k_in = ((sw(i, j, k) & kFloorBit) != 0) ? c.tke_floor : kk(i, j, k);
+            o(i, j, k) = encode(closure::switches_for(k_in, n2(i, j, k), l_g, c));
+        });
+    }
+}
 
 //! The vertical ghost layers of a cell field take the adjacent cell's values
 //! (zero gradient), over the whole lateral extent of each box.
@@ -96,6 +146,8 @@ std::vector<std::string> check_closure_options (const ClosureOptions& opt)
     bad(opt.alpha_molecular, "alpha_molecular", "finite and >= 0 (m^2/s)", [&] { return opt.alpha_molecular >= 0; });
     bad(opt.kappa, "kappa", "finite and > 0", [&] { return opt.kappa > 0; });
     bad(opt.nut_relax, "nut_relax", "finite, > 0 and <= 1", [&] { return opt.nut_relax > 0 && opt.nut_relax <= 1; });
+    bad(opt.ri_gate, "ri_gate", "0 (off) or finite, >= 1e-6 and <= 1",
+        [&] { return opt.ri_gate == 0 || (opt.ri_gate >= amrex::Real(1e-6) && opt.ri_gate <= 1); });
     return err;
 }
 
@@ -120,7 +172,8 @@ ClosureOptions read_closure_options ()
     pp.query("alpha_molecular", opt.alpha_molecular);
     pp.query("kappa", opt.kappa);
     pp.query("nut_relax", opt.nut_relax);
-    int frozen = 0;
+    pp.query("ri_gate", opt.ri_gate);
+    int frozen = opt.frozen_switch ? 1 : 0;
     pp.query("frozen_switch", frozen);
     if (frozen != 0 && frozen != 1) { amrex::Abort("ablsteady: turb.frozen_switch must be 0 or 1"); }
     opt.frozen_switch = (frozen == 1);
@@ -234,7 +287,33 @@ void stratification_and_strain (const State& q, const BuoyancyOptions& buoyancy,
     copy_vertical_ghosts(S2);
 }
 
+void gate_stratification (amrex::MultiFab& N2, const amrex::MultiFab& S2, amrex::Real ri0)
+{
+    if (std::isnan(ri0) || !(ri0 > 0 && std::isfinite(ri0))) {
+        amrex::Abort("ablsteady: gate_stratification: ri0 = " + std::to_string(ri0) + " must be finite and > 0");
+    }
+    const amrex::Real r2 = ri0 * ri0;
+    // N2^2 / (N2^2 + r2 S2^2) with a denominator floor: 0/tiny = 0 where both vanish.
+    const amrex::Real tiny = std::numeric_limits<amrex::Real>::min();
+    for (amrex::MFIter mfi(N2, false); mfi.isValid(); ++mfi) {
+        const auto n2 = N2.array(mfi);
+        const auto s2 = S2.const_array(mfi);
+        amrex::ParallelFor(mfi.fabbox(), [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
+        {
+            const amrex::Real a = n2(i, j, k) * n2(i, j, k), b = s2(i, j, k) * s2(i, j, k);
+            n2(i, j, k) *= a / (a + r2 * b + tiny);
+        });
+    }
+}
+
 Closure::Closure (const ClosureOptions& opt) : m_opt(checked(opt)), m_c(closure_constants(m_opt)) {}
+
+void Closure::stratification (const State& q, const BuoyancyOptions& buoyancy, const amrex::Geometry& geom,
+                              amrex::MultiFab& N2, amrex::MultiFab& S2) const
+{
+    stratification_and_strain(q, buoyancy, geom, N2, S2);
+    if (m_opt.ri_gate > 0) { gate_stratification(N2, S2, m_opt.ri_gate); }
+}
 
 void Closure::evaluate (const State& q, const amrex::MultiFab& dist, amrex::Real z0, const BuoyancyOptions& buoyancy,
                         const Mesh& mesh, const amrex::Geometry& geom, ClosureFields& f) const
@@ -260,32 +339,42 @@ void Closure::evaluate (const State& q, const amrex::MultiFab& dist, amrex::Real
         amrex::Abort(std::string("ablsteady: ") + op + ": the frozen switches are not on this layout");
     }
 
-    amrex::MultiFab N2, S2;
+    // N^2 as the theta equation sees it (P_b, the heat flux's buoyancy sink)
+    // and, gated, as the length and Rt see it (the same field without the gate).
+    amrex::MultiFab N2, S2, N2g;
     stratification_and_strain(q, buoyancy, geom, N2, S2);
+    if (m_opt.ri_gate > 0) {
+        N2g.define(N2.boxArray(), N2.DistributionMap(), 1, N2.nGrow());
+        amrex::MultiFab::Copy(N2g, N2, 0, 0, 1, N2.nGrow());
+        gate_stratification(N2g, S2, m_opt.ri_gate);
+    }
+    const amrex::MultiFab& N2c = (m_opt.ri_gate > 0) ? N2g : N2;
+    amrex::iMultiFab dec;
+    decide(q, N2c, dist, z0, dec);
     const ClosureConstants c = m_c;
     const amrex::Real nu_mol = m_opt.nu_molecular, alpha_mol = m_opt.alpha_molecular, inv_sigma = 1 / m_opt.sigma_k;
     const bool has = has_history();
     const amrex::Real w = has ? m_opt.nut_relax : amrex::Real(1);
-    const bool use_frozen = frozen();
     for (amrex::MFIter mfi(f.nu, false); mfi.isValid(); ++mfi) {
         const amrex::Box bx = lateral_grown(mfi.validbox());
         const amrex::Box vb = mfi.validbox();
         const auto kk = q.tke.const_array(mfi);
-        const auto n2 = N2.const_array(mfi);
+        const auto n2 = N2c.const_array(mfi);
+        const auto n2r = N2.const_array(mfi);
         const auto s2 = S2.const_array(mfi);
         const auto d = dist.const_array(mfi);
         // A valid, finite array in every case: the history when there is one,
         // else k itself with the weight 1 - w = 0 (0 times a finite value is
         // 0 exactly; a fresh field could hold signalling NaNs).
         const auto prev = has ? m_nut_prev.const_array(mfi) : q.tke.const_array(mfi);
-        const auto sw = use_frozen ? m_switches.const_array(mfi) : amrex::Array4<int const>{};
+        const auto dc = dec.const_array(mfi);
         const auto nu = f.nu.array(mfi), gth = f.gamma_theta.array(mfi), gk = f.gamma_tke.array(mfi), nut = f.nut.array(mfi);
         const auto Lf = f.length.array(mfi), Rtf = f.Rt.array(mfi), Psf = f.Ps.array(mfi), Pbf = f.Pb.array(mfi),
                    epsf = f.eps.array(mfi), dsf = f.dSdk.array(mfi), dse = f.dSdk_exact.array(mfi), dnf = f.dnutdk.array(mfi);
         amrex::ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
         {
             const amrex::Real l_g = closure::geom_length(c.kappa * (d(i, j, k) + z0), c.l_g_max);
-            const Switches s = use_frozen ? decode(sw(i, j, k)) : closure::switches_for(kk(i, j, k), n2(i, j, k), l_g, c);
+            const Switches s = decode(dc(i, j, k));
             const auto p = closure::closure_point<amrex::Real>(kk(i, j, k), n2(i, j, k), s2(i, j, k), l_g, c, s);
             const amrex::Real ratio = p.cmu_prime / p.cmu;   // 1/Pr_t(Rt)
             const amrex::Real nt = w * p.nut + (1 - w) * prev(i, j, k);
@@ -294,8 +383,9 @@ void Closure::evaluate (const State& q, const amrex::MultiFab& dist, amrex::Real
             gth(i, j, k) = alpha_mol + ratio * nt;
             gk(i, j, k) = nu_mol + nt * inv_sigma;
             if (vb.contains(amrex::IntVect(i, j, k))) {
-                // The sources with the relaxed nu_t: P_s = nu_t S^2, P_b = -nu_t' N^2.
-                const amrex::Real Ps = nt * s2(i, j, k), Pb = -ratio * nt * n2(i, j, k);
+                // The sources with the relaxed nu_t: P_s = nu_t S^2, P_b = -nu_t' N^2
+                // (N^2 not gated: the sink of the heat flux nu_t' dtheta/dz).
+                const amrex::Real Ps = nt * s2(i, j, k), Pb = -ratio * nt * n2r(i, j, k);
                 Lf(i, j, k) = p.L;
                 Rtf(i, j, k) = p.Rt;
                 Psf(i, j, k) = Ps;
@@ -309,7 +399,7 @@ void Closure::evaluate (const State& q, const amrex::MultiFab& dist, amrex::Real
                 const auto pd = closure::closure_point<Dual>(Dual{kk(i, j, k), 1}, n2(i, j, k), s2(i, j, k), l_g, c, s);
                 const amrex::Real dnut = w * pd.nut.d;
                 dnf(i, j, k) = dnut;
-                dse(i, j, k) = dnut * s2(i, j, k) - ratio * dnut * n2(i, j, k) - pd.eps.d;
+                dse(i, j, k) = dnut * s2(i, j, k) - ratio * dnut * n2r(i, j, k) - pd.eps.d;
             }
         });
     }
@@ -358,27 +448,79 @@ void Closure::read_checkpoint (const std::string& dir, const amrex::BoxArray& ba
 }
 
 void Closure::freeze_switches (const State& q, const amrex::MultiFab& dist, amrex::Real z0, const BuoyancyOptions& buoyancy,
-                               const Mesh& mesh, const amrex::Geometry& geom)
+                               const Mesh& mesh, const amrex::Geometry& geom, FreezeScope scope)
 {
     check_operator_field("Closure::freeze_switches", "dist", dist, Loc::cell, mesh, 1);
     amrex::MultiFab N2, S2;
-    stratification_and_strain(q, buoyancy, geom, N2, S2);
+    stratification(q, buoyancy, geom, N2, S2);
+    m_scope = scope;
     m_switches.clear();
     m_switches.define(q.p.boxArray(), q.p.DistributionMap(), 1, 1);
     m_switches.setVal(0);
+    live_decisions(q.tke, N2, dist, z0, m_c, m_switches);
+}
+
+void Closure::decide (const State& q, const amrex::MultiFab& N2, const amrex::MultiFab& dist, amrex::Real z0,
+                      amrex::iMultiFab& out) const
+{
+    out.define(q.p.boxArray(), q.p.DistributionMap(), 1, 1);
+    out.setVal(0);
+    if (!frozen()) {
+        live_decisions(q.tke, N2, dist, z0, m_c, out);
+    } else if (m_scope == FreezeScope::all) {
+        amrex::iMultiFab::Copy(out, m_switches, 0, 0, 1, 1);
+    } else {
+        floor_held_decisions(q.tke, N2, dist, z0, m_c, m_switches, out);
+    }
+}
+
+amrex::Long Closure::changed_switches (const State& q, const amrex::MultiFab& dist, amrex::Real z0,
+                                       const BuoyancyOptions& buoyancy, const Mesh& mesh, const amrex::Geometry& geom) const
+{
+    const char* op = "Closure::changed_switches";
+    if (!frozen()) { amrex::Abort(std::string("ablsteady: ") + op + ": the switches are not frozen"); }
+    check_operator_field(op, "dist", dist, Loc::cell, mesh, 1);
+    if (m_switches.boxArray() != q.p.boxArray() || m_switches.DistributionMap() != q.p.DistributionMap()) {
+        amrex::Abort(std::string("ablsteady: ") + op + ": the frozen switches are not on this layout");
+    }
+    amrex::MultiFab N2, S2;
+    stratification(q, buoyancy, geom, N2, S2);
     const ClosureConstants c = m_c;
+    const int fm = scope_mask(m_scope);
+    amrex::ReduceOps<amrex::ReduceOpSum> rop;
+    amrex::ReduceData<amrex::Long> data(rop);
     for (amrex::MFIter mfi(m_switches, false); mfi.isValid(); ++mfi) {
-        const amrex::Box bx = lateral_grown(mfi.validbox());
-        const auto sw = m_switches.array(mfi);
+        const amrex::Box vb = mfi.validbox();
+        const auto sw = m_switches.const_array(mfi);
         const auto kk = q.tke.const_array(mfi);
         const auto n2 = N2.const_array(mfi);
         const auto d = dist.const_array(mfi);
-        amrex::ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
+        rop.eval(vb, data, [=] AMREX_GPU_DEVICE (int i, int j, int k) -> amrex::GpuTuple<amrex::Long>
         {
             const amrex::Real l_g = closure::geom_length(c.kappa * (d(i, j, k) + z0), c.l_g_max);
-            sw(i, j, k) = encode(closure::switches_for(kk(i, j, k), n2(i, j, k), l_g, c));
+            const int now = encode(closure::switches_for(kk(i, j, k), n2(i, j, k), l_g, c));
+            return {(now & fm) != (sw(i, j, k) & fm) ? amrex::Long(1) : amrex::Long(0)};
         });
     }
+    amrex::Long n = amrex::get<0>(data.value(rop));
+    amrex::ParallelDescriptor::ReduceLongSum(n);
+    return n;
+}
+
+void Closure::restore_switches (const amrex::iMultiFab& src, FreezeScope scope, const amrex::BoxArray& ba,
+                                const amrex::DistributionMapping& dm, const amrex::Geometry& geom)
+{
+    if (src.nComp() != 1 || src.nGrow() < 1 || amrex::convert(src.boxArray(), amrex::IntVect(0)).minimalBox() != geom.Domain()
+        || !src.boxArray().ixType().cellCentered()) {
+        amrex::Abort("ablsteady: Closure::restore_switches: the switches must be one cell-centred component with one ghost "
+                     "cell on this domain");
+    }
+    m_scope = scope;
+    m_switches.clear();
+    m_switches.define(ba, dm, 1, 1);
+    // Ghosts first, valid data last (Closure::read_checkpoint).
+    m_switches.ParallelCopy(src, 0, 0, 1, amrex::IntVect(1), amrex::IntVect(1), geom.periodicity());
+    m_switches.ParallelCopy(src, 0, 0, 1, amrex::IntVect(0), amrex::IntVect(0), geom.periodicity());
 }
 
 } // namespace ablsteady

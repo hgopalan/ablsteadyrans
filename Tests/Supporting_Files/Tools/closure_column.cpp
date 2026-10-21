@@ -6,8 +6,9 @@
 //
 // Reads mesh.*, terrain.*, io.plot_file, bc.* (the boundary conditions and the
 // surface layer), turb.* (the closure: turb.wall_distance selects the height
-// above the ground or the Tucker distance, turb.frozen_switch records the
-// branch decisions at the state before the residual) and the tool's own
+// above the ground or the Tucker distance, turb.frozen_switch freezes the
+// k-floor decisions at the state before the residual, as the Newton stage
+// does, Smoothness.H) and the tool's own
 // fixed_state.* keys:
 // ustar (m/s) and direction (degrees) of the log-law wind the state holds,
 // u = (u*/kappa) ln((z + z0)/z0) along the direction at every point's height
@@ -181,9 +182,12 @@ int main (int argc, char* argv[])
         } else {
             ablsteady::height_above_ground(q.z_phys_nd, dist);
         }
-        // turb.frozen_switch: the branch decisions recorded at this state (the
-        // residual is then the frozen evaluation, identical here).
-        if (copt.frozen_switch) { closure.freeze_switches(q, dist, sopt.z0, ablsteady::BuoyancyOptions{}, mesh, geom); }
+        // turb.frozen_switch (default 1): the floor decisions frozen at this
+        // state, as the Newton stage freezes them (Smoothness.H); the residual
+        // is then the frozen evaluation, identical here.
+        if (copt.frozen_switch) {
+            closure.freeze_switches(q, dist, sopt.z0, ablsteady::BuoyancyOptions{}, mesh, geom, ablsteady::FreezeScope::floor);
+        }
 
         ablsteady::ResidualInputs res_in;
         res_in.closure = &closure;

@@ -316,8 +316,8 @@ TEST(Closure, InputsAreReadAndChecked)
     const std::string text =
         "turb.Cmu0 = 0.55\nturb.Cb = 0.3\nturb.Rt_crit = -0.5\nturb.Rt_min = -2.5\nturb.max_geom_lscale = 40\n"
         "turb.tke_floor = 1e-6\nturb.sigma_k = 1.3\nturb.nu_molecular = 1.5e-5\nturb.alpha_molecular = 2e-5\n"
-        "turb.kappa = 0.4\nturb.nut_relax = 0.7\nturb.frozen_switch = 1\nturb.face_mean = logarithmic\n"
-        "turb.wall_distance = tucker\n";
+        "turb.kappa = 0.4\nturb.nut_relax = 0.7\nturb.frozen_switch = 0\nturb.face_mean = logarithmic\n"
+        "turb.wall_distance = tucker\nturb.ri_gate = 0.05\n";
     const std::string fname = "ut_turb_inputs_tmp";
     if (amrex::ParallelDescriptor::IOProcessor()) {
         std::ofstream os(fname);
@@ -334,7 +334,7 @@ TEST(Closure, InputsAreReadAndChecked)
     {
         amrex::ParmParse pp("turb");
         for (const char* k : {"Cmu0", "Cb", "Rt_crit", "Rt_min", "max_geom_lscale", "tke_floor", "sigma_k", "nu_molecular",
-                              "alpha_molecular", "kappa", "nut_relax", "frozen_switch", "face_mean", "wall_distance"}) {
+                              "alpha_molecular", "kappa", "nut_relax", "frozen_switch", "face_mean", "wall_distance", "ri_gate"}) {
             while (pp.remove(k) > 0) {}
         }
     }
@@ -349,7 +349,8 @@ TEST(Closure, InputsAreReadAndChecked)
     EXPECT_EQ(o.alpha_molecular, amrex::Real(2e-5));
     EXPECT_EQ(o.kappa, amrex::Real(0.4));
     EXPECT_EQ(o.nut_relax, amrex::Real(0.7));
-    EXPECT_TRUE(o.frozen_switch);
+    EXPECT_FALSE(o.frozen_switch);   // the default is 1 (below)
+    EXPECT_EQ(o.ri_gate, amrex::Real(0.05));
     EXPECT_EQ(o.face_mean, FaceMean::logarithmic);
     EXPECT_EQ(o.wall_distance, ablsteady::WallDistanceKind::tucker);
     // The constants: the floor from the input, Cmu0^3 and 1/Cb^2.
@@ -373,6 +374,9 @@ TEST(Closure, InputsAreReadAndChecked)
         {"turb.kappa", [] (ClosureOptions& b) { b.kappa = 0; }},
         {"turb.nut_relax", [] (ClosureOptions& b) { b.nut_relax = 0; }},
         {"turb.nut_relax", [] (ClosureOptions& b) { b.nut_relax = amrex::Real(1.5); }},
+        {"turb.ri_gate", [] (ClosureOptions& b) { b.ri_gate = amrex::Real(-0.01); }},
+        {"turb.ri_gate", [] (ClosureOptions& b) { b.ri_gate = amrex::Real(1e-7); }},
+        {"turb.ri_gate", [] (ClosureOptions& b) { b.ri_gate = amrex::Real(1.01); }},
     };
     for (const Bad& b : bads) {
         ClosureOptions x = o;
@@ -404,6 +408,10 @@ TEST(Closure, InputsAreReadAndChecked)
         EXPECT_THROW(ablsteady::read_closure_options(), std::runtime_error);
         while (pp.remove("tke_floor") > 0) {}
         EXPECT_NO_THROW(ablsteady::read_closure_options());
+        // The defaults: the floor frozen in the Newton stage (Smoothness.H), no gate.
+        const ClosureOptions d = ablsteady::read_closure_options();
+        EXPECT_TRUE(d.frozen_switch);
+        EXPECT_EQ(d.ri_gate, 0);
     }
 }
 

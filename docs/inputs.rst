@@ -258,8 +258,11 @@ Quick reference
      - ``1``
      - Under-relaxation of :math:`\nu_t`
    * - ``turb.frozen_switch``
+     - ``1``
+     - Freeze the k-floor decisions in the Newton stage
+   * - ``turb.ri_gate``
      - ``0``
-     - Freeze the model's branch choices for a Jacobian
+     - Stratification gate :math:`Ri_0` (0: off)
    * - ``turb.face_mean``
      - ``arithmetic``
      - Face average of the diffusivities
@@ -726,8 +729,13 @@ See :doc:`turbulence_model`. Read with the SIMPLEC stage only.
      - ``1``
      - In (0, 1]: under-relaxation of :math:`\nu_t` (1: none).
    * - ``turb.frozen_switch``
+     - ``1``
+     - 0 or 1: freeze the k-floor decisions of the closure from the switch to Newton to the end of the Newton stage
+       (:doc:`solution_algorithm`). The application refuses it until it can switch to Newton (sub-phase 3.5).
+   * - ``turb.ri_gate``
      - ``0``
-     - 0 or 1: freeze the stable/unstable branch choices before a Jacobian is formed.
+     - 0 (off) or finite, ≥ 1e-6 and ≤ 1: :math:`Ri_0` of the stratification gate
+       :math:`N^2 \to N^2\,Ri^2/(Ri^2 + Ri_0^2)` in the closure (:doc:`turbulence_model`).
    * - ``turb.face_mean``
      - ``arithmetic``
      - ``arithmetic`` or ``logarithmic`` (:doc:`discretization`).

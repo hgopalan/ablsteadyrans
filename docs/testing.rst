@@ -227,6 +227,59 @@ signal in that test (SIGILL on macOS arm64), so the tests after it did not run.
      - p′ not restored after the projection
      - UT-2.4.2
 
+The one-line mutants of sub-phase 3.4 (``Source/Smoothness.cpp`` and the floor freeze and stratification gate in
+``Source/Closure.cpp``), each run against ``Smoothness.*`` and ``Closure.*`` on two ranks with the unit-test flags by
+``tools/smoothness_mutants.py`` (macOS arm64, AppleClang). 12 of 13 are killed. S5 survives: it removes the gate
+from the decisions that ``freeze_switches`` and ``changed_switches`` take, and the floor scope's held bit does not
+depend on :math:`N^2` (``evaluate`` gates :math:`N^2` itself; S4 and S13 cover it there).
+
+.. list-table::
+   :header-rows: 1
+   :widths: 6 44 50
+
+   * - Mutant
+     - Change
+     - Failing tests
+   * - S1
+     - The floor scope holds every decision
+     - ``FloorScopeHoldsOnlyTheFloor``, ``NewtonCycleReturnsTheSimplecSolution``
+   * - S2
+     - ``changed_switches`` compares every bit
+     - ``FloorScopeHoldsOnlyTheFloor``, ``NewtonCycleReturnsTheSimplecSolution``
+   * - S3
+     - The floor scope decides from the live state (frozen bits ignored)
+     - ``FloorScopeHoldsOnlyTheFloor``, ``ModuleInputsAbortsAndCheckpoint``
+   * - S4
+     - The gate with :math:`S^2` not squared
+     - ``RiGateClosedFormAndLimits``
+   * - S5
+     - The gate not applied in ``Closure::stratification``
+     - survives (above)
+   * - S6
+     - ``turb.ri_gate`` not read
+     - ``Closure.InputsAreReadAndChecked``
+   * - S7
+     - No limiter swap
+     - ``ModuleInputsAbortsAndCheckpoint``, ``NewtonCycleReturnsTheSimplecSolution``
+   * - S8
+     - ``leave`` does not thaw
+     - ``ModuleInputsAbortsAndCheckpoint``, ``NewtonCycleReturnsTheSimplecSolution``
+   * - S9
+     - ``enter`` freezes every decision
+     - ``ModuleInputsAbortsAndCheckpoint``, ``NewtonCycleReturnsTheSimplecSolution``
+   * - S10
+     - The checkpoint's scope ignored on read
+     - ``ModuleInputsAbortsAndCheckpoint``
+   * - S11
+     - A held cell decided at its own :math:`k`, not the floor (negative :math:`\nu_t`, Aaron review)
+     - ``FloorScopeHoldsOnlyTheFloor``, ``ModuleInputsAbortsAndCheckpoint``
+   * - S12
+     - ``evaluate`` holds every decision under the floor scope
+     - ``FloorScopeHoldsOnlyTheFloor`` (crash: NaN at :math:`k \le 0`)
+   * - S13
+     - :math:`P_b` from the gated :math:`N^2`
+     - ``RiGateClosedFormAndLimits``
+
 The one-line mutants of sub-phase 3.2 (``Source/Continuation.cpp``, the SER law in ``Source/PseudoTime.cpp`` and the
 GMRES limit in ``Source/Newton.cpp``), each run against ``Continuation.*``, ``Newton.*`` and ``Driver.*`` on two ranks
 with the unit-test flags by ``tools/continuation_mutants.py`` (run on macOS arm64 with AppleClang). #36 reported 40
@@ -1565,3 +1618,35 @@ GoogleTest suite
        default, ``identity``, an unknown value aborting with the key named, the range checks of the class, and
        ``apply`` before ``setup``. CTest ``abort_newton_preconditioner_value``, ``_no_newton`` and ``_no_stage``:
        the application's messages.
+   * - UT-3.4.1
+     - ``Smoothness.NewtonCycleReturnsTheSimplecSolution``: the 2-D periodic hill with a capping inversion (8 × 2 × 8
+       cells, two boxes, the k–L closure, the wall law, Rayleigh damping of w and θ at the top). From the SIMPLEC
+       state at :math:`r` = 1e-4: ``enter`` (the floor frozen), plain Newton on the smooth inputs to
+       :math:`10^{-9}|R_0|` within 14 steps (10 measured), ``leave`` (no floor decision moved: no cell reaches the floor
+       on this hill, so the floor freeze itself is tested in UT-3.4 (a); the closure thawed),
+       then the verification pass, SIMPLEC with the run's inputs to :math:`r` < 1e-8. Its solution equals SIMPLEC's
+       own (run on from 1e-4 to 1e-8) to 1e-5 of the largest :math:`u` and :math:`k` and of 2 K in θ (6e-7 measured).
+       With the standard limiter Newton is still above :math:`10^{-8}|R_0|` after the same 14 steps.
+   * - UT-3.4.2
+     - The same test: the smooth-limiter Newton solution differs from the van Leer SIMPLEC solution by at most 2 % of
+       the largest :math:`u` in :math:`u` and :math:`w`, 0.01 K in θ and 5 % of the largest :math:`k` in :math:`k`
+       (1.1 %, 0.09 %, 7e-5 K and 3.2 % measured), and by more than 0.1 % in :math:`u` (the limiters differ).
+   * - UT-3.4 (a)
+     - *Beyond the plan.* ``Smoothness.FloorScopeHoldsOnlyTheFloor``: frozen with the floor scope, the closure
+       evaluates as the live one after the θ gradient is reversed (every cell changes branch; bit for bit, no change
+       counted), where the full freeze keeps the stable branch and counts every cell; with :math:`k` below the floor
+       (1e-20, 0, −1e-10) the floor scope floors it as the live closure does (finite, bit for bit) and the full
+       freeze keeps it unfloored; a cell held at the floor on an unstable state with :math:`k` back at 0.4 evaluates as
+       the live closure at the floor (:math:`\nu_t > 0`). ``Smoothness.RiGateClosedFormAndLimits``: the gate's closed form
+       at nine (:math:`N^2`, :math:`S^2`) points (sign kept, 0 at :math:`N^2 = 0`), the limits :math:`|Ri| = 10^3
+       Ri_0` (kept to 1e-6) and :math:`10^{-3} Ri_0` (suppressed to 1e-6), ``turb.ri_gate = 0`` bit-identical to the
+       default, a neutral state bit-identical with the gate on, a stratified one changed with :math:`P_b` of the
+       ungated :math:`N^2`; the range check (0, or 1e-6 to 1) names the key. ``Smoothness.ModuleInputsAbortsAndCheckpoint``: the limiter swap (van Leer only; :math:`\epsilon` and
+       the other inputs kept), ``turb.frozen_switch`` → the floor freeze, ``enter``/``leave`` (the moved floor
+       decisions counted, the closure thawed; nothing frozen without a closure or with the switch off), the aborts
+       (twice, out of order, another closure), and the checkpoint read on one box from four (the frozen evaluation
+       bit for bit; a deck with ``turb.frozen_switch = 0`` and a corrupt file abort; no file reads as "not in the Newton
+       stage"). ``Closure.InputsAreReadAndChecked`` reads ``turb.ri_gate`` and
+       the new default of ``turb.frozen_switch``. CTest ``abort_frozen_switch_value``, ``abort_frozen_switch_no_newton``
+       and ``abort_ri_gate_range``: the application's messages. ``Smoothness.DISABLED_Sweep`` (on request): the
+       measurements of :doc:`results`.

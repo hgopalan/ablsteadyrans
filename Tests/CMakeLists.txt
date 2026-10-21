@@ -49,6 +49,7 @@ add_executable(unit_tests
     Unit_Tests/test_Terrain.cpp
     Unit_Tests/test_Transfer.cpp
     Unit_Tests/test_Sequencing.cpp
+    Unit_Tests/test_Smoothness.cpp
 )
 target_include_directories(unit_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Unit_Tests)
 target_link_libraries(unit_tests PRIVATE ablsteady_core GTest::gtest)
@@ -293,6 +294,21 @@ ablsteady_add_test(NAME abort_newton_preconditioner_no_stage NP 1 LABELS "regres
                    PREFIX ${EXPECT_ABORT} "steady\\.newton_preconditioner has no effect without steady\\.stage = simplec" --
                    COMMAND $<TARGET_FILE:ablsteady> ${VALIDATION_CASE}/inputs_abort_no_stage steady.newton_preconditioner=simplec
                            ${ABLSTEADY_TEST_AMREX_FLAGS})
+# turb.frozen_switch (sub-phase 3.4): a bad value aborts naming the key; a good
+# one aborts until the run can switch to Newton (sub-phase 3.5). turb.ri_gate
+# out of range aborts naming the key.
+ablsteady_add_test(NAME abort_frozen_switch_value NP 1 LABELS "regression;smoke"
+                   PREFIX ${EXPECT_ABORT} "turb\\.frozen_switch must be 0 or 1" --
+                   COMMAND $<TARGET_FILE:ablsteady> ${HILL3D_NEUTRAL_CASE}/inputs_steady_hill3d_neutral
+                           turb.frozen_switch=2 ${ABLSTEADY_TEST_AMREX_FLAGS})
+ablsteady_add_test(NAME abort_frozen_switch_no_newton NP 1 LABELS "regression;smoke"
+                   PREFIX ${EXPECT_ABORT} "turb\\.frozen_switch has no effect until the run can switch to Newton" --
+                   COMMAND $<TARGET_FILE:ablsteady> ${HILL3D_NEUTRAL_CASE}/inputs_steady_hill3d_neutral
+                           turb.frozen_switch=1 ${ABLSTEADY_TEST_AMREX_FLAGS})
+ablsteady_add_test(NAME abort_ri_gate_range NP 1 LABELS "regression;smoke"
+                   PREFIX ${EXPECT_ABORT} "turb\\.ri_gate = 2\\.0+: must be 0 \\(off\\) or finite, >= 1e-6 and <= 1" --
+                   COMMAND $<TARGET_FILE:ablsteady> ${HILL3D_NEUTRAL_CASE}/inputs_steady_hill3d_neutral
+                           turb.ri_gate=2 ${ABLSTEADY_TEST_AMREX_FLAGS})
 # The LU-SGS overlap against the coarse levels' boxes: overlap 3 fits level 0's
 # 16-wide boxes but not level 3's, 2 wide.
 ablsteady_add_test(NAME abort_sequencing_overlap NP 1 LABELS "regression;smoke"
