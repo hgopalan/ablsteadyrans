@@ -294,7 +294,7 @@ Quick reference
      - ``1e-3``, ``50``
      - Monitor tolerance and window
    * - ``steady.cfl0``, ``steady.cfl_max``
-     - ``1``, ``10``
+     - ``1``, ``8`` (``lusgs``) or ``10`` (``zjacobi``)
      - Initial and largest CFL number
    * - ``steady.ser_exponent``, ``steady.ser_max_growth``
      - ``1``, ``2``
@@ -303,7 +303,7 @@ Quick reference
      - ``20``, ``1e-2``, ``10``
      - Stage-switching rules
    * - ``steady.sweep``
-     - ``zjacobi``
+     - ``lusgs`` (CPU build), ``zjacobi`` (GPU build)
      - Line solver: ``zjacobi`` or ``lusgs``
    * - ``steady.zline_sweeps``
      - ``2``
@@ -785,8 +785,9 @@ writes them and stops; the other ``steady.*`` keys are then refused.
      - ``1``
      - Finite, > 0. CFL number of the first iterations.
    * - ``steady.cfl_max``
-     - ``10``
-     - Finite, ≥ ``steady.cfl0``. Largest CFL number.
+     - ``8`` with ``lusgs``, ``10`` with ``zjacobi``
+     - Finite, ≥ ``steady.cfl0``. Largest CFL number. The default depends on ``steady.sweep`` (the Phase 2
+       checkpoint, :doc:`results`); a given value is used with either sweep.
    * - ``steady.ser_exponent``
      - ``1``
      - Finite, ≥ 0. Exponent :math:`p` of the CFL ramp; 0 holds the CFL at ``cfl0``.
@@ -803,8 +804,10 @@ writes them and stops; the other ``steady.*`` keys are then refused.
      - ``10``
      - Finite, > 1. Residual growth over a window that returns the run to the previous stage.
    * - ``steady.sweep``
-     - ``zjacobi``
-     - ``zjacobi`` (z-line Jacobi) or ``lusgs`` (line LU-SGS).
+     - ``lusgs`` (CPU build), ``zjacobi`` (GPU build)
+     - ``zjacobi`` (z-line Jacobi) or ``lusgs`` (line LU-SGS). The default depends on the build (the Phase 2
+       checkpoint, :doc:`results`): a GPU build keeps ``zjacobi`` until the sweeps are measured on H100.
+       ``zjacobi`` reproduces the solver of Phase 1.
    * - ``steady.zline_sweeps``
      - ``2``
      - Sweeps per iteration: 2 to 100 with ``zjacobi``, 1 to 100 with ``lusgs``. With ``zjacobi`` the stable CFL

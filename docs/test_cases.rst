@@ -42,6 +42,11 @@ Steady cases
      - Askervein, conventionally neutral
      - Case 5 with stratification aloft, Coriolis forcing and a Rayleigh layer (below).
      - ``rt_steady_askervein_cnbl``
+   * - 5c
+     - Askervein, ERF's setup
+     - Case 5 with ERF's own inflow (power law from 210° through two faces) and Rayleigh layer on ERF's full mesh,
+       compared with ERF's URANS on lines A and AA.
+     - RT-2.6.1, RT-2.6.2
    * - 6
      - Bolund, Perdigão
      - A steep escarpment (Bolund) and a double ridge (Perdigão). Flow separation in the lee may prevent a steady

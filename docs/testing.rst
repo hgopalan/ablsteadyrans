@@ -665,6 +665,24 @@ Current tests
        30 × 26 to 1599 m, the precursor's table as inflow on xlo and yhi, outflow on xhi and ylo, Rayleigh damping
        of w and θ above 1200 m, four sweeps, cap 2) to the steady verdict. Measured: 220 iterations (156 for
        ``rt_steady_askervein``); u residual down four orders. Label ``regression``; double only.
+   * - ``rt_askervein_210_inflow_table``
+     - ``Tests/Real_Terrain/Askervein_210/askervein_210_inflow.txt`` is the table ``tools/erf_inflow_table.py`` makes
+       from ERF's Askervein inflow (``extern_erf/inflow_powerlaw.txt``, wind from 210°; w dropped, θ = 300 K, a z = 0
+       row added), to 1e-9. Label ``regression;smoke``.
+   * - ``rt_steady_askervein_210``, ``rt_askervein_210_erf_lines``, ``rt_askervein_210_level_history``
+     - RT-2.6.1 and RT-2.6.2 (sub-phase 2.6): Askervein with ERF's setup (``inputs_steady_askervein_210``: 300 × 300 ×
+       18, the 210° inflow through xlo and ylo, outflow through xhi and yhi, Rayleigh damping of w in the top 250 m)
+       with the Phase 2 default configuration (the build's sweep and CFL cap, the default reference window, grid
+       sequencing over two levels) to the steady verdict; measured: 96 level-0 iterations and 42 on level 1 (four
+       ranks). The 10 m speeds on lines A and AA (``tools/askervein_lines.py check``) must be within 5 % of ERF's
+       URANS average (``Gold/erf_urans_lines_10m.csv``) up to 300 m past the hilltop, and within 10 % at the four
+       lee masts beyond (measured: 4.45 % and 7.66 %). The level history (cells, stop reasons, iterations within
+       10 %) and the stage switches must match ``Gold/askervein_210_level_history.json``. Label ``nightly``; double
+       only.
+   * - ``rt_steady_askervein_210_phase1``, ``rt_askervein_210_phase1_matches``
+     - Old against new: the same deck with the Phase 1 configuration of RT-1.16.3 (``zjacobi``, four sweeps, cap 2, a
+       100-iteration reference, one level; measured: 538 iterations) reaches the Phase 2 lines to 0.1 % (measured:
+       0.005 %). Label ``nightly``; double only.
    * - ``drift_check_selftest``
      - The ``extern_erf`` drift check on a throw-away ERF repository (:doc:`extraction`).
    * - ``refavg_snapshots``, ``refavg_build``, ``refavg_verify``, ``refavg_matches``
