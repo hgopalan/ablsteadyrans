@@ -178,7 +178,7 @@ struct HillRun
         s.sopt.max_iterations = 100000;
         s.sopt.criterion.residual_tol = amrex::Real(1e-12);
         s.sopt.criterion.residual_drop_orders = 12;
-        ablsteady::use_closure_constants(s.bin, s.surf, s.copt.Cmu0, s.copt.kappa);
+        ablsteady::use_closure_constants(s.bin, s.surf, s.copt.Cmu0, s.copt.kappa, s.copt.max_geom_lscale);
         ls = std::make_unique<ablsteady::LevelSolver>(s, c.mesh, c.geom, c.z, c.ba, c.dm, "");
         q.define(c.ba, c.dm);
         amrex::MultiFab::Copy(q.z_phys_nd, c.z, 0, 0, 1, c.z.nGrow());
