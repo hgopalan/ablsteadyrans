@@ -408,8 +408,7 @@ Current tests
    * - ``rt_askervein_mesh``
      - RT-1.4.1 and RT-1.4.2: ERF's Askervein mesh coarsened to 60 × 60 × 18 (20 m × 1.08 layers, BTF, ERF's terrain
        file): statistics of ``z`` and ``detJ`` and the quality report against ``Tests/Discretization/Terrain_Mesh/Gold/askervein_mesh.json``.
-       Double-precision builds only: the statistics use ERF's plotfile reader, which reads double-precision
-       plotfiles.
+       Double-precision builds only: the statistics are compared at double-precision tolerances.
    * - ``rt_steep_ridge_quality``
      - RT-1.4.2: a 600 m ridge under STF: the report against its gold, including both warnings (STF capped, top
        not flat). Double-precision builds only.
@@ -694,6 +693,10 @@ Current tests
        1e-4 %). Label ``nightly``; double only.
    * - ``drift_check_selftest``
      - The ``extern_erf`` drift check on a throw-away ERF repository (:doc:`extraction`).
+   * - ``erf_plotfile_selftest``
+     - ``extern_erf/erf_plotfile.py`` (a local change, :doc:`extraction`) on hand-made one-box plotfiles in double
+       and float, little- and big-endian: every value read back exactly. The upstream reader fails the two float
+       cases. Label ``unit``.
    * - ``refavg_snapshots``, ``refavg_build``, ``refavg_verify``, ``refavg_matches``
      - ``ablsteady_refavg`` end to end: three copies of the smoke plotfile at 0, 5 and 10 s are archived on 2
        ranks with two inputs files; the archive verifies on 3 ranks with the expected metadata, AU and a zero
