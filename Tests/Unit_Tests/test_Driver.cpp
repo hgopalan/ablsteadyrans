@@ -20,6 +20,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -450,6 +451,127 @@ TEST (Driver, SwitchRulesHaveHysteresis)
         for (int i = 0; i < 20; ++i) { d.step(q); }
         EXPECT_TRUE(d.history().switches.empty());
         EXPECT_EQ(d.stage(), 0);
+    }
+}
+
+// A scripted stage whose monitor follows its own script, and which can ask
+// to go back (fallback_requested from iterate number `fallback_at` on, 0:
+// never) or refuse a forward switch (accepts false).
+class ScriptedSwitchStage : public ScriptedStage
+{
+public:
+    ScriptedSwitchStage (std::string name, std::vector<amrex::Real> script, std::vector<amrex::Real> mon, int fallback_at = 0,
+                         bool accepts = true)
+        : ScriptedStage(std::move(name), std::move(script)), m_mon(std::move(mon)), m_fallback_at(fallback_at), m_accepts(accepts)
+    {}
+    void iterate (ablsteady::State& q, const amrex::MultiFab& dtau) override
+    {
+        ScriptedStage::iterate(q, dtau);
+        m_cur = m_mon[static_cast<std::size_t>(iterates - 1) % m_mon.size()];
+    }
+    void leave (ablsteady::State&) override { ++leaves; }
+    [[nodiscard]] std::vector<amrex::Real> monitors () const override { return {m_cur}; }
+    [[nodiscard]] bool fallback_requested () const override { return m_fallback_at > 0 && iterates >= m_fallback_at; }
+    [[nodiscard]] std::string fallback_reason () const override { return "scripted fallback"; }
+    [[nodiscard]] bool accepts_switch () const override { return m_accepts; }
+    int leaves{0};
+
+private:
+    std::vector<amrex::Real> m_mon;
+    int m_fallback_at;
+    bool m_accepts;
+    amrex::Real m_cur{0};
+};
+
+// ---------------------------------------------------------------------------
+// UT-3.5.1. The forward switch to the Newton stage on synthetic histories
+// (steady.switch_residual 1e-4, switch_window 5): r_n crosses 1e-4 at
+// iteration 3 and stays below; the switch happens once, at iteration 7 (the
+// fifth iteration below), with every monitor flat. With the monitor still
+// moving by 5 % per iteration (above steady.switch_monitor_tol = 1 %) it
+// waits until the monitor has been flat over a whole window (iteration 12:
+// the monitor stops at iteration 7), and with switch_monitor_tol = 0 it
+// switches at iteration 7 again. A stage that refuses (accepts_switch false)
+// is never entered.
+//
+// UT-3.5.2. The fallback: the second stage asks to go back from its second
+// iterate on (the Newton stage's two failed steps, NewtonStage.H): the
+// driver switches back at once (inside the hysteresis window), calls its
+// leave once, logs the stage's reason, and switches forward again only after
+// the window.
+TEST (Driver, NewtonSwitchOnceAndFallback)
+{
+    PCase c = make_mesh(0, false);
+    ablsteady::State q;
+    define_state(q, c);
+    SteadyOptions o = base_options();
+    o.criterion.residual_ref_iterations = 1;
+    o.criterion.monitor_window = 1000;   // never steady here
+    o.switch_window = 5;
+    o.switch_residual = amrex::Real(1e-4);
+    // r_n = residual / 1 (the reference): 1, 1e-2, 1e-3, then 5e-5 on.
+    std::vector<amrex::Real> res{1, amrex::Real(1e-2), amrex::Real(1e-3)};
+    for (int i = 0; i < 60; ++i) { res.push_back(amrex::Real(5e-5)); }
+    auto run = [&] (const SteadyOptions& opt, std::vector<amrex::Real> mon, int fallback_at, bool accepts, int steps) {
+        std::vector<std::unique_ptr<ablsteady::Stage>> v;
+        v.push_back(std::make_unique<ScriptedSwitchStage>("simplec", res, mon));
+        v.push_back(std::make_unique<ScriptedSwitchStage>("newton", std::vector<amrex::Real>{amrex::Real(4e-5)},
+                                                          std::vector<amrex::Real>{amrex::Real(3)}, fallback_at, accepts));
+        auto* first = static_cast<ScriptedSwitchStage*>(v[0].get());
+        auto* second = static_cast<ScriptedSwitchStage*>(v[1].get());
+        auto d = std::make_unique<ablsteady::Driver>(opt, std::move(v), c.mesh, c.geom, nullptr);
+        for (int i = 0; i < steps; ++i) { d->step(q); }
+        return std::make_tuple(std::move(d), first, second);
+    };
+    const std::vector<amrex::Real> flat{amrex::Real(3)};
+    // moving 5 % per iteration up to iteration 7, flat after
+    std::vector<amrex::Real> moving;
+    for (int i = 0; i < 8; ++i) { moving.push_back(amrex::Real(3) * std::pow(amrex::Real(1.05), i)); }
+    for (int i = 0; i < 60; ++i) { moving.push_back(moving[7]); }
+    {
+        auto [d, first, second] = run(o, flat, 0, true, 40);
+        const auto& sw = d->history().switches;
+        ASSERT_EQ(sw.size(), 1u);
+        EXPECT_EQ(sw[0].iteration, 7);
+        EXPECT_EQ(sw[0].to, 1);
+        EXPECT_NE(sw[0].reason.find("steady.switch_monitor_tol"), std::string::npos);
+        EXPECT_EQ(second->inits, 1);
+        EXPECT_EQ(first->leaves, 1);
+        EXPECT_EQ(d->stage(), 1);
+    }
+    {
+        auto [d, first, second] = run(o, moving, 0, true, 40);
+        const auto& sw = d->history().switches;
+        ASSERT_EQ(sw.size(), 1u);
+        EXPECT_EQ(sw[0].iteration, 12);
+    }
+    {
+        SteadyOptions o0 = o;
+        o0.switch_monitor_tol = 0;
+        auto [d, first, second] = run(o0, moving, 0, true, 40);
+        ASSERT_EQ(d->history().switches.size(), 1u);
+        EXPECT_EQ(d->history().switches[0].iteration, 7);
+    }
+    {
+        auto [d, first, second] = run(o, flat, 0, false, 40);
+        EXPECT_TRUE(d->history().switches.empty());
+        EXPECT_EQ(second->inits, 0);
+    }
+    // UT-3.5.2
+    {
+        auto [d, first, second] = run(o, flat, 2, true, 40);
+        const auto& sw = d->history().switches;
+        ASSERT_GE(sw.size(), 3u);
+        EXPECT_EQ(sw[0].iteration, 7);
+        EXPECT_EQ(sw[1].iteration, 9);   // the second stage's second iterate: inside the window, at once
+        EXPECT_EQ(sw[1].from, 1);
+        EXPECT_EQ(sw[1].to, 0);
+        EXPECT_EQ(sw[1].reason, "scripted fallback");
+        int backs = 0;
+        for (const auto& e : sw) { backs += (e.from == 1) ? 1 : 0; }
+        EXPECT_EQ(second->leaves, backs);   // leave on every exit
+        EXPECT_EQ(sw[2].to, 1);
+        EXPECT_GE(sw[2].iteration - sw[1].iteration, o.switch_window);
     }
 }
 

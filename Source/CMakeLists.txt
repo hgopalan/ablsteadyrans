@@ -39,6 +39,7 @@ set(ABLSTEADY_SOURCES
     NewtonPreconditioner.cpp
     Continuation.cpp
     Smoothness.cpp
+    NewtonStage.cpp
     TurbulenceOutput.cpp
     App.cpp
     # Copied from ERF (extern_erf/EXTRACTED.md)

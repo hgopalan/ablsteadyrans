@@ -318,10 +318,8 @@ SimplecStage::SimplecStage (const SimplecOptions& opt, int sweeps, const Residua
     m_cf.define(ba, dm);
     m_cf.nu.setVal(0.0);
     m_height = geom.ProbHi(2) - geom.ProbLo(2);
-    m_names = {"u", "v", "w", "p", "theta", "tke"};
-    const JvpScales& s = in.jvp_scales;
-    m_specs = {{"max_speed", s.velocity}, {"mean_tke", s.tke}};
-    if (in.surface != nullptr) { m_specs.push_back({"mean_ustar", amrex::Real(0.1)}); }
+    m_names = stage_residual_names();
+    m_specs = stage_monitor_specs(in);
     m_res.assign(m_names.size(), 0);
     m_mon.assign(m_specs.size(), 0);
 }
@@ -342,11 +340,23 @@ void SimplecStage::init (State&)
     }
 }
 
-void SimplecStage::compute_norms (const State& q)
+std::vector<std::string> stage_residual_names () { return {"u", "v", "w", "p", "theta", "tke"}; }
+
+std::vector<MonitorSpec> stage_monitor_specs (const ResidualInputs& in)
 {
-    const JvpScales& s = m_in.jvp_scales;
-    const amrex::Real U = s.velocity, H = m_height;
-    const amrex::MultiFab* R[6] = {&m_R.u, &m_R.v, &m_R.w, &m_R.p, &m_R.theta, &m_R.tke};
+    const JvpScales& s = in.jvp_scales;
+    std::vector<MonitorSpec> specs = {{"max_speed", s.velocity}, {"mean_tke", s.tke}};
+    if (in.surface != nullptr) { specs.push_back({"mean_ustar", amrex::Real(0.1)}); }
+    return specs;
+}
+
+void stage_norms (const ResidualFields& Rf, const State& q, const SurfaceState* ss, const JvpScales& s, amrex::Real height,
+                  const amrex::Geometry& geom, std::vector<amrex::Real>& res, std::vector<amrex::Real>& mon)
+{
+    const amrex::Real U = s.velocity, H = height;
+    res.assign(6, 0);
+    mon.assign(ss != nullptr ? 3 : 2, 0);
+    const amrex::MultiFab* R[6] = {&Rf.u, &Rf.v, &Rf.w, &Rf.p, &Rf.theta, &Rf.tke};
     const amrex::Real scale[6] = {U * U / H, U * U / H, U * U / H, U / H, U * s.theta / H, U * s.tke / H};
     for (int n = 0; n < 6; ++n) {
         // Dot, not norm2 (which asserts cell-centred data); collective. The
@@ -354,16 +364,21 @@ void SimplecStage::compute_norms (const State& q)
         // as numPts does: a consistent weighted RMS.
         const amrex::Real n2 = std::sqrt(amrex::MultiFab::Dot(*R[n], 0, 1, 0));
         const auto npts = static_cast<amrex::Real>(R[n]->boxArray().numPts());
-        m_res[static_cast<std::size_t>(n)] = n2 / std::sqrt(npts) / scale[n];
+        res[static_cast<std::size_t>(n)] = n2 / std::sqrt(npts) / scale[n];
     }
     amrex::Real speed = amrex::max(q.u.norm0(0, 0, false), q.v.norm0(0, 0, false), q.w.norm0(0, 0, false));
     amrex::ParallelDescriptor::ReduceRealMax(speed);
-    m_mon[0] = speed;
-    m_mon[1] = q.tke.sum(0, false) / static_cast<amrex::Real>(q.tke.boxArray().numPts());
-    if (m_in.surface != nullptr) {
-        const auto& dom = m_geom.Domain();
-        m_mon[2] = m_ss.ustar.sum(0, false) / static_cast<amrex::Real>(dom.length(0) * dom.length(1));
+    mon[0] = speed;
+    mon[1] = q.tke.sum(0, false) / static_cast<amrex::Real>(q.tke.boxArray().numPts());
+    if (ss != nullptr) {
+        const auto& dom = geom.Domain();
+        mon[2] = ss->ustar.sum(0, false) / static_cast<amrex::Real>(dom.length(0) * dom.length(1));
     }
+}
+
+void SimplecStage::compute_norms (const State& q)
+{
+    stage_norms(m_R, q, m_in.surface != nullptr ? &m_ss : nullptr, m_in.jvp_scales, m_height, m_geom, m_res, m_mon);
 }
 
 void SimplecStage::iterate (State& q, const amrex::MultiFab& dtau)
