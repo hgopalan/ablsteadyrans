@@ -38,6 +38,11 @@ std::vector<std::string> check_inflow_profile_options (const InflowProfileOption
     }
     positive(opt.Cmu0, "Cmu0");
     positive(opt.kappa, "kappa");
+    if (opt.length == InflowProfileOptions::Length::closure
+        && (std::isnan(opt.l_max) || !(opt.l_max > 0 && std::isfinite(opt.l_max)))) {
+        err.emplace_back("turb.max_geom_lscale = " + std::to_string(opt.l_max)
+                         + ": must be finite and > 0 (the length cap of bc.inflow_tke_length = closure)");
+    }
     return err;
 }
 
@@ -184,6 +189,7 @@ InflowProfile::View InflowProfile::view_with (const amrex::Real* tz, const amrex
     p.sind = static_cast<amrex::Real>(std::sin(a));
     p.Cmu0 = m_opt.Cmu0;
     p.kappa = m_opt.kappa;
+    p.inv_lmax = (m_opt.length == InflowProfileOptions::Length::closure) ? amrex::Real(1) / m_opt.l_max : amrex::Real(0);
     p.tz = tz;
     p.tu = tu;
     p.tv = tv;

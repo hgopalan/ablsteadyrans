@@ -258,6 +258,11 @@ ablsteady_add_test(NAME abort_sequencing_unused NP 1 LABELS "regression;smoke"
                    COMMAND $<TARGET_FILE:ablsteady> ${HILL3D_NEUTRAL_CASE}/inputs_steady_hill3d_neutral
                            steady.sequencing_drop_orders=1 steady.sequencing_hold=0 steady.sequencing_cfl_start=cfl0
                            ${ABLSTEADY_TEST_AMREX_FLAGS})
+# bc.inflow_tke_length takes closure or unbounded only.
+ablsteady_add_test(NAME abort_inflow_tke_length_value NP 1 LABELS "regression;smoke"
+                   PREFIX ${EXPECT_ABORT} "bc\\.inflow_tke_length = capped: must be closure or unbounded" --
+                   COMMAND $<TARGET_FILE:ablsteady> ${HILL3D_NEUTRAL_CASE}/inputs_steady_hill3d_neutral
+                           bc.inflow_tke_length=capped ${ABLSTEADY_TEST_AMREX_FLAGS})
 ablsteady_add_test(NAME abort_sequencing_value NP 1 LABELS "regression;smoke"
                    PREFIX ${EXPECT_ABORT} "steady\\.sequencing = 2: must be 0 or 1" --
                    COMMAND $<TARGET_FILE:ablsteady> ${HILL3D_NEUTRAL_CASE}/inputs_steady_hill3d_neutral

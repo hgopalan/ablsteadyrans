@@ -128,9 +128,11 @@ struct BoundaryInputs
 };
 
 //! Give the wall model and the inflow profile's equilibrium k and nu_t the
-//! closure's constants (turb.Cmu0, turb.kappa), so the log law, the wall k
-//! and the closure agree when either is changed.
-void use_closure_constants (BoundaryInputs& bin, SurfaceLayerOptions& surf, amrex::Real Cmu0, amrex::Real kappa);
+//! closure's constants (turb.Cmu0, turb.kappa, and the length cap
+//! turb.max_geom_lscale for the inflow), so the log law, the wall k, the
+//! inflow k and the closure agree when either is changed.
+void use_closure_constants (BoundaryInputs& bin, SurfaceLayerOptions& surf, amrex::Real Cmu0, amrex::Real kappa,
+                            amrex::Real max_geom_lscale);
 
 //! Read the bc.* keys (no range checks).
 BoundaryInputs read_boundary_inputs ();

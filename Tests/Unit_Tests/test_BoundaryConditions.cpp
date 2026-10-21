@@ -5,6 +5,7 @@
 #include "BoundaryConditions.H"
 #include "MassFlux_K.H"
 #include "ImplicitOperator.H"
+#include "Closure_K.H"
 #include "InflowProfile.H"
 #include "MassFlux.H"
 #include "Residual.H"
@@ -190,6 +191,7 @@ TEST(InflowProfile, AnalyticKindsAndEquilibriumTurbulence)
     opt.ustar = amrex::Real(0.4);
     opt.z0 = amrex::Real(0.1);
     opt.direction = 30;
+    opt.length = InflowProfileOptions::Length::unbounded;   // the wall-law length; the closure's: ClosureLengthCapsTheEquilibrium
     ablsteady::InflowProfile log(opt, tref);
     const auto p = log.host_view();
     amrex::Real u, v, t, k, nut;
@@ -227,9 +229,10 @@ TEST(InflowProfile, AnalyticKindsAndEquilibriumTurbulence)
     EXPECT_NEAR(k, ul05 * ul05 / (0.5562 * 0.5562), tol(1e-12, 1e-5) * k);
 }
 
-// The application hands turb.Cmu0 and turb.kappa to the inflow profile and the
-// wall model (use_closure_constants). Before, both kept 0.5562 and 0.41 when
-// the closure's constants were changed: the inflow k and nu_t below would be
+// The application hands turb.Cmu0, turb.kappa and turb.max_geom_lscale to the
+// inflow profile and the wall model (use_closure_constants). Before, the
+// inflow kept 0.5562 and 0.41 when the closure's constants were changed, and
+// its length was never capped: the inflow k and nu_t below would be
 // 0.16/0.5562^2 and 0.41 u* (z + z0).
 TEST(InflowProfile, TakesTheClosureConstants)
 {
@@ -237,16 +240,87 @@ TEST(InflowProfile, TakesTheClosureConstants)
     ablsteady::SurfaceLayerOptions surf;
     bin.inflow.ustar = amrex::Real(0.4);
     bin.inflow.z0 = amrex::Real(0.1);
-    ablsteady::use_closure_constants(bin, surf, amrex::Real(0.55), amrex::Real(0.40));
+    ablsteady::use_closure_constants(bin, surf, amrex::Real(0.55), amrex::Real(0.40), amrex::Real(25));
     EXPECT_EQ(surf.Cmu0, amrex::Real(0.55));
     EXPECT_EQ(surf.kappa, amrex::Real(0.40));
+    EXPECT_EQ(bin.inflow.l_max, amrex::Real(25));
     ablsteady::InflowProfile log(bin.inflow, bin.theta_ref);
     const auto p = log.host_view();
     amrex::Real u, v, t, k, nut;
     p.eval(50, u, v, t, k, nut);
     EXPECT_NEAR(u, 0.4 / 0.40 * std::log(50.1 / 0.1), tol(1e-14, 1e-6) * u);
-    EXPECT_NEAR(k, 0.16 / (0.55 * 0.55), tol(1e-14, 1e-6));
-    EXPECT_NEAR(nut, 0.40 * 0.4 * 50.1, tol(1e-14, 1e-6) * nut);
+    const double lraw = 0.40 * 50.1, l = 1 / (1 / lraw + 1 / 25.0), ul = 0.4 * l / lraw;
+    EXPECT_NEAR(k, ul * ul / (0.55 * 0.55), tol(1e-14, 1e-6));
+    EXPECT_NEAR(nut, l * ul, tol(1e-14, 1e-6) * nut);
+}
+
+// bc.inflow_tke_length = closure (the default): the equilibrium k and nu_t take
+// the closure's geometric length, kappa (z + z0) capped harmonically by
+// turb.max_geom_lscale (Closure_K.H geom_length), for every kind; a table's own
+// k is kept and the length sets nu_t only. Closed forms at heights below, near
+// and far above the cap (l_max = 30 m). Before, the length was kappa (z + z0)
+// at every height: k grew with height on a power law (about 9 m^2/s^2 at 316 m
+// on ERF's Askervein inflow, where ERF has 0.31).
+TEST(InflowProfile, ClosureLengthCapsTheEquilibrium)
+{
+    ablsteady::ReferenceProfile tref;
+    tref.z = {0};
+    tref.theta = {300};
+    const double kap = 0.41, cmu = 0.5562, z0 = 0.03, lmax = 30;
+    auto lcap = [&] (double z) { return 1 / (1 / (kap * (z + z0)) + 1 / lmax); };
+    for (const double z : {1.0, 10.0, 73.0, 316.0, 2000.0}) {
+        EXPECT_NEAR(static_cast<double>(ablsteady::closure::geom_length(amrex::Real(kap * (z + z0)), amrex::Real(lmax))),
+                    lcap(z), tol(1e-13, 1e-5) * lcap(z)) << z;
+    }
+    InflowProfileOptions opt;
+    opt.z0 = amrex::Real(z0);
+    EXPECT_EQ(opt.length, InflowProfileOptions::Length::closure);   // the default
+    EXPECT_EQ(opt.l_max, 30);
+    // log law: dS/dz = u*/(kappa (z + z0)), u*_l = u* l / (kappa (z + z0)).
+    opt.ustar = amrex::Real(0.6);
+    {
+        ablsteady::InflowProfile prof(opt, tref);
+        const auto p = prof.host_view();
+        for (const double z : {1.0, 10.0, 73.0, 316.0, 2000.0}) {
+            amrex::Real u, v, t, k, nut;
+            p.eval(static_cast<amrex::Real>(z), u, v, t, k, nut);
+            const double ul = 0.6 * lcap(z) / (kap * (z + z0));
+            EXPECT_NEAR(k, ul * ul / (cmu * cmu), tol(1e-12, 1e-5) * k) << z;
+            EXPECT_NEAR(nut, lcap(z) * ul, tol(1e-12, 1e-5) * nut) << z;
+        }
+    }
+    // power law: dS/dz = alpha S / z above z0.
+    opt.kind = InflowProfileOptions::Kind::power_law;
+    opt.speed_ref = 9;
+    opt.z_ref = 10;
+    opt.alpha = amrex::Real(0.22);
+    {
+        ablsteady::InflowProfile prof(opt, tref);
+        const auto p = prof.host_view();
+        for (const double z : {10.0, 316.0}) {
+            amrex::Real u, v, t, k, nut;
+            p.eval(static_cast<amrex::Real>(z), u, v, t, k, nut);
+            const double S = 9 * std::pow(z / 10, 0.22), ul = lcap(z) * 0.22 * S / z;
+            EXPECT_NEAR(k, ul * ul / (cmu * cmu), tol(1e-12, 1e-5) * k) << z;
+            EXPECT_NEAR(nut, lcap(z) * ul, tol(1e-12, 1e-5) * nut) << z;
+        }
+        // With the unbounded length, the same profile's k at 316 m is (l_raw/l)^2 = 11.7 times larger.
+        InflowProfileOptions ub = opt;
+        ub.length = InflowProfileOptions::Length::unbounded;
+        ablsteady::InflowProfile pu(ub, tref);
+        amrex::Real u, v, t, kc, ku, nut;
+        p.eval(316, u, v, t, kc, nut);
+        pu.host_view().eval(316, u, v, t, ku, nut);
+        const double r = kap * (316 + z0) / lcap(316);
+        EXPECT_NEAR(ku / kc, r * r, tol(1e-12, 1e-5) * r * r);
+    }
+    // A cap that is not finite and > 0 is refused, naming turb.max_geom_lscale.
+    opt.l_max = 0;
+    const auto err = ablsteady::check_inflow_profile_options(opt);
+    ASSERT_EQ(err.size(), 1u);
+    EXPECT_NE(err[0].find("turb.max_geom_lscale = 0"), std::string::npos) << err[0];
+    opt.length = InflowProfileOptions::Length::unbounded;   // no cap used: not checked
+    EXPECT_TRUE(ablsteady::check_inflow_profile_options(opt).empty());
 }
 
 TEST(InflowProfile, FileTableWithAndWithoutK)
@@ -263,6 +337,7 @@ TEST(InflowProfile, FileTableWithAndWithoutK)
     InflowProfileOptions opt;
     opt.kind = InflowProfileOptions::Kind::file;
     opt.file = fname;
+    opt.length = InflowProfileOptions::Length::unbounded;   // the wall-law length (closure: below)
     ablsteady::InflowProfile f(opt, tref);
     EXPECT_EQ(f.table_size(), 3);
     EXPECT_TRUE(f.has_k());
@@ -277,6 +352,14 @@ TEST(InflowProfile, FileTableWithAndWithoutK)
     EXPECT_NEAR(nut, 0.41 * 300.1 * 0.5562 * 0.5, tol(1e-12, 1e-4) * nut);
     p.eval(900, u, v, t, k, nut);   // beyond the table: constant
     EXPECT_NEAR(u, 10, tol(1e-13, 1e-5));
+    {   // the closure's length: the table's k as given, nu_t = l Cmu0 sqrt(k)
+        InflowProfileOptions oc = opt;
+        oc.length = InflowProfileOptions::Length::closure;
+        ablsteady::InflowProfile fc(oc, tref);
+        fc.host_view().eval(300, u, v, t, k, nut);
+        EXPECT_NEAR(k, 0.25, tol(1e-13, 1e-5));
+        EXPECT_NEAR(nut, 1 / (1 / (0.41 * 300.1) + 1 / 30.0) * 0.5562 * 0.5, tol(1e-12, 1e-4) * nut);
+    }
 
     // Every rank has read the file before it is rewritten (else a slow rank
     // reads the next version, throws outside EXPECT_THROW and the ranks
@@ -294,6 +377,17 @@ TEST(InflowProfile, FileTableWithAndWithoutK)
     // k from the shear: u*_l = kappa (z + z0) dS/dz, dS/dz = sqrt(40)/100
     const double ul = 0.41 * 50.1 * std::sqrt(40.0) / 100;
     EXPECT_NEAR(k, ul * ul / (0.5562 * 0.5562), tol(1e-12, 1e-5) * k);
+    // The closure's length (the default): l = 1/(1/(kappa (z + z0)) + 1/30) for k,
+    // and for nu_t also with the table's own k.
+    {
+        InflowProfileOptions oc = opt;
+        oc.length = InflowProfileOptions::Length::closure;
+        ablsteady::InflowProfile gc(oc, tref);
+        gc.host_view().eval(50, u, v, t, k, nut);
+        const double l = 1 / (1 / (0.41 * 50.1) + 1 / 30.0), ulc = l * std::sqrt(40.0) / 100;
+        EXPECT_NEAR(k, ulc * ulc / (0.5562 * 0.5562), tol(1e-12, 1e-5) * k);
+        EXPECT_NEAR(nut, l * ulc, tol(1e-12, 1e-5) * nut);
+    }
 
     // Refused tables: heights not increasing, a first height not 0, 3 columns.
     for (const char* bad : {"0 0 0 300\n0 1 0 300\n", "10 0 0 300\n20 1 0 300\n", "0 0 300\n1 1 300\n", "0 0 0 300\n"}) {
@@ -917,6 +1011,7 @@ TEST(BoundaryInputs, KeysAreReadAndChecked)
     const std::string text =
         "bc.xlo = inflow\nbc.xhi = outflow\nbc.ylo = slip_wall\nbc.yhi = no_slip_wall\nbc.zlo = surface_layer\nbc.zhi = slip_wall\n"
         "bc.inflow_profile = power_law\nbc.inflow_speed = 9\nbc.inflow_zref = 20\nbc.inflow_alpha = 0.15\nbc.inflow_direction = 10\n"
+        "bc.inflow_tke_length = unbounded\n"
         "bc.theta_profile_z = 0 500\nbc.theta_profile = 290 295\nbc.zhi_theta_grad = 0.003\n"
         "bc.rayleigh_zdamp = 400\nbc.rayleigh_dampcoef = 0.1\nbc.sponge_width = 100\nbc.sponge_strength = 0.05\n"
         "bc.surface_z0 = 0.3\nbc.surface_zref = 12\nbc.surface_stability = heat_flux\nbc.surface_heat_flux = 0.02\nbc.surface_wall_k = source\n"
@@ -941,10 +1036,11 @@ TEST(BoundaryInputs, KeysAreReadAndChecked)
         for (const char* k : {"xlo", "xhi", "ylo", "yhi", "zlo", "zhi", "inflow_profile", "inflow_speed", "inflow_zref", "inflow_alpha",
                               "inflow_direction", "theta_profile_z", "theta_profile", "zhi_theta_grad", "rayleigh_zdamp", "rayleigh_dampcoef",
                               "sponge_width", "sponge_strength", "surface_z0", "surface_zref", "surface_stability", "surface_heat_flux",
-                              "surface_wall_k", "surface_denominator_floor"}) {
+                              "surface_wall_k", "surface_denominator_floor", "inflow_tke_length"}) {
             while (pp.remove(k) > 0) {}
         }
     }
+    EXPECT_EQ(in.inflow.length, InflowProfileOptions::Length::unbounded);
     EXPECT_EQ(in.face[0], FaceType::inflow);
     EXPECT_EQ(in.face[3], FaceType::outflow);
     EXPECT_EQ(in.face[1], FaceType::slip_wall);
@@ -1000,6 +1096,9 @@ TEST(BoundaryInputs, KeysAreReadAndChecked)
         {"bc.rayleigh_dampcoef", [] (BoundaryInputs& b) { b.rayleigh_dampcoef = 0; b.given = {}; }},
         {"bc.sponge_strength", [] (BoundaryInputs& b) { b.sponge_strength = 0; b.given = {}; }},
         {"bc.inflow_z0", [] (BoundaryInputs& b) { b.inflow.z0 = -1; }},
+        {"turb.max_geom_lscale", [] (BoundaryInputs& b) {
+             b.inflow.length = InflowProfileOptions::Length::closure;
+             b.inflow.l_max = std::numeric_limits<amrex::Real>::infinity(); }},
     };
     for (const Bad& b : bads) {
         BoundaryInputs x = in;
@@ -1021,6 +1120,10 @@ TEST(BoundaryInputs, KeysAreReadAndChecked)
     const auto err = ablsteady::check_boundary_inputs(y, geom, kNoCoriolis);
     ASSERT_FALSE(err.empty());
     EXPECT_NE(err.front().find("inflow_speed"), std::string::npos);
+    y.given = {"inflow_tke_length"};
+    const auto errl = ablsteady::check_boundary_inputs(y, geom, kNoCoriolis);
+    ASSERT_EQ(errl.size(), 1u);
+    EXPECT_NE(errl.front().find("bc.inflow_tke_length has no effect without an inflow face"), std::string::npos) << errl.front();
     EXPECT_THROW(ablsteady::face_type_from_name("open", "bc.xlo"), std::runtime_error);
     const PCase pc = mesh_over(0, 0, flat);
     EXPECT_THROW(BoundaryConditions(y, geom, pc.mesh, kNoCoriolis), std::runtime_error);

@@ -158,6 +158,9 @@ Quick reference
    * - ``bc.inflow_file``
      - none
      - Tabulated inflow profile
+   * - ``bc.inflow_tke_length``
+     - ``closure``
+     - Length of the inflow profile's equilibrium :math:`k` and :math:`\nu_t`
    * - ``bc.theta_profile_z``, ``bc.theta_profile``
      - ``0``, ``300``
      - Potential-temperature sounding (m, K)
@@ -580,6 +583,13 @@ types, the inflow profile and the sounding; the other keys act in the SIMPLEC st
      - none
      - Required with ``file``: rows of ``z u v theta [k]`` (4 or 5 columns, at least 2 rows), z increasing from
        0, θ > 0, k ≥ 0.
+   * - ``bc.inflow_tke_length``
+     - ``closure``
+     - ``closure`` or ``unbounded``: the length :math:`l` of the equilibrium :math:`k` and :math:`\nu_t`
+       (:doc:`boundary_conditions`). ``closure``: the turbulence model's :math:`\kappa(z + z_0)` capped by
+       ``turb.max_geom_lscale``. ``unbounded``: :math:`\kappa(z + z_0)`, the form before this input (for the log law,
+       :math:`k = u_*^2/C_{\mu 0}^2` at every height). With a ``k`` column in ``bc.inflow_file``, the length sets
+       :math:`\nu_t` only.
    * - ``bc.theta_profile_z``, ``bc.theta_profile``
      - ``0``, ``300``
      - Lists of equal length: heights increasing from 0 (m) and θ > 0 (K). The reference sounding.
@@ -628,8 +638,8 @@ types, the inflow profile and the sounding; the other keys act in the SIMPLEC st
        denominator. They differ only where :math:`\ln((d + z_0)/z_0) < 1`.
 
 The wall model and the inflow profile's equilibrium :math:`k` and :math:`\nu_t` use the turbulence model's
-``turb.Cmu0`` and ``turb.kappa``. Without the SIMPLEC stage (``turb.*`` is then refused) they use the defaults, 0.5562
-and 0.41.
+``turb.Cmu0`` and ``turb.kappa``, and the inflow profile its ``turb.max_geom_lscale``. Without the SIMPLEC stage
+(``turb.*`` is then refused) they use the defaults, 0.5562, 0.41 and 30 m.
 
 ``forcing``
 -----------
@@ -697,7 +707,8 @@ See :doc:`turbulence_model`. Read with the SIMPLEC stage only.
      - Finite, < ``turb.Rt_crit`` and > −3.6: the smoothed :math:`R_t` stays above it.
    * - ``turb.max_geom_lscale``
      - 30 m
-     - Finite, > 0: the harmonic cap of :math:`l_g` (about :math:`\kappa \times 0.1` of the boundary-layer depth).
+     - Finite, > 0: the harmonic cap of :math:`l_g` (about :math:`\kappa \times 0.1` of the boundary-layer depth);
+       also the cap of the inflow profile's length with ``bc.inflow_tke_length = closure``.
    * - ``turb.tke_floor``
      - ``0``
      - 0 (machine epsilon) or ≥ machine epsilon (m²/s²): lower bound on :math:`k`.

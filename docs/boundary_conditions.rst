@@ -121,9 +121,24 @@ wind speed :math:`S(z)` points along ``bc.inflow_direction``:
    \text{log\_law:}\quad S = \frac{u_*}{\kappa}\ln\frac{z + z_0}{z_0}, \qquad
    \text{power\_law:}\quad S = S_\mathrm{ref}\left(\frac{z}{z_\mathrm{ref}}\right)^\alpha .
 
-A ``file`` profile tabulates ``z u v theta [k]``. Without a :math:`k` column, :math:`k` is the equilibrium value
-:math:`k = u_{*l}^2/C_{\mu 0}^2`, with the local friction velocity :math:`u_{*l} = \kappa(z + z_0)\,dS/dz`. For the
-analytic profiles :math:`\theta` is the sounding ``bc.theta_profile``.
+A ``file`` profile tabulates ``z u v theta [k]``. For the analytic profiles :math:`\theta` is the sounding
+``bc.theta_profile``.
+
+**Turbulence of the profile.** Without a :math:`k` column, :math:`k` and :math:`\nu_t` are in equilibrium with the
+wind's shear: shear production equals dissipation in the neutral k–L closure (:doc:`turbulence_model`),
+
+.. math::
+
+   u_{*l} = l\,\frac{dS}{dz}, \qquad k = \frac{u_{*l}^2}{C_{\mu 0}^2}, \qquad \nu_t = l\,u_{*l}, \qquad
+   \frac{1}{l} = \frac{1}{\kappa (z + z_0)} + \frac{1}{l_\mathrm{max}} .
+
+- :math:`u_{*l}`: the local friction velocity; :math:`l`: the length; :math:`l_\mathrm{max}`: ``turb.max_geom_lscale``.
+- ``bc.inflow_tke_length = closure`` (the default) uses this :math:`l`, the closure's own geometric length, so the
+  inflow :math:`k` is the closure's equilibrium. ``unbounded`` drops the cap (:math:`l = \kappa(z + z_0)`); the log
+  law then has :math:`u_{*l} = u_*` and :math:`k = u_*^2/C_{\mu 0}^2` at every height.
+- **Why the cap.** Without it, :math:`\kappa z\,dS/dz` grows with height on a power law, and so does :math:`k`: on
+  ERF's Askervein inflow it reaches about 9 m²/s² at 316 m, where ERF's flow has 0.31. With the cap, 0.31.
+- A :math:`k` column is used as given; :math:`l` then sets :math:`\nu_t = l\,C_{\mu 0}\sqrt{k}`.
 
 Damping layers
 --------------
