@@ -50,6 +50,7 @@ add_executable(unit_tests
     Unit_Tests/test_Transfer.cpp
     Unit_Tests/test_Sequencing.cpp
     Unit_Tests/test_Smoothness.cpp
+    Unit_Tests/test_NewtonStage.cpp
 )
 target_include_directories(unit_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Unit_Tests)
 target_link_libraries(unit_tests PRIVATE ablsteady_core GTest::gtest)
@@ -281,13 +282,13 @@ ablsteady_add_test(NAME abort_sequencing_no_stage NP 1 LABELS "regression;smoke"
                    COMMAND $<TARGET_FILE:ablsteady> ${VALIDATION_CASE}/inputs_abort_no_stage steady.sequencing=1
                            ${ABLSTEADY_TEST_AMREX_FLAGS})
 # steady.newton_preconditioner (sub-phase 3.3): a bad value aborts naming the
-# key; a good one aborts until the run can switch to Newton (sub-phase 3.5).
+# key; a good one aborts without the Newton stage (steady.stage = simplec).
 ablsteady_add_test(NAME abort_newton_preconditioner_value NP 1 LABELS "regression;smoke"
                    PREFIX ${EXPECT_ABORT} "steady\\.newton_preconditioner = hypre: must be identity or simplec" --
                    COMMAND $<TARGET_FILE:ablsteady> ${HILL3D_NEUTRAL_CASE}/inputs_steady_hill3d_neutral
                            steady.newton_preconditioner=hypre ${ABLSTEADY_TEST_AMREX_FLAGS})
 ablsteady_add_test(NAME abort_newton_preconditioner_no_newton NP 1 LABELS "regression;smoke"
-                   PREFIX ${EXPECT_ABORT} "steady\\.newton_preconditioner has no effect until the run can switch to Newton" --
+                   PREFIX ${EXPECT_ABORT} "steady\\.newton_preconditioner has no effect without steady\\.stage = simplec_newton" --
                    COMMAND $<TARGET_FILE:ablsteady> ${HILL3D_NEUTRAL_CASE}/inputs_steady_hill3d_neutral
                            steady.newton_preconditioner=identity ${ABLSTEADY_TEST_AMREX_FLAGS})
 ablsteady_add_test(NAME abort_newton_preconditioner_no_stage NP 1 LABELS "regression;smoke"
@@ -295,20 +296,44 @@ ablsteady_add_test(NAME abort_newton_preconditioner_no_stage NP 1 LABELS "regres
                    COMMAND $<TARGET_FILE:ablsteady> ${VALIDATION_CASE}/inputs_abort_no_stage steady.newton_preconditioner=simplec
                            ${ABLSTEADY_TEST_AMREX_FLAGS})
 # turb.frozen_switch (sub-phase 3.4): a bad value aborts naming the key; a good
-# one aborts until the run can switch to Newton (sub-phase 3.5). turb.ri_gate
-# out of range aborts naming the key.
+# one aborts without the Newton stage. turb.ri_gate out of range aborts naming
+# the key.
 ablsteady_add_test(NAME abort_frozen_switch_value NP 1 LABELS "regression;smoke"
                    PREFIX ${EXPECT_ABORT} "turb\\.frozen_switch must be 0 or 1" --
                    COMMAND $<TARGET_FILE:ablsteady> ${HILL3D_NEUTRAL_CASE}/inputs_steady_hill3d_neutral
                            turb.frozen_switch=2 ${ABLSTEADY_TEST_AMREX_FLAGS})
 ablsteady_add_test(NAME abort_frozen_switch_no_newton NP 1 LABELS "regression;smoke"
-                   PREFIX ${EXPECT_ABORT} "turb\\.frozen_switch has no effect until the run can switch to Newton" --
+                   PREFIX ${EXPECT_ABORT} "turb\\.frozen_switch has no effect without steady\\.stage = simplec_newton" --
                    COMMAND $<TARGET_FILE:ablsteady> ${HILL3D_NEUTRAL_CASE}/inputs_steady_hill3d_neutral
                            turb.frozen_switch=1 ${ABLSTEADY_TEST_AMREX_FLAGS})
 ablsteady_add_test(NAME abort_ri_gate_range NP 1 LABELS "regression;smoke"
                    PREFIX ${EXPECT_ABORT} "turb\\.ri_gate = 2\\.0+: must be 0 \\(off\\) or finite, >= 1e-6 and <= 1" --
                    COMMAND $<TARGET_FILE:ablsteady> ${HILL3D_NEUTRAL_CASE}/inputs_steady_hill3d_neutral
                            turb.ri_gate=2 ${ABLSTEADY_TEST_AMREX_FLAGS})
+# Sub-phase 3.5: the Newton stage's keys and the switch rules have no effect
+# with steady.stage = simplec (one stage), so they abort there.
+ablsteady_add_test(NAME abort_newton_keys_no_newton_stage NP 1 LABELS "regression;smoke"
+                   PREFIX ${EXPECT_ABORT} "steady\\.newton_gmres_restart has no effect without steady\\.stage = simplec_newton"
+                          "steady\\.switch_residual has no effect without steady\\.stage = simplec_newton" --
+                   COMMAND $<TARGET_FILE:ablsteady> ${HILL3D_NEUTRAL_CASE}/inputs_steady_hill3d_neutral
+                           steady.newton_gmres_restart=50 steady.switch_residual=1e-3 ${ABLSTEADY_TEST_AMREX_FLAGS})
+ablsteady_add_test(NAME abort_newton_keys_no_stage NP 1 LABELS "regression;smoke"
+                   PREFIX ${EXPECT_ABORT} "steady\\.newton_gmres_restart has no effect without steady\\.stage = simplec_newton" --
+                   COMMAND $<TARGET_FILE:ablsteady> ${VALIDATION_CASE}/inputs_abort_no_stage steady.newton_gmres_restart=50
+                           ${ABLSTEADY_TEST_AMREX_FLAGS})
+# Sub-phase 3.5: the truly neutral 2-D hill (32 x 1 x 16, no Coriolis, van
+# Albada) with steady.stage = simplec_newton switches to Newton once (at
+# r <= 1e-3, iteration 1812), finishes in the Newton stage without a fallback
+# and ends steady within 1800-2199 iterations (1868 measured on 1, 2 and 4
+# ranks; SIMPLEC alone takes 2906). About 10 s on two ranks.
+set(HILL2D_NEWTON_DIR ${CMAKE_CURRENT_BINARY_DIR}/run/rt_steady_hill2d_newton)
+ablsteady_add_test(NAME rt_steady_hill2d_newton NP 2 LABELS "regression;smoke" RUN_DIR ${HILL2D_NEWTON_DIR}
+                   PREFIX ${EXPECT_ABORT} --success
+                          "switching from stage simplec to newton: relative residual"
+                          "ablsteady: steady after (1[89][0-9][0-9]|2[01][0-9][0-9]) iterations"
+                          "ablsteady: it [0-9]+ newton r"
+                          "!switching from stage newton to simplec" --
+                   COMMAND $<TARGET_FILE:ablsteady> ${HILL2D_CASE}/inputs_steady_hill2d_newton ${ABLSTEADY_TEST_AMREX_FLAGS})
 # The LU-SGS overlap against the coarse levels' boxes: overlap 3 fits level 0's
 # 16-wide boxes but not level 3's, 2 wide.
 ablsteady_add_test(NAME abort_sequencing_overlap NP 1 LABELS "regression;smoke"

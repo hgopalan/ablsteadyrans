@@ -739,15 +739,15 @@ TEST(Continuation, InputReadersAndRangeChecks)
     bad_ser.cfl_max = 1;   // below cfl0
     EXPECT_THROW(ablsteady::read_continuation_options(bad_ser), std::runtime_error);
     EXPECT_NO_THROW(ablsteady::read_continuation_options(so));
-    // the application's hint: read from sub-phase 3.5
+    // the application's hint: read with steady.stage = simplec_newton
     for (const char* k : keys) {
         const auto msg = ablsteady::unknown_inputs({{std::string("steady.") + k, false}}, {"steady"});
         ASSERT_EQ(msg.size(), 1U);
-        EXPECT_NE(msg.front().find("sub-phase 3.5"), std::string::npos) << msg.front();
+        EXPECT_NE(msg.front().find("steady.stage = simplec_newton"), std::string::npos) << msg.front();
     }
     const auto other = ablsteady::unknown_inputs({{"steady.newton_armijo", false}}, {"steady"});
     ASSERT_EQ(other.size(), 1U);
-    EXPECT_EQ(other.front().find("sub-phase 3.5"), std::string::npos) << other.front();
+    EXPECT_EQ(other.front().find("steady.stage = simplec_newton"), std::string::npos) << other.front();
 }
 
 // ---------------------------------------------------------------------------

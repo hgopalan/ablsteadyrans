@@ -1,0 +1,64 @@
+# Sub-phase 3.5 (CTest rt_steady_hill2d_newton): the 2-D hill of
+# inputs_steady_hill2d_lusgs, coarsened to 32 x 1 x 16 and driven by a
+# pressure gradient instead of Coriolis, with steady.stage = simplec_newton:
+# SIMPLEC (line LU-SGS, CFL cap 16), then the Newton stage. A regression
+# test of the switch, not of the answer; see docs/solution_algorithm.rst.
+# Truly neutral (300 K, no buoyancy, w damped from 700 m): the capped
+# inversion of the hill deck wandered at r = 0.1-1 for about 2000 iterations,
+# and round-off decided whether it settled (MSVC did not within 20000).
+mesh.n_cell        = 32 1 16   # coarse: a regression test of the switch, not of the answer
+mesh.prob_lo       = -2560. 0. 0.
+mesh.prob_hi       =  2560. 40. 1000.
+mesh.is_periodic   = 1 1 0
+mesh.max_grid_size = 16 1
+
+terrain.type            = agnesi
+terrain.hill_shape      = ridge_x
+terrain.hill_height     = 100.
+terrain.hill_half_width = 500.
+terrain.smoothing       = 0
+
+bc.zlo = surface_layer
+bc.zhi = slip_wall
+bc.surface_z0 = 0.1
+bc.theta_profile_z = 0.
+bc.theta_profile   = 300.
+bc.inflow_profile   = log_law
+bc.inflow_ustar     = 0.35
+bc.inflow_z0        = 0.1
+bc.inflow_direction = 0.
+bc.rayleigh_zdamp    = 700.
+bc.rayleigh_dampcoef = 0.2
+bc.rayleigh_fields   = w
+
+init.first_guess = profile
+
+
+turb.tke_floor = 1.e-6
+
+steady.stage                   = simplec_newton
+steady.cfl0                    = 1.
+steady.cfl_max                 = 16.
+steady.zline_sweeps            = 2
+steady.sweep                   = lusgs
+simplec.rotation_relax         = 1.   # with the planar-mean split 1 converges in half the iterations of 0.3 (docs/solver.rst)
+steady.residual_ref_iterations = 100
+steady.residual_drop_orders    = 4
+steady.max_iterations          = 20000
+
+io.plot_file      = steady_hill2d_newton_plt
+io.turb_plot_file = steady_hill2d_newton_turb
+io.chk_file       = steady_hill2d_newton_chk
+
+# Sub-phase 3.5: SIMPLEC, then the Newton stage once r <= 1e-3 for 20
+# iterations with the monitors settled; van Albada for the whole run, so the
+# Newton stage solves the run's own equations (no final SIMPLEC pass).
+convection.limiter             = van_albada
+steady.switch_residual         = 1.e-3
+# No Coriolis: on ERF's Coriolis deck GMRES stalls at infinite dtau (the
+# simplec preconditioner does not resolve the Ekman balance of rotation and
+# vertical diffusion; docs/solution_algorithm.rst, Limits), so this deck drives
+# the flow by a pressure gradient, u*^2 / H with u* 0.35 m/s.
+forcing.pressure_gradient      = -1.225e-4 0. 0.
+steady.newton_gmres_restart    = 200
+forcing.gravity                = 0.

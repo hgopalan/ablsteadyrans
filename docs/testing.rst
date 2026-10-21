@@ -227,6 +227,65 @@ signal in that test (SIGILL on macOS arm64), so the tests after it did not run.
      - p′ not restored after the projection
      - UT-2.4.2
 
+The one-line mutants of sub-phase 3.5 (``Source/NewtonStage.cpp`` and the switch rules in ``Source/Driver.cpp``),
+each run against ``Driver.*`` and ``NewtonStage.*`` on two ranks with the unit-test flags by
+``tools/newton_stage_mutants.py`` (macOS arm64, AppleClang). 13 of 15 are killed. N14 and N15 survive: they matter only
+where the SIMPLEC preconditioner loses GMRES at a large CFL (the full-size 2-D hill), which no unit test reaches in
+seconds; the Askervein study that replaces the Phase 3 checkpoint measures them.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 6 44 50
+
+   * - Mutant
+     - Change
+     - Failing tests
+   * - N1
+     - The fallback waits for the hysteresis window
+     - ``Driver.NewtonSwitchOnceAndFallback``
+   * - N2
+     - The forward switch ignores the monitors
+     - ``Driver.NewtonSwitchOnceAndFallback``
+   * - N3
+     - The forward switch ignores ``accepts_switch``
+     - ``Driver.NewtonSwitchOnceAndFallback``
+   * - N4
+     - ``leave`` not called on a switch
+     - ``Driver.NewtonSwitchOnceAndFallback``, ``HandsBackForTheFinalPassAfterTheSwap``
+   * - N5
+     - The monitor test against the window's first record, off by one
+     - ``Driver.NewtonSwitchOnceAndFallback``
+   * - N6
+     - The fallback after one failure whatever the key
+     - ``FallsBackAfterFailedSteps``, ``RestartInsideTheStage``
+   * - N7
+     - A failed step does not count
+     - ``FallsBackAfterFailedSteps``
+   * - N8
+     - Converged before any accepted step
+     - ``FallsBackAfterFailedSteps``
+   * - N9
+     - No hand-back for the final pass
+     - ``HandsBackForTheFinalPassAfterTheSwap``
+   * - N10
+     - The continuation's start CFL not reset on entry
+     - every ``NewtonStage`` test
+   * - N11
+     - The continuation state not restored on restart
+     - ``RestartInsideTheStage``
+   * - N12
+     - No limit on failed visits
+     - ``FallsBackAfterFailedSteps``
+   * - N13
+     - No idle hand-back
+     - ``HandsBackWhenConvergedWithoutAVerdict``
+   * - N14
+     - The Newton cap not used (the SIMPLEC cap, plain Newton after one step)
+     - survives (above)
+   * - N15
+     - The preconditioner of an infinite :math:`\Delta\tau` at the SIMPLEC cap
+     - survives (above)
+
 The one-line mutants of sub-phase 3.4 (``Source/Smoothness.cpp`` and the floor freeze and stratification gate in
 ``Source/Closure.cpp``), each run against ``Smoothness.*`` and ``Closure.*`` on two ranks with the unit-test flags by
 ``tools/smoothness_mutants.py`` (macOS arm64, AppleClang). 12 of 13 are killed. S5 survives: it removes the gate
@@ -1650,3 +1709,36 @@ GoogleTest suite
        the new default of ``turb.frozen_switch``. CTest ``abort_frozen_switch_value``, ``abort_frozen_switch_no_newton``
        and ``abort_ri_gate_range``: the application's messages. ``Smoothness.DISABLED_Sweep`` (on request): the
        measurements of :doc:`results`.
+   * - UT-3.5.1
+     - ``Driver.NewtonSwitchOnceAndFallback``: synthetic histories with ``steady.switch_residual`` 1e-4 and a window of
+       5: the relative residual crosses 1e-4 at iteration 3 and stays below; the switch happens once, at iteration 7,
+       with the monitors flat. With a monitor still moving by 5 % per iteration (above ``steady.switch_monitor_tol``
+       = 1 %) it waits until the monitor has been flat over a whole window (iteration 12); with the tolerance 0 it
+       switches at 7 again. A stage that refuses (``accepts_switch`` false) is never entered.
+   * - UT-3.5.2
+     - The same test: a second stage that asks to go back from its second iterate is left at once (iteration 9,
+       inside the hysteresis window), its ``leave`` is called on every exit, the reason is logged, and the forward
+       switch comes back only after the window. ``NewtonStage.FallsBackAfterFailedSteps``: on the hill, with a
+       preconditioner that returns zero every continuation step fails; the stage asks to go back after
+       ``steady.newton_fallback_failures`` = 2 failed steps, not after one, and after one with the key at 1; ``leave``
+       thaws the closure.
+   * - UT-3.5 (a)
+     - *Beyond the plan.* ``NewtonStage.SwitchesOnceAndConvergesInNewton``: the 2-D hill with a capping inversion
+       (8 × 2 × 8, van Albada, 6 orders): one switch (at r ≤ 1e-4, iteration 2768), at most 10 accepted Newton steps
+       (5 measured), steady in the Newton stage, at most 60 % of the SIMPLEC iterations of a SIMPLEC run (2769 of
+       5417) and the same solution to 1e-4 of the largest :math:`u` and :math:`k` (7e-8 measured).
+       ``NewtonStage.HandsBackForTheFinalPassAfterTheSwap``: with van Leer the stage hands the run back for the final
+       SIMPLEC pass once its smooth equations have converged, thaws the closure, refuses any later switch, and the run
+       stays in SIMPLEC over two more windows. ``NewtonStage.RestartInsideTheStage``: a checkpoint two steps into the
+       stage restarts it; three more steps give the uninterrupted run's records and fields bit for bit with the
+       identity preconditioner, and to 1e-3 of the relative residual with ``simplec`` (1e-4 measured; the cause of the
+       difference is not found: the preconditioner's setup and apply give the same bits on the same input). That test
+       found that the continuation's diffusivity must be the stage's own (the SIMPLEC stage's is not restored by a
+       restart inside the Newton stage), and the fallback test that a failed first step must not count as converged.
+   * - RT-3.5 (a)
+     - *Beyond the plan.* CTest ``rt_steady_hill2d_newton`` (smoke, two ranks, about 10 s): the 2-D hill at 32 × 1 × 16
+       without Coriolis (``inputs_steady_hill2d_newton``: truly neutral, a pressure gradient, van Albada, GMRES(200),
+       the switch at 1e-3) switches to Newton once, finishes in the Newton stage without a fallback, and ends steady
+       within 1800–2199 iterations (1868 measured on 1, 2 and 4 ranks; SIMPLEC alone takes 2906).
+       CTest ``abort_newton_keys_no_newton_stage``: a Newton key and a
+       switch key with ``steady.stage = simplec`` abort, naming the key.

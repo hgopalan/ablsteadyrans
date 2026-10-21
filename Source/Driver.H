@@ -15,8 +15,11 @@
 //      unchanged once the run has diverged) drives
 //      the SER ramp, CFL_{n+1} = min(cfl_max, growth CFL_n, cfl0 r_n^-p), and
 //      the switch rules;
-//   5. the switch rules: forward to the next stage after switch_window
-//      consecutive iterations with r_n <= switch_residual, back to the
+//   5. the switch rules: a stage's own request first (fallback_requested:
+//      back at once, whatever the hysteresis); forward to the next stage after switch_window
+//      consecutive iterations with r_n <= switch_residual and (with
+//      switch_monitor_tol > 0) every monitor settled over that window, when
+//      the next stage accepts it; back to the
 //      previous one when r_n has grown by switch_back_growth over the last
 //      switch_window iterations of the current stage; never within
 //      switch_window iterations of the last switch (hysteresis). Every switch
@@ -48,12 +51,14 @@ namespace ablsteady {
 
 //! The solver stage the application runs (steady.stage): none writes the
 //! state and stops (the behaviour before sub-phase 1.15); simplec runs the
-//! SIMPLEC stage (Simplec.H) under the driver.
-enum class StageKind { none, simplec };
+//! SIMPLEC stage (Simplec.H) under the driver; simplec_newton runs SIMPLEC,
+//! then the Newton stage (NewtonStage.H) once the switch rules allow it
+//! (sub-phase 3.5), with the fallback to SIMPLEC.
+enum class StageKind { none, simplec, simplec_newton };
 
 struct SteadyOptions
 {
-    StageKind stage{StageKind::none};    //!< steady.stage (none | simplec)
+    StageKind stage{StageKind::none};    //!< steady.stage (none | simplec | simplec_newton)
     SteadyParams criterion;              //!< steady.residual_*, monitor_* (SteadyCriterion.H)
     int max_iterations{10000};           //!< steady.max_iterations (>= 1)
     amrex::Real cfl0{1};                 //!< steady.cfl0 (> 0): the CFL of the first iterations
@@ -61,13 +66,27 @@ struct SteadyOptions
     amrex::Real ser_exponent{1};         //!< steady.ser_exponent p (>= 0): CFL = cfl0 r^-p
     amrex::Real ser_max_growth{2};       //!< steady.ser_max_growth (>= 1): CFL_{n+1} <= growth CFL_n
     int switch_window{20};               //!< steady.switch_window (>= 1): hysteresis window, iterations
-    amrex::Real switch_residual{amrex::Real(1.0e-2)};  //!< steady.switch_residual (> 0, <= 1): r_n at which to go forward
+    amrex::Real switch_residual{amrex::Real(1.0e-4)};  //!< steady.switch_residual (> 0, <= 1): r_n at which to go forward (plan 3.5: 1e-4)
     amrex::Real switch_back_growth{10};  //!< steady.switch_back_growth (> 1): growth of r_n over a window that sends back
+    //! steady.switch_monitor_tol (0: off, or > 0 and < 1): a forward switch
+    //! also needs every monitor's change over the window at most this
+    //! fraction of max(|value|, scale) (plan 3.5: settled to < 1 %).
+    amrex::Real switch_monitor_tol{amrex::Real(1.0e-2)};
+    //! steady.newton_fallback_failures (>= 1): consecutive failed Newton
+    //! steps (Continuation::step returned failed, every retry used) after
+    //! which the Newton stage asks to go back to SIMPLEC (plan 3.5: 2).
+    int newton_fallback_failures{2};
+    //! steady.newton_cfl_max (finite, >= steady.cfl_max; 128): the Newton
+    //! stage's CFL cap. Its continuation ramps from steady.cfl_max to it by
+    //! the SER law, and its preconditioner uses it for an infinite dtau
+    //! (NewtonStage.H). With steady.newton_dtau_inf_at_cap = 1 dtau becomes
+    //! infinite once the CFL reaches it.
+    amrex::Real newton_cfl_max{amrex::Real(128)};
     int zline_sweeps{2};                 //!< steady.zline_sweeps (zjacobi 2..100, lusgs 1..100): line sweeps per predictor step, for the SIMPLEC stage of 1.15 (Predictor.H)
     SweepKind sweep{SweepKind::zjacobi}; //!< steady.sweep (zjacobi | lusgs): the line solver of the sweeps (sub-phase 2.1, Predictor.H)
     //! steady.newton_preconditioner (identity | simplec): the Newton step's
-    //! preconditioner (sub-phase 3.3, NewtonPreconditioner.H); read here, used
-    //! once the run can switch to Newton (sub-phase 3.5).
+    //! preconditioner (sub-phase 3.3, NewtonPreconditioner.H); used by the
+    //! Newton stage (steady.stage = simplec_newton, NewtonStage.H).
     NewtonPreconditionerKind newton_preconditioner{NewtonPreconditionerKind::simplec};
     //! steady.line_ghosts (lagged | zero), line_overlap (0..max_line_overlap,
     //! 0 unless zero) and line_order (sequential | diagonal): the LU-SGS
@@ -121,6 +140,17 @@ public:
     [[nodiscard]] virtual std::vector<amrex::Real> monitors () const = 0;
     [[nodiscard]] virtual const std::vector<std::string>& residual_names () const = 0;
     [[nodiscard]] virtual const std::vector<MonitorSpec>& monitor_specs () const = 0;
+    //! Called when the driver switches away from the stage (before the next
+    //! stage's init).
+    virtual void leave (State& /*q*/) {}
+    //! After an iterate: true when the stage asks to go back to the
+    //! previous stage now (the switch ignores the hysteresis window); why
+    //! goes to the switch log.
+    [[nodiscard]] virtual bool fallback_requested () const { return false; }
+    [[nodiscard]] virtual std::string fallback_reason () const { return {}; }
+    //! false: the driver does not switch forward into the stage (a stage
+    //! that has handed the run back for a final pass).
+    [[nodiscard]] virtual bool accepts_switch () const { return true; }
 };
 
 struct IterationRecord
@@ -236,6 +266,10 @@ public:
 private:
     amrex::Real next_cfl (amrex::Real r) const;
     void apply_switch_rules (int iteration, amrex::Real r, const std::vector<amrex::Real>& residuals, State& q);
+    //! Every monitor changed by at most steady.switch_monitor_tol of
+    //! max(|value|, scale) over the last switch_window iterations (true when
+    //! the tolerance is 0; false with fewer records).
+    [[nodiscard]] bool monitors_settled () const;
 
     SteadyOptions m_opt;
     std::vector<std::unique_ptr<Stage>> m_stages;

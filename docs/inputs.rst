@@ -283,7 +283,7 @@ Quick reference
      -
    * - ``steady.stage``
      - ``none``
-     - ``none`` (build and stop) or ``simplec``
+     - ``none`` (build and stop), ``simplec``, or ``simplec_newton`` (SIMPLEC, then Newton)
    * - ``steady.max_iterations``
      - ``10000``
      - Iteration limit
@@ -306,8 +306,14 @@ Quick reference
      - ``1``, ``2``
      - CFL ramp exponent and largest growth per iteration
    * - ``steady.switch_window``, ``steady.switch_residual``, ``steady.switch_back_growth``
-     - ``20``, ``1e-2``, ``10``
-     - Stage-switching rules
+     - ``20``, ``1e-4``, ``10``
+     - Stage-switching rules (``simplec_newton`` only)
+   * - ``steady.switch_monitor_tol``, ``steady.newton_fallback_failures``
+     - ``1e-2``, ``2``
+     - Monitors settled before the switch to Newton; failed Newton steps before the fallback
+   * - ``steady.newton_cfl_max``
+     - ``128``
+     - The Newton stage's CFL cap
    * - ``steady.sweep``
      - ``lusgs`` (CPU build), ``zjacobi`` (GPU build)
      - Line solver: ``zjacobi`` or ``lusgs``
@@ -343,10 +349,10 @@ Quick reference
      - Machine and node count for the allocation accounting
    * - ``steady.newton_*``
      - see `steady`_
-     - Newton–Krylov inputs (not yet used by the application)
+     - Newton–Krylov inputs (``simplec_newton`` only)
    * - ``steady.newton_preconditioner``
      - ``simplec``
-     - Newton preconditioner: ``identity`` or ``simplec`` (not yet used by the application)
+     - Newton preconditioner: ``identity`` or ``simplec``
    * - **SIMPLEC** (`simplec`_)
      -
      -
@@ -505,7 +511,7 @@ A restart cannot be combined with ``init.*`` keys.
    * - ``init.first_guess``
      - ``none``
      - ``none`` (fluid at rest), ``profile`` (the inflow profile by height above the ground) or ``column`` (the
-       steady single-column profile; needs a horizontal forcing and the SIMPLEC stage, see
+       steady single-column profile; needs a horizontal forcing and ``steady.stage = simplec`` or ``simplec_newton``, see
        :doc:`initial_conditions` for the full list).
    * - ``init.projection``
      - ``1``
@@ -731,7 +737,7 @@ See :doc:`turbulence_model`. Read with the SIMPLEC stage only.
    * - ``turb.frozen_switch``
      - ``1``
      - 0 or 1: freeze the k-floor decisions of the closure from the switch to Newton to the end of the Newton stage
-       (:doc:`solution_algorithm`). The application refuses it until it can switch to Newton (sub-phase 3.5).
+       (:doc:`solution_algorithm`). With ``steady.stage = simplec`` it aborts as a key with no effect.
    * - ``turb.ri_gate``
      - ``0``
      - 0 (off) or finite, ≥ 1e-6 and ≤ 1: :math:`Ri_0` of the stratification gate
@@ -780,7 +786,8 @@ writes them and stops; the other ``steady.*`` keys are then refused.
      - Range and meaning
    * - ``steady.stage``
      - ``none``
-     - ``none`` or ``simplec``.
+     - ``none``, ``simplec`` or ``simplec_newton``: SIMPLEC, then the Newton stage once the switch rules allow it,
+       with the fallback to SIMPLEC (:doc:`solution_algorithm`).
    * - ``steady.max_iterations``
      - ``10000``
      - ≥ 1. Iteration limit over the whole run, restarts included. With grid sequencing it applies to each level.
@@ -817,13 +824,29 @@ writes them and stops; the other ``steady.*`` keys are then refused.
      - Finite, ≥ 1. Largest CFL growth factor per iteration.
    * - ``steady.switch_window``
      - ``20``
-     - ≥ 1. Iterations below ``switch_residual`` before a switch to the next stage.
+     - ≥ 1. Iterations below ``switch_residual`` before a switch to the next stage; no other switch within this many
+       iterations of the last one (hysteresis), except the Newton stage's own hand-back.
    * - ``steady.switch_residual``
-     - ``1e-2``
-     - > 0 and ≤ 1. Relative residual at which the next stage starts.
+     - ``1e-4``
+     - > 0 and ≤ 1. Relative residual at which the Newton stage starts (plan rev. 6: 1e-4; it was ``1e-2`` and unused
+       before the Newton stage).
    * - ``steady.switch_back_growth``
      - ``10``
      - Finite, > 1. Residual growth over a window that returns the run to the previous stage.
+   * - ``steady.switch_monitor_tol``
+     - ``1e-2``
+     - 0 (off), or > 0 and < 1. The switch to Newton also needs every monitor to have changed by at most this fraction
+       of max(\|value\|, scale) over the window.
+   * - ``steady.newton_fallback_failures``
+     - ``2``
+     - Integer, ≥ 1. Consecutive failed Newton steps (every retry used) after which the run goes back to SIMPLEC.
+       After three such fallbacks the run stays in SIMPLEC.
+   * - ``steady.newton_cfl_max``
+     - ``128``
+     - Finite, ≥ ``steady.cfl_max`` (with ``simplec_newton``). The Newton stage's CFL cap: from ``steady.cfl_max`` the
+       CFL is multiplied by ``steady.ser_max_growth`` per accepted step up to this cap, then (with
+       ``steady.newton_dtau_inf_at_cap = 1``) :math:`\Delta\tau` is infinite. The preconditioner of an infinite
+       :math:`\Delta\tau` uses this CFL.
    * - ``steady.sweep``
      - ``lusgs`` (CPU build), ``zjacobi`` (GPU build)
      - ``zjacobi`` (z-line Jacobi) or ``lusgs`` (line LU-SGS). The default depends on the build (the Phase 2
@@ -926,11 +949,10 @@ writes them and stops; the other ``steady.*`` keys are then refused.
      - Finite, ≥ 1. At a finite :math:`\Delta\tau`, when no :math:`\lambda` meets the Armijo condition, accept the
        full step if :math:`|R|` grows by at most this factor. 1: off. Not used at infinite :math:`\Delta\tau`.
 
-The ``steady.newton_*`` keys belong to the Newton–Krylov stage, which the application does not run yet; until then
-they are refused as unknown keys. ``steady.newton_preconditioner`` is read and range-checked, then refused with
-"has no effect until the run can switch to Newton". Their defaults are provisional. The last seven rows are the pseudo-transient
-continuation of :doc:`solution_algorithm`; its CFL ramp reuses ``steady.cfl0``, ``steady.cfl_max``,
-``steady.ser_exponent`` and ``steady.ser_max_growth``, with the same range checks.
+The ``steady.newton_*`` and ``steady.switch_*`` keys are read with ``steady.stage = simplec_newton``; with
+``simplec`` they abort as keys with no effect. Their defaults are provisional (PR-28 tunes them). The last seven rows are the pseudo-transient
+continuation of :doc:`solution_algorithm`; its CFL ramp reuses ``steady.cfl_max`` and the SER keys, and in the
+Newton stage starts at ``steady.cfl_max``.
 
 ``simplec``
 -----------

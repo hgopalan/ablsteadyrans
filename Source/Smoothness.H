@@ -49,9 +49,9 @@
 // ghost ring), so a restart inside the Newton stage evaluates the same
 // residual on any layout.
 //
-// Inputs: turb.frozen_switch (Closure.H). The application does not run the
-// Newton stage yet (sub-phase 3.5 switches to it), so it refuses
-// turb.frozen_switch as a key with no effect.
+// Inputs: turb.frozen_switch (Closure.H), read with steady.stage =
+// simplec_newton (the Newton stage, NewtonStage.H); with simplec it aborts as
+// a key with no effect.
 
 #include "Closure.H"
 #include "Limiter_K.H"

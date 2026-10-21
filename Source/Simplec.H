@@ -162,6 +162,18 @@ ScalarSweepResult scalar_sweep (Equation eq, amrex::MultiFab& field, const amrex
                                 const ClosureFields* fields, SimplecWorkspace& w, const LineSweepOptions& sweep = LineSweepOptions(),
                                 bool clip = true);
 
+//! The residual names and monitors every steady stage reports (the
+//! driver requires them to agree across its stages): u, v, w, p, theta, tke;
+//! the largest face speed, the mean k and, with a wall model, the mean u*.
+std::vector<std::string> stage_residual_names ();
+std::vector<MonitorSpec> stage_monitor_specs (const ResidualInputs& in);
+//! The scaled residual norms (RMS per unit volume over U^2/H, U/H, U
+//! theta_s/H, U k_s/H with the jvp scales s and the domain height) and the
+//! monitors of R at q; ss: the wall state at q (null without a wall model).
+//! Collective.
+void stage_norms (const ResidualFields& R, const State& q, const SurfaceState* ss, const JvpScales& s, amrex::Real height,
+                  const amrex::Geometry& geom, std::vector<amrex::Real>& res, std::vector<amrex::Real>& mon);
+
 //! What one iteration did (the application's log line).
 struct SimplecIterationInfo
 {
@@ -205,6 +217,8 @@ public:
     [[nodiscard]] const SurfaceState& surface_state () const { return m_ss; }
     [[nodiscard]] const ResidualFields& residual_fields () const { return m_R; }
     [[nodiscard]] const SimplecOptions& options () const { return m_opt; }
+    //! The height H of the residual scales (stage_norms).
+    [[nodiscard]] amrex::Real norm_height () const { return m_height; }
 
 private:
     void compute_norms (const State& q);

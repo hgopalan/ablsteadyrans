@@ -23,7 +23,8 @@ const char* const kKeys[] = {"residual_tol", "residual_drop_orders", "residual_r
                              "monitor_window", "max_iterations", "cfl0", "cfl_max", "ser_exponent", "ser_max_growth",
                              "switch_window", "switch_residual", "switch_back_growth", "zline_sweeps", "sweep", "line_ghosts", "line_overlap",
                              "line_order", "line_alternate", "machine", "nodes", "stage",
-                             "newton_preconditioner"};
+                             "newton_preconditioner", "switch_monitor_tol", "newton_fallback_failures",
+                             "newton_cfl_max"};
 
 // 2: the reference hold; 3: the residual scale height (versions 1 and 2 still read)
 constexpr int kDriverVersion = 3;
@@ -78,6 +79,14 @@ std::vector<std::string> check_steady_options (const SteadyOptions& opt)
         [&] { return opt.switch_residual > 0 && opt.switch_residual <= 1; });
     bad(opt.switch_back_growth, "switch_back_growth", "finite and > 1",
         [&] { return std::isfinite(opt.switch_back_growth) && opt.switch_back_growth > 1; });
+    bad(opt.switch_monitor_tol, "switch_monitor_tol", "0 (off), or > 0 and < 1",
+        [&] { return opt.switch_monitor_tol >= 0 && opt.switch_monitor_tol < 1; });
+    if (opt.newton_fallback_failures < 1) { err.emplace_back("steady.newton_fallback_failures must be >= 1"); }
+    // The Newton stage's cap (only that stage reads it; with one stage it aborts as a key with no effect, App.cpp).
+    if (opt.stage == StageKind::simplec_newton) {
+        bad(opt.newton_cfl_max, "newton_cfl_max", "finite and >= steady.cfl_max",
+            [&] { return std::isfinite(opt.newton_cfl_max) && !std::isnan(opt.cfl_max) && opt.newton_cfl_max >= opt.cfl_max; });
+    }
     if (opt.nodes < 1) { err.emplace_back("steady.nodes must be >= 1"); }
     if (opt.sweep == SweepKind::lusgs) {
         if (opt.zline_sweeps < 1 || opt.zline_sweeps > 100) {
@@ -155,6 +164,9 @@ SteadyOptions read_steady_options ()
     pp.query("switch_window", opt.switch_window);
     pp.query("switch_residual", opt.switch_residual);
     pp.query("switch_back_growth", opt.switch_back_growth);
+    pp.query("switch_monitor_tol", opt.switch_monitor_tol);
+    pp.query("newton_fallback_failures", opt.newton_fallback_failures);
+    pp.query("newton_cfl_max", opt.newton_cfl_max);
     pp.query("nodes", opt.nodes);
     pp.query("zline_sweeps", opt.zline_sweeps);
     std::string sweep;
@@ -188,7 +200,8 @@ SteadyOptions read_steady_options ()
     if (pp.query("stage", stage)) {
         if (stage == "none") { opt.stage = StageKind::none; }
         else if (stage == "simplec") { opt.stage = StageKind::simplec; }
-        else { amrex::Abort("ablsteady: steady.stage = " + stage + ": must be none or simplec"); }
+        else if (stage == "simplec_newton") { opt.stage = StageKind::simplec_newton; }
+        else { amrex::Abort("ablsteady: steady.stage = " + stage + ": must be none, simplec or simplec_newton"); }
     }
     std::string machine;
     if (pp.query("machine", machine) && !parse_machine(machine, opt.machine)) {
@@ -313,13 +326,23 @@ void Driver::apply_switch_rules (int iteration, amrex::Real r, const std::vector
 {
     const int W = m_opt.switch_window;
     m_h.below_count = (r <= m_opt.switch_residual) ? m_h.below_count + 1 : 0;
-    if (m_h.last_switch >= 0 && iteration - m_h.last_switch < W) { return; }   // hysteresis
     int to = m_h.stage;
     std::string reason;
-    if (m_h.below_count >= W && m_h.stage + 1 < static_cast<int>(m_stages.size())) {
+    if (m_h.stage > 0 && m_stages[m_h.stage]->fallback_requested()) {
+        // The stage's own request (the Newton stage's failed steps, or its
+        // hand-back for the final pass): at once, whatever the hysteresis.
+        to = m_h.stage - 1;
+        reason = m_stages[m_h.stage]->fallback_reason();
+    } else if (m_h.last_switch >= 0 && iteration - m_h.last_switch < W) {
+        return;   // hysteresis
+    } else if (m_h.below_count >= W && m_h.stage + 1 < static_cast<int>(m_stages.size())
+               && m_stages[m_h.stage + 1]->accepts_switch() && monitors_settled()) {
         to = m_h.stage + 1;
         reason = "relative residual " + fmt(double(r)) + " <= steady.switch_residual " + fmt(double(m_opt.switch_residual))
                  + " for " + std::to_string(W) + " iterations";
+        if (m_opt.switch_monitor_tol > 0) {
+            reason += ", monitors within steady.switch_monitor_tol " + fmt(double(m_opt.switch_monitor_tol));
+        }
     } else if (m_h.stage > 0 && static_cast<int>(m_h.records.size()) > W && iteration - W > m_h.last_switch) {
         // the record W iterations back belongs to the current stage
         const amrex::Real before = m_h.records[m_h.records.size() - 1 - W].relative_residual;
@@ -344,10 +367,27 @@ void Driver::apply_switch_rules (int iteration, amrex::Real r, const std::vector
     }
     amrex::Print() << "ablsteady: iteration " << iteration << ": switching from stage " << m_stages[e.from]->name()
                    << " to " << m_stages[to]->name() << ": " << reason << " (scaled residuals: " << state << ")\n";
+    m_stages[e.from]->leave(q);
     m_h.stage = to;
     m_h.below_count = 0;
     m_h.last_switch = iteration;
     m_stages[to]->init(q);
+}
+
+bool Driver::monitors_settled () const
+{
+    if (m_opt.switch_monitor_tol <= 0) { return true; }
+    const int W = m_opt.switch_window;
+    const auto& rec = m_h.records;
+    if (static_cast<int>(rec.size()) < W + 1) { return false; }
+    const auto& specs = m_stages.front()->monitor_specs();
+    const auto& now = rec.back().monitors;
+    const auto& then = rec[rec.size() - 1 - static_cast<std::size_t>(W)].monitors;
+    for (std::size_t m = 0; m < now.size(); ++m) {
+        const amrex::Real scale = amrex::max(std::abs(now[m]), specs[m].scale);
+        if (!(std::abs(now[m] - then[m]) <= m_opt.switch_monitor_tol * scale)) { return false; }
+    }
+    return true;
 }
 
 SteadyVerdict Driver::step (State& q)
@@ -418,11 +458,22 @@ DriverResult Driver::run (State& q)
     return out;
 }
 
-void Driver::restore (const DriverHistory& h, State& q)
+void Driver::restore (const DriverHistory& h_in, State& q)
 {
+    // A run with more stages may continue a history with fewer (a
+    // steady.stage = simplec checkpoint finished with simplec_newton): the
+    // missing stages start with empty accounts. The reverse loses a stage.
+    DriverHistory h_pad;
+    const bool pad = h_in.accounts.size() < m_stages.size() && h_in.stage < static_cast<int>(h_in.accounts.size());
+    if (pad) {
+        h_pad = h_in;
+        h_pad.accounts.resize(m_stages.size());
+    }
+    const DriverHistory& h = pad ? h_pad : h_in;
     if (h.accounts.size() != m_stages.size()) {
         amrex::Abort("ablsteady: Driver::restore: the history has " + std::to_string(h.accounts.size()) + " stages, this driver "
-                     + std::to_string(m_stages.size()));
+                     + std::to_string(m_stages.size()) + " (a steady.stage = simplec_newton checkpoint cannot continue with "
+                     "steady.stage = simplec)");
     }
     if (h.stage < 0 || h.stage >= static_cast<int>(m_stages.size())) {
         amrex::Abort("ablsteady: Driver::restore: the history's stage " + std::to_string(h.stage) + " does not exist");

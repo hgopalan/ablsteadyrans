@@ -67,6 +67,7 @@
 #include "InflowProfile.H"
 #include "Initializer.H"
 #include "MeshHierarchy.H"
+#include "NewtonStage.H"
 #include "Poisson.H"
 #include "Residual.H"
 #include "Simplec.H"
@@ -145,18 +146,22 @@ struct RunSetup
     ConvectionInputs cin;
     SimplecOptions simplec;
     SteadyOptions sopt;
+    //! The Newton stage's (steady.stage = simplec_newton; level 0 only).
+    NewtonStageOptions newton;
 };
 
 //! The SIMPLEC stage and its driver on one level's mesh, with the level's
-//! own boundary conditions, closure and wall distance. setup, mesh, geom and
-//! z_nd are referenced: they must outlive the solver. label prefixes its log
-//! lines ("" for level 0, whose lines are those of a run without
-//! sequencing).
+//! own boundary conditions, closure and wall distance; with newton (level 0
+//! of steady.stage = simplec_newton) the Newton stage too (NewtonStage.H).
+//! setup, mesh, geom and z_nd are referenced: they must outlive the solver.
+//! label prefixes its log lines ("" for level 0, whose lines are those of a
+//! run without sequencing).
 class LevelSolver
 {
 public:
     LevelSolver (const RunSetup& setup, const Mesh& mesh, const amrex::Geometry& geom, const amrex::MultiFab& z_nd,
-                 const amrex::BoxArray& ba, const amrex::DistributionMapping& dm, const std::string& label);
+                 const amrex::BoxArray& ba, const amrex::DistributionMapping& dm, const std::string& label,
+                 bool newton = false);
     // res_in, the stage's copy of it and the driver's diffusivity point into
     // this object: it can be neither copied nor moved.
     LevelSolver (const LevelSolver&) = delete;
@@ -172,16 +177,23 @@ public:
     [[nodiscard]] Driver& driver () { return *m_driver; }
     [[nodiscard]] const Driver& driver () const { return *m_driver; }
     [[nodiscard]] const SimplecStage& stage () const { return *m_stage; }
+    //! The Newton stage (null without one).
+    [[nodiscard]] NewtonStage* newton_stage () { return m_newton; }
+    [[nodiscard]] const NewtonStage* newton_stage () const { return m_newton; }
     [[nodiscard]] const SurfaceLayerOptions* surface () const { return res_in.surface; }
 
 private:
     const SimplecStage* m_stage{nullptr};
+    NewtonStage* m_newton{nullptr};
     std::unique_ptr<Driver> m_driver;
 };
 
 //! One log line per iteration (the first ten, then every tenth, and the
 //! last), prefixed with label.
-void print_iteration (const Driver& driver, const SimplecStage& stage, bool last, const std::string& label = "");
+//! In the Newton stage (newton set, the record's stage 1) the line gives
+//! the continuation step instead of SIMPLEC's pieces.
+void print_iteration (const Driver& driver, const SimplecStage& stage, bool last, const std::string& label = "",
+                      const NewtonStage* newton = nullptr);
 
 //! What sequencing did on one level.
 struct LevelSummary

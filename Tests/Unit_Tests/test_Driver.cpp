@@ -20,6 +20,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -453,6 +454,168 @@ TEST (Driver, SwitchRulesHaveHysteresis)
     }
 }
 
+// A scripted stage whose monitor follows its own script, and which can ask
+// to go back (fallback_requested from iterate number `fallback_at` on, 0:
+// never) or refuse a forward switch (accepts false).
+class ScriptedSwitchStage : public ScriptedStage
+{
+public:
+    ScriptedSwitchStage (std::string name, std::vector<amrex::Real> script, std::vector<amrex::Real> mon, int fallback_at = 0,
+                         bool accepts = true)
+        : ScriptedStage(std::move(name), std::move(script)), m_mon(std::move(mon)), m_fallback_at(fallback_at), m_accepts(accepts)
+    {}
+    void iterate (ablsteady::State& q, const amrex::MultiFab& dtau) override
+    {
+        ScriptedStage::iterate(q, dtau);
+        m_cur = m_mon[static_cast<std::size_t>(iterates - 1) % m_mon.size()];
+    }
+    void leave (ablsteady::State&) override { ++leaves; }
+    [[nodiscard]] std::vector<amrex::Real> monitors () const override { return {m_cur}; }
+    [[nodiscard]] bool fallback_requested () const override { return m_fallback_at > 0 && iterates >= m_fallback_at; }
+    [[nodiscard]] std::string fallback_reason () const override { return "scripted fallback"; }
+    [[nodiscard]] bool accepts_switch () const override { return m_accepts; }
+    int leaves{0};
+
+private:
+    std::vector<amrex::Real> m_mon;
+    int m_fallback_at;
+    bool m_accepts;
+    amrex::Real m_cur{0};
+};
+
+// ---------------------------------------------------------------------------
+// UT-3.5.1. The forward switch to the Newton stage on synthetic histories
+// (steady.switch_residual 1e-4, switch_window 5): r_n crosses 1e-4 at
+// iteration 3 and stays below; the switch happens once, at iteration 7 (the
+// fifth iteration below), with every monitor flat. With the monitor still
+// moving by 5 % per iteration (above steady.switch_monitor_tol = 1 %) it
+// waits until the monitor has been flat over a whole window (iteration 12:
+// the monitor stops at iteration 7), and with switch_monitor_tol = 0 it
+// switches at iteration 7 again. A stage that refuses (accepts_switch false)
+// is never entered.
+//
+// UT-3.5.2. The fallback: the second stage asks to go back from its second
+// iterate on (the Newton stage's two failed steps, NewtonStage.H): the
+// driver switches back at once (inside the hysteresis window), calls its
+// leave once, logs the stage's reason, and switches forward again only after
+// the window.
+TEST (Driver, NewtonSwitchOnceAndFallback)
+{
+    PCase c = make_mesh(0, false);
+    ablsteady::State q;
+    define_state(q, c);
+    SteadyOptions o = base_options();
+    o.criterion.residual_ref_iterations = 1;
+    o.criterion.monitor_window = 1000;   // never steady here
+    o.switch_window = 5;
+    o.switch_residual = amrex::Real(1e-4);
+    // r_n = residual / 1 (the reference): 1, 1e-2, 1e-3, then 5e-5 on.
+    std::vector<amrex::Real> res{1, amrex::Real(1e-2), amrex::Real(1e-3)};
+    for (int i = 0; i < 60; ++i) { res.push_back(amrex::Real(5e-5)); }
+    auto run = [&] (const SteadyOptions& opt, std::vector<amrex::Real> mon, int fallback_at, bool accepts, int steps) {
+        std::vector<std::unique_ptr<ablsteady::Stage>> v;
+        v.push_back(std::make_unique<ScriptedSwitchStage>("simplec", res, mon));
+        v.push_back(std::make_unique<ScriptedSwitchStage>("newton", std::vector<amrex::Real>{amrex::Real(4e-5)},
+                                                          std::vector<amrex::Real>{amrex::Real(3)}, fallback_at, accepts));
+        auto* first = static_cast<ScriptedSwitchStage*>(v[0].get());
+        auto* second = static_cast<ScriptedSwitchStage*>(v[1].get());
+        auto d = std::make_unique<ablsteady::Driver>(opt, std::move(v), c.mesh, c.geom, nullptr);
+        for (int i = 0; i < steps; ++i) { d->step(q); }
+        return std::make_tuple(std::move(d), first, second);
+    };
+    const std::vector<amrex::Real> flat{amrex::Real(3)};
+    // moving 5 % per iteration up to iteration 7, flat after
+    std::vector<amrex::Real> moving;
+    for (int i = 0; i < 8; ++i) { moving.push_back(amrex::Real(3) * std::pow(amrex::Real(1.05), i)); }
+    for (int i = 0; i < 60; ++i) { moving.push_back(moving[7]); }
+    {
+        auto [d, first, second] = run(o, flat, 0, true, 40);
+        const auto& sw = d->history().switches;
+        ASSERT_EQ(sw.size(), 1u);
+        EXPECT_EQ(sw[0].iteration, 7);
+        EXPECT_EQ(sw[0].to, 1);
+        EXPECT_NE(sw[0].reason.find("steady.switch_monitor_tol"), std::string::npos);
+        EXPECT_EQ(second->inits, 1);
+        EXPECT_EQ(first->leaves, 1);
+        EXPECT_EQ(d->stage(), 1);
+    }
+    {
+        auto [d, first, second] = run(o, moving, 0, true, 40);
+        const auto& sw = d->history().switches;
+        ASSERT_EQ(sw.size(), 1u);
+        EXPECT_EQ(sw[0].iteration, 12);
+    }
+    {
+        SteadyOptions o0 = o;
+        o0.switch_monitor_tol = 0;
+        auto [d, first, second] = run(o0, moving, 0, true, 40);
+        ASSERT_EQ(d->history().switches.size(), 1u);
+        EXPECT_EQ(d->history().switches[0].iteration, 7);
+    }
+    {
+        auto [d, first, second] = run(o, flat, 0, false, 40);
+        EXPECT_TRUE(d->history().switches.empty());
+        EXPECT_EQ(second->inits, 0);
+    }
+    // UT-3.5.2
+    {
+        auto [d, first, second] = run(o, flat, 2, true, 40);
+        const auto& sw = d->history().switches;
+        ASSERT_GE(sw.size(), 3u);
+        EXPECT_EQ(sw[0].iteration, 7);
+        EXPECT_EQ(sw[1].iteration, 9);   // the second stage's second iterate: inside the window, at once
+        EXPECT_EQ(sw[1].from, 1);
+        EXPECT_EQ(sw[1].to, 0);
+        EXPECT_EQ(sw[1].reason, "scripted fallback");
+        int backs = 0;
+        for (const auto& e : sw) { backs += (e.from == 1) ? 1 : 0; }
+        EXPECT_EQ(second->leaves, backs);   // leave on every exit
+        EXPECT_EQ(sw[2].to, 1);
+        EXPECT_GE(sw[2].iteration - sw[1].iteration, o.switch_window);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Beyond the plan (Ann review of PR-27). A one-stage history (a steady.stage =
+// simplec checkpoint) continues in a two-stage driver (simplec_newton): the
+// records, the CFL and the stage are kept and the Newton stage starts with an
+// empty account; a two-stage history cannot continue in a one-stage driver,
+// and the message names steady.stage.
+TEST (Driver, OneStageHistoryContinuesWithTwoStages)
+{
+    PCase c = make_mesh(0, false);
+    ablsteady::State q;
+    define_state(q, c);
+    SteadyOptions o = base_options();
+    o.criterion.monitor_window = 1000;
+    std::vector<amrex::Real> s{1, amrex::Real(0.5), amrex::Real(0.25)};
+    ablsteady::Driver one(o, one_stage<ScriptedStage>("simplec", s), c.mesh, c.geom, nullptr);
+    for (int i = 0; i < 3; ++i) { one.step(q); }
+    auto two_stages = [&] {
+        std::vector<std::unique_ptr<ablsteady::Stage>> v;
+        v.push_back(std::make_unique<ScriptedStage>("simplec", s));
+        v.push_back(std::make_unique<ScriptedStage>("newton", s));
+        return v;
+    };
+    ablsteady::Driver two(o, two_stages(), c.mesh, c.geom, nullptr);
+    two.restore(one.history(), q);
+    EXPECT_EQ(two.history().records.size(), 3u);
+    ASSERT_EQ(two.history().accounts.size(), 2u);
+    EXPECT_EQ(two.history().accounts[0].iterations, 3);
+    EXPECT_EQ(two.history().accounts[1].iterations, 0);
+    EXPECT_EQ(two.stage(), 0);
+    EXPECT_EQ(two.cfl(), one.cfl());
+    two.step(q);
+    EXPECT_EQ(two.history().records.size(), 4u);
+    ablsteady::Driver back(o, one_stage<ScriptedStage>("simplec", s), c.mesh, c.geom, nullptr);
+    try {
+        back.restore(two.history(), q);
+        ADD_FAILURE() << "a two-stage history restored into one stage";
+    } catch (const std::runtime_error& e) {
+        EXPECT_NE(std::string(e.what()).find("steady.stage"), std::string::npos) << e.what();
+    }
+}
+
 // ---------------------------------------------------------------------------
 // UT-1.13.4. The history: written and read back bit for bit (every field,
 // strings with spaces included); a run interrupted after K iterations and
@@ -710,6 +873,13 @@ TEST (Driver, DivergenceStopsAndTheChecksNameTheirInput)
         {"steady.switch_residual", [] (SteadyOptions& b) { b.switch_residual = 0; }},
         {"steady.switch_residual", [] (SteadyOptions& b) { b.switch_residual = 2; }},
         {"steady.switch_back_growth", [] (SteadyOptions& b) { b.switch_back_growth = 1; }},
+        {"steady.switch_monitor_tol", [] (SteadyOptions& b) { b.switch_monitor_tol = -0.1; }},
+        {"steady.switch_monitor_tol", [] (SteadyOptions& b) { b.switch_monitor_tol = 1; }},
+        {"steady.newton_fallback_failures", [] (SteadyOptions& b) { b.newton_fallback_failures = 0; }},
+        {"steady.newton_cfl_max", [] (SteadyOptions& b) {
+             b.stage = ablsteady::StageKind::simplec_newton;
+             b.newton_cfl_max = b.cfl_max / 2;
+         }},
         {"steady.nodes", [] (SteadyOptions& b) { b.nodes = 0; }},
         {"steady.zline_sweeps", [] (SteadyOptions& b) { b.zline_sweeps = 1; }},
         {"steady.zline_sweeps", [] (SteadyOptions& b) { b.zline_sweeps = 101; }},
@@ -774,7 +944,8 @@ TEST (Driver, DivergenceStopsAndTheChecksNameTheirInput)
         const char* keys[] = {"residual_tol", "residual_drop_orders", "residual_ref_iterations", "monitor_rel_tol", "monitor_window",
                               "max_iterations", "cfl0", "cfl_max", "ser_exponent", "ser_max_growth", "switch_window",
                               "switch_residual", "switch_back_growth", "zline_sweeps", "sweep", "machine", "nodes",
-                              "line_ghosts", "line_overlap", "line_order", "line_alternate"};
+                              "line_ghosts", "line_overlap", "line_order", "line_alternate", "switch_monitor_tol",
+                              "newton_fallback_failures", "stage"};
         auto clear = [&] { for (const char* k : keys) { while (pp.remove(k) > 0) {} } };
         clear();
         pp.add("residual_tol", amrex::Real(1e-4));
@@ -798,7 +969,13 @@ TEST (Driver, DivergenceStopsAndTheChecksNameTheirInput)
         pp.add("line_overlap", 3);
         pp.add("line_order", std::string("diagonal"));
         pp.add("line_alternate", 1);
+        pp.add("switch_monitor_tol", amrex::Real(0.05));
+        pp.add("newton_fallback_failures", 3);
+        pp.add("stage", std::string("simplec_newton"));
         const SteadyOptions r = ablsteady::read_steady_options();
+        EXPECT_EQ(r.switch_monitor_tol, amrex::Real(0.05));
+        EXPECT_EQ(r.newton_fallback_failures, 3);
+        EXPECT_EQ(r.stage, ablsteady::StageKind::simplec_newton);
         EXPECT_EQ(r.sweep, ablsteady::SweepKind::lusgs);
         EXPECT_EQ(r.line_ghosts, ablsteady::LineGhosts::zero);
         EXPECT_EQ(r.line_overlap, 3);
@@ -826,10 +1003,16 @@ TEST (Driver, DivergenceStopsAndTheChecksNameTheirInput)
         EXPECT_EQ(r.machine, ablsteady::Machine::KestrelGpu);
         EXPECT_EQ(r.nodes, 3);
         EXPECT_EQ(r.zline_sweeps, 4);
-        EXPECT_EQ(r.given.size(), 21u);
+        EXPECT_EQ(r.given.size(), 24u);
         clear();
         const SteadyOptions d = ablsteady::read_steady_options();
         EXPECT_EQ(d.cfl0, 1);
+        // The switch rules of sub-phase 3.5 (plan rev. 6: 1e-4, monitors within 1 %, two failures).
+        EXPECT_EQ(d.switch_residual, amrex::Real(1e-4));
+        EXPECT_EQ(d.switch_monitor_tol, amrex::Real(1e-2));
+        EXPECT_EQ(d.newton_fallback_failures, 2);
+        EXPECT_EQ(d.newton_cfl_max, amrex::Real(128));
+        EXPECT_EQ(d.switch_window, 20);
         // The application defaults of sub-phase 2.6: the build's sweep and
         // that sweep's CFL cap (lusgs and 8 on a CPU build).
         EXPECT_EQ(d.sweep, ablsteady::default_sweep());

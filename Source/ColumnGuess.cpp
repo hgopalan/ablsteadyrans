@@ -24,8 +24,9 @@ std::vector<std::string> check_column_guess (const InitOptions& iopt, const Stea
 {
     std::vector<std::string> err;
     if (iopt.first_guess != InitOptions::FirstGuess::column) { return err; }
-    if (sopt.stage != StageKind::simplec) {
-        err.emplace_back("init.first_guess = column needs steady.stage = simplec (the column uses the stage's closure and forcing)");
+    if (sopt.stage == StageKind::none) {
+        err.emplace_back("init.first_guess = column needs steady.stage = simplec or simplec_newton (the column uses the stage's "
+                         "closure and forcing)");
     }
     const bool driven = (fopt.coriolis.enabled && fopt.coriolis.geostrophic)
                         || fopt.pressure_gradient[0] != 0 || fopt.pressure_gradient[1] != 0;

@@ -222,7 +222,8 @@ LooseStop loose_stop (const SteadyHistory& h, const SteadyParams& p, const std::
 
 // ---------------------------------------------------------------------------
 LevelSolver::LevelSolver (const RunSetup& s, const Mesh& mesh, const amrex::Geometry& geom, const amrex::MultiFab& z_nd,
-                          const amrex::BoxArray& ba, const amrex::DistributionMapping& dm, const std::string& label)
+                          const amrex::BoxArray& ba, const amrex::DistributionMapping& dm, const std::string& label,
+                          bool newton)
     : bc(s.bin, geom, mesh, s.fopt.coriolis), closure(s.copt)
 {
     if (s.copt.wall_distance == WallDistanceKind::tucker) {
@@ -239,13 +240,43 @@ LevelSolver::LevelSolver (const RunSetup& s, const Mesh& mesh, const amrex::Geom
     m_stage = stage.get();
     std::vector<std::unique_ptr<Stage>> stages;
     stages.push_back(std::move(stage));
+    if (newton) {
+        auto ns = std::make_unique<NewtonStage>(s.sopt, s.newton, s.simplec, s.popt, res_in, &closure, mesh, geom, z_nd,
+                                                s.copt.tke_floor, m_stage->norm_height(), ba, dm);
+        m_newton = ns.get();
+        stages.push_back(std::move(ns));
+    }
     m_driver = std::make_unique<Driver>(s.sopt, std::move(stages), mesh, geom, &m_stage->nu());
 }
 
-void print_iteration (const Driver& driver, const SimplecStage& stage, bool last, const std::string& label)
+void print_iteration (const Driver& driver, const SimplecStage& stage, bool last, const std::string& label,
+                      const NewtonStage* newton)
 {
     const DriverHistory& h = driver.history();
     const IterationRecord& r = h.records.back();
+    if (newton != nullptr && r.stage == 1) {
+        // Every Newton step (few, and each costs many residual evaluations).
+        std::string line = "ablsteady: " + label + "it " + std::to_string(r.iteration + 1) + " newton r " + fmt(double(r.relative_residual))
+                           + " res";
+        for (const amrex::Real v : r.residuals) { line += " " + fmt(double(v)); }
+        const auto& recs = newton->continuation().records();
+        int attempts = 0, gmres = 0;
+        for (std::size_t n = newton->first_record(); n < recs.size(); ++n) {   // this iteration's attempts
+            ++attempts;
+            gmres += recs[n].gmres_iterations;
+        }
+        if (newton->converged()) {
+            line += " converged: no step";
+        } else if (attempts > 0) {
+            const ContinuationRecord& c = recs.back();
+            line += " |R| " + fmt(double(c.residual)) + " -> " + fmt(double(c.residual_new)) + " cfl "
+                    + (c.infinite ? std::string("inf") : fmt(double(c.cfl))) + " lambda " + fmt(double(c.lambda)) + " attempts "
+                    + std::to_string(attempts) + " gmres " + std::to_string(gmres)
+                    + (newton->last_status() == ContinuationStatus::failed ? " FAILED" : "");
+        }
+        amrex::Print() << line << "\n";
+        return;
+    }
     if (!(r.iteration < 10 || r.iteration % 10 == 9 || last)) { return; }
     std::string line = "ablsteady: " + label + "it " + std::to_string(r.iteration + 1) + " cfl " + fmt(double(r.cfl)) + " r "
                      + fmt(double(r.relative_residual)) + " res";

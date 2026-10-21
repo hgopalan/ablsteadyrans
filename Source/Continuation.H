@@ -37,8 +37,8 @@
 // read_continuation_options): newton_armijo_c, newton_backtrack,
 // newton_lambda_min, newton_cfl_cut, newton_max_retries,
 // newton_dtau_inf_at_cap, newton_ptc_growth. Like the steady.newton_* keys of Newton.H, the
-// application does not read them before sub-phase 3.5: setting them stops
-// the run as unknown keys.
+// application reads them with steady.stage = simplec_newton (NewtonStage.H);
+// with simplec they abort as keys with no effect.
 //
 // The continuation state (the step count, the CFL, the infinite-dtau switch,
 // |R_0| and the last |R|) decides every later dtau, so it goes to a

@@ -1044,6 +1044,8 @@ TEST(Initializer, ColumnGuessAndProjectionSwitch)
         EXPECT_NE(err.front().find("init.first_guess"), std::string::npos);
         forcing_opt.pressure_gradient = {amrex::Real(1e-4), 0, 0};
         EXPECT_TRUE(ablsteady::check_column_guess(o, so, forcing_opt, cb, cs, true).empty());
+        so.stage = ablsteady::StageKind::simplec_newton;   // the column runs before either stage
+        EXPECT_TRUE(ablsteady::check_column_guess(o, so, forcing_opt, cb, cs, true).empty());
         so.stage = ablsteady::StageKind::none;
         err = ablsteady::check_column_guess(o, so, forcing_opt, cb, cs, true);
         ASSERT_FALSE(err.empty());
