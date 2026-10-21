@@ -362,7 +362,13 @@ Switching and fallback
 
 - Before the Newton CFL cap, the stage went to infinite :math:`\Delta\tau` after one step; GMRES(30) and GMRES(200)
   then stalled on ERF's 2-D hill (2000 iterations at a Krylov residual of 0.9) and the run cycled between the
-  stages. The defaults (the cap, the restart, the switch residual) are tuned in the Phase 3 checkpoint (PR-28).
+  stages.
+- On that hill at full size (128 × 1 × 64, no Coriolis) the ramp does not remove the stall: GMRES(30) needs 105, 180
+  and 323 iterations at CFL 16, 32 and 64, and reaches the 2000-iteration limit from CFL 128 on (Krylov residual
+  0.08 at 128, 0.75 at 256, 0.97–0.99 at infinite :math:`\Delta\tau`); those steps are still accepted, and
+  :math:`|R|` falls from 1.8e-4 to 7.8e-5 over 11 steps. The SIMPLEC preconditioner holds GMRES(30) to about CFL 64
+  on that grid. The cap, the restart length and the switch residual are chosen from the Askervein study that
+  replaces the Phase 3 checkpoint (PR-28).
 - The stage's continuation takes its momentum diffusivity from the closure at its own state, not from the SIMPLEC
   stage (whose is not restored by a restart inside the Newton stage).
 
