@@ -168,7 +168,7 @@ on two ranks (four for the 3-D hill).
 
 The 2-D hill and Askervein counts were re-measured with the closure's inflow length
 (``bc.inflow_tke_length = closure``, October 2026); the column does not change, and the flat case keeps the length
-of before (its deck sets ``unbounded``, see :ref:`flat-inflow-length`). The other numbers on this page were measured when each feature was added; later changes to the
+of before (its deck sets ``unbounded``, see :ref:`Periodic decks and the inflow length <flat-inflow-length>`). The other numbers on this page were measured when each feature was added; later changes to the
 code shift iteration counts by up to about 1 % (for example 3062 → 3077 on the 2-D hill).
 
 The crest speed-ups are those of the z-line Jacobi runs (16 sweeps, CFL cap 4). The LU-SGS runs reach the same
