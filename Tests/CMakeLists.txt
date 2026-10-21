@@ -1108,6 +1108,14 @@ if(NOT WIN32)
     set_tests_properties(kestrel_dryrun PROPERTIES LABELS "regression;smoke" FIXTURES_REQUIRED smoke)
 endif()
 
+# The plotfile reader of the check scripts (extern_erf/erf_plotfile.py, a
+# local change): hand-made one-box plotfiles in float and double, little- and
+# big-endian, read back exactly.
+add_test(NAME erf_plotfile_selftest
+         COMMAND ${Python3_EXECUTABLE} -m unittest -v test_erf_plotfile
+         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/tools)
+set_tests_properties(erf_plotfile_selftest PROPERTIES LABELS unit ENVIRONMENT PYTHONDONTWRITEBYTECODE=1)
+
 # --- RT-1.3.1 helper: the extern_erf drift check's own tests -----------------
 add_test(NAME drift_check_selftest
          COMMAND ${Python3_EXECUTABLE} -m unittest -v test_check_extern_erf

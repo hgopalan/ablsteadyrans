@@ -694,6 +694,10 @@ Current tests
        1e-4 %). Label ``nightly``; double only.
    * - ``drift_check_selftest``
      - The ``extern_erf`` drift check on a throw-away ERF repository (:doc:`extraction`).
+   * - ``erf_plotfile_selftest``
+     - ``extern_erf/erf_plotfile.py`` (a local change, :doc:`extraction`) on hand-made one-box plotfiles in double
+       and float, little- and big-endian: every value read back exactly. The upstream reader fails the two float
+       cases. Label ``unit``.
    * - ``refavg_snapshots``, ``refavg_build``, ``refavg_verify``, ``refavg_matches``
      - ``ablsteady_refavg`` end to end: three copies of the smoke plotfile at 0, 5 and 10 s are archived on 2
        ranks with two inputs files; the archive verifies on 3 ranks with the expected metadata, AU and a zero

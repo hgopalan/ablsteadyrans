@@ -74,11 +74,13 @@ def _read_fab(path, offset, ncomp):
             header += fh.read(1)
         htxt = header.decode()
         # FAB ((8, (64 11 52 0 1 12 0 1023)),(8, (1 2 3 4 5 6 7 8)))((lo) (hi) (0)) ncomp
-        nbytes = int(re.search(r"FAB \(\((\d+)", htxt).group(1))
-        # AMReX byte-order descriptor: "(1 2 ... 8)" is big endian,
-        # "(8 7 ... 1)" is little endian (native on x86 and Apple silicon).
+        # The first tuple is the floating-point format (8 fields for float and
+        # double alike); the second is the byte order, one entry per byte, so
+        # its length is the size: (8 7 ... 1) a little-endian double,
+        # (4 3 2 1) a little-endian float; (1 2 ... n) is big endian.
         order = re.search(r"\(\d+, \(([\d ]+)\)\)\)\(", htxt).group(1).split()
-        little = order[0] == "8"
+        nbytes = len(order)
+        little = order[0] == str(nbytes)
         lo, hi = re.findall(r"\(([-\d,]+)\)", htxt.split(")))")[1])[:2]
         lo = [int(v) for v in lo.split(",")]
         hi = [int(v) for v in hi.split(",")]

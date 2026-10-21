@@ -23,7 +23,9 @@ writes :math:`h\,z_\mathrm{top}/z_\mathrm{top}` there (within 1 ulp of :math:`h`
 same nodes, so the result depended on thread order. Its ghost columns outside non-periodic sides take the clamped
 domain node's height there instead (ERF's builder first sets every node outside the domain to
 ``bogus_large_value``; skipping the whole ground layer, as the first version of this change did, left those nodes at
-1e150 and the extrapolation below the ground at 2e150, which a Dirichlet-ground solve read, sub-phase 1.11).
+1e150 and the extrapolation below the ground at 2e150, which a Dirichlet-ground solve read, sub-phase 1.11). ``erf_plotfile.py`` is modified: it takes a FAB's size and byte order
+from the byte-order descriptor (one entry per byte). The upstream reader takes the floating-point format's field
+count as the size, which is 8 for float data too, so it read single-precision plotfiles as byte-swapped doubles.
 
 Copied in sub-phase 1.10, unchanged: ERF's terrain Poisson operator (``ERF_TerrainPoisson.{H,cpp}``,
 ``ERF_TerrainPoisson_3D_K.H``) and ``ERF_SolverUtils.H``, whose ``get_fft_bc`` maps the domain boundary names to

@@ -17,7 +17,8 @@ between the two cell centres that bracket H, or below the first centre by the wa
 S ~ ln((z + z0)/z0) (--z0, default 0.03 m, the Askervein roughness of both
 codes); the ground under a column is TERRAIN, ERF's structured terrain file,
 bilinear at the column centre (within 1.4 m of the mesh's own ground on the
-ERF grid). Then bilinear in x and y between the four columns. Writes "line,d,x,y,speed" rows; prints them.
+ERF grid). Then bilinear in x and y between the four columns. Double and float
+plotfiles are read (the FAB's own size and byte order). Writes "line,d,x,y,speed" rows; prints them.
 
 A PLOTFILE that does not exist is taken as a prefix: the plotfile of that
 prefix with the highest step is read (prefix00213, not prefix_level1_00213).
@@ -35,7 +36,6 @@ import argparse
 import csv
 import math
 import os
-import re
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -121,15 +121,6 @@ class Columns:
         for blo, bhi in self.boxes:
             if blo[2] != lo[2] or bhi[2] != hi[2]:
                 sys.exit(f"{plotfile}: a box spans z {blo[2]}..{bhi[2]} of {lo[2]}..{hi[2]}; columns split in z are not read")
-        # erf_plotfile.py reads 8-byte reals only (it takes the format's field
-        # count as the size and "8 ..." as little endian): refuse float data,
-        # whose byte order has 4 entries, "FAB ((8, (32 8 23 ...)),(4, (4 3 2 1)))".
-        with open(os.path.join(self.level_dir, self.fabs[0][0]), "rb") as fh:
-            fh.seek(self.fabs[0][1])
-            head = fh.readline().decode(errors="replace")
-        order = re.search(r"\),\((\d+), \(([\d ]+)\)\)\)", head)
-        if order is None or int(order.group(1)) != 8:
-            sys.exit(f"{plotfile}: not double precision; extern_erf/erf_plotfile.py reads only doubles correctly")
         self.cache = {}
 
     def column(self, i, j):
