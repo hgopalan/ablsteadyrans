@@ -1649,3 +1649,29 @@ GoogleTest suite
        the new default of ``turb.frozen_switch``. CTest ``abort_frozen_switch_value``, ``abort_frozen_switch_no_newton``
        and ``abort_ri_gate_range``: the application's messages. ``Smoothness.DISABLED_Sweep`` (on request): the
        measurements of :doc:`results`.
+   * - UT-3.5.1
+     - ``Driver.NewtonSwitchOnceAndFallback``: synthetic histories with ``steady.switch_residual`` 1e-4 and a window of
+       5: the relative residual crosses 1e-4 at iteration 3 and stays below; the switch happens once, at iteration 7,
+       with the monitors flat. With a monitor still moving by 5 % per iteration (above ``steady.switch_monitor_tol``
+       = 1 %) it waits until the monitor has been flat over a whole window (iteration 12); with the tolerance 0 it
+       switches at 7 again. A stage that refuses (``accepts_switch`` false) is never entered.
+   * - UT-3.5.2
+     - The same test: a second stage that asks to go back from its second iterate is left at once (iteration 9,
+       inside the hysteresis window), its ``leave`` is called on every exit, the reason is logged, and the forward
+       switch comes back only after the window. ``NewtonStage.FallsBackAfterFailedSteps``: on the hill, with a
+       preconditioner that returns zero every continuation step fails; the stage asks to go back after
+       ``steady.newton_fallback_failures`` = 2 failed steps, not after one, and after one with the key at 1; ``leave``
+       thaws the closure.
+   * - UT-3.5 (a)
+     - *Beyond the plan.* ``NewtonStage.SwitchesOnceAndConvergesInNewton``: the 2-D hill with a capping inversion
+       (8 × 2 × 8, van Albada, 6 orders): one switch (at r ≤ 1e-4, iteration 2768), at most 10 accepted Newton steps
+       (5 measured), steady in the Newton stage, at most 60 % of the SIMPLEC iterations of a SIMPLEC run (2769 of
+       5417) and the same solution to 1e-4 of the largest :math:`u` and :math:`k` (7e-8 measured).
+       ``NewtonStage.HandsBackForTheFinalPassAfterTheSwap``: with van Leer the stage hands the run back for the final
+       SIMPLEC pass once its smooth equations have converged, thaws the closure, refuses any later switch, and the run
+       stays in SIMPLEC over two more windows. ``NewtonStage.RestartInsideTheStage``: a checkpoint two steps into the
+       stage restarts it; three more steps give the uninterrupted run's records and fields bit for bit with the
+       identity preconditioner, and to 1e-3 of the relative residual with ``simplec`` (1e-4 measured; the cause of the
+       difference is not found: the preconditioner's setup and apply give the same bits on the same input). That test
+       found that the continuation's diffusivity must be the stage's own (the SIMPLEC stage's is not restored by a
+       restart inside the Newton stage), and the fallback test that a failed first step must not count as converged.

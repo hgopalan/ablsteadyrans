@@ -23,8 +23,8 @@ Each iteration solves for a correction :math:`\delta q`:
 A *stage* chooses :math:`A` and the way :math:`\delta q` is computed. When :math:`\delta q = 0`, :math:`R(q) = 0`,
 whatever :math:`A` is. A cheaper or rougher :math:`A` changes how fast the iteration converges, not the answer.
 
-The production stage is SIMPLEC (``steady.stage = simplec``), optionally with grid sequencing (below). The
-Newton–Krylov and multigrid stages are in development.
+The production stage is SIMPLEC (``steady.stage = simplec``), optionally with grid sequencing (below).
+The Newton–Krylov stage (``steady.stage = simplec_newton``) finishes the run; multigrid is in development.
 
 Local time step and CFL ramp
 ----------------------------
@@ -298,10 +298,11 @@ the level-0 solver stays allocated, so the peak memory is somewhat above that of
 On the 3-D hill, three levels reduce the level-0 iterations from 2091 to 706 and the wall time from 145 s to 54 s
 (:doc:`results`).
 
-Newton–Krylov stage (in development)
-------------------------------------
+Newton–Krylov stage
+-------------------
 
-A Newton–Krylov stage will finish the iteration once SIMPLEC is close to the solution. Each Newton step solves
+With ``steady.stage = simplec_newton`` a Newton–Krylov stage finishes the iteration once SIMPLEC is close to the
+solution. Each Newton step solves
 
 .. math::
 
@@ -314,8 +315,42 @@ by GMRES, with the Jacobian–vector products of :doc:`discretization`.
   rows. :math:`D = 0` is plain Newton.
 - The fields are scaled so GMRES weighs them alike.
 
-The step is implemented and tested; the application does not run it yet. Its inputs (``steady.newton_*``) are
-listed in :doc:`inputs`.
+Its inputs (``steady.newton_*``) are listed in :doc:`inputs`.
+
+Switching and fallback
+^^^^^^^^^^^^^^^^^^^^^^
+
+``NewtonStage`` (``Source/NewtonStage.H``) is the driver's second stage.
+
+- **Switch.** The driver moves from SIMPLEC to Newton after ``steady.switch_window`` (20) consecutive iterations with
+  the relative residual at or below ``steady.switch_residual`` (1e-4) and every monitor settled: changed by at most
+  ``steady.switch_monitor_tol`` (1 %) of max(\|value\|, scale) over the window.
+- **Entry.** The smoothness handling below enters (the k floor frozen, the smooth limiter in the Newton residual),
+  and the pseudo-transient continuation starts afresh at ``steady.cfl_max``. Its SER law also starts there (SIMPLEC's
+  ramp is done), so with ``steady.newton_dtau_inf_at_cap = 1`` the second step is plain Newton.
+- **Each iteration** is one continuation step. The residual norms and monitors the driver records are those of the
+  run's own equations at the new state (the run's limiter, the closure's live decisions), so the steady criterion
+  and the relative residual mean what they mean for SIMPLEC. That costs one more residual evaluation per step.
+  Once the continuation has converged on equations that are the run's own (\|R\| at or below
+  :math:`10^{-\text{drop}}\,|R_0|`, with ``steady.residual_drop_orders``), the stage takes no more steps; the
+  driver's criterion then fills its monitor window at one residual evaluation per iteration.
+- **Fallback.** After ``steady.newton_fallback_failures`` (2) consecutive failed steps (every retry used) the stage
+  hands the run back to SIMPLEC at once, whatever the hysteresis. SIMPLEC may switch forward again after the window.
+  The switch-back rule on residual growth (``steady.switch_back_growth``) applies too.
+- **Final pass.** When the Newton stage's equations differ from the run's (the limiter was swapped, or a k-floor
+  decision moved), it hands the run back once its own residual has converged, and refuses any later switch: the run
+  ends on SIMPLEC with the run's own equations. With ``convection.limiter = van_albada`` there is no swap.
+- **Restart.** The stage writes ``<checkpoint>/NewtonStage``, the continuation state and the smoothness state; a
+  restart inside the stage continues it. With ``steady.newton_preconditioner = identity`` the restart is bit for bit;
+  with ``simplec`` it agrees to about 1e-4 of the relative residual (the cause is not found).
+
+**Limits.**
+
+- GMRES(30), the default restart, stagnates at infinite :math:`\Delta\tau` on ERF's 2-D hill with Coriolis
+  (2000 iterations at a Krylov residual of 0.9); the steps then fail and the run cycles between the stages. GMRES(200)
+  is tested on the small cases; the defaults are tuned in the Phase 3 checkpoint (PR-28).
+- The stage's continuation takes its momentum diffusivity from the closure at its own state, not from the SIMPLEC
+  stage (whose is not restored by a restart inside the Newton stage).
 
 ``steady.newton_gmres_max_iters`` bounds the GMRES iterations of one solve over all its restarts. A solve that
 reaches it is unconverged; its update is used when the Krylov residual is finite and below :math:`|b|`, like any
@@ -465,7 +500,7 @@ it, and failed at 5.7e-9 on the neutral van Albada run, against 1.4e-13 (:doc:`r
 so the verification pass is not short: 3650–4316 SIMPLEC iterations, 44–74 % of what SIMPLEC needs from 1e-4 to
 1e-9 on its own, on top of the Newton stage. On a van Leer run the swap therefore saves little; with ``convection.limiter = van_albada``
 for the whole run Newton solves the run's own equations, reaches 4e-11 in 5 steps, and needs no verification
-pass, at the cost of a 0.4–0.6 % different answer (:doc:`results`). The application does not run the Newton stage yet (sub-phase 3.5).
+pass, at the cost of a 0.4–0.6 % different answer (:doc:`results`).
 
 .. _convergence-criteria:
 
@@ -507,7 +542,8 @@ Stage switching, restart and reproducibility
 --------------------------------------------
 
 - **Stage switching.** The driver moves to the next stage after ``steady.switch_window`` iterations below
-  ``steady.switch_residual``, and back when the residual grows by ``steady.switch_back_growth`` over a window.
+  ``steady.switch_residual`` with the monitors settled, back when the residual grows by ``steady.switch_back_growth``
+  over a window, and back at once when the Newton stage asks (`Switching and fallback`_).
 - **Restart.** The driver records every iteration (stage, CFL, residuals, monitors, wall time, allocation units) in
   the checkpoint. A restarted run reproduces the uninterrupted run bit for bit on the same ranks and box layout.
 - **Reproducibility.** Norms and monitors are reduced over all ranks, so every rank reaches the same verdict at the

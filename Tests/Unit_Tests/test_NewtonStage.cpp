@@ -37,11 +37,13 @@ amrex::MultiFab& field (ablsteady::State& q, int f)
     return *p[f];
 }
 
+// max |a - b| over the valid points; b may be on another DistributionMapping
+// of the same BoxArray (two runs built separately need not share one).
 double diff (ablsteady::State& a, ablsteady::State& b, int f)
 {
     amrex::MultiFab d(field(a, f).boxArray(), field(a, f).DistributionMap(), 1, 0);
-    amrex::MultiFab::Copy(d, field(a, f), 0, 0, 1, 0);
-    amrex::MultiFab::Subtract(d, field(b, f), 0, 0, 1, 0);
+    d.ParallelCopy(field(b, f), 0, 0, 1);
+    amrex::MultiFab::Subtract(d, field(a, f), 0, 0, 1, 0);
     return static_cast<double>(d.norm0());
 }
 
@@ -208,8 +210,10 @@ TEST(NewtonStage, FallsBackAfterFailedSteps)
 // A checkpoint inside the Newton stage (the state, the driver history, the
 // closure, the stage: its continuation, smoothness and flags) restarts the
 // stage: three more steps from the checkpoint give the same records and
-// fields as three more steps of the uninterrupted run, bit for bit with the
-// identity preconditioner, and to 1e-3 of the relative residual with
+// fields as three more steps of the uninterrupted run, with the identity
+// preconditioner the fields bit for bit (the Newton iterates' reductions are
+// in box order) and the recorded norms to 1e-12 (their sums follow the
+// DistributionMapping), and to 1e-3 of the relative residual with
 // simplec (1e-4 measured; the switch at 1e-3, to keep the test short). With simplec the
 // restarted GMRES solves differ in the fifth digit of the Krylov residual
 // although the preconditioner's setup and apply give the same bits on the
@@ -249,8 +253,12 @@ TEST(NewtonStage, RestartInsideTheStage)
         for (std::size_t n = ra.size() - 3; n < ra.size(); ++n) {
             EXPECT_EQ(ra[n].stage, rb[n].stage);
             if (exact) {
-                EXPECT_EQ(ra[n].residuals, rb[n].residuals) << n;
-                EXPECT_EQ(ra[n].relative_residual, rb[n].relative_residual) << n;
+                // The recorded norms are MultiFab::Dot sums, whose order follows the
+                // DistributionMapping (the two runs need not share one): to 1e-12.
+                ASSERT_EQ(ra[n].residuals.size(), rb[n].residuals.size());
+                for (std::size_t i = 0; i < ra[n].residuals.size(); ++i) {
+                    EXPECT_NEAR(rb[n].residuals[i], ra[n].residuals[i], 1e-12 * std::abs(ra[n].residuals[i])) << n << " " << i;
+                }
             } else {
                 EXPECT_NEAR(rb[n].relative_residual / ra[n].relative_residual, 1.0, 1e-3) << n;   // 1e-4 measured
             }
@@ -263,3 +271,4 @@ TEST(NewtonStage, RestartInsideTheStage)
         if (amrex::ParallelDescriptor::IOProcessor()) { amrex::FileSystem::RemoveAll(dir); }
     }
 }
+

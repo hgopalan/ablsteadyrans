@@ -31,13 +31,6 @@ bc.rayleigh_fields   = w theta
 
 init.first_guess = profile
 
-forcing.coriolis        = 1
-forcing.coriolis_3d     = 0
-forcing.latitude        = 90.
-forcing.rotation_period = 125663.7061435917
-forcing.geostrophic     = 1
-forcing.ug              = 10.
-forcing.vg              = 0.
 
 turb.tke_floor = 1.e-6
 
@@ -60,3 +53,7 @@ io.chk_file       = steady_hill2d_newton_chk
 # Newton stage solves the run's own equations (no final SIMPLEC pass).
 convection.limiter             = van_albada
 steady.switch_residual         = 1.e-3
+# No Coriolis: the Newton stage's simplec preconditioner does not resolve the
+# Ekman balance of rotation and vertical diffusion (docs/solution_algorithm.rst),
+# so this deck drives the flow by a pressure gradient, u*^2 / H with u* 0.35 m/s.
+forcing.pressure_gradient      = -1.225e-4 0. 0.
