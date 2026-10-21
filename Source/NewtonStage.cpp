@@ -15,14 +15,21 @@ namespace ablsteady {
 
 namespace {
 
-//! The continuation of the stage: the SER law starts at the cap
-//! (steady.cfl_max), not at steady.cfl0, so once the first step reaches it
-//! the continuation stays at infinite dtau (SIMPLEC's ramp is done).
-ContinuationOptions at_cap (ContinuationOptions o)
+//! The continuation of the stage: a geometric ramp from SIMPLEC's cap
+//! (steady.cfl_max, the CFL of the first step) to the Newton cap
+//! (steady.newton_cfl_max), by steady.ser_max_growth per accepted step. The
+//! SER law's residual term, cfl0 (|R_0|/|R|)^p, starts at the Newton cap, so
+//! it never holds the CFL back: at moderate CFL |R| falls slowly, and a
+//! residual-driven ramp would settle there (measured on the 2-D hill).
+ContinuationOptions newton_ramp (ContinuationOptions o, const SteadyOptions& sopt)
 {
-    o.cfl0 = o.cfl_max;
+    o.cfl0 = sopt.newton_cfl_max;
+    o.cfl_max = sopt.newton_cfl_max;
     return o;
 }
+
+//! Hand-backs after this many failure fallbacks: the stage refuses later switches.
+constexpr int kMaxFailedVisits = 3;
 
 const char* const kMagic = "ablsteady-newton-stage";
 constexpr int kVersion = 1;
@@ -63,8 +70,8 @@ NewtonStage::NewtonStage (const SteadyOptions& sopt, const NewtonStageOptions& o
                           const amrex::DistributionMapping& dm, NewtonPreconditioner* hook, int verbose)
     : m_sopt(sopt), m_opt(opt), m_in(in), m_nin(newton_residual_inputs(in, opt.smoothness)), m_closure(closure),
       m_mesh(mesh), m_geom(geom), m_height(norm_height),
-      m_cont(at_cap(opt.continuation), opt.newton, m_nin, mesh, geom, in.closure != nullptr ? &m_cf.nu : in.nu, tke_floor, ba,
-             dm, verbose),
+      m_cont(newton_ramp(opt.continuation, sopt), opt.newton, m_nin, mesh, geom, in.closure != nullptr ? &m_cf.nu : in.nu,
+             tke_floor, ba, dm, verbose),
       m_pc(hook), m_smooth(opt.smoothness), m_verbose(verbose)
 {
     if (in.bc == nullptr) { amrex::Abort("ablsteady: NewtonStage: the residual inputs need the boundary conditions (bc)"); }
@@ -76,7 +83,7 @@ NewtonStage::NewtonStage (const SteadyOptions& sopt, const NewtonStageOptions& o
     }
     if (m_pc == nullptr) {
         m_own_pc = make_newton_preconditioner(sopt.newton_preconditioner, simplec, sopt.zline_sweeps, m_nin, popt, mesh, geom,
-                                              z_nd, sopt.cfl_max, ba, dm, line_sweep_options(sopt));
+                                              z_nd, sopt.newton_cfl_max, ba, dm, line_sweep_options(sopt));
         m_pc = m_own_pc.get();
     }
     m_R.define(ba, dm);
@@ -95,11 +102,11 @@ void NewtonStage::init (State& q)
     m_in.bc->fill_ghosts(q, m_in.surface, m_in.buoyancy);
     if (!m_smooth.active()) {
         m_smooth.enter(q, m_closure, m_in, m_mesh, m_geom);
-        // A fresh continuation at the SIMPLEC cap: with newton_dtau_inf_at_cap
-        // its first accepted step goes to infinite dtau (plain Newton).
+        // A fresh continuation at the SIMPLEC cap, ramping to steady.newton_cfl_max.
         ContinuationState st;
-        st.cfl = m_opt.continuation.cfl_max;
+        st.cfl = m_sopt.cfl_max;
         m_cont.restore(st);
+        m_idle = 0;
     }
     m_restored = false;
     if (m_closure != nullptr && m_closure->frozen()) {
@@ -123,23 +130,40 @@ void NewtonStage::iterate (State& q, const amrex::MultiFab& /*dtau*/)
     const ContinuationState& before = m_cont.state();
     const amrex::Real drop = std::pow(amrex::Real(10), -m_sopt.criterion.residual_drop_orders);
     if (before.steps > 0 && before.r0 > 0 && before.r_last <= drop * before.r0) {   // after an accepted step
+        // Converged, but the driver's criterion has not held for a monitor
+        // window: hand back (the criterion is stricter than the stage reaches).
+        if (++m_idle > m_sopt.criterion.monitor_window) {
+            m_request = true;
+            m_handed_back = true;
+            m_reason = "Newton converged but the steady criterion did not hold for steady.monitor_window iterations";
+            run_norms(q);
+            return;
+        }
         // Converged on the stage's equations (the run's own: differs() was
         // false): no more steps, which would only fail at round-off; the
         // driver's criterion fills its monitor window at the cost of one
         // residual evaluation per iteration.
         m_status = ContinuationStatus::accepted;
         m_converged = true;
+        m_first_record = m_cont.records().size();
         run_norms(q);
         return;
     }
     m_converged = false;
+    m_first_record = m_cont.records().size();
     m_status = m_cont.step(q, m_pc);
     m_failures = (m_status == ContinuationStatus::failed) ? m_failures + 1 : 0;
     run_norms(q);
     if (m_failures >= m_sopt.newton_fallback_failures) {
         m_request = true;
+        ++m_failed_visits;
         m_reason = std::to_string(m_failures) + " consecutive failed Newton steps (steady.newton_fallback_failures "
                    + std::to_string(m_sopt.newton_fallback_failures) + ")";
+        if (m_failed_visits >= kMaxFailedVisits) {
+            // The same failure again and again: SIMPLEC finishes the run.
+            m_handed_back = true;
+            m_reason += "; " + std::to_string(m_failed_visits) + " failed visits: no more switches to Newton";
+        }
         return;
     }
     const ContinuationState& st = m_cont.state();
@@ -171,6 +195,10 @@ void NewtonStage::leave (State& q)
 bool NewtonStage::differs (const State& q) const
 {
     if (m_nin.momentum.limiter != m_in.momentum.limiter || m_nin.theta.limiter != m_in.theta.limiter) { return true; }
+    // With turb.nut_relax < 1 the closure blends nu_t with the history of the
+    // last SIMPLEC iteration, which the Newton stage does not update: its
+    // equations are not the steady ones.
+    if (m_closure != nullptr && m_closure->has_history() && m_closure->options().nut_relax < 1) { return true; }
     if (m_closure == nullptr || !m_closure->frozen()) { return false; }
     const amrex::Real z0 = (m_in.surface != nullptr) ? m_in.surface->z0 : amrex::Real(0);
     return m_closure->changed_switches(q, *m_in.wall_distance, z0, m_in.buoyancy, m_mesh, m_geom) > 0;
@@ -184,7 +212,10 @@ void NewtonStage::run_norms (State& q)
     const bool frozen = (m_closure != nullptr && m_closure->frozen());
     if (frozen) { m_closure->thaw(); }   // the run's own (live) decisions
     residual(q, m_in, m_mesh, m_geom, m_R, m_in.closure != nullptr ? &m_cf : nullptr);
-    if (frozen) { m_closure->restore_switches(m_saved, FreezeScope::floor, q.p.boxArray(), q.p.DistributionMap(), m_geom); }
+    if (frozen) {
+        const FreezeScope scope = m_closure->freeze_scope();
+        m_closure->restore_switches(m_saved, scope, q.p.boxArray(), q.p.DistributionMap(), m_geom);
+    }
     stage_norms(m_R, q, m_in.surface != nullptr ? &m_ss : nullptr, m_in.jvp_scales, m_height, m_geom, m_res, m_mon);
 }
 
@@ -196,7 +227,8 @@ void NewtonStage::write_checkpoint (const std::string& dir) const
     if (amrex::ParallelDescriptor::IOProcessor()) {
         std::ofstream os(dir + "/NewtonStage");
         os << kMagic << " " << kVersion << "\n";
-        os << "failures " << m_failures << " handed_back " << (m_handed_back ? 1 : 0) << "\n";
+        os << "failures " << m_failures << " handed_back " << (m_handed_back ? 1 : 0) << " failed_visits " << m_failed_visits
+           << " idle " << m_idle << "\n";
         ok = os.good() ? 1 : 0;
     }
     amrex::ParallelDescriptor::Bcast(&ok, 1, amrex::ParallelDescriptor::IOProcessorNumber());
@@ -218,18 +250,20 @@ void NewtonStage::read_checkpoint (const std::string& dir, const amrex::BoxArray
     amrex::ParallelDescriptor::ReadAndBcastFile(dir + "/NewtonStage", buf);
     buf.push_back('\0');
     std::istringstream is(buf.data());
-    std::string magic, w1, w2;
-    int version = 0, failures = -1, back = -1;
+    std::string magic, w1, w2, w3, w4;
+    int version = 0, failures = -1, back = -1, visits = -1, idle = -1;
     is >> magic >> version;
     if (!is || magic != kMagic || version != kVersion) {
         state_error(dir, "not an ablsteady Newton stage state of format version " + std::to_string(kVersion));
     }
-    if (!(is >> w1 >> failures >> w2 >> back) || w1 != "failures" || w2 != "handed_back" || failures < 0
-        || (back != 0 && back != 1)) {
+    if (!(is >> w1 >> failures >> w2 >> back >> w3 >> visits >> w4 >> idle) || w1 != "failures" || w2 != "handed_back"
+        || w3 != "failed_visits" || w4 != "idle" || failures < 0 || (back != 0 && back != 1) || visits < 0 || idle < 0) {
         state_error(dir, "corrupt: bad state line");
     }
     m_failures = failures;
     m_handed_back = (back == 1);
+    m_failed_visits = visits;
+    m_idle = idle;
     if (m_smooth.active()) {
         m_cont.restore(read_continuation_state(dir));
         m_restored = true;

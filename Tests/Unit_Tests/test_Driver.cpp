@@ -576,6 +576,47 @@ TEST (Driver, NewtonSwitchOnceAndFallback)
 }
 
 // ---------------------------------------------------------------------------
+// Beyond the plan (Ann review of PR-27). A one-stage history (a steady.stage =
+// simplec checkpoint) continues in a two-stage driver (simplec_newton): the
+// records, the CFL and the stage are kept and the Newton stage starts with an
+// empty account; a two-stage history cannot continue in a one-stage driver,
+// and the message names steady.stage.
+TEST (Driver, OneStageHistoryContinuesWithTwoStages)
+{
+    PCase c = make_mesh(0, false);
+    ablsteady::State q;
+    define_state(q, c);
+    SteadyOptions o = base_options();
+    o.criterion.monitor_window = 1000;
+    std::vector<amrex::Real> s{1, amrex::Real(0.5), amrex::Real(0.25)};
+    ablsteady::Driver one(o, one_stage<ScriptedStage>("simplec", s), c.mesh, c.geom, nullptr);
+    for (int i = 0; i < 3; ++i) { one.step(q); }
+    auto two_stages = [&] {
+        std::vector<std::unique_ptr<ablsteady::Stage>> v;
+        v.push_back(std::make_unique<ScriptedStage>("simplec", s));
+        v.push_back(std::make_unique<ScriptedStage>("newton", s));
+        return v;
+    };
+    ablsteady::Driver two(o, two_stages(), c.mesh, c.geom, nullptr);
+    two.restore(one.history(), q);
+    EXPECT_EQ(two.history().records.size(), 3u);
+    ASSERT_EQ(two.history().accounts.size(), 2u);
+    EXPECT_EQ(two.history().accounts[0].iterations, 3);
+    EXPECT_EQ(two.history().accounts[1].iterations, 0);
+    EXPECT_EQ(two.stage(), 0);
+    EXPECT_EQ(two.cfl(), one.cfl());
+    two.step(q);
+    EXPECT_EQ(two.history().records.size(), 4u);
+    ablsteady::Driver back(o, one_stage<ScriptedStage>("simplec", s), c.mesh, c.geom, nullptr);
+    try {
+        back.restore(two.history(), q);
+        ADD_FAILURE() << "a two-stage history restored into one stage";
+    } catch (const std::runtime_error& e) {
+        EXPECT_NE(std::string(e.what()).find("steady.stage"), std::string::npos) << e.what();
+    }
+}
+
+// ---------------------------------------------------------------------------
 // UT-1.13.4. The history: written and read back bit for bit (every field,
 // strings with spaces included); a run interrupted after K iterations and
 // continued from the written history by a new driver on the saved state
@@ -832,6 +873,13 @@ TEST (Driver, DivergenceStopsAndTheChecksNameTheirInput)
         {"steady.switch_residual", [] (SteadyOptions& b) { b.switch_residual = 0; }},
         {"steady.switch_residual", [] (SteadyOptions& b) { b.switch_residual = 2; }},
         {"steady.switch_back_growth", [] (SteadyOptions& b) { b.switch_back_growth = 1; }},
+        {"steady.switch_monitor_tol", [] (SteadyOptions& b) { b.switch_monitor_tol = -0.1; }},
+        {"steady.switch_monitor_tol", [] (SteadyOptions& b) { b.switch_monitor_tol = 1; }},
+        {"steady.newton_fallback_failures", [] (SteadyOptions& b) { b.newton_fallback_failures = 0; }},
+        {"steady.newton_cfl_max", [] (SteadyOptions& b) {
+             b.stage = ablsteady::StageKind::simplec_newton;
+             b.newton_cfl_max = b.cfl_max / 2;
+         }},
         {"steady.nodes", [] (SteadyOptions& b) { b.nodes = 0; }},
         {"steady.zline_sweeps", [] (SteadyOptions& b) { b.zline_sweeps = 1; }},
         {"steady.zline_sweeps", [] (SteadyOptions& b) { b.zline_sweeps = 101; }},
@@ -896,7 +944,8 @@ TEST (Driver, DivergenceStopsAndTheChecksNameTheirInput)
         const char* keys[] = {"residual_tol", "residual_drop_orders", "residual_ref_iterations", "monitor_rel_tol", "monitor_window",
                               "max_iterations", "cfl0", "cfl_max", "ser_exponent", "ser_max_growth", "switch_window",
                               "switch_residual", "switch_back_growth", "zline_sweeps", "sweep", "machine", "nodes",
-                              "line_ghosts", "line_overlap", "line_order", "line_alternate"};
+                              "line_ghosts", "line_overlap", "line_order", "line_alternate", "switch_monitor_tol",
+                              "newton_fallback_failures", "stage"};
         auto clear = [&] { for (const char* k : keys) { while (pp.remove(k) > 0) {} } };
         clear();
         pp.add("residual_tol", amrex::Real(1e-4));
@@ -920,7 +969,13 @@ TEST (Driver, DivergenceStopsAndTheChecksNameTheirInput)
         pp.add("line_overlap", 3);
         pp.add("line_order", std::string("diagonal"));
         pp.add("line_alternate", 1);
+        pp.add("switch_monitor_tol", amrex::Real(0.05));
+        pp.add("newton_fallback_failures", 3);
+        pp.add("stage", std::string("simplec_newton"));
         const SteadyOptions r = ablsteady::read_steady_options();
+        EXPECT_EQ(r.switch_monitor_tol, amrex::Real(0.05));
+        EXPECT_EQ(r.newton_fallback_failures, 3);
+        EXPECT_EQ(r.stage, ablsteady::StageKind::simplec_newton);
         EXPECT_EQ(r.sweep, ablsteady::SweepKind::lusgs);
         EXPECT_EQ(r.line_ghosts, ablsteady::LineGhosts::zero);
         EXPECT_EQ(r.line_overlap, 3);
@@ -948,10 +1003,16 @@ TEST (Driver, DivergenceStopsAndTheChecksNameTheirInput)
         EXPECT_EQ(r.machine, ablsteady::Machine::KestrelGpu);
         EXPECT_EQ(r.nodes, 3);
         EXPECT_EQ(r.zline_sweeps, 4);
-        EXPECT_EQ(r.given.size(), 21u);
+        EXPECT_EQ(r.given.size(), 24u);
         clear();
         const SteadyOptions d = ablsteady::read_steady_options();
         EXPECT_EQ(d.cfl0, 1);
+        // The switch rules of sub-phase 3.5 (plan rev. 6: 1e-4, monitors within 1 %, two failures).
+        EXPECT_EQ(d.switch_residual, amrex::Real(1e-4));
+        EXPECT_EQ(d.switch_monitor_tol, amrex::Real(1e-2));
+        EXPECT_EQ(d.newton_fallback_failures, 2);
+        EXPECT_EQ(d.newton_cfl_max, amrex::Real(1000));
+        EXPECT_EQ(d.switch_window, 20);
         // The application defaults of sub-phase 2.6: the build's sweep and
         // that sweep's CFL cap (lusgs and 8 on a CPU build).
         EXPECT_EQ(d.sweep, ablsteady::default_sweep());

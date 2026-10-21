@@ -261,12 +261,13 @@ void print_iteration (const Driver& driver, const SimplecStage& stage, bool last
         for (const amrex::Real v : r.residuals) { line += " " + fmt(double(v)); }
         const auto& recs = newton->continuation().records();
         int attempts = 0, gmres = 0;
-        const int step = recs.empty() ? 0 : recs.back().step;
-        for (auto it = recs.rbegin(); it != recs.rend() && it->step == step; ++it) {
+        for (std::size_t n = newton->first_record(); n < recs.size(); ++n) {   // this iteration's attempts
             ++attempts;
-            gmres += it->gmres_iterations;
+            gmres += recs[n].gmres_iterations;
         }
-        if (!recs.empty()) {
+        if (newton->converged()) {
+            line += " converged: no step";
+        } else if (attempts > 0) {
             const ContinuationRecord& c = recs.back();
             line += " |R| " + fmt(double(c.residual)) + " -> " + fmt(double(c.residual_new)) + " cfl "
                     + (c.infinite ? std::string("inf") : fmt(double(c.cfl))) + " lambda " + fmt(double(c.lambda)) + " attempts "

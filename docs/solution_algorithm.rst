@@ -326,8 +326,14 @@ Switching and fallback
   the relative residual at or below ``steady.switch_residual`` (1e-4) and every monitor settled: changed by at most
   ``steady.switch_monitor_tol`` (1 %) of max(\|value\|, scale) over the window.
 - **Entry.** The smoothness handling below enters (the k floor frozen, the smooth limiter in the Newton residual),
-  and the pseudo-transient continuation starts afresh at ``steady.cfl_max``. Its SER law also starts there (SIMPLEC's
-  ramp is done), so with ``steady.newton_dtau_inf_at_cap = 1`` the second step is plain Newton.
+  and the pseudo-transient continuation starts afresh at ``steady.cfl_max``. Its CFL doubles (``steady.ser_max_growth``)
+  with every accepted step up to ``steady.newton_cfl_max`` (1000); with ``steady.newton_dtau_inf_at_cap = 1``
+  :math:`\Delta\tau` is then infinite. At every finite step the preconditioner uses the step's own
+  :math:`\Delta\tau`, and at infinite :math:`\Delta\tau` the Newton cap's. A residual-driven ramp (the SER law
+  of the SIMPLEC stage) settles near CFL 13 on the hill, where :math:`|R|` falls slowly; jumping to infinite
+  :math:`\Delta\tau` after one step leaves the slow modes unpreconditioned (GMRES(30) and GMRES(200) stall at the
+  2000-iteration limit on ERF's 2-D hill). On the 8 × 2 × 8 hill the cap 1000 then infinite takes 11 Newton steps
+  and 718 GMRES iterations; the cap 1e4, 13 and 882; the cap 1000 held, 28 and 2058.
 - **Each iteration** is one continuation step. The residual norms and monitors the driver records are those of the
   run's own equations at the new state (the run's limiter, the closure's live decisions), so the steady criterion
   and the relative residual mean what they mean for SIMPLEC. That costs one more residual evaluation per step.
@@ -335,20 +341,28 @@ Switching and fallback
   :math:`10^{-\text{drop}}\,|R_0|`, with ``steady.residual_drop_orders``), the stage takes no more steps; the
   driver's criterion then fills its monitor window at one residual evaluation per iteration.
 - **Fallback.** After ``steady.newton_fallback_failures`` (2) consecutive failed steps (every retry used) the stage
-  hands the run back to SIMPLEC at once, whatever the hysteresis. SIMPLEC may switch forward again after the window.
-  The switch-back rule on residual growth (``steady.switch_back_growth``) applies too.
+  hands the run back to SIMPLEC at once, whatever the hysteresis. SIMPLEC may switch forward again after the window;
+  after three failed visits the stage refuses (SIMPLEC finishes the run). The switch-back rule on residual growth
+  (``steady.switch_back_growth``) applies too. A stage that has converged on the run's own equations but whose
+  steady criterion has not held for ``steady.monitor_window`` iterations hands back as well.
 - **Final pass.** When the Newton stage's equations differ from the run's (the limiter was swapped, or a k-floor
   decision moved), it hands the run back once its own residual has converged, and refuses any later switch: the run
   ends on SIMPLEC with the run's own equations. With ``convection.limiter = van_albada`` there is no swap.
-- **Restart.** The stage writes ``<checkpoint>/NewtonStage``, the continuation state and the smoothness state; a
-  restart inside the stage continues it. With ``steady.newton_preconditioner = identity`` the restart is bit for bit;
-  with ``simplec`` it agrees to about 1e-4 of the relative residual (the cause is not found).
+- **Restart.** The checkpoint holds ``<checkpoint>/NewtonStage``, the continuation state and the smoothness state
+  (written before the stage is left at the end of a run); a restart inside the stage continues it. With
+  ``steady.newton_preconditioner = identity`` the restart is bit for bit; with ``simplec`` it agrees to about 1e-4 of
+  the relative residual (the cause is not found). A ``steady.stage = simplec`` checkpoint continues with
+  ``simplec_newton`` (the Newton stage starts with an empty account); the reverse aborts, naming ``steady.stage``.
+- **Grid sequencing.** The coarse levels run SIMPLEC only (their loose stop ends them first); the Newton stage is level
+  0's.
+- **Relaxed** :math:`\nu_t`. With ``turb.nut_relax`` < 1 the closure's history is the last SIMPLEC iteration's, which
+  the Newton stage does not update, so the stage's equations are not the steady ones: it hands back for the final pass.
 
 **Limits.**
 
-- GMRES(30), the default restart, stagnates at infinite :math:`\Delta\tau` on ERF's 2-D hill with Coriolis
-  (2000 iterations at a Krylov residual of 0.9); the steps then fail and the run cycles between the stages. GMRES(200)
-  is tested on the small cases; the defaults are tuned in the Phase 3 checkpoint (PR-28).
+- Before the Newton CFL cap, the stage went to infinite :math:`\Delta\tau` after one step; GMRES(30) and GMRES(200)
+  then stalled on ERF's 2-D hill (2000 iterations at a Krylov residual of 0.9) and the run cycled between the
+  stages. The defaults (the cap, the restart, the switch residual) are tuned in the Phase 3 checkpoint (PR-28).
 - The stage's continuation takes its momentum diffusivity from the closure at its own state, not from the SIMPLEC
   stage (whose is not restored by a restart inside the Newton stage).
 

@@ -990,8 +990,8 @@ unbounded``; for the precursor this also keeps the committed inflow table of the
 reproducible. A drop measured from the start-up transient rewards a worse first guess; a criterion with a physical
 residual scale is left for later.
 
-Newton–Krylov (in development)
-------------------------------
+Newton–Krylov
+-------------
 
 *Setup.* The Ekman column of UT-3.1.2 with plain Newton steps.
 

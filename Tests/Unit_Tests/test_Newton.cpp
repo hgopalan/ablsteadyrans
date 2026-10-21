@@ -927,13 +927,13 @@ TEST(Newton, OptionReadersAndRangeChecks)
     for (const char* key : ablsteady::kNewtonInputKeys) {
         const auto msg = ablsteady::unknown_inputs({{std::string("steady.") + key, false}}, {"steady"});
         ASSERT_EQ(msg.size(), 1U);
-        EXPECT_NE(msg.front().find("sub-phase 3.5"), std::string::npos) << msg.front();
+        EXPECT_NE(msg.front().find("steady.stage = simplec_newton"), std::string::npos) << msg.front();
     }
     // A misspelt key (or another name) gets no hint that it is read later.
     for (const char* k : {"steady.newtonish", "steady.newton_gmres_restar", "steady.newton_rtol"}) {
         const auto other = ablsteady::unknown_inputs({{k, false}}, {"steady"});
         ASSERT_EQ(other.size(), 1U);
-        EXPECT_EQ(other.front().find("sub-phase 3.5"), std::string::npos) << other.front();
+        EXPECT_EQ(other.front().find("steady.stage = simplec_newton"), std::string::npos) << other.front();
     }
 }
 

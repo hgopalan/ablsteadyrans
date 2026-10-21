@@ -61,9 +61,9 @@
 //
 // Inputs (steady.*, read by read_newton_options): newton_gmres_restart,
 // newton_gmres_max_iters, newton_fd_eps_scale, newton_krylov_rtol,
-// newton_mem_budget_gb. The
-// application does not run the Newton step yet (sub-phase 3.5 switches to
-// it), so it does not read them: setting them stops the run as unknown keys.
+// newton_mem_budget_gb. The application reads them with steady.stage =
+// simplec_newton (NewtonStage.H); with simplec they abort as keys with no
+// effect.
 
 #include "Mesh.H"
 #include "Residual.H"

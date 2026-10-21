@@ -317,6 +317,10 @@ ablsteady_add_test(NAME abort_newton_keys_no_newton_stage NP 1 LABELS "regressio
                           "steady\\.switch_residual has no effect without steady\\.stage = simplec_newton" --
                    COMMAND $<TARGET_FILE:ablsteady> ${HILL3D_NEUTRAL_CASE}/inputs_steady_hill3d_neutral
                            steady.newton_gmres_restart=50 steady.switch_residual=1e-3 ${ABLSTEADY_TEST_AMREX_FLAGS})
+ablsteady_add_test(NAME abort_newton_keys_no_stage NP 1 LABELS "regression;smoke"
+                   PREFIX ${EXPECT_ABORT} "steady\\.newton_gmres_restart has no effect without steady\\.stage = simplec_newton" --
+                   COMMAND $<TARGET_FILE:ablsteady> ${VALIDATION_CASE}/inputs_abort_no_stage steady.newton_gmres_restart=50
+                           ${ABLSTEADY_TEST_AMREX_FLAGS})
 # Sub-phase 3.5: the 2-D hill (32 x 1 x 16, no Coriolis, van Albada) with
 # steady.stage = simplec_newton switches to Newton once (at r <= 1e-3, about
 # iteration 3860), never falls back, and ends steady in the Newton stage in

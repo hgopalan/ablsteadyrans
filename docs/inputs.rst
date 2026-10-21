@@ -311,6 +311,9 @@ Quick reference
    * - ``steady.switch_monitor_tol``, ``steady.newton_fallback_failures``
      - ``1e-2``, ``2``
      - Monitors settled before the switch to Newton; failed Newton steps before the fallback
+   * - ``steady.newton_cfl_max``
+     - ``1000``
+     - The Newton stage's CFL cap
    * - ``steady.sweep``
      - ``lusgs`` (CPU build), ``zjacobi`` (GPU build)
      - Line solver: ``zjacobi`` or ``lusgs``
@@ -508,7 +511,7 @@ A restart cannot be combined with ``init.*`` keys.
    * - ``init.first_guess``
      - ``none``
      - ``none`` (fluid at rest), ``profile`` (the inflow profile by height above the ground) or ``column`` (the
-       steady single-column profile; needs a horizontal forcing and the SIMPLEC stage, see
+       steady single-column profile; needs a horizontal forcing and ``steady.stage = simplec`` or ``simplec_newton``, see
        :doc:`initial_conditions` for the full list).
    * - ``init.projection``
      - ``1``
@@ -837,6 +840,13 @@ writes them and stops; the other ``steady.*`` keys are then refused.
    * - ``steady.newton_fallback_failures``
      - ``2``
      - Integer, ≥ 1. Consecutive failed Newton steps (every retry used) after which the run goes back to SIMPLEC.
+       After three such fallbacks the run stays in SIMPLEC.
+   * - ``steady.newton_cfl_max``
+     - ``1000``
+     - Finite, ≥ ``steady.cfl_max`` (with ``simplec_newton``). The Newton stage's CFL cap: from ``steady.cfl_max`` the
+       CFL is multiplied by ``steady.ser_max_growth`` per accepted step up to this cap, then (with
+       ``steady.newton_dtau_inf_at_cap = 1``) :math:`\Delta\tau` is infinite. The preconditioner of an infinite
+       :math:`\Delta\tau` uses this CFL.
    * - ``steady.sweep``
      - ``lusgs`` (CPU build), ``zjacobi`` (GPU build)
      - ``zjacobi`` (z-line Jacobi) or ``lusgs`` (line LU-SGS). The default depends on the build (the Phase 2

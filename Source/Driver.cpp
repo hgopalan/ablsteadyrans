@@ -23,7 +23,8 @@ const char* const kKeys[] = {"residual_tol", "residual_drop_orders", "residual_r
                              "monitor_window", "max_iterations", "cfl0", "cfl_max", "ser_exponent", "ser_max_growth",
                              "switch_window", "switch_residual", "switch_back_growth", "zline_sweeps", "sweep", "line_ghosts", "line_overlap",
                              "line_order", "line_alternate", "machine", "nodes", "stage",
-                             "newton_preconditioner", "switch_monitor_tol", "newton_fallback_failures"};
+                             "newton_preconditioner", "switch_monitor_tol", "newton_fallback_failures",
+                             "newton_cfl_max"};
 
 // 2: the reference hold; 3: the residual scale height (versions 1 and 2 still read)
 constexpr int kDriverVersion = 3;
@@ -81,6 +82,11 @@ std::vector<std::string> check_steady_options (const SteadyOptions& opt)
     bad(opt.switch_monitor_tol, "switch_monitor_tol", "0 (off), or > 0 and < 1",
         [&] { return opt.switch_monitor_tol >= 0 && opt.switch_monitor_tol < 1; });
     if (opt.newton_fallback_failures < 1) { err.emplace_back("steady.newton_fallback_failures must be >= 1"); }
+    // The Newton stage's cap (only that stage reads it; with one stage it aborts as a key with no effect, App.cpp).
+    if (opt.stage == StageKind::simplec_newton) {
+        bad(opt.newton_cfl_max, "newton_cfl_max", "finite and >= steady.cfl_max",
+            [&] { return std::isfinite(opt.newton_cfl_max) && !std::isnan(opt.cfl_max) && opt.newton_cfl_max >= opt.cfl_max; });
+    }
     if (opt.nodes < 1) { err.emplace_back("steady.nodes must be >= 1"); }
     if (opt.sweep == SweepKind::lusgs) {
         if (opt.zline_sweeps < 1 || opt.zline_sweeps > 100) {
@@ -160,6 +166,7 @@ SteadyOptions read_steady_options ()
     pp.query("switch_back_growth", opt.switch_back_growth);
     pp.query("switch_monitor_tol", opt.switch_monitor_tol);
     pp.query("newton_fallback_failures", opt.newton_fallback_failures);
+    pp.query("newton_cfl_max", opt.newton_cfl_max);
     pp.query("nodes", opt.nodes);
     pp.query("zline_sweeps", opt.zline_sweeps);
     std::string sweep;
@@ -451,11 +458,22 @@ DriverResult Driver::run (State& q)
     return out;
 }
 
-void Driver::restore (const DriverHistory& h, State& q)
+void Driver::restore (const DriverHistory& h_in, State& q)
 {
+    // A run with more stages may continue a history with fewer (a
+    // steady.stage = simplec checkpoint finished with simplec_newton): the
+    // missing stages start with empty accounts. The reverse loses a stage.
+    DriverHistory h_pad;
+    const bool pad = h_in.accounts.size() < m_stages.size() && h_in.stage < static_cast<int>(h_in.accounts.size());
+    if (pad) {
+        h_pad = h_in;
+        h_pad.accounts.resize(m_stages.size());
+    }
+    const DriverHistory& h = pad ? h_pad : h_in;
     if (h.accounts.size() != m_stages.size()) {
         amrex::Abort("ablsteady: Driver::restore: the history has " + std::to_string(h.accounts.size()) + " stages, this driver "
-                     + std::to_string(m_stages.size()));
+                     + std::to_string(m_stages.size()) + " (a steady.stage = simplec_newton checkpoint cannot continue with "
+                     "steady.stage = simplec)");
     }
     if (h.stage < 0 || h.stage >= static_cast<int>(m_stages.size())) {
         amrex::Abort("ablsteady: Driver::restore: the history's stage " + std::to_string(h.stage) + " does not exist");

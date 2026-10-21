@@ -298,7 +298,7 @@ std::vector<std::string> unknown_inputs (const std::vector<InputEntry>& entries,
                 msg.emplace_back("unknown input '" + e.name + "': not an input of namespace '" + ns + "' in this version"
                                  + ((ns == "bc" || ns == "solver")
                                     ? " (read with init.first_guess = profile or steady.stage = simplec)" : "")
-                                 + (newton ? " (the Newton-Krylov inputs are read once the run can switch to Newton, sub-phase 3.5)" : ""));
+                                 + (newton ? " (the Newton-Krylov inputs are read with steady.stage = simplec_newton)" : ""));
             }
         } else if (!contains(amrex_namespaces(), ns)) {
             msg.emplace_back("unknown input '" + e.name + "': unknown namespace '" + ns + "'");

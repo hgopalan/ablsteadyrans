@@ -100,8 +100,9 @@ public:
 // ---------------------------------------------------------------------------
 // With van Albada as the run's limiter (no swap: the Newton stage solves the
 // run's own equations) the run switches once, at r <= 1e-4 (2768 SIMPLEC
-// iterations measured), converges in the Newton stage within 10 accepted
-// steps (6 measured) and ends steady there, with at most 60 % of the SIMPLEC
+// iterations measured), converges in the Newton stage within 16 accepted
+// steps (11 measured: the CFL doubles from 8 to the cap 1000, then dtau is
+// infinite) and ends steady there, with at most 60 % of the SIMPLEC
 // iterations of a SIMPLEC run (5417 measured) and the same solution to 1e-4
 // of the largest u and k (both runs stop at 6 orders).
 TEST(NewtonStage, SwitchesOnceAndConvergesInNewton)
@@ -119,7 +120,7 @@ TEST(NewtonStage, SwitchesOnceAndConvergesInNewton)
     EXPECT_EQ(hr->ls->driver().stage(), 1);
     const ablsteady::NewtonStage* ns = hr->ls->newton_stage();
     ASSERT_NE(ns, nullptr);
-    EXPECT_LE(ns->continuation().state().steps, 10);
+    EXPECT_LE(ns->continuation().state().steps, 16);
     EXPECT_GE(ns->continuation().state().steps, 2);
     EXPECT_TRUE(ns->converged());
     EXPECT_LE(b.simplec, 0.6 * a.simplec);
@@ -166,7 +167,8 @@ TEST(NewtonStage, HandsBackForTheFinalPassAfterTheSwap)
 // UT-3.5.2 on the stage itself: with a preconditioner that returns zero every
 // continuation step fails (every retry rejected); the stage asks to go back
 // after steady.newton_fallback_failures (2) failed steps, not after one, and
-// with the key at 1 after the first; leave thaws the closure.
+// with the key at 1 after the first; leave thaws the closure; after three
+// failed visits the stage refuses later switches.
 TEST(NewtonStage, FallsBackAfterFailedSteps)
 {
     auto hr = make_run(Limiter::van_albada, StageKind::simplec);
@@ -203,6 +205,21 @@ TEST(NewtonStage, FallsBackAfterFailedSteps)
         ns.leave(q);
         EXPECT_FALSE(hr->ls->closure.frozen());
         EXPECT_FALSE(ns.fallback_requested());
+        if (limit == 1) {
+            // Three failed visits: the stage refuses later switches (SIMPLEC finishes the run).
+            EXPECT_EQ(ns.failed_visits(), 1);
+            for (int visit = 2; visit <= 3; ++visit) {
+                EXPECT_TRUE(ns.accepts_switch()) << visit;
+                ns.init(q);
+                testing::internal::CaptureStdout();
+                ns.iterate(q, dtau);
+                testing::internal::GetCapturedStdout();
+                EXPECT_TRUE(ns.fallback_requested()) << visit;
+                ns.leave(q);
+            }
+            EXPECT_EQ(ns.failed_visits(), 3);
+            EXPECT_FALSE(ns.accepts_switch());
+        }
     }
 }
 
@@ -271,4 +288,5 @@ TEST(NewtonStage, RestartInsideTheStage)
         if (amrex::ParallelDescriptor::IOProcessor()) { amrex::FileSystem::RemoveAll(dir); }
     }
 }
+
 

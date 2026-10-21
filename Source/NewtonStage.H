@@ -39,8 +39,9 @@
 //    again after the hysteresis window;
 //  * the final pass: when the continuation has converged on its own
 //    equations, |R| <= 10^-steady.residual_drop_orders |R_0|, and those
-//    differ from the run's (the limiter was swapped, or a floor decision
-//    has moved since init), the run goes back to SIMPLEC for the
+//    differ from the run's (the limiter was swapped, a floor decision has
+//    moved since init, or turb.nut_relax < 1: the closure's history is the
+//    last SIMPLEC iteration's, which this stage does not update), the run goes back to SIMPLEC for the
 //    verification pass, and the stage refuses any later switch
 //    (accepts_switch false), so the run ends on SIMPLEC. Without a swap and
 //    with no moved decision the run's own criterion ends it in this stage.
@@ -124,8 +125,11 @@ public:
     [[nodiscard]] ContinuationStatus last_status () const { return m_status; }
     [[nodiscard]] const Continuation& continuation () const { return m_cont; }
     [[nodiscard]] int failures () const { return m_failures; }
+    [[nodiscard]] int failed_visits () const { return m_failed_visits; }
     //! The last iterate took no step: converged on the run's own equations.
     [[nodiscard]] bool converged () const { return m_converged; }
+    //! The continuation records of the last iterate: [first_record(), records().size()).
+    [[nodiscard]] std::size_t first_record () const { return m_first_record; }
     [[nodiscard]] bool handed_back () const { return m_handed_back; }
     [[nodiscard]] const ResidualInputs& newton_inputs () const { return m_nin; }
 
@@ -160,6 +164,9 @@ private:
     bool m_handed_back{false};
     bool m_restored{false};
     bool m_converged{false};
+    int m_failed_visits{0};   //!< failure fallbacks so far (3: no more switches to Newton)
+    int m_idle{0};            //!< iterations converged without a steady verdict
+    std::size_t m_first_record{0};
     std::string m_reason;
     int m_verbose;
 };

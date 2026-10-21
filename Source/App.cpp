@@ -87,13 +87,14 @@ void run ()
         } else {
             // The Newton stage's keys, and the switch rules (one stage: nothing to switch to).
             for (const auto& k : sopt.given) {
-                if (k == "newton_preconditioner" || k == "newton_fallback_failures" || k.rfind("switch_", 0) == 0) {
+                if (k == "newton_preconditioner" || k == "newton_fallback_failures" || k == "newton_cfl_max"
+                    || k.rfind("switch_", 0) == 0) {
                     err.emplace_back("steady." + k + " has no effect without steady.stage = simplec_newton");
                 }
             }
             for (const InputEntry& e : parmparse_entries()) {
                 if (e.name.rfind("steady.newton_", 0) == 0 && e.name != "steady.newton_preconditioner"
-                    && e.name != "steady.newton_fallback_failures") {
+                    && e.name != "steady.newton_fallback_failures" && e.name != "steady.newton_cfl_max") {
                     err.emplace_back(e.name + " has no effect without steady.stage = simplec_newton");
                 }
             }
@@ -112,6 +113,13 @@ void run ()
         for (const auto& k : sopt.given) {
             if (k != "stage") { err.emplace_back("steady." + k + " has no effect without steady.stage = simplec"); }
         }
+        // The Newton stage's keys that steady.* does not read (Newton.H, Continuation.H).
+        for (const InputEntry& e : parmparse_entries()) {
+            if (e.name.rfind("steady.newton_", 0) == 0 && e.name != "steady.newton_preconditioner"
+                && e.name != "steady.newton_fallback_failures" && e.name != "steady.newton_cfl_max") {
+                err.emplace_back(e.name + " has no effect without steady.stage = simplec_newton");
+            }
+        }
         for (const auto& k : seq.given) { err.emplace_back("steady." + k + " has no effect without steady.stage = simplec"); }
     }
     if (solve) {
@@ -126,7 +134,7 @@ void run ()
             }
         }
         // The Newton keys without the Newton stage: reported above.
-        if ((solve && !newton) || !solve) { reported = reported || e.find("'steady.newton_") != std::string::npos; }
+        if (!newton) { reported = reported || e.find("'steady.newton_") != std::string::npos; }
         if (!reported) { err.push_back(e); }
     }
     if (solve && !initialize && in.io.restart.empty()) {
@@ -343,16 +351,25 @@ void run ()
                            << " s, " << acc.au << " AU\n";
         }
         if (!levels.empty()) { amrex::Print() << sequencing_report(levels, driver.history(), status, sopt.criterion.residual_ref_iterations); }
-        // A run that ends in the Newton stage leaves it (the k floor thawed),
-        // so the outputs see the run's own closure; a restart from the
-        // checkpoint enters the stage afresh.
-        if (newton_stage != nullptr && driver.stage() == 1) { newton_stage->leave(state); }
         check_overwrite();   // the step is final here, before any output
         if (in.io.write_plotfile == 1) {
             const auto name = write_plotfile(in.io.plot_file, state, geom, &mesh.detJ);
             amrex::Print() << "ablsteady: wrote " << name << "\n";
             write_hierarchy();
         }
+        // The checkpoint first, with the Newton stage as it is (a restart
+        // continues it: the frozen k floor, the continuation); then a run that
+        // ends in the Newton stage leaves it (the k floor thawed), so the
+        // turbulence plotfile sees the run's own closure. A diverged state is
+        // not evaluated again.
+        if (in.io.write_checkpoint == 1) {
+            const auto name = write_checkpoint(in.io.chk_file, state, in.mesh);
+            write_driver_history(name, driver.history());
+            closure.write_checkpoint(name);
+            if (newton_stage != nullptr) { newton_stage->write_checkpoint(name); }
+            amrex::Print() << "ablsteady: wrote " << name << "\n";
+        }
+        if (newton_stage != nullptr && driver.stage() == 1 && v.status != SteadyStatus::Diverged) { newton_stage->leave(state); }
         if (!in.io.turb_plot_file.empty()) {
             // The closure's fields and the wall state at the final state.
             bc.fill_ghosts(state, res_in.surface, fopt.buoyancy, false, nullptr);
@@ -364,13 +381,6 @@ void run ()
             residual(state, res_in, mesh, geom, R);
             const auto name = write_turbulence_plotfile(in.io.turb_plot_file, state, cf, dist, surface_layer ? &ss : nullptr,
                                                         copt, geom, &R);
-            amrex::Print() << "ablsteady: wrote " << name << "\n";
-        }
-        if (in.io.write_checkpoint == 1) {
-            const auto name = write_checkpoint(in.io.chk_file, state, in.mesh);
-            write_driver_history(name, driver.history());
-            closure.write_checkpoint(name);
-            if (newton_stage != nullptr) { newton_stage->write_checkpoint(name); }
             amrex::Print() << "ablsteady: wrote " << name << "\n";
         }
         if (v.status == SteadyStatus::Diverged) { amrex::Abort("ablsteady: the run diverged" + reasons); }
