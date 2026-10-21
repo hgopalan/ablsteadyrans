@@ -1737,8 +1737,8 @@ GoogleTest suite
        restart inside the Newton stage), and the fallback test that a failed first step must not count as converged.
    * - RT-3.5 (a)
      - *Beyond the plan.* CTest ``rt_steady_hill2d_newton`` (smoke, two ranks, about 10 s): the 2-D hill at 32 × 1 × 16
-       without Coriolis (``inputs_steady_hill2d_newton``: a pressure gradient, van Albada, GMRES(200), the switch at
-       1e-3) switches to Newton once and ends steady within 4500 iterations (3919 measured; SIMPLEC alone takes 5381).
-       8 k-floor decisions move during the Newton stage; Newton stalls on that difference, falls back after two failed
-       steps, and SIMPLEC finishes. CTest ``abort_newton_keys_no_newton_stage``: a Newton key and a
+       without Coriolis (``inputs_steady_hill2d_newton``: truly neutral, a pressure gradient, van Albada, GMRES(200),
+       the switch at 1e-3) switches to Newton once, finishes in the Newton stage without a fallback, and ends steady
+       within 1800–2199 iterations (1868 measured on 1, 2 and 4 ranks; SIMPLEC alone takes 2906).
+       CTest ``abort_newton_keys_no_newton_stage``: a Newton key and a
        switch key with ``steady.stage = simplec`` abort, naming the key.
