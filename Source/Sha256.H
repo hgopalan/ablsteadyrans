@@ -1,12 +1,12 @@
-#ifndef ABLSTEADY_SHA256_H_
-#define ABLSTEADY_SHA256_H_
+#ifndef GUST_SHA256_H_
+#define GUST_SHA256_H_
 
 #include <array>
 #include <cstddef>
 #include <cstdint>
 #include <string>
 
-namespace ablsteady {
+namespace gust {
 
 //! SHA-256 (FIPS 180-4), for the checksums of reference archives. Host only.
 class Sha256
@@ -34,6 +34,6 @@ std::string sha256_hex (const std::string& bytes);
 //! cannot be opened or read.
 std::string sha256_file (const std::string& path);
 
-} // namespace ablsteady
+} // namespace gust
 
 #endif

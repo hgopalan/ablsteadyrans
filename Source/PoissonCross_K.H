@@ -1,10 +1,10 @@
-#ifndef ABLSTEADY_POISSON_CROSS_K_H_
-#define ABLSTEADY_POISSON_CROSS_K_H_
+#ifndef GUST_POISSON_CROSS_K_H_
+#define GUST_POISSON_CROSS_K_H_
 
 #include <AMReX_Array4.H>
 #include <AMReX_REAL.H>
 
-namespace ablsteady {
+namespace gust {
 
 //! The terrain cross part of ERF's z-face gradient at the low z-face of cell
 //! (i, j, k): h_x (d phi/dx) + h_y (d phi/dy), with the physical horizontal
@@ -57,6 +57,6 @@ amrex::Real z_face_cross (int i, int j, int k, amrex::Array4<amrex::Real const> 
          + half * h_eta_on_zlo * ((py_md_hi_lo + py_md_lo_lo) - (pz_md_hi_lo + pz_md_lo_lo));
 }
 
-} // namespace ablsteady
+} // namespace gust
 
 #endif

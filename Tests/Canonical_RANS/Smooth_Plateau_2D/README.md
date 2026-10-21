@@ -18,5 +18,5 @@ The terrain file is written by `tools/make_ramp_terrain.py`.
 python3 tools/make_ramp_terrain.py ramp2d.txt
 ```
 ```bash
-mpirun -n 2 <build>/ablsteady Tests/Canonical_RANS/Smooth_Plateau_2D/inputs_steady_ramp2d terrain.file=ramp2d.txt
+mpirun -n 2 <build>/gust Tests/Canonical_RANS/Smooth_Plateau_2D/inputs_steady_ramp2d terrain.file=ramp2d.txt
 ```

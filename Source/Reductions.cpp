@@ -6,7 +6,7 @@
 
 #include <limits>
 
-namespace ablsteady {
+namespace gust {
 
 amrex::Real deterministic_sum (const amrex::MultiFab& mf, int comp)
 {
@@ -64,4 +64,4 @@ amrex::Real global_max (const amrex::MultiFab& mf, int comp)
     return (m == amrex::Real(0)) ? amrex::Real(0) : m;
 }
 
-} // namespace ablsteady
+} // namespace gust

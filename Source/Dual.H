@@ -1,5 +1,5 @@
-#ifndef ABLSTEADY_DUAL_H_
-#define ABLSTEADY_DUAL_H_
+#ifndef GUST_DUAL_H_
+#define GUST_DUAL_H_
 
 // Forward-mode dual numbers (value, derivative) for the closure's analytic
 // source Jacobian (sub-phase 1.9): a kernel templated on the scalar type gives
@@ -12,7 +12,7 @@
 
 #include <cmath>
 
-namespace ablsteady {
+namespace gust {
 
 struct Dual
 {
@@ -66,6 +66,6 @@ AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE amrex::Real max (amrex::Real x, amrex::
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE Dual max (Dual x, amrex::Real c) noexcept { return (x.v > c) ? x : Dual{c, 0}; }
 
 } // namespace dual
-} // namespace ablsteady
+} // namespace gust
 
 #endif

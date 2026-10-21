@@ -4,7 +4,7 @@
 Cases that check one layer of the solver on a fixed state, before any iteration: the terrain mesh and its grid
 hierarchy, the boundary
 fluxes, the k-L closure, the Poisson layer and the wall distance. Each compares against a closed form, ERF's own
-checks, or a gold written by ablsteady.
+checks, or a gold written by GUST.
 
 ## Cases
 | Folder | Plan ID | Description |

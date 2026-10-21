@@ -24,12 +24,12 @@
 
 namespace {
 
-using ablsteady::BoundaryInputs;
-using ablsteady::FaceType;
-using ablsteady::InitOptions;
-using ablsteady::PoissonFace;
-using ablsteady::ptest::PCase;
-using ablsteady::trtest::tol;
+using gust::BoundaryInputs;
+using gust::FaceType;
+using gust::InitOptions;
+using gust::PoissonFace;
+using gust::ptest::PCase;
+using gust::trtest::tol;
 
 // A square domain [0, L]^2 x [0, 500] with a Gaussian hill of height H0 and
 // radius R at the centre (D4-symmetric about the centre on the n x n mesh),
@@ -50,11 +50,11 @@ PCase square_hill (int n, int nz, double H0, bool periodic, double L = 1000, dou
         const double dx = x - 0.5 * L, dy = y - 0.5 * L;
         return H0 * std::exp(-(dx * dx + dy * dy) / (R * R));
     });
-    ablsteady::trtest::smooth_vertical_ghost_nodes(c);
+    gust::trtest::smooth_vertical_ghost_nodes(c);
     return c;
 }
 
-void define_state (ablsteady::State& q, const PCase& c)
+void define_state (gust::State& q, const PCase& c)
 {
     q.define(c.ba, c.dm);
     amrex::MultiFab::Copy(q.z_phys_nd, c.z, 0, 0, 1, c.z.nGrow());
@@ -85,16 +85,16 @@ BoundaryInputs open_along (const PCase& c, int axis, bool positive)
         in.face[positive ? axis : axis + 3] = FaceType::inflow;
         in.face[positive ? axis + 3 : axis] = FaceType::outflow;
     }
-    in.inflow.kind = ablsteady::InflowProfileOptions::Kind::log_law;
+    in.inflow.kind = gust::InflowProfileOptions::Kind::log_law;
     in.inflow.ustar = amrex::Real(0.5);
     in.inflow.z0 = amrex::Real(0.1);
     in.inflow.direction = static_cast<amrex::Real>(axis == 0 ? (positive ? 0 : 180) : (positive ? 90 : 270));
     return in;
 }
 
-ablsteady::PoissonOptions solver_options ()
+gust::PoissonOptions solver_options ()
 {
-    ablsteady::PoissonOptions p;
+    gust::PoissonOptions p;
     p.reltol = tol(1e-11, 1e-5);
     p.max_iter = 400;
     return p;
@@ -121,7 +121,7 @@ double max_diff (const amrex::MultiFab& a, const amrex::MultiFab& b)
 
 // The cell-centred velocity of a state (a named function: device lambdas do
 // not belong inside a test body's closures under nvcc).
-void cell_centre (const ablsteady::State& q, amrex::MultiFab& u, amrex::MultiFab& v, amrex::MultiFab& w)
+void cell_centre (const gust::State& q, amrex::MultiFab& u, amrex::MultiFab& v, amrex::MultiFab& w)
 {
     for (amrex::MFIter mfi(u, false); mfi.isValid(); ++mfi) {
         const auto a = u.array(mfi), b = v.array(mfi), d = w.array(mfi);
@@ -147,31 +147,31 @@ double xface_height (const amrex::FArrayBox& z, int i, int j, int k)
 // back end B does not have; the result reports which, and the fallback.
 TEST(Initializer, ProjectionBackEndFollowsTheAlphaRatio)
 {
-    const ablsteady::PoissonOptions dflt;
+    const gust::PoissonOptions dflt;
     EXPECT_EQ(dflt.backend, "gmres_mlmg");
-    EXPECT_EQ(ablsteady::initializer_poisson_options(profile_options(1, 1), dflt).backend, "gmres_mlmg");
-    EXPECT_EQ(ablsteady::initializer_poisson_options(profile_options(2, 2), dflt).backend, "gmres_mlmg");
-    EXPECT_EQ(ablsteady::initializer_poisson_options(profile_options(0.5, 1), dflt).backend, "gmres_fft");
-    EXPECT_EQ(ablsteady::initializer_poisson_options(profile_options(1, 2), dflt).backend, "gmres_fft");
-    ablsteady::PoissonOptions mg;
+    EXPECT_EQ(gust::initializer_poisson_options(profile_options(1, 1), dflt).backend, "gmres_mlmg");
+    EXPECT_EQ(gust::initializer_poisson_options(profile_options(2, 2), dflt).backend, "gmres_mlmg");
+    EXPECT_EQ(gust::initializer_poisson_options(profile_options(0.5, 1), dflt).backend, "gmres_fft");
+    EXPECT_EQ(gust::initializer_poisson_options(profile_options(1, 2), dflt).backend, "gmres_fft");
+    gust::PoissonOptions mg;
     mg.backend = "mlmg";
-    EXPECT_EQ(ablsteady::initializer_poisson_options(profile_options(0.5), mg).backend, "gmres_fft");
-    EXPECT_EQ(ablsteady::initializer_poisson_options(profile_options(1), mg).backend, "mlmg");
-    ablsteady::PoissonOptions fft;
+    EXPECT_EQ(gust::initializer_poisson_options(profile_options(0.5), mg).backend, "gmres_fft");
+    EXPECT_EQ(gust::initializer_poisson_options(profile_options(1), mg).backend, "mlmg");
+    gust::PoissonOptions fft;
     fft.backend = "gmres_fft";
-    EXPECT_EQ(ablsteady::initializer_poisson_options(profile_options(1), fft).backend, "gmres_fft");
+    EXPECT_EQ(gust::initializer_poisson_options(profile_options(1), fft).backend, "gmres_fft");
 
     PCase c = square_hill(16, 8, 120, false);
     const BoundaryInputs bin = open_along(c, 0, true);
     const auto popt = solver_options();   // the default back end
-    ablsteady::State qa, qb;
+    gust::State qa, qb;
     define_state(qa, c);
     define_state(qb, c);
-    const auto ra = ablsteady::initialize_state(profile_options(0.5), bin, popt, c.mesh, c.geom, qa);
+    const auto ra = gust::initialize_state(profile_options(0.5), bin, popt, c.mesh, c.geom, qa);
     EXPECT_EQ(ra.poisson_backend, "gmres_fft");
     EXPECT_TRUE(ra.backend_fallback);
     EXPECT_LT(ra.divergence_after, 10 * popt.reltol * ra.divergence_before);
-    const auto rb = ablsteady::initialize_state(profile_options(1), bin, popt, c.mesh, c.geom, qb);
+    const auto rb = gust::initialize_state(profile_options(1), bin, popt, c.mesh, c.geom, qb);
     EXPECT_EQ(rb.poisson_backend, "gmres_mlmg");
     EXPECT_FALSE(rb.backend_fallback);
     EXPECT_LT(rb.divergence_after, 10 * popt.reltol * rb.divergence_before);
@@ -190,10 +190,10 @@ TEST(Initializer, EqualAlphasAreThePlainProjection)
     const BoundaryInputs bin = open_along(c, 0, true);
     const auto popt = solver_options();
     const InitOptions o1 = profile_options();
-    ablsteady::State q1;
+    gust::State q1;
     define_state(q1, c);
     amrex::MultiFab lam1;
-    const auto r1 = ablsteady::initialize_state(o1, bin, popt, c.mesh, c.geom, q1, &lam1);
+    const auto r1 = gust::initialize_state(o1, bin, popt, c.mesh, c.geom, q1, &lam1);
     EXPECT_GT(r1.divergence_before, 1e-3);
     EXPECT_LT(r1.divergence_after, 10 * popt.reltol * r1.divergence_before);
     EXPECT_GT(r1.divergence_after, 0);   // measured, not assumed
@@ -201,28 +201,28 @@ TEST(Initializer, EqualAlphasAreThePlainProjection)
     EXPECT_EQ(r1.obrien_top_residual, 0);
     // The plain projection by hand: the first guess, the solve without
     // coefficients, u += F.
-    ablsteady::State q0;
+    gust::State q0;
     define_state(q0, c);
-    EXPECT_EQ(ablsteady::first_guess_state(o1, bin, c.mesh, c.geom, q0), 0);
+    EXPECT_EQ(gust::first_guess_state(o1, bin, c.mesh, c.geom, q0), 0);
     {
         amrex::MultiFab rhs(c.ba, c.dm, 1, 0), lam(c.ba, c.dm, 1, 1);
-        ablsteady::velocity_divergence(q0.u, q0.v, q0.w, q0.z_phys_nd, c.mesh, c.geom, rhs);
+        gust::velocity_divergence(q0.u, q0.v, q0.w, q0.z_phys_nd, c.mesh, c.geom, rhs);
         EXPECT_EQ(rhs.norm2(), r1.divergence_before);
         lam.setVal(0.0);
-        ablsteady::PoissonSolver solver(c.mesh, c.geom, q0.z_phys_nd, popt);
+        gust::PoissonSolver solver(c.mesh, c.geom, q0.z_phys_nd, popt);
         amrex::Array<amrex::MultiFab, 3> F;
         const amrex::MultiFab* areas[3] = {&c.mesh.ax, &c.mesh.ay, &c.mesh.az};
         for (int d = 0; d < 3; ++d) { F[d].define(areas[d]->boxArray(), c.dm, 1, 0); }
-        const ablsteady::PoissonBC pbc = ablsteady::initializer_poisson_bc(bin, c.geom);
-        solver.solve(rhs, lam, ablsteady::FaceCoeffs{}, pbc, &F);
+        const gust::PoissonBC pbc = gust::initializer_poisson_bc(bin, c.geom);
+        solver.solve(rhs, lam, gust::FaceCoeffs{}, pbc, &F);
         amrex::MultiFab omega(c.mesh.az.boxArray(), c.dm, 1, 0);
-        ablsteady::omega_from_w(q0.u, q0.v, q0.w, q0.z_phys_nd, c.mesh, c.geom, omega, 0);
+        gust::omega_from_w(q0.u, q0.v, q0.w, q0.z_phys_nd, c.mesh, c.geom, omega, 0);
         amrex::MultiFab::Add(q0.u, F[0], 0, 0, 1, 0);
         amrex::MultiFab::Add(q0.v, F[1], 0, 0, 1, 0);
         amrex::MultiFab::Add(omega, F[2], 0, 0, 1, 0);
         q0.u.FillBoundary(c.geom.periodicity());
         q0.v.FillBoundary(c.geom.periodicity());
-        ablsteady::w_from_omega(q0.u, q0.v, omega, q0.z_phys_nd, c.mesh, c.geom, q0.w);
+        gust::w_from_omega(q0.u, q0.v, omega, q0.z_phys_nd, c.mesh, c.geom, q0.w);
         EXPECT_EQ(max_diff(q0.u, q1.u), 0);
         EXPECT_EQ(max_diff(q0.v, q1.v), 0);
         EXPECT_EQ(max_diff(q0.w, q1.w), 0);
@@ -231,19 +231,19 @@ TEST(Initializer, EqualAlphasAreThePlainProjection)
     // lambda given with garbage in it is zeroed before the solve: the same
     // field to the solver's tolerance.
     {
-        ablsteady::State qg;
+        gust::State qg;
         define_state(qg, c);
         amrex::MultiFab lamg(c.ba, c.dm, 1, 1);
         lamg.setVal(1e3);
-        ablsteady::initialize_state(o1, bin, popt, c.mesh, c.geom, qg, &lamg);
+        gust::initialize_state(o1, bin, popt, c.mesh, c.geom, qg, &lamg);
         EXPECT_LT(max_diff(qg.u, q1.u), tol(1e-9, 1e-4) * max_abs(q1.u));
         EXPECT_LT(max_diff(lamg, lam1), tol(1e-9, 1e-4) * max_abs(lam1));
     }
     // alpha_h = alpha_v = 2: the same corrected field, lambda a quarter.
-    ablsteady::State q4;
+    gust::State q4;
     define_state(q4, c);
     amrex::MultiFab lam4;
-    const auto r4 = ablsteady::initialize_state(profile_options(2, 2), bin, popt, c.mesh, c.geom, q4, &lam4);
+    const auto r4 = gust::initialize_state(profile_options(2, 2), bin, popt, c.mesh, c.geom, q4, &lam4);
     const double scale = max_abs(q1.u);
     EXPECT_LT(max_diff(q4.u, q1.u), tol(1e-9, 1e-4) * scale);
     EXPECT_LT(max_diff(q4.v, q1.v), tol(1e-9, 1e-4) * scale);
@@ -260,30 +260,30 @@ TEST(Initializer, EqualAlphasAreThePlainProjection)
     // same solve with the whole z flux scaled by alpha_v^2 (no z_cross) gives
     // a different field over the hill.
     {
-        ablsteady::State qa, qz;
+        gust::State qa, qz;
         define_state(qa, c);
         define_state(qz, c);
         const InitOptions oa = profile_options(0.5);
-        ablsteady::initialize_state(oa, bin, popt, c.mesh, c.geom, qa);
-        ablsteady::first_guess_state(oa, bin, c.mesh, c.geom, qz);
+        gust::initialize_state(oa, bin, popt, c.mesh, c.geom, qa);
+        gust::first_guess_state(oa, bin, c.mesh, c.geom, qz);
         amrex::MultiFab rhs(c.ba, c.dm, 1, 0), lam(c.ba, c.dm, 1, 1);
-        ablsteady::velocity_divergence(qz.u, qz.v, qz.w, qz.z_phys_nd, c.mesh, c.geom, rhs);
+        gust::velocity_divergence(qz.u, qz.v, qz.w, qz.z_phys_nd, c.mesh, c.geom, rhs);
         lam.setVal(0.0);
         amrex::MultiFab bx(c.mesh.ax.boxArray(), c.dm, 1, 0), by(c.mesh.ay.boxArray(), c.dm, 1, 0),
                         bz(c.mesh.az.boxArray(), c.dm, 1, 0);
         bx.setVal(1.0);
         by.setVal(1.0);
         bz.setVal(0.25);
-        ablsteady::FaceCoeffs fc;
+        gust::FaceCoeffs fc;
         fc.x = &bx;
         fc.y = &by;
         fc.z = &bz;
         fc.precond_ratio = amrex::Real(0.25);
-        ablsteady::PoissonSolver solver(c.mesh, c.geom, qz.z_phys_nd, popt);
+        gust::PoissonSolver solver(c.mesh, c.geom, qz.z_phys_nd, popt);
         amrex::Array<amrex::MultiFab, 3> F;
         const amrex::MultiFab* areas[3] = {&c.mesh.ax, &c.mesh.ay, &c.mesh.az};
         for (int d = 0; d < 3; ++d) { F[d].define(areas[d]->boxArray(), c.dm, 1, 0); }
-        solver.solve(rhs, lam, fc, ablsteady::initializer_poisson_bc(bin, c.geom), &F);
+        solver.solve(rhs, lam, fc, gust::initializer_poisson_bc(bin, c.geom), &F);
         amrex::MultiFab::Add(qz.u, F[0], 0, 0, 1, 0);
         EXPECT_GT(max_diff(qz.u, qa.u), 1e-3 * scale);
     }
@@ -292,9 +292,9 @@ TEST(Initializer, EqualAlphasAreThePlainProjection)
     // with the seam faces holding one value (face 0 and face n are the same).
     {
         PCase cp = square_hill(16, 8, 120, true);
-        ablsteady::State qp;
+        gust::State qp;
         define_state(qp, cp);
-        const auto rp = ablsteady::initialize_state(profile_options(0.5), open_along(cp, 0, true), popt, cp.mesh, cp.geom, qp);
+        const auto rp = gust::initialize_state(profile_options(0.5), open_along(cp, 0, true), popt, cp.mesh, cp.geom, qp);
         EXPECT_GT(rp.divergence_before, 1e-3);
         EXPECT_LT(rp.divergence_after, 10 * popt.reltol * rp.divergence_before);
         EXPECT_GT(max_abs(qp.w), 1e-3);
@@ -330,15 +330,15 @@ TEST(Initializer, FlatTerrainLeavesTheProfile)
     for (const bool periodic : {false, true}) {
         PCase c = square_hill(8, 8, 0, periodic);
         const BoundaryInputs bin = open_along(c, 0, true);
-        ablsteady::State q;
+        gust::State q;
         define_state(q, c);
         amrex::MultiFab lam;
-        const auto r = ablsteady::initialize_state(profile_options(0.5), bin, solver_options(), c.mesh, c.geom, q, &lam);
+        const auto r = gust::initialize_state(profile_options(0.5), bin, solver_options(), c.mesh, c.geom, q, &lam);
         EXPECT_LT(r.divergence_before, tol(1e-12, 1e-4)) << periodic;
         EXPECT_LT(max_abs(lam), tol(1e-12, 1e-3));   // lambda is O(100) m^2/s: the solve's round-off
         EXPECT_LT(max_abs(q.w), tol(1e-12, 1e-4));
-        const ablsteady::CoriolisOptions cor;
-        const ablsteady::BoundaryConditions bc(bin, c.geom, c.mesh, cor);
+        const gust::CoriolisOptions cor;
+        const gust::BoundaryConditions bc(bin, c.geom, c.mesh, cor);
         const auto p = bc.profile().host_view();
         int seen = 0;
         for (amrex::MFIter mfi(q.u, false); mfi.isValid(); ++mfi) {
@@ -369,7 +369,7 @@ TEST(Initializer, D4SymmetryOnTheRoundHill)
     // The symmetry holds to the solver's error in lambda, which is the
     // residual tolerance times the operator's condition number: converge to
     // round-off here.
-    ablsteady::PoissonOptions popt = solver_options();
+    gust::PoissonOptions popt = solver_options();
     popt.reltol = tol(3e-15, 2e-6);   // the solver requires >= 10 machine epsilon
     popt.max_iter = 2000;
     // Cell-centred u, v, w of a state, gathered to one box on rank 0.
@@ -381,10 +381,10 @@ TEST(Initializer, D4SymmetryOnTheRoundHill)
         return g;
     };
     auto run = [&] (int axis, bool positive, amrex::MultiFab& uc, amrex::MultiFab& vc, amrex::MultiFab& wc, amrex::MultiFab& lc) {
-        ablsteady::State q;
+        gust::State q;
         define_state(q, c);
         amrex::MultiFab lam;
-        const auto r = ablsteady::initialize_state(profile_options(0.6), open_along(c, axis, positive), popt, c.mesh,
+        const auto r = gust::initialize_state(profile_options(0.6), open_along(c, axis, positive), popt, c.mesh,
                                                    c.geom, q, &lam);
         EXPECT_LT(r.divergence_after, 10 * popt.reltol * r.divergence_before);
         amrex::MultiFab u(c.ba, c.dm, 1, 0), v(c.ba, c.dm, 1, 0), w(c.ba, c.dm, 1, 0);
@@ -443,7 +443,7 @@ TEST(Initializer, D4SymmetryOnTheRoundHill)
 // 0.943, 0.913 on this 1 km domain, whose open faces are 500 m from the
 // summit), and it is the ratio that matters: alpha_h = 2 with alpha_v = 1 is
 // alpha_v = 0.5 with alpha_h = 1.
-double summit_speedup (const ablsteady::State& q, const PCase& c, const BoundaryInputs& bin)
+double summit_speedup (const gust::State& q, const PCase& c, const BoundaryInputs& bin)
 {
     const int n = c.geom.Domain().length(0), k = c.geom.Domain().length(2) / 4;   // about 100 m above the summit
     amrex::MultiFab uc(c.ba, c.dm, 1, 0), vc(c.ba, c.dm, 1, 0), wc(c.ba, c.dm, 1, 0);
@@ -457,8 +457,8 @@ double summit_speedup (const ablsteady::State& q, const PCase& c, const Boundary
     gu.ParallelCopy(uc, 0, 0, 1, 0, 0);
     gv.ParallelCopy(vc, 0, 0, 1, 0, 0);
     gz.ParallelCopy(q.z_phys_nd, 0, 0, 1, 0, 0);
-    const ablsteady::CoriolisOptions cor;
-    const ablsteady::BoundaryConditions bc(bin, c.geom, c.mesh, cor);
+    const gust::CoriolisOptions cor;
+    const gust::BoundaryConditions bc(bin, c.geom, c.mesh, cor);
     const auto p = bc.profile().host_view();
     amrex::Real s = 0;
     for (amrex::MFIter mfi(gu, false); mfi.isValid(); ++mfi) {   // rank 0
@@ -488,9 +488,9 @@ TEST(Initializer, SummitSpeedUpDecreasesWithAlphaRatio)
     const auto popt = solver_options();
     double prev = std::numeric_limits<double>::max(), w_half = 0;
     for (double ratio : {1.0, 0.7, 0.5, 0.3, 0.1}) {
-        ablsteady::State q;
+        gust::State q;
         define_state(q, c);
-        const auto r = ablsteady::initialize_state(profile_options(ratio), bin, popt, c.mesh, c.geom, q);
+        const auto r = gust::initialize_state(profile_options(ratio), bin, popt, c.mesh, c.geom, q);
         EXPECT_LT(r.divergence_after, 10 * popt.reltol * r.divergence_before);
         // the preconditioner is told the ratio: 13 to 19 iterations measured
         // (bound 10 % above the largest, rounded up); untold, far more
@@ -501,9 +501,9 @@ TEST(Initializer, SummitSpeedUpDecreasesWithAlphaRatio)
         prev = wmax;
         if (ratio == 0.5) { w_half = wmax; }
     }
-    ablsteady::State q;
+    gust::State q;
     define_state(q, c);
-    ablsteady::initialize_state(profile_options(1, 2), bin, popt, c.mesh, c.geom, q);
+    gust::initialize_state(profile_options(1, 2), bin, popt, c.mesh, c.geom, q);
     EXPECT_NEAR(summit_speedup(q, c, bin), w_half, tol(1e-9, 1e-4) * w_half);
 }
 
@@ -518,23 +518,23 @@ TEST(Initializer, FirstGuessByHeightAboveGround)
     BoundaryInputs bin = open_along(c, 0, true);
     bin.inflow.direction = 30;
     // The wall-law length: the log law's k is then u*^2/Cmu0^2 at every height (checked last).
-    bin.inflow.length = ablsteady::InflowProfileOptions::Length::unbounded;
+    bin.inflow.length = gust::InflowProfileOptions::Length::unbounded;
     bin.theta_ref.z = {0, 300, 500};
     bin.theta_ref.theta = {300, 300, 306};
-    const ablsteady::CoriolisOptions cor;
-    const ablsteady::BoundaryConditions bc(bin, c.geom, c.mesh, cor);
+    const gust::CoriolisOptions cor;
+    const gust::BoundaryConditions bc(bin, c.geom, c.mesh, cor);
     const auto p = bc.profile().host_view();
     InitOptions o = profile_options();
     o.z_agl_min = 3;
     o.k_decay_height = 200;
-    ablsteady::State q;
+    gust::State q;
     define_state(q, c);
-    EXPECT_EQ(ablsteady::first_guess_state(o, bin, c.mesh, c.geom, q), 0);
+    EXPECT_EQ(gust::first_guess_state(o, bin, c.mesh, c.geom, q), 0);
     {
         // w_0 = 0 at every face but the ground's, which carries no flux
         // (Omega_0 = 0 to round-off, so w_0 = u_0 dz/dx + v_0 dz/dy there)
         amrex::MultiFab om(c.mesh.az.boxArray(), c.dm, 1, 0);
-        ablsteady::omega_from_w(q.u, q.v, q.w, q.z_phys_nd, c.mesh, c.geom, om, 0);
+        gust::omega_from_w(q.u, q.v, q.w, q.z_phys_nd, c.mesh, c.geom, om, 0);
         double w_above = 0, om_ground = 0, w_ground = 0;
         for (amrex::MFIter mfi(om, false); mfi.isValid(); ++mfi) {
             const auto o = host_copy(om, mfi), w = host_copy(q.w, mfi);
@@ -626,16 +626,16 @@ TEST(Initializer, FirstGuessByHeightAboveGround)
         const amrex::DistributionMapping dms(split);
         amrex::MultiFab zs(amrex::convert(split, amrex::IntVect(1)), dms, 1, c.z.nGrow());
         zs.ParallelCopy(c.z, 0, 0, 1, c.z.nGrow(), c.z.nGrow());
-        ablsteady::Mesh ms;
+        gust::Mesh ms;
         ms.define(split, dms);
         ms.build_from_ground(c.in, c.geom, zs);
-        ablsteady::State qs;
+        gust::State qs;
         qs.define(split, dms);
         amrex::MultiFab::Copy(qs.z_phys_nd, zs, 0, 0, 1, zs.nGrow());
         qs.u.setVal(1.0);
         qs.v.setVal(0.0);
         amrex::MultiFab om;
-        EXPECT_THROW(ablsteady::obrien_omega(qs.u, qs.v, qs.z_phys_nd, ms, c.geom, om), std::runtime_error);
+        EXPECT_THROW(gust::obrien_omega(qs.u, qs.v, qs.z_phys_nd, ms, c.geom, om), std::runtime_error);
     }
     long want = 0;   // every point of every x-face box with its two ghost layers
     for (int b = 0; b < c.ba.size(); ++b) { want += amrex::grow(amrex::convert(c.ba[b], amrex::IntVect(1, 0, 0)), 2).numPts(); }
@@ -644,9 +644,9 @@ TEST(Initializer, FirstGuessByHeightAboveGround)
     {
         InitOptions o0 = o;
         o0.k_decay_height = 0;
-        ablsteady::State q0;
+        gust::State q0;
         define_state(q0, c);
-        ablsteady::first_guess_state(o0, bin, c.mesh, c.geom, q0);
+        gust::first_guess_state(o0, bin, c.mesh, c.geom, q0);
         EXPECT_GT(max_diff(q0.tke, q.tke), 1e-3 * max_abs(q0.tke));
         const double kval = 0.25 / (0.5562 * 0.5562);
         EXPECT_NEAR(q0.tke.min(0), kval, tol(1e-12, 1e-5) * kval);
@@ -667,18 +667,18 @@ TEST(Initializer, OBrienColumnCorrection)
     BoundaryInputs bin = open_along(c, 0, true);
     bin.inflow.direction = 30;
     const auto popt = solver_options();
-    ablsteady::State q;
+    gust::State q;
     define_state(q, c);
     const InitOptions o = profile_options();
-    ablsteady::first_guess_state(o, bin, c.mesh, c.geom, q);
+    gust::first_guess_state(o, bin, c.mesh, c.geom, q);
     amrex::MultiFab omega;
-    const amrex::Real E = ablsteady::obrien_omega(q.u, q.v, q.z_phys_nd, c.mesh, c.geom, omega);
+    const amrex::Real E = gust::obrien_omega(q.u, q.v, q.z_phys_nd, c.mesh, c.geom, omega);
     EXPECT_GT(E, 1e-3);
     EXPECT_EQ(omega.nGrow(), 0);
     amrex::MultiFab dv(c.ba, c.dm, 1, 0), dh(c.ba, c.dm, 1, 0), zero(omega.boxArray(), c.dm, 1, 0);
     zero.setVal(0.0);
-    ablsteady::face_divergence(c.mesh, c.geom, {&q.u, &q.v, &omega}, dv);
-    ablsteady::face_divergence(c.mesh, c.geom, {&q.u, &q.v, &zero}, dh);
+    gust::face_divergence(c.mesh, c.geom, {&q.u, &q.v, &omega}, dv);
+    gust::face_divergence(c.mesh, c.geom, {&q.u, &q.v, &zero}, dh);
     const int nz = c.geom.Domain().length(2);
     const double dzeta = c.geom.CellSize(2);
     int cols = 0;
@@ -723,13 +723,13 @@ TEST(Initializer, OBrienColumnCorrection)
     EXPECT_EQ(cols, 12 * 12);
     EXPECT_NEAR(worst_E, E, tol(1e-12, 1e-5) * E);
     // Through the initializer.
-    ablsteady::State qo, qp;
+    gust::State qo, qp;
     define_state(qo, c);
     define_state(qp, c);
     InitOptions ob = o;
     ob.obrien = true;
-    const auto ro = ablsteady::initialize_state(ob, bin, popt, c.mesh, c.geom, qo);
-    const auto rp = ablsteady::initialize_state(o, bin, popt, c.mesh, c.geom, qp);
+    const auto ro = gust::initialize_state(ob, bin, popt, c.mesh, c.geom, qo);
+    const auto rp = gust::initialize_state(o, bin, popt, c.mesh, c.geom, qp);
     EXPECT_NEAR(ro.obrien_top_residual, E, tol(1e-12, 1e-5) * E);
     EXPECT_EQ(rp.obrien_top_residual, 0);
     // The terrain-following first guess is already consistent at the ground;
@@ -774,25 +774,25 @@ TEST(Initializer, InputsAndPoissonTypes)
     for (const Bad& b : bads) {
         InitOptions x = o;
         b.mutate(x);
-        const auto err = ablsteady::check_init_options(x);
+        const auto err = gust::check_init_options(x);
         ASSERT_FALSE(err.empty()) << b.key;
         bool found = false;
         for (const auto& e : err) { found = found || e.find(b.key) != std::string::npos; }
         EXPECT_TRUE(found) << b.key << ": " << err.front();
-        ablsteady::State q;
+        gust::State q;
         define_state(q, c);
-        EXPECT_THROW(ablsteady::initialize_state(x, bin, popt, c.mesh, c.geom, q), std::runtime_error) << b.key;
-        EXPECT_THROW(ablsteady::first_guess_state(x, bin, c.mesh, c.geom, q), std::runtime_error) << b.key;
+        EXPECT_THROW(gust::initialize_state(x, bin, popt, c.mesh, c.geom, q), std::runtime_error) << b.key;
+        EXPECT_THROW(gust::first_guess_state(x, bin, c.mesh, c.geom, q), std::runtime_error) << b.key;
     }
-    EXPECT_TRUE(ablsteady::check_init_options(o).empty());
+    EXPECT_TRUE(gust::check_init_options(o).empty());
     {
         InitOptions none;
         none.given = {"first_guess"};
-        EXPECT_TRUE(ablsteady::check_init_options(none).empty());
-        ablsteady::State q;
+        EXPECT_TRUE(gust::check_init_options(none).empty());
+        gust::State q;
         define_state(q, c);
         q.u.setVal(7.0);
-        const auto r = ablsteady::initialize_state(none, bin, popt, c.mesh, c.geom, q);
+        const auto r = gust::initialize_state(none, bin, popt, c.mesh, c.geom, q);
         EXPECT_EQ(r.poisson.iterations, 0);
         EXPECT_EQ(max_abs(q.u), 7.0);   // untouched
     }
@@ -810,7 +810,7 @@ TEST(Initializer, InputsAndPoissonTypes)
         pp.add("alpha_v", amrex::Real(0.4));
         pp.add("k_decay_height", amrex::Real(300));
         pp.add("obrien", 1);
-        const InitOptions ro = ablsteady::read_init_options();
+        const InitOptions ro = gust::read_init_options();
         EXPECT_EQ(ro.first_guess, InitOptions::FirstGuess::profile);
         EXPECT_EQ(ro.z_agl_min, 2);
         EXPECT_EQ(ro.alpha_h, amrex::Real(1.5));
@@ -819,7 +819,7 @@ TEST(Initializer, InputsAndPoissonTypes)
         EXPECT_TRUE(ro.obrien);
         EXPECT_EQ(ro.given.size(), 6u);
         clear();
-        const InitOptions d = ablsteady::read_init_options();
+        const InitOptions d = gust::read_init_options();
         EXPECT_EQ(d.first_guess, InitOptions::FirstGuess::none);
         EXPECT_EQ(d.alpha_h, 1);
         EXPECT_EQ(d.alpha_v, 1);
@@ -828,43 +828,43 @@ TEST(Initializer, InputsAndPoissonTypes)
         EXPECT_FALSE(d.obrien);
         EXPECT_TRUE(d.given.empty());
         pp.add("first_guess", std::string("uniform"));
-        EXPECT_THROW(ablsteady::read_init_options(), std::runtime_error);
+        EXPECT_THROW(gust::read_init_options(), std::runtime_error);
         clear();
         pp.add("obrien", 2);
-        EXPECT_THROW(ablsteady::read_init_options(), std::runtime_error);
+        EXPECT_THROW(gust::read_init_options(), std::runtime_error);
         clear();
         pp.add("alpha_v", amrex::Real(0.5));   // without first_guess: no effect, refused
-        EXPECT_THROW(ablsteady::read_init_options(), std::runtime_error);
+        EXPECT_THROW(gust::read_init_options(), std::runtime_error);
         clear();
         pp.add("first_guess", std::string("profile"));
         pp.add("alpha_v", amrex::Real(0));
-        EXPECT_THROW(ablsteady::read_init_options(), std::runtime_error);
+        EXPECT_THROW(gust::read_init_options(), std::runtime_error);
         clear();
         pp.addarr("alpha_v", std::vector<amrex::Real>{1, 2});
-        EXPECT_THROW(ablsteady::read_init_options(), std::runtime_error);
+        EXPECT_THROW(gust::read_init_options(), std::runtime_error);
         clear();
         pp.add("first_guess", std::string("profile"));
         pp.add("alpha_v", amrex::Real(0.5));
         pp.add("alpha_v", amrex::Real(0.7));   // given twice: refused, not the last value
-        EXPECT_THROW(ablsteady::read_init_options(), std::runtime_error);
+        EXPECT_THROW(gust::read_init_options(), std::runtime_error);
         {
             amrex::ParmParse pb("bc");
             pb.add("xlo", std::string("outflow"));
             pb.add("xlo", std::string("inflow"));
-            EXPECT_THROW(ablsteady::read_boundary_inputs(), std::runtime_error);
+            EXPECT_THROW(gust::read_boundary_inputs(), std::runtime_error);
             while (pb.remove("xlo") > 0) {}
         }
         clear();
-        EXPECT_NO_THROW(ablsteady::read_init_options());
+        EXPECT_NO_THROW(gust::read_init_options());
     }
     // The Poisson types of the correction: open faces Dirichlet, the rest
     // Neumann, periodic where the geometry is.
-    const ablsteady::PoissonBC pbc = ablsteady::initializer_poisson_bc(bin, c.geom);
+    const gust::PoissonBC pbc = gust::initializer_poisson_bc(bin, c.geom);
     EXPECT_EQ(pbc.face[0], PoissonFace::dirichlet);
     EXPECT_EQ(pbc.face[3], PoissonFace::dirichlet);
     for (int f : {1, 2, 4, 5}) { EXPECT_EQ(pbc.face[f], PoissonFace::neumann) << f; }
     PCase cp = square_hill(8, 4, 50, true);
-    const ablsteady::PoissonBC pp2 = ablsteady::initializer_poisson_bc(open_along(cp, 0, true), cp.geom);
+    const gust::PoissonBC pp2 = gust::initializer_poisson_bc(open_along(cp, 0, true), cp.geom);
     for (int f : {0, 1, 3, 4}) { EXPECT_EQ(pp2.face[f], PoissonFace::periodic) << f; }
     EXPECT_EQ(pp2.face[2], PoissonFace::neumann);
     EXPECT_EQ(pp2.face[5], PoissonFace::neumann);
@@ -872,9 +872,9 @@ TEST(Initializer, InputsAndPoissonTypes)
     {
         BoundaryInputs bad = bin;
         bad.face[0] = FaceType::periodic;
-        ablsteady::State q;
+        gust::State q;
         define_state(q, c);
-        EXPECT_THROW(ablsteady::initialize_state(o, bad, popt, c.mesh, c.geom, q), std::runtime_error);
+        EXPECT_THROW(gust::initialize_state(o, bad, popt, c.mesh, c.geom, q), std::runtime_error);
     }
 }
 
@@ -891,8 +891,8 @@ TEST(Initializer, InputsAndPoissonTypes)
 // their keys.
 TEST(Initializer, ColumnGuessAndProjectionSwitch)
 {
-    using ablsteady::InflowProfile;
-    ablsteady::ReferenceProfile sounding;
+    using gust::InflowProfile;
+    gust::ReferenceProfile sounding;
     sounding.z = {0, 700, 1000};
     sounding.theta = {300, 300, 309};
     // (a) the table profile
@@ -954,10 +954,10 @@ TEST(Initializer, ColumnGuessAndProjectionSwitch)
     InitOptions co = profile_options();
     co.first_guess = InitOptions::FirstGuess::column;
     co.projection = false;
-    ablsteady::State q;
+    gust::State q;
     define_state(q, c);
-    EXPECT_THROW(ablsteady::first_guess_state(co, bin, c.mesh, c.geom, q), std::runtime_error);   // the column is required
-    const auto r0 = ablsteady::initialize_state(co, bin, popt, c.mesh, c.geom, q, nullptr, ablsteady::CoriolisOptions{}, &column);
+    EXPECT_THROW(gust::first_guess_state(co, bin, c.mesh, c.geom, q), std::runtime_error);   // the column is required
+    const auto r0 = gust::initialize_state(co, bin, popt, c.mesh, c.geom, q, nullptr, gust::CoriolisOptions{}, &column);
     EXPECT_EQ(r0.poisson.iterations, 0);
     EXPECT_EQ(r0.divergence_before, r0.divergence_after);
     EXPECT_LT(r0.divergence_before, tol(1e-12, 1e-4));   // a uniform column has none
@@ -977,23 +977,23 @@ TEST(Initializer, ColumnGuessAndProjectionSwitch)
     amrex::ParallelDescriptor::ReduceIntSum(seen);
     EXPECT_EQ(seen, 9 * 8 * 8);
     // the projection on the same first guess changes nothing on the uniform column but runs the solve
-    ablsteady::State q2;
+    gust::State q2;
     define_state(q2, c);
     co.projection = true;
-    const auto r1 = ablsteady::initialize_state(co, bin, popt, c.mesh, c.geom, q2, nullptr, ablsteady::CoriolisOptions{}, &column);
+    const auto r1 = gust::initialize_state(co, bin, popt, c.mesh, c.geom, q2, nullptr, gust::CoriolisOptions{}, &column);
     EXPECT_LT(max_diff(q2.u, q.u), tol(1e-12, 1e-4));
     // and on a hill the projection does change the first guess
     {
         PCase h = square_hill(8, 8, 60, true);
         BoundaryInputs hb = open_along(h, 0, true);
         hb.theta_ref = sounding;
-        ablsteady::State a, b;
+        gust::State a, b;
         define_state(a, h);
         define_state(b, h);
         co.projection = false;
-        ablsteady::initialize_state(co, hb, popt, h.mesh, h.geom, a, nullptr, ablsteady::CoriolisOptions{}, &column);
+        gust::initialize_state(co, hb, popt, h.mesh, h.geom, a, nullptr, gust::CoriolisOptions{}, &column);
         co.projection = true;
-        const auto rb = ablsteady::initialize_state(co, hb, popt, h.mesh, h.geom, b, nullptr, ablsteady::CoriolisOptions{}, &column);
+        const auto rb = gust::initialize_state(co, hb, popt, h.mesh, h.geom, b, nullptr, gust::CoriolisOptions{}, &column);
         EXPECT_GT(max_diff(a.u, b.u), 1e-3);
         EXPECT_GT(rb.poisson.iterations, 0);
         EXPECT_LT(rb.divergence_after, rb.divergence_before);
@@ -1011,74 +1011,74 @@ TEST(Initializer, ColumnGuessAndProjectionSwitch)
         pp.add("projection", 0);
         pp.add("column_tol", amrex::Real(1e-6));
         pp.add("column_max_iterations", 500);
-        const InitOptions ro = ablsteady::read_init_options();
+        const InitOptions ro = gust::read_init_options();
         EXPECT_EQ(ro.first_guess, InitOptions::FirstGuess::column);
         EXPECT_FALSE(ro.projection);
         EXPECT_EQ(ro.column_tol, amrex::Real(1e-6));
         EXPECT_EQ(ro.column_max_iterations, 500);
         clear();
-        const InitOptions d = ablsteady::read_init_options();
+        const InitOptions d = gust::read_init_options();
         EXPECT_TRUE(d.projection);
         EXPECT_EQ(d.column_tol, amrex::Real(1e-8));
         EXPECT_EQ(d.column_max_iterations, 5000);
         pp.add("first_guess", std::string("profile"));
         pp.add("projection", 2);
-        EXPECT_THROW(ablsteady::read_init_options(), std::runtime_error);
+        EXPECT_THROW(gust::read_init_options(), std::runtime_error);
         clear();
         pp.add("first_guess", std::string("profile"));
         pp.add("column_tol", amrex::Real(1e-6));   // no effect without the column
-        EXPECT_THROW(ablsteady::read_init_options(), std::runtime_error);
+        EXPECT_THROW(gust::read_init_options(), std::runtime_error);
         clear();
     }
     {
         InitOptions o;
         o.first_guess = InitOptions::FirstGuess::column;
-        ablsteady::SteadyOptions so;
-        so.stage = ablsteady::StageKind::simplec;
-        ablsteady::ForcingOptions forcing_opt;
-        ablsteady::BoundaryInputs cb;
-        cb.face[2] = ablsteady::FaceType::surface_layer;
-        ablsteady::SurfaceLayerOptions cs;
-        auto err = ablsteady::check_column_guess(o, so, forcing_opt, cb, cs, true);   // no forcing
+        gust::SteadyOptions so;
+        so.stage = gust::StageKind::simplec;
+        gust::ForcingOptions forcing_opt;
+        gust::BoundaryInputs cb;
+        cb.face[2] = gust::FaceType::surface_layer;
+        gust::SurfaceLayerOptions cs;
+        auto err = gust::check_column_guess(o, so, forcing_opt, cb, cs, true);   // no forcing
         ASSERT_FALSE(err.empty());
         EXPECT_NE(err.front().find("init.first_guess"), std::string::npos);
         forcing_opt.pressure_gradient = {amrex::Real(1e-4), 0, 0};
-        EXPECT_TRUE(ablsteady::check_column_guess(o, so, forcing_opt, cb, cs, true).empty());
-        so.stage = ablsteady::StageKind::simplec_newton;   // the column runs before either stage
-        EXPECT_TRUE(ablsteady::check_column_guess(o, so, forcing_opt, cb, cs, true).empty());
-        so.stage = ablsteady::StageKind::none;
-        err = ablsteady::check_column_guess(o, so, forcing_opt, cb, cs, true);
+        EXPECT_TRUE(gust::check_column_guess(o, so, forcing_opt, cb, cs, true).empty());
+        so.stage = gust::StageKind::simplec_newton;   // the column runs before either stage
+        EXPECT_TRUE(gust::check_column_guess(o, so, forcing_opt, cb, cs, true).empty());
+        so.stage = gust::StageKind::none;
+        err = gust::check_column_guess(o, so, forcing_opt, cb, cs, true);
         ASSERT_FALSE(err.empty());
         EXPECT_NE(err.front().find("steady.stage"), std::string::npos);
-        so.stage = ablsteady::StageKind::simplec;
-        EXPECT_FALSE(ablsteady::check_column_guess(o, so, forcing_opt, cb, cs, false).empty());   // no surface layer
-        cs.stability = ablsteady::SurfaceLayerOptions::Stability::heat_flux;
-        EXPECT_FALSE(ablsteady::check_column_guess(o, so, forcing_opt, cb, cs, true).empty());    // a heat flux
-        cs.stability = ablsteady::SurfaceLayerOptions::Stability::neutral;
-        cs.wall_k = ablsteady::SurfaceLayerOptions::WallK::source;
-        EXPECT_FALSE(ablsteady::check_column_guess(o, so, forcing_opt, cb, cs, true).empty());    // the source wall k
-        cs.wall_k = ablsteady::SurfaceLayerOptions::WallK::dirichlet;
+        so.stage = gust::StageKind::simplec;
+        EXPECT_FALSE(gust::check_column_guess(o, so, forcing_opt, cb, cs, false).empty());   // no surface layer
+        cs.stability = gust::SurfaceLayerOptions::Stability::heat_flux;
+        EXPECT_FALSE(gust::check_column_guess(o, so, forcing_opt, cb, cs, true).empty());    // a heat flux
+        cs.stability = gust::SurfaceLayerOptions::Stability::neutral;
+        cs.wall_k = gust::SurfaceLayerOptions::WallK::source;
+        EXPECT_FALSE(gust::check_column_guess(o, so, forcing_opt, cb, cs, true).empty());    // the source wall k
+        cs.wall_k = gust::SurfaceLayerOptions::WallK::dirichlet;
         cs.zref = 10;
-        EXPECT_FALSE(ablsteady::check_column_guess(o, so, forcing_opt, cb, cs, true).empty());    // a reference height
+        EXPECT_FALSE(gust::check_column_guess(o, so, forcing_opt, cb, cs, true).empty());    // a reference height
         cs.zref = 0;
         // a pressure gradient alone under a stable sounding has no steady column
         cb.theta_ref.z = {0, 700, 1000};
         cb.theta_ref.theta = {300, 300, 309};
-        EXPECT_FALSE(ablsteady::check_column_guess(o, so, forcing_opt, cb, cs, true).empty());
+        EXPECT_FALSE(gust::check_column_guess(o, so, forcing_opt, cb, cs, true).empty());
         cb.rayleigh_zdamp = 700;
         cb.rayleigh_dampcoef = amrex::Real(0.2);
-        EXPECT_TRUE(ablsteady::check_column_guess(o, so, forcing_opt, cb, cs, true).empty());   // u, v held
+        EXPECT_TRUE(gust::check_column_guess(o, so, forcing_opt, cb, cs, true).empty());   // u, v held
         cb.rayleigh_zdamp = 0;
         forcing_opt.coriolis.enabled = true;
         forcing_opt.coriolis.geostrophic = true;
         forcing_opt.coriolis.latitude = 45;
-        EXPECT_TRUE(ablsteady::check_column_guess(o, so, forcing_opt, cb, cs, true).empty());   // Coriolis-driven
+        EXPECT_TRUE(gust::check_column_guess(o, so, forcing_opt, cb, cs, true).empty());   // Coriolis-driven
         forcing_opt.coriolis.enabled = false;
         forcing_opt.coriolis.geostrophic = false;
         cb.theta_ref.z = {0};
         cb.theta_ref.theta = {300};
         o.first_guess = InitOptions::FirstGuess::profile;
-        EXPECT_TRUE(ablsteady::check_column_guess(o, so, forcing_opt, cb, cs, true).empty());
+        EXPECT_TRUE(gust::check_column_guess(o, so, forcing_opt, cb, cs, true).empty());
     }
 }
 
@@ -1090,7 +1090,7 @@ TEST(Initializer, ColumnGuessAndProjectionSwitch)
 // kappa U1 / 1 with one, U1 the first cell's speed; u* = sqrt(F H) in both.
 TEST(Initializer, ColumnGuessTakesTheDenominatorFloor)
 {
-    ablsteady::Inputs in;
+    gust::Inputs in;
     in.mesh.n_cell = amrex::IntVect(4, 4, 64);
     in.mesh.prob_lo = {0, 0, 0};
     in.mesh.prob_hi = {256, 256, 64};
@@ -1099,26 +1099,26 @@ TEST(Initializer, ColumnGuessTakesTheDenominatorFloor)
     in.terrain.type = "flat";
     InitOptions io;
     io.first_guess = InitOptions::FirstGuess::column;
-    ablsteady::SteadyOptions so;
-    so.stage = ablsteady::StageKind::simplec;
+    gust::SteadyOptions so;
+    so.stage = gust::StageKind::simplec;
     BoundaryInputs bin;
     bin.face = {FaceType::periodic, FaceType::periodic, FaceType::surface_layer, FaceType::periodic, FaceType::periodic, FaceType::slip_wall};
-    bin.inflow.kind = ablsteady::InflowProfileOptions::Kind::log_law;
+    bin.inflow.kind = gust::InflowProfileOptions::Kind::log_law;
     bin.inflow.ustar = amrex::Real(0.3);
     bin.inflow.z0 = amrex::Real(0.5);
     bin.theta_ref.z = {0};
     bin.theta_ref.theta = {300};
-    ablsteady::ClosureOptions copt;
+    gust::ClosureOptions copt;
     copt.max_geom_lscale = amrex::Real(1e12);
-    ablsteady::ForcingOptions fopt;
+    gust::ForcingOptions fopt;
     fopt.pressure_gradient = {amrex::Real(1.953125e-3), 0, 0};
     const double kappa = static_cast<double>(copt.kappa), lz = std::log(2.0);
-    using Floor = ablsteady::SurfaceLayerOptions::DenominatorFloor;
+    using Floor = gust::SurfaceLayerOptions::DenominatorFloor;
     for (const Floor fl : {Floor::log_law, Floor::one}) {
-        ablsteady::SurfaceLayerOptions surf;
+        gust::SurfaceLayerOptions surf;
         surf.z0 = amrex::Real(0.5);
         surf.denominator_floor = fl;
-        const auto r = ablsteady::run_column_guess(in, io, so, bin, surf, true, copt, fopt);
+        const auto r = gust::run_column_guess(in, io, so, bin, surf, true, copt, fopt);
         const char* name = (fl == Floor::one) ? "one" : "log_law";
         ASSERT_TRUE(r.steady) << name;
         ASSERT_GE(r.z.size(), 2u);
@@ -1147,7 +1147,7 @@ TEST(Initializer, ColumnGuessTakesTheDenominatorFloor)
 // and k undamped (the geostrophic wind at the top, not the log law).
 TEST(Initializer, ColumnGuessRunsTheColumn)
 {
-    ablsteady::Inputs in;
+    gust::Inputs in;
     in.mesh.n_cell = amrex::IntVect(8, 8, 16);
     in.mesh.prob_lo = {0, 0, 0};
     in.mesh.prob_hi = {3200, 3200, 1000};
@@ -1156,11 +1156,11 @@ TEST(Initializer, ColumnGuessRunsTheColumn)
     in.terrain.type = "flat";
     InitOptions io;
     io.first_guess = InitOptions::FirstGuess::column;
-    ablsteady::SteadyOptions so;
-    so.stage = ablsteady::StageKind::simplec;
+    gust::SteadyOptions so;
+    so.stage = gust::StageKind::simplec;
     BoundaryInputs bin;
     bin.face = {FaceType::periodic, FaceType::periodic, FaceType::surface_layer, FaceType::periodic, FaceType::periodic, FaceType::slip_wall};
-    bin.inflow.kind = ablsteady::InflowProfileOptions::Kind::log_law;
+    bin.inflow.kind = gust::InflowProfileOptions::Kind::log_law;
     bin.inflow.ustar = amrex::Real(0.35);
     bin.inflow.z0 = amrex::Real(0.1);
     bin.theta_ref.z = {0, 700, 1000};
@@ -1170,17 +1170,17 @@ TEST(Initializer, ColumnGuessRunsTheColumn)
     bin.rayleigh_zdamp = 700;
     bin.rayleigh_dampcoef = amrex::Real(0.2);
     bin.rayleigh_fields = {false, false, true, true, false};
-    ablsteady::SurfaceLayerOptions surf;
+    gust::SurfaceLayerOptions surf;
     surf.z0 = amrex::Real(0.1);
-    ablsteady::ClosureOptions copt;
+    gust::ClosureOptions copt;
     copt.tke_floor = amrex::Real(1e-6);   // the decks' floor: k reaches it in the inversion
-    ablsteady::ForcingOptions fopt;
+    gust::ForcingOptions fopt;
     fopt.coriolis.enabled = true;
     fopt.coriolis.latitude = 90;
     fopt.coriolis.three_d = false;
     fopt.coriolis.geostrophic = true;
     fopt.coriolis.ug = 10;
-    const auto r = ablsteady::run_column_guess(in, io, so, bin, surf, true, copt, fopt);
+    const auto r = gust::run_column_guess(in, io, so, bin, surf, true, copt, fopt);
     EXPECT_TRUE(r.steady);
     EXPECT_LT(r.iterations, 1000);
     // the tolerance used is init.column_tol lifted to 100 epsilon of Real
@@ -1191,7 +1191,7 @@ TEST(Initializer, ColumnGuessRunsTheColumn)
     {
         InitOptions tight = io;
         tight.column_tol = amrex::Real(1e-30);
-        const auto rt = ablsteady::run_column_guess(in, tight, so, bin, surf, true, copt, fopt);
+        const auto rt = gust::run_column_guess(in, tight, so, bin, surf, true, copt, fopt);
         EXPECT_TRUE(rt.steady);
         EXPECT_EQ(rt.tol, eps100);
     }

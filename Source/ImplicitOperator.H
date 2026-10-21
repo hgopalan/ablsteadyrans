@@ -1,5 +1,5 @@
-#ifndef ABLSTEADY_IMPLICIT_OPERATOR_H_
-#define ABLSTEADY_IMPLICIT_OPERATOR_H_
+#ifndef GUST_IMPLICIT_OPERATOR_H_
+#define GUST_IMPLICIT_OPERATOR_H_
 
 // The first-order implicit-side operator A1 (sub-phase 1.5), the left-hand
 // side of the defect-correction iteration (1/dtau + A1) dq = -R(q) (A1 and R
@@ -50,7 +50,7 @@
 #include <AMReX_Geometry.H>
 #include <AMReX_MultiFab.H>
 
-namespace ablsteady {
+namespace gust {
 
 //! Components of the coefficient MultiFab.
 enum ImplicitCoef : int { coef_P = 0, coef_XM, coef_XP, coef_YM, coef_YP, coef_ZM, coef_ZP, n_implicit_coefs };
@@ -70,6 +70,6 @@ void implicit_coefficients (Loc loc, const amrex::Array<const amrex::MultiFab*, 
 void apply_implicit (Loc loc, const amrex::MultiFab& A, const amrex::MultiFab& q, const Mesh& mesh,
                      amrex::MultiFab& out);
 
-} // namespace ablsteady
+} // namespace gust
 
 #endif

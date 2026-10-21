@@ -15,7 +15,7 @@ Add ``key=value`` after the input file:
 
 .. code-block:: bash
 
-   mpirun -n 4 build-rel/ablsteady inputs steady.max_iterations=500 io.plot_file=test_plt
+   mpirun -n 4 build-rel/gust inputs steady.max_iterations=500 io.plot_file=test_plt
 
 Use this for keys that the input file does not set: a key given twice is refused. To change a key the file sets,
 edit the file (or a copy of it).
@@ -32,7 +32,7 @@ iterations:
 
    .. code-block:: bash
 
-      mpirun -n 4 build-rel/ablsteady inputs_restart io.restart=steady_chk01000
+      mpirun -n 4 build-rel/gust inputs_restart io.restart=steady_chk01000
 
 - The mesh and terrain inputs and the floating-point precision must match the checkpoint. The number of ranks and
   ``mesh.max_grid_size`` may change.
@@ -58,7 +58,7 @@ domain, including a margin beyond its edges.
 **From an ERF terrain file.** Set ``terrain.type = erf_grid`` and ``terrain.file`` to ERF's structured terrain file,
 as in :doc:`tutorial_askervein`.
 
-**Check the mesh first.** Run with ``steady.stage = none`` (the default): ablsteady builds the mesh, prints its
+**Check the mesh first.** Run with ``steady.stage = none`` (the default): GUST builds the mesh, prints its
 quality report, writes a plotfile and a checkpoint, and stops. Look at the largest slope and the smallest layer thickness. If STF
 smoothing reports capped levels, lower ``terrain.gamma_m`` or raise the domain top.
 
@@ -206,7 +206,7 @@ Build with CUDA for an NVIDIA H100:
 
 .. code-block:: bash
 
-   cmake -S . -B build-gpu -DCMAKE_BUILD_TYPE=Release -DABLSTEADY_GPU_BACKEND=CUDA -DAMReX_CUDA_ARCH=9.0
+   cmake -S . -B build-gpu -DCMAKE_BUILD_TYPE=Release -DGUST_GPU_BACKEND=CUDA -DAMReX_CUDA_ARCH=9.0
    cmake --build build-gpu -j 8
 
 Run one MPI rank per GPU. On a GPU, ``steady.line_order = diagonal`` lets the LU-SGS sweeps run one column per thread.

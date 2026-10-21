@@ -5,7 +5,7 @@
 #include "Poisson.H"
 #include "Stencil_K.H"
 
-namespace ablsteady {
+namespace gust {
 
 namespace {
 
@@ -53,7 +53,7 @@ void omega_from_w (const amrex::MultiFab& u, const amrex::MultiFab& v, const amr
                    amrex::MultiFab& omega, int ngrow)
 {
     const char* op = "omega_from_w";
-    if (ngrow < 0 || ngrow > 1) { amrex::Abort("ablsteady: omega_from_w: ngrow must be 0 or 1"); }
+    if (ngrow < 0 || ngrow > 1) { amrex::Abort("gust: omega_from_w: ngrow must be 0 or 1"); }
     check_velocity(op, u, v, w, mesh, ngrow + 1, ngrow);
     check_operator_field(op, "omega", omega, Loc::zface, mesh, ngrow);
     check_nodal_heights(op, z_nd, mesh);
@@ -178,4 +178,4 @@ void pressure_gradient (const amrex::MultiFab& p, const amrex::MultiFab& z_nd, c
     }
 }
 
-} // namespace ablsteady
+} // namespace gust

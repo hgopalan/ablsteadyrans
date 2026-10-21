@@ -1,5 +1,5 @@
-#ifndef ABLSTEADY_SEQUENCING_H_
-#define ABLSTEADY_SEQUENCING_H_
+#ifndef GUST_SEQUENCING_H_
+#define GUST_SEQUENCING_H_
 
 // Grid sequencing, coarse to fine, over the horizontal grid hierarchy
 // (sub-phase 2.5; MeshHierarchy.H, Transfer.H). With steady.sequencing = 1
@@ -85,7 +85,7 @@
 #include <string>
 #include <vector>
 
-namespace ablsteady {
+namespace gust {
 
 struct SequencingOptions
 {
@@ -235,6 +235,6 @@ std::string sequencing_report (const std::vector<LevelSummary>& levels, const Dr
 //! init.projection = 0), the gmres_fft fallback and the O'Brien residual.
 void print_initializer (const InitResult& r, const InitOptions& iopt, const PoissonOptions& popt, const std::string& label);
 
-} // namespace ablsteady
+} // namespace gust
 
 #endif

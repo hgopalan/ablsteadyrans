@@ -1,5 +1,5 @@
-#ifndef ABLSTEADY_INFLOWPROFILE_H_
-#define ABLSTEADY_INFLOWPROFILE_H_
+#ifndef GUST_INFLOWPROFILE_H_
+#define GUST_INFLOWPROFILE_H_
 
 // Inflow profiles by height above the ground (sub-phase 1.8): the wind,
 // potential temperature and turbulence that enter through an inflow face,
@@ -37,7 +37,7 @@
 #include <string>
 #include <vector>
 
-namespace ablsteady {
+namespace gust {
 
 struct InflowProfileOptions
 {
@@ -197,6 +197,6 @@ void InflowProfile::View::eval (amrex::Real z, amrex::Real& u, amrex::Real& v, a
     nut = kappa * ustar_l * (z + z0) * c;   // l u*_l (diagnostic: the fill and the first guess take k)
 }
 
-} // namespace ablsteady
+} // namespace gust
 
 #endif

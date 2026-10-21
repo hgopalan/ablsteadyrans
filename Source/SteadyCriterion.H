@@ -1,12 +1,12 @@
-#ifndef ABLSTEADY_STEADY_CRITERION_H_
-#define ABLSTEADY_STEADY_CRITERION_H_
+#ifndef GUST_STEADY_CRITERION_H_
+#define GUST_STEADY_CRITERION_H_
 
 #include <AMReX_REAL.H>
 
 #include <string>
 #include <vector>
 
-namespace ablsteady {
+namespace gust {
 
 //! The definition of "steady" (plan sub-phase 1.2). The comments name the
 //! input key each value will be read from once the steady driver exists
@@ -124,6 +124,6 @@ private:
     SteadyHistory m_h;
 };
 
-} // namespace ablsteady
+} // namespace gust
 
 #endif

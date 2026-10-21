@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run ablsteady and check its mesh against a gold file (RT-1.4.1, RT-1.4.2,
+"""Run GUST and check its mesh against a gold file (RT-1.4.1, RT-1.4.2,
 RT-2.3.2).
 
     check_mesh.py GOLD.json [--write] [--rtol R] -- COMMAND [ARGS ...]
@@ -11,7 +11,7 @@ Runs COMMAND, then compares
   * statistics of the plotfile it wrote (sum, minimum, maximum and sum of
     squares of the cell fields z and detJ)
 with GOLD.json. With a grid hierarchy (mesh.hierarchy_levels > 1) the run
-prints one more report per coarse level ("ablsteady: mesh quality, hierarchy
+prints one more report per coarse level ("gust: mesh quality, hierarchy
 level l ..."); each is checked the same way against the gold's "levels"
 entry, and the number of levels must match. Prints one row per check: measured, target, tolerance, pass;
 the exit code is the verdict. Real values are compared to a relative
@@ -39,7 +39,7 @@ import erf_plotfile  # noqa: E402  (ERF's reader, extern_erf/)
 FIELDS = ("z", "detJ")
 
 
-LEVEL_HEADER = re.compile(r"^ablsteady: mesh quality, hierarchy level (\d+)", re.M)
+LEVEL_HEADER = re.compile(r"^gust: mesh quality, hierarchy level (\d+)", re.M)
 HEADER_FIELDS = re.compile(r"hierarchy level \d+ \((\d+) x (\d+) x (\d+) cells, dx (\S+) m, dy (\S+) m, "
                            r"ground smoothing passes (\d+), boxes (\d+)(, gathered)?\)")
 SUMMARY_ROW = re.compile(r"^\s+(\d+)\s+(\d+)\s+(\d+)\s+(\S+)\s+(\S+)\s+(\d+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\d+)$")
@@ -71,7 +71,7 @@ def measure(out):
     if heads:
         m["levels"] = []
         for n, h in enumerate(heads):
-            stop = heads[n + 1].start() if n + 1 < len(heads) else out.find("ablsteady: grid hierarchy summary", h.start())
+            stop = heads[n + 1].start() if n + 1 < len(heads) else out.find("gust: grid hierarchy summary", h.start())
             block = out[h.start():stop if stop >= 0 else len(out)]
             lev = measure_report(block)
             lev["level"] = int(h.group(1))
@@ -83,14 +83,14 @@ def measure(out):
                 "gathered": f.group(8) is not None}
             m["levels"].append(lev)
         m["summary"] = []
-        start = out.find("ablsteady: grid hierarchy summary")
+        start = out.find("gust: grid hierarchy summary")
         for line in (out[start:].splitlines()[2:] if start >= 0 else []):
             r = SUMMARY_ROW.match(line)
             if not r:
                 break
             m["summary"].append({k: (float(v) if "." in v or "e" in v else int(v))
                                  for k, v in zip(SUMMARY_KEYS, r.groups())})
-    plt = re.findall(r"ablsteady: wrote (\S+)", out)
+    plt = re.findall(r"gust: wrote (\S+)", out)
     # Level 0's plotfile: not a checkpoint, a reference archive or a hierarchy level's.
     plt = [p for p in plt if not os.path.exists(os.path.join(p, "MANIFEST")) and "chk" not in p
            and "_level" not in p]

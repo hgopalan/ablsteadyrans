@@ -10,7 +10,7 @@
 #include <limits>
 #include <string>
 
-namespace ablsteady {
+namespace gust {
 
 namespace {
 
@@ -83,7 +83,7 @@ SimplecPreconditioner::SimplecPreconditioner (const SimplecOptions& opt, int swe
       m_pbc(in.bc != nullptr ? poisson_bc_from_faces(in.bc->inputs(), geom) : PoissonBC{}),
       m_solver(mesh, geom, z_nd, m_popt)
 {
-    const std::string who = "ablsteady: SimplecPreconditioner: ";
+    const std::string who = "gust: SimplecPreconditioner: ";
     for (const auto& e : check_simplec_options(opt)) { amrex::Abort(who + e); }
     if (sweeps < 1) { amrex::Abort(who + "sweeps must be >= 1 (steady.zline_sweeps)"); }
     if (in.bc == nullptr) { amrex::Abort(who + "the residual inputs need the boundary conditions (bc)"); }
@@ -114,7 +114,7 @@ SimplecPreconditioner::SimplecPreconditioner (const SimplecOptions& opt, int swe
 void SimplecPreconditioner::setup (const State& q, const amrex::MultiFab* dtau)
 {
     if (q.p.boxArray() != m_q0.p.boxArray() || q.p.DistributionMap() != m_q0.p.DistributionMap()) {
-        amrex::Abort("ablsteady: SimplecPreconditioner::setup: q is not on the layout given to the constructor");
+        amrex::Abort("gust: SimplecPreconditioner::setup: q is not on the layout given to the constructor");
     }
     ++m_setups;
     // The linearization point with the stage's fill and wall state (step 1
@@ -135,7 +135,7 @@ void SimplecPreconditioner::setup (const State& q, const amrex::MultiFab* dtau)
         // Once per setup: the bound of the sweeps (scalar_sweep checks it too).
         const amrex::Real lo = m_dtau.min(0);
         if (std::isnan(lo) || !(lo > 0) || !std::isfinite(m_dtau.max(0))) {
-            amrex::Abort("ablsteady: SimplecPreconditioner::setup: dtau must be finite and > 0 everywhere");
+            amrex::Abort("gust: SimplecPreconditioner::setup: dtau must be finite and > 0 everywhere");
         }
     }
     transport_fluxes(m_q0.u, m_q0.v, m_q0.w, m_z, m_mesh, m_geom, m_F0);
@@ -149,7 +149,7 @@ void SimplecPreconditioner::setup (const State& q, const amrex::MultiFab* dtau)
 
 void SimplecPreconditioner::apply (NewtonVector& dq, const NewtonVector& r)
 {
-    if (!m_ready) { amrex::Abort("ablsteady: SimplecPreconditioner::apply: setup has not been called"); }
+    if (!m_ready) { amrex::Abort("gust: SimplecPreconditioner::apply: setup has not been called"); }
     ++m_applies;
     const SurfaceState* ss = (m_in.surface != nullptr) ? &m_ss : nullptr;
     const ClosureFields* cf = (m_in.closure != nullptr) ? &m_cf : nullptr;
@@ -235,4 +235,4 @@ std::unique_ptr<NewtonPreconditioner> make_newton_preconditioner (NewtonPrecondi
     return std::make_unique<SimplecPreconditioner>(opt, sweeps, in, popt, mesh, geom, z_nd, inf_cfl, ba, dm, sweep);
 }
 
-} // namespace ablsteady
+} // namespace gust

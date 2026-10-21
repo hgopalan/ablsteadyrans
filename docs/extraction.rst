@@ -1,7 +1,7 @@
 Code from other projects
 ========================
 
-ablsteady copies some ERF files rather than linking ERF, uses AMReX and GoogleTest as libraries, and
+GUST copies some ERF files rather than linking ERF, uses AMReX and GoogleTest as libraries, and
 re-implements methods from FastWindTerrain. This page lists what comes from where and how copies are kept honest.
 
 The extraction manifest
@@ -18,7 +18,7 @@ Copied so far (sub-phase 1.4): the mesh and terrain-metric code (``ERF_GridUtils
 ``ERF_ChopGrids.cpp`` and the small headers they include), ERF's Python plotfile reader for the check scripts, and
 the Askervein terrain file. ``ERF_TerrainMetrics.{H,cpp}`` are modified: the coordinate builders take the smoothing
 choice and :math:`\gamma_m` as arguments instead of reading ERF's inputs, return the number of STF levels capped,
-and lose the refined-level (AMR) paths, which ablsteady does not use. BTF no longer rewrites the ground layer: ERF
+and lose the refined-level (AMR) paths, which GUST does not use. BTF no longer rewrites the ground layer: ERF
 writes :math:`h\,z_\mathrm{top}/z_\mathrm{top}` there (within 1 ulp of :math:`h`) while other GPU threads read the
 same nodes, so the result depended on thread order. Its ghost columns outside non-periodic sides take the clamped
 domain node's height there instead (ERF's builder first sets every node outside the domain to
@@ -66,7 +66,7 @@ Licences and attribution
    :widths: 20 30 50
 
    * - Project
-     - How ablsteady uses it
+     - How GUST uses it
      - Licence and what it requires
    * - ERF
      - Copied files in ``extern_erf/``; ``Tests/Unit_Tests/Gold/erf_hill2d_*`` are ERF outputs at the pinned commit.
@@ -87,4 +87,4 @@ Licences and attribution
      - Cross-check of the Axell–Liungman closure in unit tests (sub-phase 1.9). No code is copied.
      - —
 
-ablsteady itself is distributed under the BSD 2-Clause licence (``LICENSE``).
+GUST itself is distributed under the BSD 2-Clause licence (``LICENSE``).

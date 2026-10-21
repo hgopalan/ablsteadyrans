@@ -1,5 +1,7 @@
 #include "StateIO.H"
 
+#include "FileMagic.H"
+
 #include <AMReX_ParallelDescriptor.H>
 #include <AMReX_PlotFileUtil.H>
 #include <AMReX_Utility.H>
@@ -10,11 +12,11 @@
 #include <fstream>
 #include <sstream>
 
-namespace ablsteady {
+namespace gust {
 
 namespace {
 
-constexpr const char* kCheckpointMagic = "ablsteady-checkpoint";
+constexpr const char* kCheckpointMagic = "gust-checkpoint";
 constexpr int kCheckpointVersion = 1;
 
 // Hex-float text, so a restart reads back the exact bits.
@@ -27,7 +29,7 @@ std::string hexfloat (amrex::Real x)
 
 void restart_error (const std::string& dir, const std::string& what)
 {
-    amrex::Abort("ablsteady: io.restart = " + dir + ": " + what);
+    amrex::Abort("gust: io.restart = " + dir + ": " + what);
 }
 
 } // namespace
@@ -119,8 +121,8 @@ void read_checkpoint (const std::string& dir, State& state, const MeshInputs& me
     std::string magic;
     int version = 0;
     is >> magic >> version;
-    if (!is || magic != kCheckpointMagic || version != kCheckpointVersion) {
-        restart_error(dir, "not an ablsteady checkpoint of format version "
+    if (!is || !is_file_magic(magic, kCheckpointMagic) || version != kCheckpointVersion) {
+        restart_error(dir, "not a GUST checkpoint of format version "
                            + std::to_string(kCheckpointVersion));
     }
 
@@ -208,4 +210,4 @@ void read_checkpoint (const std::string& dir, State& state, const MeshInputs& me
     }
 }
 
-} // namespace ablsteady
+} // namespace gust

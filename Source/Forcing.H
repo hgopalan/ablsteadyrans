@@ -1,5 +1,5 @@
-#ifndef ABLSTEADY_FORCING_H_
-#define ABLSTEADY_FORCING_H_
+#ifndef GUST_FORCING_H_
+#define GUST_FORCING_H_
 
 // Momentum sources (sub-phase 1.6): Boussinesq buoyancy about a hydrostatic
 // reference, and the optional Coriolis and geostrophic forcing.
@@ -42,7 +42,7 @@
 #include <string>
 #include <vector>
 
-namespace ablsteady {
+namespace gust {
 
 struct BuoyancyOptions
 {
@@ -129,6 +129,6 @@ void subtract_coriolis (const amrex::MultiFab& u, const amrex::MultiFab& v, cons
 void subtract_pressure_gradient (const amrex::Array<amrex::Real, 3>& F, const Mesh& mesh, amrex::MultiFab& Ru,
                                  amrex::MultiFab& Rv, amrex::MultiFab& Rw);
 
-} // namespace ablsteady
+} // namespace gust
 
 #endif

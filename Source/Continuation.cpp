@@ -1,6 +1,7 @@
 #include "Continuation.H"
 
 #include "BoundaryConditions.H"
+#include "FileMagic.H"
 #include "PseudoTime.H"
 
 #include <AMReX_ParallelDescriptor.H>
@@ -16,12 +17,12 @@
 #include <limits>
 #include <sstream>
 
-namespace ablsteady {
+namespace gust {
 
 namespace {
 
 constexpr int kContinuationVersion = 1;
-const char* const kContinuationMagic = "ablsteady-continuation";
+const char* const kContinuationMagic = "gust-continuation";
 
 std::string num (double x)
 {
@@ -46,7 +47,7 @@ std::string sci (double x)
 
 void state_error (const std::string& dir, const std::string& what)   // aborts
 {
-    amrex::Abort("ablsteady: " + dir + "/Continuation: " + what);
+    amrex::Abort("gust: " + dir + "/Continuation: " + what);
 }
 
 amrex::MultiFab* solution_field (State& q, int f)
@@ -147,7 +148,7 @@ ContinuationOptions read_continuation_options (const SteadyOptions& steady)
         if (pp.countval(key) != 1) { err.emplace_back(std::string("steady.") + key + " takes exactly one value"); }
     }
     if (!err.empty()) {
-        std::string all = "ablsteady: invalid inputs:";
+        std::string all = "gust: invalid inputs:";
         for (const auto& e : err) { all += "\n  " + e; }
         amrex::Abort(all);
     }
@@ -160,7 +161,7 @@ ContinuationOptions read_continuation_options (const SteadyOptions& steady)
     pp.query("newton_ptc_growth", opt.ptc_growth);
     err = check_continuation_options(opt);
     if (!err.empty()) {
-        std::string all = "ablsteady: invalid inputs:";
+        std::string all = "gust: invalid inputs:";
         for (const auto& e : err) { all += "\n  " + e; }
         amrex::Abort(all);
     }
@@ -259,8 +260,8 @@ ContinuationState read_continuation_state (const std::string& dir)
     std::string magic, word;
     int version = 0;
     is >> magic >> version;
-    if (!is || magic != kContinuationMagic || version != kContinuationVersion) {
-        state_error(dir, "not an ablsteady continuation state of format version " + std::to_string(kContinuationVersion));
+    if (!is || !is_file_magic(magic, kContinuationMagic) || version != kContinuationVersion) {
+        state_error(dir, "not a GUST continuation state of format version " + std::to_string(kContinuationVersion));
     }
     // Hex floats through strtod: libstdc++'s stream extraction does not take them.
     auto real = [&] (const char* what) {
@@ -297,12 +298,12 @@ Continuation::Continuation (const ContinuationOptions& copt, const NewtonOptions
 {
     const auto err = check_continuation_options(copt);
     if (!err.empty()) {
-        std::string all = "ablsteady: Continuation: invalid inputs:";
+        std::string all = "gust: Continuation: invalid inputs:";
         for (const auto& e : err) { all += "\n  " + e; }
         amrex::Abort(all);
     }
     if (std::isnan(static_cast<double>(tke_floor)) || !std::isfinite(static_cast<double>(tke_floor)) || !(tke_floor >= 0)) {
-        amrex::Abort("ablsteady: Continuation: tke_floor must be finite and >= 0 (turb.tke_floor)");
+        amrex::Abort("gust: Continuation: tke_floor must be finite and >= 0 (turb.tke_floor)");
     }
     m_st.cfl = copt.cfl0;
     m_dq.define(ba, dm);
@@ -318,7 +319,7 @@ void Continuation::restore (const ContinuationState& st)
         return std::isfinite(d) && d >= 0;
     };
     if (st.steps < 0 || !finite_nonneg(st.cfl) || !(st.cfl > 0) || !finite_nonneg(st.r0) || !finite_nonneg(st.r_last)) {
-        amrex::Abort("ablsteady: Continuation::restore: the state is inconsistent (steps >= 0, CFL finite and > 0, |R| finite and >= 0)");
+        amrex::Abort("gust: Continuation::restore: the state is inconsistent (steps >= 0, CFL finite and > 0, |R| finite and >= 0)");
     }
     m_st = st;
     // The options may have changed across the restart.
@@ -329,7 +330,7 @@ void Continuation::set_reference_residual (amrex::Real r0)
 {
     const auto d = static_cast<double>(r0);
     if (std::isnan(d) || !std::isfinite(d) || !(d > 0)) {
-        amrex::Abort("ablsteady: Continuation::set_reference_residual: |R_0| must be finite and > 0");
+        amrex::Abort("gust: Continuation::set_reference_residual: |R_0| must be finite and > 0");
     }
     m_st.r0 = r0;
 }
@@ -337,7 +338,7 @@ void Continuation::set_reference_residual (amrex::Real r0)
 void Continuation::log (const ContinuationRecord& rec) const
 {
     if (m_verbose <= 0 && rec.outcome == AttemptOutcome::accepted) { return; }
-    amrex::Print() << "ablsteady: PTC step " << rec.step << " attempt " << rec.attempt << ": |R| "
+    amrex::Print() << "gust: PTC step " << rec.step << " attempt " << rec.attempt << ": |R| "
                    << sci(static_cast<double>(rec.residual)) << " -> " << sci(static_cast<double>(rec.residual_new))
                    << ", CFL " << (rec.infinite ? std::string("inf") : sci(static_cast<double>(rec.cfl)))
                    << ", lambda " << rec.lambda << ", " << rec.backtracks << " backtracks, GMRES "
@@ -351,7 +352,7 @@ ContinuationStatus Continuation::step (State& q, NewtonPreconditioner* pc)
     const ResidualInputs& in = m_nk.residual_inputs();
     // MultiFab::Copy checks layouts only in debug builds.
     if (q.p.boxArray() != m_qb.p.boxArray() || q.p.DistributionMap() != m_qb.p.DistributionMap()) {
-        amrex::Abort("ablsteady: Continuation::step: q is not on the BoxArray and DistributionMapping given to the constructor");
+        amrex::Abort("gust: Continuation::step: q is not on the BoxArray and DistributionMapping given to the constructor");
     }
     for (int attempt = 0; attempt <= m_opt.max_retries; ++attempt) {
         ContinuationRecord rec;
@@ -418,7 +419,7 @@ ContinuationStatus Continuation::step (State& q, NewtonPreconditioner* pc)
         m_st = continuation_after_failure(m_opt, m_st);
     }
     // q is as it was given.
-    amrex::Print() << "ablsteady: PTC step " << m_st.steps << ": failed after " << m_opt.max_retries
+    amrex::Print() << "gust: PTC step " << m_st.steps << ": failed after " << m_opt.max_retries
                    << " retries (steady.newton_max_retries); the next CFL is " << sci(static_cast<double>(m_st.cfl)) << "\n";
     return ContinuationStatus::failed;
 }
@@ -439,4 +440,4 @@ ContinuationRunResult Continuation::run (State& q, int max_steps, amrex::Real re
     return out;
 }
 
-} // namespace ablsteady
+} // namespace gust

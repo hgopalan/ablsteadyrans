@@ -1,5 +1,5 @@
-#ifndef ABLSTEADY_CVFLUXES_H_
-#define ABLSTEADY_CVFLUXES_H_
+#ifndef GUST_CVFLUXES_H_
+#define GUST_CVFLUXES_H_
 
 // Control volumes of the C-grid and the divergence of fluxes through their
 // faces (sub-phase 1.5), shared by the convection and diffusion operators.
@@ -16,7 +16,7 @@
 #include <AMReX_Geometry.H>
 #include <AMReX_MultiFab.H>
 
-namespace ablsteady {
+namespace gust {
 
 //! Location of a field's points (the stencil:: bit mask: bit d set = nodal in d).
 enum class Loc : int { cell = 0, xface = 1, yface = 2, zface = 4 };
@@ -59,6 +59,6 @@ void check_cv_fluxes (const char* op, Loc loc, const amrex::Array<amrex::MultiFa
 //! and DistributionMapping with at least one ghost node.
 void check_nodal_heights (const char* op, const amrex::MultiFab& z_nd, const Mesh& mesh);
 
-} // namespace ablsteady
+} // namespace gust
 
 #endif

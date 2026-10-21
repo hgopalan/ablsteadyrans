@@ -529,7 +529,7 @@ Current tests
        ``Tests/Discretization/Terrain_Mesh/Gold/hill2d_plt00000`` at relative tolerance 1e-12 (1e-5 in single precision). The plotfile holds
        cell fields only, so the nodal heights are not compared here; UT-1.4.7 compares them with ERF.
 
-       The golds of the three mesh tests above were written by ablsteady itself (``Tests/Supporting_Files/check_mesh.py --write``):
+       The golds of the three mesh tests above were written by GUST itself (``Tests/Supporting_Files/check_mesh.py --write``):
        they detect changes, they do not show correctness. Correctness of the same code paths comes from UT-1.4.7
        (ERF's own output) and the closed-form unit tests.
    * - ``rt_askervein_hierarchy``, ``rt_askervein_hierarchy_level1_matches``, ``rt_askervein_hierarchy_level2_matches``
@@ -539,17 +539,17 @@ Current tests
        ``Tests/Discretization/Grid_Hierarchy/Gold/askervein_hierarchy_mesh.json`` (the per-level headers and the summary table included); in both
        precisions, ``z`` and ``detJ`` of levels 1 and 2 against
        ``Tests/Discretization/Grid_Hierarchy/Gold/askervein_hierarchy_level{1,2}_plt00000`` (relative 1e-12; 1e-5 in single precision). The golds
-       were written by ablsteady: they detect changes. The coarse grounds were checked against an independent
+       were written by gust: they detect changes. The coarse grounds were checked against an independent
        rebuild (UT-2.3.2).
    * - ``rt_steep_ridge_hierarchy_quality``
      - RT-2.3.2: the steep ridge of ``rt_steep_ridge_quality`` on 32 × 4 × 16 cells with three levels: the report
        of every level against ``Tests/Discretization/Grid_Hierarchy/Gold/steep_ridge_hierarchy_mesh.json``, with the STF and top warnings (no
        coarse-level hint: levels 1 and 2 cap no more than level 0), and the per-level headers and summary table. Double precision only. The gold was written
-       by ablsteady: it detects changes.
+       by gust: it detects changes.
    * - ``rt_askervein_hierarchy_hint``
      - RT-2.3.2: the Askervein hierarchy with unsmoothed coarse grounds (``terrain.hierarchy_passes = 0``): levels 1
        and 2 cap STF at 9 and 10 z-levels against level 0's 8, so the report gives the coarse-level hint; against
-       ``Tests/Discretization/Grid_Hierarchy/Gold/askervein_hierarchy_p0_mesh.json`` (written by ablsteady). Double precision only.
+       ``Tests/Discretization/Grid_Hierarchy/Gold/askervein_hierarchy_p0_mesh.json`` (written by GUST). Double precision only.
    * - ``rt_hierarchy_restart_first``, ``rt_hierarchy_restart``, ``rt_hierarchy_restart_level{1,2}_matches``
      - A checkpoint of the Askervein mesh written without a hierarchy (2 ranks), restarted with three levels on 3
        ranks: the rebuilt levels 1 and 2 against the golds of ``rt_askervein_hierarchy``.
@@ -581,16 +581,16 @@ Current tests
        most 10 % above ``Tests/Discretization/Poisson_Askervein/Gold/poisson_askervein.json``, divergence after below 10 × the printed tolerance of
        before, and
        :math:`\phi` against ``Tests/Discretization/Poisson_Askervein/Gold/poisson_askervein_plt00000`` at relative 1e-8. Double precision only (the
-       golds are double-precision runs); the gold was written by ablsteady, so it detects changes.
+       golds are double-precision runs); the gold was written by GUST, so it detects changes.
    * - ``rt_poisson_askervein_mlmg``, ``rt_poisson_askervein_mlmg_matches``
      - RT-1.11.1: the same projection with back end B (MLMG, 6 iterations): iterations at most 10 % above
-       ``Tests/Discretization/Poisson_Askervein/Gold/poisson_askervein_mlmg.json`` (written by ablsteady's first run) and the divergence check, and
+       ``Tests/Discretization/Poisson_Askervein/Gold/poisson_askervein_mlmg.json`` (written by GUST's first run) and the divergence check, and
        :math:`\phi` against back end A's gold
        ``Tests/Discretization/Poisson_Askervein/Gold/poisson_askervein_plt00000`` at relative 1e-8, since both solve the same operator.
    * - ``rt_walldist_hill2d``, ``rt_walldist_hill2d_matches``
      - RT-1.11.2: ``wall_distance`` on ERF's Neutral_Hill_2D mesh: ERF's wall-distance checks (``Tests/Discretization/Wall_Distance/check_walldist.py``:
        max relative ≤ 0.15, mean ≤ 0.03, ≤ 0.2 cells below 100 m, all finite), and the field against
-       ``Tests/Discretization/Wall_Distance/Gold/walldist_hill2d_plt00000`` at relative 1e-8 (a gold written by ablsteady). Double precision only.
+       ``Tests/Discretization/Wall_Distance/Gold/walldist_hill2d_plt00000`` at relative 1e-8 (a gold written by GUST). Double precision only.
    * - ``rt_init_askervein``, ``rt_init_askervein_matches``
      - RT-1.12.1: the mass-consistent initial field on the Askervein mesh (30 × 30 × 18; ``Tests/Initialization/Mass_Consistent_Askervein/inputs_init_askervein``:
        log law u* = 0.6 m/s, z₀ = 0.03 m along x, inflow at xlo, outflow at xhi, :math:`\alpha_h = 1`,
@@ -607,7 +607,7 @@ Current tests
        648f8f1 (``Tests/Initialization/Bump_Speedup_Trend/Gold/init_bump_trend.json``, written from its plotfiles by ``Tests/Initialization/Bump_Speedup_Trend/fwt_bump_speedup.py``): the
        same ranking of the five values at 40, 80 and 150 m above the ground (at 20 m two values tie within 0.002 in
        both codes), every speed-up above 1 at 20, 40, 80 and 150 m, the two codes within 0.02, 0.01, 0.005 and 0.003
-       of each other at those heights (measured 0.011, 0.0057, 0.0020, 0.0008), and ablsteady's own values and
+       of each other at those heights (measured 0.011, 0.0057, 0.0020, 0.0008), and GUST's own values and
        iterations pinned (1e-6, 10 %). Double precision only (:doc:`initial_conditions`).
    * - ``rt_bc_neutral_flat``, ``rt_bc_neutral_flat_matches``
      - RT-1.8.1: ``boundary_fluxes`` on ERF's Neutral_ABL_Flat mesh (8 × 8 × 64, 1000 m) with a fixed log-law state
@@ -618,7 +618,7 @@ Current tests
        v (1e-13 measured) and 1e-9 K/s for θ (the sounding's diffusion with the top gradient), with the first cell's
        truncation −0.0971 and the top cell's lost flux +1.000 of :math:`u_*^2\cos/\Delta z` pinned; R_k and R_w zero;
        every field finite. The plotfile against ``Tests/Discretization/Boundary_Fluxes/Gold/bc_neutral_flat_plt00000`` at relative 1e-10 (a gold
-       written by ablsteady). Double precision only.
+       written by GUST). Double precision only.
    * - ``rt_closure_column``, ``rt_closure_column_matches``
      - RT-1.9.1: ``closure_column`` on ERF's Neutral_ABL_Flat mesh (8 × 8 × 64, neutral) with the wall law's
        equilibrium state (u* = 0.35 m/s, z₀ = 0.1 m, k = u*²/C_μ0²), the uncapped geometric length and the
@@ -626,7 +626,7 @@ Current tests
        (1e-9), u* recovered (1e-10), R_u and R_v zero below the top cell (1e-10 of u*²/Δz; the top cell loses
        u*²/Δz through the slip top, 1e-8), P_s, ε and R_k = −(P_s − ε) equal to their closed forms from the discrete
        strain (1e-9 of ε; the second cell's P_s/ε = 1.45 is the centred difference of ln over 2Δz), R_θ and R_w zero.
-       The plotfile against ``Tests/Discretization/Closure_Column/Gold/closure_column_plt00000`` at relative 1e-10 (a gold written by ablsteady).
+       The plotfile against ``Tests/Discretization/Closure_Column/Gold/closure_column_plt00000`` at relative 1e-10 (a gold written by GUST).
        Double precision only.
    * - ``rt_steady_column``
      - RT-1.15.1: the application on the 1-D neutral column (``Tests/Canonical_RANS/Neutral_Column/inputs_steady_column``: 4 × 4 × 64,
@@ -811,7 +811,7 @@ Current tests
        and float, little- and big-endian: every value read back exactly. The upstream reader fails the two float
        cases. Label ``unit``.
    * - ``refavg_snapshots``, ``refavg_build``, ``refavg_verify``, ``refavg_matches``
-     - ``ablsteady_refavg`` end to end: three copies of the smoke plotfile at 0, 5 and 10 s are archived on 2
+     - ``gust_refavg`` end to end: three copies of the smoke plotfile at 0, 5 and 10 s are archived on 2
        ranks with two inputs files; the archive verifies on 3 ranks with the expected metadata, AU and a zero
        half-window change; the average equals the smoke plotfile at zero tolerance. This checks the round trip;
        identical snapshots cannot check the weights, which UT-1.1.2 does.
@@ -827,7 +827,7 @@ Current tests
        the 3-D plotfiles in the final window and archiving the inputs but not the run's outputs; a second case
        with the default prefix ``plt`` keeps its ``plt2d_`` plotfiles out.
 
-In a build without MPI (``ABLSTEADY_MPI=OFF``, as in the Windows CI job) every test runs on one rank, so
+In a build without MPI (``GUST_MPI=OFF``, as in the Windows CI job) every test runs on one rank, so
 ``unit_np2`` and ``unit_np4`` repeat ``unit_np1`` and ``smoke_restart_matches`` does not change the rank count.
 MSVC does not trap floating-point exceptions, so ``amrex.fpe_trap_invalid=1`` has no effect there; the Linux GCC
 jobs keep that check.
@@ -878,7 +878,7 @@ GoogleTest suite
        refused.
    * - UT-1.4.7
      - ``z_phys``, ``detJ`` and nodal heights equal ERF's own output for the same 2-D hill deck (BTF, STF,
-       Sullivan; STF and Sullivan bit for bit on macOS, BTF to rounding because ablsteady keeps the ground layer as
+       Sullivan; STF and Sullivan bit for bit on macOS, BTF to rounding because GUST keeps the ground layer as
        given, all within 1e-13 elsewhere); STF capped at 2 of 16 levels, as ERF reports.
    * - UT-1.4.8
      - *Beyond the plan.* The IDW bucket search picks the brute-force neighbours; results agree to 1e-13 (random

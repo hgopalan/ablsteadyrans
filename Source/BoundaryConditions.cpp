@@ -16,7 +16,7 @@
 #include <limits>
 #include <string>
 
-namespace ablsteady {
+namespace gust {
 
 namespace {
 
@@ -122,7 +122,7 @@ FaceType face_type_from_name (const std::string& name, const std::string& key)
     }
     std::string all;
     for (int n = 0; n < kNumTypes; ++n) { all += std::string(n ? ", " : "") + kNames[n]; }
-    amrex::Abort("ablsteady: " + key + " = " + name + ": unknown face type (one of " + all + ")");
+    amrex::Abort("gust: " + key + " = " + name + ": unknown face type (one of " + all + ")");
     return FaceType::periodic;
 }
 
@@ -167,7 +167,7 @@ BoundaryInputs read_boundary_inputs ()
     for (const char* key : kSurfaceKeys) {
         if (pp.contains(key)) { in.given.emplace_back(key); }   // read by read_surface_layer_options
     }
-    if (!errs.empty()) { amrex::Abort("ablsteady: invalid inputs:\n  " + errs.front()); }
+    if (!errs.empty()) { amrex::Abort("gust: invalid inputs:\n  " + errs.front()); }
     for (int o = 0; o < 6; ++o) {
         std::string name;
         if (pp.query(kFaceKeys[o], name)) { in.face[o] = face_type_from_name(name, std::string("bc.") + kFaceKeys[o]); }
@@ -178,7 +178,7 @@ BoundaryInputs read_boundary_inputs ()
     if (kind == "log_law") { in.inflow.kind = K::log_law; }
     else if (kind == "power_law") { in.inflow.kind = K::power_law; }
     else if (kind == "file") { in.inflow.kind = K::file; }
-    else { amrex::Abort("ablsteady: bc.inflow_profile = " + kind + ": must be log_law, power_law or file"); }
+    else { amrex::Abort("gust: bc.inflow_profile = " + kind + ": must be log_law, power_law or file"); }
     pp.query("inflow_ustar", in.inflow.ustar);
     pp.query("inflow_z0", in.inflow.z0);
     pp.query("inflow_speed", in.inflow.speed_ref);
@@ -190,7 +190,7 @@ BoundaryInputs read_boundary_inputs ()
     if (pp.query("inflow_tke_length", length)) {
         if (length == "closure") { in.inflow.length = InflowProfileOptions::Length::closure; }
         else if (length == "unbounded") { in.inflow.length = InflowProfileOptions::Length::unbounded; }
-        else { amrex::Abort("ablsteady: bc.inflow_tke_length = " + length + ": must be closure or unbounded"); }
+        else { amrex::Abort("gust: bc.inflow_tke_length = " + length + ": must be closure or unbounded"); }
     }
     amrex::Vector<amrex::Real> tz, tt;
     pp.queryarr("theta_profile_z", tz);
@@ -213,14 +213,14 @@ BoundaryInputs read_boundary_inputs ()
         if (pp.query("rayleigh_height", rh)) {
             if (rh == "absolute") { in.rayleigh_above_ground = false; }
             else if (rh == "above_ground") { in.rayleigh_above_ground = true; }
-            else { amrex::Abort("ablsteady: bc.rayleigh_height = " + rh + ": must be absolute or above_ground"); }
+            else { amrex::Abort("gust: bc.rayleigh_height = " + rh + ": must be absolute or above_ground"); }
         }
         std::vector<std::string> names;
         if (pp.queryarr("rayleigh_fields", names)) {
             in.rayleigh_fields = {false, false, false, false, false};
             for (const auto& n : names) {
                 const int f = (n == "u") ? 0 : (n == "v") ? 1 : (n == "w") ? 2 : (n == "theta") ? 3 : (n == "tke") ? 4 : -1;
-                if (f < 0) { amrex::Abort("ablsteady: bc.rayleigh_fields = " + n + ": must be among u, v, w, theta, tke"); }
+                if (f < 0) { amrex::Abort("gust: bc.rayleigh_fields = " + n + ": must be among u, v, w, theta, tke"); }
                 in.rayleigh_fields[static_cast<std::size_t>(f)] = true;
             }
         }
@@ -375,10 +375,10 @@ namespace {
 const BoundaryInputs& checked (const BoundaryInputs& in, const amrex::Geometry& geom, const Mesh& mesh,
                                const CoriolisOptions& coriolis)
 {
-    if (mesh.zlevels().empty()) { amrex::Abort("ablsteady: BoundaryConditions: the mesh has no levels (not built)"); }
+    if (mesh.zlevels().empty()) { amrex::Abort("gust: BoundaryConditions: the mesh has no levels (not built)"); }
     const auto err = check_boundary_inputs(in, geom, coriolis, mesh.zlevels().back());
     if (!err.empty()) {
-        std::string all = "ablsteady: invalid boundary conditions:";
+        std::string all = "gust: invalid boundary conditions:";
         for (const auto& e : err) { all += "\n  " + e; }
         amrex::Abort(all);
     }
@@ -395,7 +395,7 @@ BoundaryConditions::BoundaryConditions (const BoundaryInputs& in, const amrex::G
     // changes nothing (the fill, the damping and the first guess take k, not
     // the profile's nu_t), so the key would be read and ignored.
     if (m_profile.has_k() && std::find(m_in.given.begin(), m_in.given.end(), "inflow_tke_length") != m_in.given.end()) {
-        amrex::Abort("ablsteady: invalid boundary conditions:\n  bc.inflow_tke_length has no effect with a k column in "
+        amrex::Abort("gust: invalid boundary conditions:\n  bc.inflow_tke_length has no effect with a k column in "
                      "bc.inflow_file = " + m_in.inflow.file);
     }
 }
@@ -544,11 +544,11 @@ void BoundaryConditions::fill_ghosts (State& q, const SurfaceLayerOptions* surfa
 {
     const bool ground_wall = (m_in.face[2] == FaceType::surface_layer);
     if (ground_wall && !homogeneous && surface_opt == nullptr) {
-        amrex::Abort("ablsteady: fill_ghosts: bc.zlo = surface_layer needs the surface-layer options");
+        amrex::Abort("gust: fill_ghosts: bc.zlo = surface_layer needs the surface-layer options");
     }
     amrex::MultiFab* fields[n_fields] = {&q.u, &q.v, &q.w, &q.p, &q.theta, &q.tke};
     for (auto* mf : fields) {
-        if (mf->nGrow() < 2) { amrex::Abort("ablsteady: fill_ghosts: the state needs two ghost cells"); }
+        if (mf->nGrow() < 2) { amrex::Abort("gust: fill_ghosts: the state needs two ghost cells"); }
         mf->FillBoundary(m_geom.periodicity());
     }
     const InflowProfile::View prof = m_profile.view();
@@ -1000,4 +1000,4 @@ void BoundaryConditions::add_damping_to_implicit (Equation eq, Loc loc, const am
     }
 }
 
-} // namespace ablsteady
+} // namespace gust

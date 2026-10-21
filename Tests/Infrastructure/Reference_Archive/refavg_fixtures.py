@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fixtures for the ablsteady_refavg CTests.
+"""Fixtures for the gust_refavg CTests.
 
     refavg_fixtures.py snapshots SRC OUT:TIME [OUT:TIME ...]
         Copy plotfile SRC to each OUT with the time in its Header replaced,

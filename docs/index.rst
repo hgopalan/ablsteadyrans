@@ -1,17 +1,18 @@
-ablsteady
-=========
+GUST
+====
 
-**ablsteady** computes steady-state wind fields in the atmospheric boundary layer (ABL) over complex terrain. It
+**GUST** computes steady-state wind fields in the atmospheric boundary layer (ABL) over complex terrain. It
 solves the steady Reynolds-averaged Navier–Stokes (RANS) equations with a one-equation k–L turbulence model on a
 terrain-following mesh. It is a stand-alone `AMReX <https://github.com/AMReX-Codes/amrex>`__ application and runs on
-CPUs and GPUs.
+CPUs and GPUs. GUST stands for Grid-sequenced Unified Steady Terrain solver; it was called ablsteady until
+October 2026.
 
 A transient ABL code such as `ERF <https://github.com/erf-model/ERF>`__ reaches a steady wind field by integrating in
-time for many hours of simulated flow. ablsteady solves for the steady state directly. It drives the residual of the
+time for many hours of simulated flow. GUST solves for the steady state directly. It drives the residual of the
 steady equations to zero with a pseudo-time iteration, and accelerates the iteration with line solvers, a good
 initial field and coarse grids.
 
-ablsteady reuses ERF components where they fit:
+GUST reuses ERF components where they fit:
 
 - the Axell–Liungman k–L turbulence model;
 - the stretched terrain-following mesh with terrain smoothing;

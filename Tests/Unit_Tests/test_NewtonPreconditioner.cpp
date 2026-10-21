@@ -34,33 +34,33 @@
 
 namespace {
 
-using ablsteady::FaceType;
-using ablsteady::Loc;
-using ablsteady::NewtonKrylov;
-using ablsteady::NewtonOptions;
-using ablsteady::NewtonPreconditionerKind;
-using ablsteady::NewtonVector;
-using ablsteady::SimplecPreconditioner;
-using ablsteady::ptest::PCase;
-using ablsteady::trtest::tol;
+using gust::FaceType;
+using gust::Loc;
+using gust::NewtonKrylov;
+using gust::NewtonOptions;
+using gust::NewtonPreconditionerKind;
+using gust::NewtonVector;
+using gust::SimplecPreconditioner;
+using gust::ptest::PCase;
+using gust::trtest::tol;
 
 constexpr double kPi = 3.14159265358979323846;
 constexpr bool kDouble = std::is_same_v<amrex::Real, double>;
 constexpr Loc kLoc[6] = {Loc::xface, Loc::yface, Loc::zface, Loc::cell, Loc::cell, Loc::cell};
 
-amrex::MultiFab& field (ablsteady::State& q, int f)
+amrex::MultiFab& field (gust::State& q, int f)
 {
     amrex::MultiFab* p[6] = {&q.u, &q.v, &q.w, &q.p, &q.theta, &q.tke};
     return *p[f];
 }
 
-const amrex::MultiFab& rfield (const ablsteady::ResidualFields& R, int f)
+const amrex::MultiFab& rfield (const gust::ResidualFields& R, int f)
 {
     const amrex::MultiFab* p[6] = {&R.u, &R.v, &R.w, &R.p, &R.theta, &R.tke};
     return *p[f];
 }
 
-void copy_state (ablsteady::State& to, ablsteady::State& from)
+void copy_state (gust::State& to, gust::State& from)
 {
     auto t = to.fields();
     const auto f = from.fields();
@@ -114,10 +114,10 @@ struct HillCase
 {
     PCase c;
     amrex::MultiFab nu, gt, gk;
-    ablsteady::BoundaryInputs bin;
-    std::unique_ptr<ablsteady::BoundaryConditions> bc;
-    ablsteady::ResidualInputs in;
-    ablsteady::State q;
+    gust::BoundaryInputs bin;
+    std::unique_ptr<gust::BoundaryConditions> bc;
+    gust::ResidualInputs in;
+    gust::State q;
     static constexpr double Lx = 900, Ly = 600, H = 400;
     explicit HillCase (int max_grid, double gravity = 9.81)
     {
@@ -130,7 +130,7 @@ struct HillCase
         });
         c.z.FillBoundary(c.geom.periodicity());
         c.mesh.build_from_ground(c.in, c.geom, c.z);
-        ablsteady::trtest::smooth_vertical_ghost_nodes(c);
+        gust::trtest::smooth_vertical_ghost_nodes(c);
         for (auto* mf : {&nu, &gt, &gk}) {
             mf->define(c.ba, c.dm, 1, 1);
             mf->setVal(2.0);
@@ -141,18 +141,18 @@ struct HillCase
         in.theta_ref.z = {-1000, 5000};
         in.theta_ref.theta = {290, 350};
         in.buoyancy.gravity = static_cast<amrex::Real>(gravity);
-        in.momentum.limiter = ablsteady::Limiter::upwind;
-        in.theta.limiter = ablsteady::Limiter::upwind;
+        in.momentum.limiter = gust::Limiter::upwind;
+        in.theta.limiter = gust::Limiter::upwind;
         in.coriolis.enabled = true;
         in.coriolis.latitude = 45;
         bin.face = {FaceType::periodic, FaceType::periodic, FaceType::slip_wall,
                     FaceType::periodic, FaceType::periodic, FaceType::slip_wall};
-        bc = std::make_unique<ablsteady::BoundaryConditions>(bin, c.geom, c.mesh, in.coriolis);
+        bc = std::make_unique<gust::BoundaryConditions>(bin, c.geom, c.mesh, in.coriolis);
         in.bc = bc.get();
         q.define(c.ba, c.dm);
         amrex::MultiFab::Copy(q.z_phys_nd, c.z, 0, 0, 1, c.z.nGrow());
         for (int f = 0; f < 6; ++f) {
-            ablsteady::trtest::fill_loc(field(q, f), kLoc[f], c,
+            gust::trtest::fill_loc(field(q, f), kLoc[f], c,
                                         [&] (double x, double y, double z) { return base_value(f, x, y, z, Lx, Ly, H); });
         }
         bc->fill_ghosts(q, in.surface, in.buoyancy);
@@ -164,11 +164,11 @@ struct OpenHill
 {
     PCase c;
     amrex::MultiFab nu, gt, gk;
-    ablsteady::BoundaryInputs bin;
-    std::unique_ptr<ablsteady::BoundaryConditions> bc;
-    ablsteady::SurfaceLayerOptions sl;
-    ablsteady::ResidualInputs in;
-    ablsteady::State q;
+    gust::BoundaryInputs bin;
+    std::unique_ptr<gust::BoundaryConditions> bc;
+    gust::SurfaceLayerOptions sl;
+    gust::ResidualInputs in;
+    gust::State q;
     static constexpr double Lx = 900, Ly = 600, H = 400;
     OpenHill (int max_grid, FaceType ground, double hill, int nx = 9, int ny = 6, int nz = 8)
     {
@@ -179,7 +179,7 @@ struct OpenHill
         c.make([=] (double x, double) { return hill * std::exp(-(x - 450) * (x - 450) / (150.0 * 150.0)); });
         c.z.FillBoundary(c.geom.periodicity());
         c.mesh.build_from_ground(c.in, c.geom, c.z);
-        ablsteady::trtest::smooth_vertical_ghost_nodes(c);
+        gust::trtest::smooth_vertical_ghost_nodes(c);
         sl.z0 = amrex::Real(0.1);
         for (auto* mf : {&nu, &gt, &gk}) {
             mf->define(c.ba, c.dm, 1, 1);
@@ -191,19 +191,19 @@ struct OpenHill
         in.theta_ref.z = {-1000, 5000};
         in.theta_ref.theta = {300, 300};
         in.buoyancy.gravity = 0;
-        in.momentum.limiter = ablsteady::Limiter::upwind;
-        in.theta.limiter = ablsteady::Limiter::upwind;
+        in.momentum.limiter = gust::Limiter::upwind;
+        in.theta.limiter = gust::Limiter::upwind;
         in.surface = (ground == FaceType::surface_layer) ? &sl : nullptr;
         bin.face = {FaceType::inflow, FaceType::periodic, ground, FaceType::outflow, FaceType::periodic, FaceType::slip_wall};
         // The pinned residuals below were measured with the wall-law inflow length (before the
         // closure's capped length became the default of bc.inflow_tke_length).
-        bin.inflow.length = ablsteady::InflowProfileOptions::Length::unbounded;
-        bc = std::make_unique<ablsteady::BoundaryConditions>(bin, c.geom, c.mesh, in.coriolis);
+        bin.inflow.length = gust::InflowProfileOptions::Length::unbounded;
+        bc = std::make_unique<gust::BoundaryConditions>(bin, c.geom, c.mesh, in.coriolis);
         in.bc = bc.get();
         q.define(c.ba, c.dm);
         amrex::MultiFab::Copy(q.z_phys_nd, c.z, 0, 0, 1, c.z.nGrow());
         for (int f = 0; f < 6; ++f) {
-            ablsteady::trtest::fill_loc(field(q, f), kLoc[f], c,
+            gust::trtest::fill_loc(field(q, f), kLoc[f], c,
                                         [&] (double x, double y, double z) { return base_value(f, x, y, z, Lx, Ly, H); });
         }
         bc->fill_ghosts(q, in.surface, in.buoyancy);
@@ -217,11 +217,11 @@ struct Column
 {
     PCase c;
     amrex::MultiFab nu, gt, gk;
-    ablsteady::BoundaryInputs bin;
-    std::unique_ptr<ablsteady::BoundaryConditions> bc;
-    ablsteady::SurfaceLayerOptions sl;
-    ablsteady::ResidualInputs in;
-    ablsteady::State q;
+    gust::BoundaryInputs bin;
+    std::unique_ptr<gust::BoundaryConditions> bc;
+    gust::SurfaceLayerOptions sl;
+    gust::ResidualInputs in;
+    gust::State q;
     Column ()
     {
         c.in.mesh.n_cell = amrex::IntVect(2, 2, 32);
@@ -231,7 +231,7 @@ struct Column
         c.make([] (double, double) { return 0.0; });
         c.z.FillBoundary(c.geom.periodicity());
         c.mesh.build_from_ground(c.in, c.geom, c.z);
-        ablsteady::trtest::smooth_vertical_ghost_nodes(c);
+        gust::trtest::smooth_vertical_ghost_nodes(c);
         sl.z0 = amrex::Real(0.1);
         for (auto* mf : {&nu, &gt, &gk}) {
             mf->define(c.ba, c.dm, 1, 1);
@@ -251,7 +251,7 @@ struct Column
         in.coriolis.ug = 10;
         bin.face = {FaceType::periodic, FaceType::periodic, FaceType::surface_layer,
                     FaceType::periodic, FaceType::periodic, FaceType::slip_wall};
-        bc = std::make_unique<ablsteady::BoundaryConditions>(bin, c.geom, c.mesh, in.coriolis);
+        bc = std::make_unique<gust::BoundaryConditions>(bin, c.geom, c.mesh, in.coriolis);
         in.bc = bc.get();
         q.define(c.ba, c.dm);
         amrex::MultiFab::Copy(q.z_phys_nd, c.z, 0, 0, 1, c.z.nGrow());
@@ -262,10 +262,10 @@ struct Column
     }
 };
 
-std::unique_ptr<SimplecPreconditioner> make_pc (const PCase& c, const ablsteady::ResidualInputs& in,
-                                                ablsteady::SimplecOptions opt = {}, amrex::Real inf_cfl = 100)
+std::unique_ptr<SimplecPreconditioner> make_pc (const PCase& c, const gust::ResidualInputs& in,
+                                                gust::SimplecOptions opt = {}, amrex::Real inf_cfl = 100)
 {
-    ablsteady::PoissonOptions popt;
+    gust::PoissonOptions popt;
     return std::make_unique<SimplecPreconditioner>(opt, 2, in, popt, c.mesh, c.geom, c.z, inf_cfl, c.ba, c.dm);
 }
 
@@ -280,13 +280,13 @@ std::vector<int> open_hill_steps (double cfl, Pc kind)
     opt.gmres_restart = 200;
     opt.krylov_rtol = amrex::Real(1e-3);
     NewtonKrylov nk(opt, h.in, h.c.mesh, h.c.geom, h.c.ba, h.c.dm, 0);
-    const auto den = (kind == Pc::stage_d) ? ablsteady::PressureDenominator::stage : ablsteady::PressureDenominator::diagonal;
-    SimplecPreconditioner pc(ablsteady::SimplecOptions{}, 2, h.in, ablsteady::PoissonOptions{}, h.c.mesh, h.c.geom, h.c.z,
-                             amrex::Real(1e4), h.c.ba, h.c.dm, ablsteady::LineSweepOptions(), den);
+    const auto den = (kind == Pc::stage_d) ? gust::PressureDenominator::stage : gust::PressureDenominator::diagonal;
+    SimplecPreconditioner pc(gust::SimplecOptions{}, 2, h.in, gust::PoissonOptions{}, h.c.mesh, h.c.geom, h.c.z,
+                             amrex::Real(1e4), h.c.ba, h.c.dm, gust::LineSweepOptions(), den);
     amrex::MultiFab dtau(h.c.ba, h.c.dm, 1, 0);
     std::vector<int> its;
     for (int n = 0; n < 4; ++n) {
-        ablsteady::local_dtau(h.q, &h.nu, h.c.mesh, h.c.geom, static_cast<amrex::Real>(cfl), dtau);
+        gust::local_dtau(h.q, &h.nu, h.c.mesh, h.c.geom, static_cast<amrex::Real>(cfl), dtau);
         const auto info = nk.step(h.q, &dtau, kind == Pc::identity ? nullptr : &pc);
         EXPECT_TRUE(info.applied) << cfl << " " << n;
         its.push_back(info.gmres_iterations);
@@ -316,24 +316,24 @@ TEST(NewtonPreconditioner, ApplyIsOneSimplecIteration)
 {
     // the third case: the w rows' cap with its slope margin (simplec.w_vnn_cap_slope_margin), here so large that it
     // binds on every sloped row
-    const std::pair<ablsteady::SweepKind, amrex::Real> cases[3] = {
-        {ablsteady::SweepKind::zjacobi, 0}, {ablsteady::SweepKind::lusgs, 0}, {ablsteady::SweepKind::lusgs, 16}};
+    const std::pair<gust::SweepKind, amrex::Real> cases[3] = {
+        {gust::SweepKind::zjacobi, 0}, {gust::SweepKind::lusgs, 0}, {gust::SweepKind::lusgs, 16}};
     for (const auto& [kind, cap] : cases) {
         HillCase h(4);
         ASSERT_GE(h.c.ba.size(), 6);
-        ablsteady::SimplecOptions opt;
+        gust::SimplecOptions opt;
         opt.pressure_reltol = amrex::Real(tol(1e-10, 1e-5));
         opt.w_vnn_cap = cap;
         if (cap > 0) { opt.w_vnn_cap_slope_margin = amrex::Real(1e6); }   // no cap on any sloped row
-        ablsteady::PoissonOptions popt;
-        const ablsteady::LineSweepOptions sweep(kind);
+        gust::PoissonOptions popt;
+        const gust::LineSweepOptions sweep(kind);
         amrex::MultiFab dtau(h.c.ba, h.c.dm, 1, 0);
-        ablsteady::local_dtau(h.q, &h.nu, h.c.mesh, h.c.geom, amrex::Real(5), dtau);
+        gust::local_dtau(h.q, &h.nu, h.c.mesh, h.c.geom, amrex::Real(5), dtau);
         ASSERT_GT(dtau.max(0), 1.2 * dtau.min(0));   // non-uniform
 
         // r = -R(q), with its shared-face copies set equal (the contract).
-        ablsteady::ResidualFields R;
-        ablsteady::residual(h.q, h.in, h.c.mesh, h.c.geom, R);
+        gust::ResidualFields R;
+        gust::residual(h.q, h.in, h.c.mesh, h.c.geom, R);
         NewtonVector r, dq;
         r.define(h.c.ba, h.c.dm);
         dq.define(h.c.ba, h.c.dm);
@@ -343,17 +343,17 @@ TEST(NewtonPreconditioner, ApplyIsOneSimplecIteration)
             if (f < 3) { r.f[f].OverrideSync(h.c.geom.periodicity()); }
         }
         SimplecPreconditioner pc(opt, 2, h.in, popt, h.c.mesh, h.c.geom, h.c.z, 100, h.c.ba, h.c.dm, sweep,
-                                 ablsteady::PressureDenominator::stage);
+                                 gust::PressureDenominator::stage);
         pc.setup(h.q, &dtau);
         pc.apply(dq, r);
         EXPECT_FALSE(pc.used_inf_cfl());
 
         // One stage iteration from q, on the same r (its R's face copies set equal).
-        ablsteady::State q1;
+        gust::State q1;
         q1.define(h.c.ba, h.c.dm);
         copy_state(q1, h.q);
         for (int f = 0; f < 3; ++f) { field(q1, f).OverrideSync(h.c.geom.periodicity()); }
-        ablsteady::SimplecStage stage(opt, 2, h.in, nullptr, popt, h.c.mesh, h.c.geom, h.c.z, 0, h.c.ba, h.c.dm, sweep);
+        gust::SimplecStage stage(opt, 2, h.in, nullptr, popt, h.c.mesh, h.c.geom, h.c.z, 0, h.c.ba, h.c.dm, sweep);
         // The stage's residual copies: the same shared-face rule as r.
         stage.iterate(q1, dtau);
         EXPECT_EQ(stage.last().tke.clipped, 0);
@@ -371,7 +371,7 @@ TEST(NewtonPreconditioner, ApplyIsOneSimplecIteration)
                 // The Dirichlet rows: dq = r there (identity rows of the
                 // Newton system); the stage's increment there is its fill's.
                 amrex::MultiFab mask;
-                const ablsteady::Equation eqs[3] = {ablsteady::Equation::u, ablsteady::Equation::v, ablsteady::Equation::w};
+                const gust::Equation eqs[3] = {gust::Equation::u, gust::Equation::v, gust::Equation::w};
                 h.bc->dirichlet_rows(eqs[f], kLoc[f], h.c.mesh, mask);
                 amrex::MultiFab rm(mask.boxArray(), mask.DistributionMap(), 1, 0);
                 amrex::MultiFab::Copy(rm, r.f[f], 0, 0, 1, 0);
@@ -410,9 +410,9 @@ TEST(NewtonPreconditioner, ConstantPressureShiftLeavesTheSolveUnchanged)
 {
     HillCase h(4);
     amrex::MultiFab dtau(h.c.ba, h.c.dm, 1, 0);
-    ablsteady::local_dtau(h.q, &h.nu, h.c.mesh, h.c.geom, amrex::Real(10), dtau);
-    ablsteady::ResidualFields R;
-    ablsteady::residual(h.q, h.in, h.c.mesh, h.c.geom, R);
+    gust::local_dtau(h.q, &h.nu, h.c.mesh, h.c.geom, amrex::Real(10), dtau);
+    gust::ResidualFields R;
+    gust::residual(h.q, h.in, h.c.mesh, h.c.geom, R);
     NewtonVector r, rc, a, b;
     for (auto* v : {&r, &rc, &a, &b}) { v->define(h.c.ba, h.c.dm); }
     for (int f = 0; f < 6; ++f) {
@@ -439,7 +439,7 @@ TEST(NewtonPreconditioner, ConstantPressureShiftLeavesTheSolveUnchanged)
     EXPECT_LE(std::abs(weighted_mean(b.f[3], h.c.mesh.detJ)), tol(1e-12, 1e-5) * pa);
 
     // (b) setup at q + c.
-    ablsteady::State qc;
+    gust::State qc;
     qc.define(h.c.ba, h.c.dm);
     copy_state(qc, h.q);
     qc.p.plus(amrex::Real(1000), 0, 1, qc.p.nGrow());
@@ -458,7 +458,7 @@ TEST(NewtonPreconditioner, ConstantPressureShiftLeavesTheSolveUnchanged)
     nopt.gmres_restart = 200;
     nopt.krylov_rtol = amrex::Real(tol(1e-6, 1e-3));
     NewtonKrylov nk(nopt, h.in, h.c.mesh, h.c.geom, h.c.ba, h.c.dm, 0);
-    ablsteady::State d0, dc, q0;
+    gust::State d0, dc, q0;
     for (auto* s : {&d0, &dc, &q0}) { s->define(h.c.ba, h.c.dm); }
     copy_state(q0, h.q);
     const auto i0 = nk.direction(q0, &dtau, d0, pc.get());
@@ -498,9 +498,9 @@ TEST(NewtonPreconditioner, ApplyIsLinearInR)
 {
     HillCase h(4);
     amrex::MultiFab dtau(h.c.ba, h.c.dm, 1, 0);
-    ablsteady::local_dtau(h.q, &h.nu, h.c.mesh, h.c.geom, amrex::Real(10), dtau);
-    ablsteady::ResidualFields R;
-    ablsteady::residual(h.q, h.in, h.c.mesh, h.c.geom, R);
+    gust::local_dtau(h.q, &h.nu, h.c.mesh, h.c.geom, amrex::Real(10), dtau);
+    gust::ResidualFields R;
+    gust::residual(h.q, h.in, h.c.mesh, h.c.geom, R);
     NewtonVector r, rs, a, b;
     for (auto* v : {&r, &rs, &a, &b}) { v->define(h.c.ba, h.c.dm); }
     for (int f = 0; f < 6; ++f) {
@@ -527,11 +527,11 @@ TEST(NewtonPreconditioner, ApplyIsLinearInR)
         }
         return err;
     };
-    ablsteady::SimplecOptions opt;
+    gust::SimplecOptions opt;
     opt.pressure_reltol = amrex::Real(tol(1e-10, 1e-5));
-    SimplecPreconditioner lin(opt, 2, h.in, ablsteady::PoissonOptions{}, h.c.mesh, h.c.geom, h.c.z, 100, h.c.ba, h.c.dm);
-    SimplecPreconditioner stg(opt, 2, h.in, ablsteady::PoissonOptions{}, h.c.mesh, h.c.geom, h.c.z, 100, h.c.ba, h.c.dm,
-                              ablsteady::LineSweepOptions(), ablsteady::PressureDenominator::stage);
+    SimplecPreconditioner lin(opt, 2, h.in, gust::PoissonOptions{}, h.c.mesh, h.c.geom, h.c.z, 100, h.c.ba, h.c.dm);
+    SimplecPreconditioner stg(opt, 2, h.in, gust::PoissonOptions{}, h.c.mesh, h.c.geom, h.c.z, 100, h.c.ba, h.c.dm,
+                              gust::LineSweepOptions(), gust::PressureDenominator::stage);
     const double el = worst(lin), es = worst(stg);
     amrex::Print() << "apply(s r) / s - apply(r), relative: diagonal " << el << ", stage " << es << "\n";
     // 1e-5 measured in double: the finite-difference truncation of step 3
@@ -590,9 +590,9 @@ TEST(NewtonPreconditioner, ContinuationIdentityVersusSimplec)
     OpenHill a(4, FaceType::surface_layer, 30), b(4, FaceType::surface_layer, 30);
     NewtonOptions nopt;
     nopt.gmres_restart = 200;
-    const auto copt = ablsteady::continuation_options(ablsteady::SteadyOptions{});
-    ablsteady::Continuation pa(copt, nopt, a.in, a.c.mesh, a.c.geom, &a.nu, 0, a.c.ba, a.c.dm, 0);
-    ablsteady::Continuation pb(copt, nopt, b.in, b.c.mesh, b.c.geom, &b.nu, 0, b.c.ba, b.c.dm, 0);
+    const auto copt = gust::continuation_options(gust::SteadyOptions{});
+    gust::Continuation pa(copt, nopt, a.in, a.c.mesh, a.c.geom, &a.nu, 0, a.c.ba, a.c.dm, 0);
+    gust::Continuation pb(copt, nopt, b.in, b.c.mesh, b.c.geom, &b.nu, 0, b.c.ba, b.c.dm, 0);
     auto pc = make_pc(b.c, b.in, {}, copt.cfl_max);
     const auto ra = pa.run(a.q, 30, amrex::Real(1e-8));
     const auto rb = pb.run(b.q, 30, amrex::Real(1e-8), pc.get());
@@ -629,20 +629,20 @@ TEST(NewtonPreconditioner, ContinuationIdentityVersusSimplec)
 // the constructor's range checks and apply before setup.
 TEST(NewtonPreconditioner, ReaderFactoryAndRangeChecks)
 {
-    EXPECT_EQ(ablsteady::read_steady_options().newton_preconditioner, NewtonPreconditionerKind::simplec);
+    EXPECT_EQ(gust::read_steady_options().newton_preconditioner, NewtonPreconditionerKind::simplec);
     {
         amrex::ParmParse pp("steady");
         pp.add("newton_preconditioner", std::string("identity"));
-        const auto o = ablsteady::read_steady_options();
+        const auto o = gust::read_steady_options();
         EXPECT_EQ(o.newton_preconditioner, NewtonPreconditionerKind::identity);
         EXPECT_EQ(o.given.size(), 1U);
         while (pp.remove("newton_preconditioner") > 0) {}
         pp.add("newton_preconditioner", std::string("simplec"));
-        EXPECT_EQ(ablsteady::read_steady_options().newton_preconditioner, NewtonPreconditionerKind::simplec);
+        EXPECT_EQ(gust::read_steady_options().newton_preconditioner, NewtonPreconditionerKind::simplec);
         while (pp.remove("newton_preconditioner") > 0) {}
         pp.add("newton_preconditioner", std::string("hypre"));
         try {
-            (void)ablsteady::read_steady_options();
+            (void)gust::read_steady_options();
             ADD_FAILURE() << "no abort";
         } catch (const std::runtime_error& e) {
             EXPECT_NE(std::string(e.what()).find("steady.newton_preconditioner = hypre: must be identity or simplec"), std::string::npos)
@@ -650,12 +650,12 @@ TEST(NewtonPreconditioner, ReaderFactoryAndRangeChecks)
         }
         while (pp.remove("newton_preconditioner") > 0) {}
     }
-    EXPECT_STREQ(ablsteady::newton_preconditioner_name(NewtonPreconditionerKind::identity), "identity");
-    EXPECT_STREQ(ablsteady::newton_preconditioner_name(NewtonPreconditionerKind::simplec), "simplec");
+    EXPECT_STREQ(gust::newton_preconditioner_name(NewtonPreconditionerKind::identity), "identity");
+    EXPECT_STREQ(gust::newton_preconditioner_name(NewtonPreconditionerKind::simplec), "simplec");
 
     Column col;
     const auto make = [&] (NewtonPreconditionerKind k) {
-        return ablsteady::make_newton_preconditioner(k, ablsteady::SimplecOptions{}, 2, col.in, ablsteady::PoissonOptions{},
+        return gust::make_newton_preconditioner(k, gust::SimplecOptions{}, 2, col.in, gust::PoissonOptions{},
                                                      col.c.mesh, col.c.geom, col.c.z, amrex::Real(1e4), col.c.ba, col.c.dm);
     };
     EXPECT_EQ(make(NewtonPreconditionerKind::identity), nullptr);
@@ -671,7 +671,7 @@ TEST(NewtonPreconditioner, ReaderFactoryAndRangeChecks)
     ASSERT_NE(sp, nullptr);
     EXPECT_TRUE(sp->used_inf_cfl());
     amrex::MultiFab dt(col.c.ba, col.c.dm, 1, 0);
-    ablsteady::local_dtau(col.q, &col.nu, col.c.mesh, col.c.geom, amrex::Real(1e4), dt);
+    gust::local_dtau(col.q, &col.nu, col.c.mesh, col.c.geom, amrex::Real(1e4), dt);
     EXPECT_EQ(max_diff(sp->dtau(), dt), 0);
     pc->apply(dq, r);   // r = 0 gives dq = 0
     for (int f = 0; f < 6; ++f) { EXPECT_EQ(dq.f[f].norm0(0, 0), 0) << f; }
@@ -680,12 +680,12 @@ TEST(NewtonPreconditioner, ReaderFactoryAndRangeChecks)
     for (const amrex::Real bad : {amrex::Real(0), amrex::Real(-1), nan, std::numeric_limits<amrex::Real>::infinity()}) {
         EXPECT_THROW(make_pc(col.c, col.in, {}, bad), std::runtime_error) << bad;
     }
-    ablsteady::SimplecOptions so;
+    gust::SimplecOptions so;
     so.alpha_p = 2;
     EXPECT_THROW(make_pc(col.c, col.in, so), std::runtime_error);
-    ablsteady::ResidualInputs nobc = col.in;
+    gust::ResidualInputs nobc = col.in;
     nobc.bc = nullptr;
     EXPECT_THROW(make_pc(col.c, nobc), std::runtime_error);
-    EXPECT_THROW(SimplecPreconditioner(ablsteady::SimplecOptions{}, 0, col.in, ablsteady::PoissonOptions{}, col.c.mesh, col.c.geom,
+    EXPECT_THROW(SimplecPreconditioner(gust::SimplecOptions{}, 0, col.in, gust::PoissonOptions{}, col.c.mesh, col.c.geom,
                                        col.c.z, 100, col.c.ba, col.c.dm), std::runtime_error);
 }

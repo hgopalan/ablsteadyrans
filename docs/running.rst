@@ -1,11 +1,11 @@
 Running a simulation
 ====================
 
-ablsteady takes one input file and, optionally, extra inputs on the command line:
+GUST takes one input file and, optionally, extra inputs on the command line:
 
 .. code-block:: bash
 
-   mpirun -n 2 build-rel/ablsteady inputs_file [key=value ...]
+   mpirun -n 2 build-rel/gust inputs_file [key=value ...]
 
 For a first run, follow :doc:`tutorial_column`.
 

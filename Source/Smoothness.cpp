@@ -1,5 +1,7 @@
 #include "Smoothness.H"
 
+#include "FileMagic.H"
+
 #include <AMReX_ParallelDescriptor.H>
 #include <AMReX_Utility.H>
 #include <AMReX_VisMF.H>
@@ -8,16 +10,16 @@
 #include <fstream>
 #include <sstream>
 
-namespace ablsteady {
+namespace gust {
 
 namespace {
 
-const char* const kMagic = "ablsteady-smoothness";
+const char* const kMagic = "gust-smoothness";
 constexpr int kVersion = 1;
 
 void file_error (const std::string& dir, const std::string& what)
 {
-    amrex::Abort("ablsteady: " + dir + "/Smoothness: " + what);
+    amrex::Abort("gust: " + dir + "/Smoothness: " + what);
 }
 
 //! Whether the I/O rank finds the file; every rank gets the answer.
@@ -33,10 +35,10 @@ amrex::Real z0_of (const ResidualInputs& in) { return (in.surface != nullptr) ? 
 void check_closure_inputs (const char* op, const ResidualInputs& in, const Closure* closure)
 {
     if (in.closure != closure) {
-        amrex::Abort(std::string("ablsteady: ") + op + ": closure must be the one the residual inputs point to");
+        amrex::Abort(std::string("gust: ") + op + ": closure must be the one the residual inputs point to");
     }
     if (closure != nullptr && in.wall_distance == nullptr) {
-        amrex::Abort(std::string("ablsteady: ") + op + ": the residual inputs have no wall distance");
+        amrex::Abort(std::string("gust: ") + op + ": the residual inputs have no wall distance");
     }
 }
 
@@ -67,7 +69,7 @@ ResidualInputs newton_residual_inputs (const ResidualInputs& in, const Smoothnes
 void NewtonSmoothness::enter (const State& q, Closure* closure, const ResidualInputs& in, const Mesh& mesh,
                               const amrex::Geometry& geom)
 {
-    if (m_active) { amrex::Abort("ablsteady: NewtonSmoothness::enter: the Newton stage is already active"); }
+    if (m_active) { amrex::Abort("gust: NewtonSmoothness::enter: the Newton stage is already active"); }
     check_closure_inputs("NewtonSmoothness::enter", in, closure);
     if (closure != nullptr && m_opt.freeze_floor) {
         closure->freeze_switches(q, *in.wall_distance, z0_of(in), in.buoyancy, mesh, geom, FreezeScope::floor);
@@ -78,7 +80,7 @@ void NewtonSmoothness::enter (const State& q, Closure* closure, const ResidualIn
 amrex::Long NewtonSmoothness::leave (const State& q, Closure* closure, const ResidualInputs& in, const Mesh& mesh,
                                      const amrex::Geometry& geom)
 {
-    if (!m_active) { amrex::Abort("ablsteady: NewtonSmoothness::leave: the Newton stage is not active"); }
+    if (!m_active) { amrex::Abort("gust: NewtonSmoothness::leave: the Newton stage is not active"); }
     check_closure_inputs("NewtonSmoothness::leave", in, closure);
     amrex::Long moved = 0;
     if (closure != nullptr && closure->frozen()) {
@@ -127,8 +129,8 @@ void NewtonSmoothness::read_checkpoint (const std::string& dir, Closure* closure
     std::string magic, w1, w2, w3, scope;
     int version = 0, active = -1, frozen = -1;
     is >> magic >> version;
-    if (!is || magic != kMagic || version != kVersion) {
-        file_error(dir, "not an ablsteady smoothness state of format version " + std::to_string(kVersion));
+    if (!is || !is_file_magic(magic, kMagic) || version != kVersion) {
+        file_error(dir, "not a GUST smoothness state of format version " + std::to_string(kVersion));
     }
     if (!(is >> w1 >> active >> w2 >> frozen >> w3 >> scope) || w1 != "active" || w2 != "frozen" || w3 != "scope"
         || (active != 0 && active != 1) || (frozen != 0 && frozen != 1) || (scope != "all" && scope != "floor")) {
@@ -152,4 +154,4 @@ void NewtonSmoothness::read_checkpoint (const std::string& dir, Closure* closure
     m_active = (active == 1);
 }
 
-} // namespace ablsteady
+} // namespace gust

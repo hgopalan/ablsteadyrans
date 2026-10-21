@@ -1,5 +1,5 @@
-#ifndef ABLSTEADY_POISSON_H_
-#define ABLSTEADY_POISSON_H_
+#ifndef GUST_POISSON_H_
+#define GUST_POISSON_H_
 
 #include "Mesh.H"
 
@@ -15,7 +15,7 @@
 class TerrainPoisson;
 namespace amrex { class MLTerrainPoisson; }
 
-namespace ablsteady {
+namespace gust {
 
 //! Boundary condition of the Poisson problem on one domain face. All are
 //! homogeneous: Neumann is zero total flux through the face (the terrain
@@ -209,6 +209,6 @@ private:
 void face_divergence (const Mesh& mesh, const amrex::Geometry& geom,
                       const amrex::Array<const amrex::MultiFab*, AMREX_SPACEDIM>& F, amrex::MultiFab& div);
 
-} // namespace ablsteady
+} // namespace gust
 
 #endif

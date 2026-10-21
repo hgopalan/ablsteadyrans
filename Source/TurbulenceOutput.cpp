@@ -9,24 +9,24 @@
 #include <cstdio>
 #include <fstream>
 
-namespace ablsteady {
+namespace gust {
 
 std::string write_turbulence_plotfile (const std::string& prefix, const State& q, const ClosureFields& fields,
                                        const amrex::MultiFab& dist, const SurfaceState* surface,
                                        const ClosureOptions& copt, const amrex::Geometry& geom,
                                        const ResidualFields* R)
 {
-    if (fields.empty()) { amrex::Abort("ablsteady: write_turbulence_plotfile: the closure's fields are empty"); }
+    if (fields.empty()) { amrex::Abort("gust: write_turbulence_plotfile: the closure's fields are empty"); }
     const amrex::BoxArray& ba = q.p.boxArray();
     const amrex::DistributionMapping& dm = q.p.DistributionMap();
     if (dist.boxArray() != ba || dist.DistributionMap() != dm || fields.nut.boxArray() != ba) {
-        amrex::Abort("ablsteady: write_turbulence_plotfile: dist and the fields must be on the state's layout");
+        amrex::Abort("gust: write_turbulence_plotfile: dist and the fields must be on the state's layout");
     }
     amrex::Vector<std::string> names{"x_velocity", "y_velocity", "z_velocity", "theta", "KE", "Kmv", "Khv", "Lturb",
                                      "walldist", "diss", "density", "Rt", "cmu", "cmu_prime", "ustar", "z_phys"};
     const int nbase = static_cast<int>(names.size());
     if (R != nullptr) {
-        if (R->u.empty()) { amrex::Abort("ablsteady: write_turbulence_plotfile: the residual fields are empty"); }
+        if (R->u.empty()) { amrex::Abort("gust: write_turbulence_plotfile: the residual fields are empty"); }
         for (const char* n : {"R_u", "R_v", "R_w", "R_p", "R_theta", "R_tke"}) { names.emplace_back(n); }
     }
     const int ncomp = static_cast<int>(names.size());
@@ -102,4 +102,4 @@ std::string write_turbulence_plotfile (const std::string& prefix, const State& q
     return name;
 }
 
-} // namespace ablsteady
+} // namespace gust

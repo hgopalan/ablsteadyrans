@@ -7,7 +7,7 @@
 #include <limits>
 #include <sstream>
 
-namespace ablsteady {
+namespace gust {
 
 namespace {
 
@@ -60,7 +60,7 @@ SteadyCriterion::SteadyCriterion (const SteadyParams& p, std::vector<std::string
         }
     }
     if (!err.empty()) {
-        std::string all = "ablsteady: invalid steady criterion:";
+        std::string all = "gust: invalid steady criterion:";
         for (const auto& e : err) { all += "\n  " + e; }
         amrex::Abort(all);
     }
@@ -76,7 +76,7 @@ void SteadyCriterion::restore (const SteadyHistory& h)
               && h.res_last.size() == m_res_names.size() && h.mon_hist.size() == m_mon.size();
     for (const auto& mh : h.mon_hist) { ok = ok && mh.size() <= keep; }
     if (!ok) {
-        amrex::Abort("ablsteady: SteadyCriterion::restore: the saved history does not match "
+        amrex::Abort("gust: SteadyCriterion::restore: the saved history does not match "
                      "this criterion's residuals, monitors or steady.monitor_window");
     }
     m_h = h;
@@ -87,7 +87,7 @@ void SteadyCriterion::seed_reference (const std::vector<amrex::Real>& ref)
     bool ok = m_h.count == 0 && ref.size() == m_res_names.size();
     for (const auto r : ref) { ok = ok && std::isfinite(r) && r >= 0; }
     if (!ok) {
-        amrex::Abort("ablsteady: SteadyCriterion::seed_reference: needs one finite reference >= 0 per residual, "
+        amrex::Abort("gust: SteadyCriterion::seed_reference: needs one finite reference >= 0 per residual, "
                      "before the first iteration");
     }
     m_h.res_ref = ref;
@@ -97,7 +97,7 @@ void SteadyCriterion::add (const std::vector<amrex::Real>& residuals,
                            const std::vector<amrex::Real>& monitors)
 {
     if (residuals.size() != m_res_names.size() || monitors.size() != m_mon.size()) {
-        amrex::Abort("ablsteady: SteadyCriterion::add got " + std::to_string(residuals.size())
+        amrex::Abort("gust: SteadyCriterion::add got " + std::to_string(residuals.size())
                      + " residuals and " + std::to_string(monitors.size()) + " monitors, expected "
                      + std::to_string(m_res_names.size()) + " and " + std::to_string(m_mon.size()));
     }
@@ -218,4 +218,4 @@ SteadyVerdict SteadyCriterion::verdict () const
     return v;
 }
 
-} // namespace ablsteady
+} // namespace gust

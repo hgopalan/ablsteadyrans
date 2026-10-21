@@ -27,13 +27,13 @@
 
 namespace {
 
-using ablsteady::LineGhosts;
-using ablsteady::LineOrder;
-using ablsteady::LineSweepOptions;
-using ablsteady::Loc;
-using ablsteady::SweepKind;
-using ablsteady::ptest::PCase;
-using ablsteady::trtest::tol;
+using gust::LineGhosts;
+using gust::LineOrder;
+using gust::LineSweepOptions;
+using gust::Loc;
+using gust::SweepKind;
+using gust::ptest::PCase;
+using gust::trtest::tol;
 
 const Loc kLocs[] = {Loc::cell, Loc::xface, Loc::yface, Loc::zface};
 
@@ -51,17 +51,17 @@ amrex::IntVect type_of (Loc loc)
 // A flat mesh of nx x ny x nz cells in boxes of at most mx x my columns.
 PCase box_mesh (int nx, int ny, int nz, bool periodic, int mx, int my)
 {
-    ablsteady::ptest::Manufactured ms;
+    gust::ptest::Manufactured ms;
     ms.Lx = 1000;
     ms.Ly = 800;
     ms.H0 = 0;
-    const auto f = periodic ? ablsteady::PoissonFace::periodic : ablsteady::PoissonFace::neumann;
-    PCase c = ablsteady::ptest::make_case(nx, ny, nz, f, f, ms, 0, true);
+    const auto f = periodic ? gust::PoissonFace::periodic : gust::PoissonFace::neumann;
+    PCase c = gust::ptest::make_case(nx, ny, nz, f, f, ms, 0, true);
     c.in.mesh.max_grid_size = {mx, my};
     c.make([ms] (double x, double y) { return ms.h(x, y); });
     c.z.FillBoundary(c.geom.periodicity());
     c.mesh.build_from_ground(c.in, c.geom, c.z);
-    ablsteady::trtest::smooth_vertical_ghost_nodes(c);
+    gust::trtest::smooth_vertical_ghost_nodes(c);
     return c;
 }
 
@@ -82,7 +82,7 @@ void random_system (const PCase& c, Loc loc, unsigned seed, double extra, double
                     amrex::MultiFab& ap, amrex::MultiFab& rhs)
 {
     const amrex::BoxArray ba = amrex::convert(c.ba, type_of(loc));
-    A.define(ba, c.dm, ablsteady::n_implicit_coefs, 0);
+    A.define(ba, c.dm, gust::n_implicit_coefs, 0);
     ap.define(ba, c.dm, 1, 0);
     rhs.define(ba, c.dm, 1, 0);
     for (amrex::MFIter mfi(A, false); mfi.isValid(); ++mfi) {
@@ -90,18 +90,18 @@ void random_system (const PCase& c, Loc loc, unsigned seed, double extra, double
         // seeded by box index, so the system is the same on any number of ranks
         std::mt19937 gen(seed + 7919u * static_cast<unsigned>(mfi.index()));
         std::uniform_real_distribution<double> dist(0.1, 1.0), rd(-1.0, 1.0);
-        amrex::FArrayBox fa(b, ablsteady::n_implicit_coefs, amrex::The_Pinned_Arena()), fp(b, 1, amrex::The_Pinned_Arena()),
+        amrex::FArrayBox fa(b, gust::n_implicit_coefs, amrex::The_Pinned_Arena()), fp(b, 1, amrex::The_Pinned_Arena()),
                          fr(b, 1, amrex::The_Pinned_Arena());
         amrex::LoopOnCpu(b, [&] (int i, int j, int k) {
             const amrex::IntVect iv(i, j, k);
             double sum = 0;
-            for (int n = 1; n < ablsteady::n_implicit_coefs; ++n) {
+            for (int n = 1; n < gust::n_implicit_coefs; ++n) {
                 double v = dist(gen);
-                if (n == ablsteady::coef_XM || n == ablsteady::coef_XP) { v *= xscale; }
+                if (n == gust::coef_XM || n == gust::coef_XP) { v *= xscale; }
                 fa(iv, n) = static_cast<amrex::Real>(v);
                 sum += v;
             }
-            fa(iv, ablsteady::coef_P) = static_cast<amrex::Real>(sum);
+            fa(iv, gust::coef_P) = static_cast<amrex::Real>(sum);
             fp(iv) = static_cast<amrex::Real>(sum + extra);
             fr(iv) = static_cast<amrex::Real>(rd(gen));
         });
@@ -136,10 +136,10 @@ void residual_of (const amrex::MultiFab& A, const amrex::MultiFab& ap, const amr
         const auto o = res.array(mfi);
         amrex::ParallelFor(vb, [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
         {
-            amrex::Real nb = a(i, j, k, ablsteady::coef_XM) * d(i - 1, j, k) + a(i, j, k, ablsteady::coef_XP) * d(i + 1, j, k)
-                             + a(i, j, k, ablsteady::coef_YM) * d(i, j - 1, k) + a(i, j, k, ablsteady::coef_YP) * d(i, j + 1, k);
-            if (k > klo) { nb += a(i, j, k, ablsteady::coef_ZM) * d(i, j, k - 1); }
-            if (k < khi) { nb += a(i, j, k, ablsteady::coef_ZP) * d(i, j, k + 1); }
+            amrex::Real nb = a(i, j, k, gust::coef_XM) * d(i - 1, j, k) + a(i, j, k, gust::coef_XP) * d(i + 1, j, k)
+                             + a(i, j, k, gust::coef_YM) * d(i, j - 1, k) + a(i, j, k, gust::coef_YP) * d(i, j + 1, k);
+            if (k > klo) { nb += a(i, j, k, gust::coef_ZM) * d(i, j, k - 1); }
+            if (k < khi) { nb += a(i, j, k, gust::coef_ZP) * d(i, j, k + 1); }
             o(i, j, k) = r(i, j, k) - (p(i, j, k) * d(i, j, k) - nb);
         });
     }
@@ -158,7 +158,7 @@ int outer_solve (Loc loc, const amrex::MultiFab& A, const amrex::MultiFab& ap, c
         residual_of(A, ap, rhs, x, c.geom, res);
         if (res.norm0() <= rtol * r0) { return it; }
         amrex::MultiFab delta;
-        ablsteady::line_sweeps(opt, loc, A, ap, res, sweeps, c.mesh, c.geom, delta);
+        gust::line_sweeps(opt, loc, A, ap, res, sweeps, c.mesh, c.geom, delta);
         amrex::MultiFab::Add(x, delta, 0, 0, 1, 0);
     }
     return -1;
@@ -249,12 +249,12 @@ std::pair<double, double> replay_error (Loc loc, const amrex::MultiFab& A, const
                     const amrex::IntVect iv(i, j, k), w = wrap(iv);
                     // a periodic one-cell axis: both neighbours are this point (implicit)
                     amrex::Real pw = p(w), xn = 0, yn = 0;
-                    if (selfx) { pw -= a(w, ablsteady::coef_XM) + a(w, ablsteady::coef_XP); }
-                    else { xn = a(w, ablsteady::coef_XM) * W(amrex::IntVect(i - 1, j, k)) + a(w, ablsteady::coef_XP) * W(amrex::IntVect(i + 1, j, k)); }
-                    if (selfy) { pw -= a(w, ablsteady::coef_YM) + a(w, ablsteady::coef_YP); }
-                    else { yn = a(w, ablsteady::coef_YM) * W(amrex::IntVect(i, j - 1, k)) + a(w, ablsteady::coef_YP) * W(amrex::IntVect(i, j + 1, k)); }
+                    if (selfx) { pw -= a(w, gust::coef_XM) + a(w, gust::coef_XP); }
+                    else { xn = a(w, gust::coef_XM) * W(amrex::IntVect(i - 1, j, k)) + a(w, gust::coef_XP) * W(amrex::IntVect(i + 1, j, k)); }
+                    if (selfy) { pw -= a(w, gust::coef_YM) + a(w, gust::coef_YP); }
+                    else { yn = a(w, gust::coef_YM) * W(amrex::IntVect(i, j - 1, k)) + a(w, gust::coef_YP) * W(amrex::IntVect(i, j + 1, k)); }
                     const amrex::Real rk = r(w) + xn + yn;
-                    const amrex::Real lower = -a(w, ablsteady::coef_ZM), upper = -a(w, ablsteady::coef_ZP);
+                    const amrex::Real lower = -a(w, gust::coef_ZM), upper = -a(w, gust::coef_ZP);
                     if (k == klo) {
                         cc(iv) = upper / pw;
                         ee(iv) = rk / pw;
@@ -312,7 +312,7 @@ TEST (LineSweeps, EveryFaceIsOwnedAndSweptOnce)
                 std::vector<int> count(static_cast<std::size_t>(dom.numPts()), 0);
                 const amrex::BoxArray ba = amrex::convert(c.ba, t);
                 for (int b = 0; b < ba.size(); ++b) {
-                    const amrex::Box own = ablsteady::line_owned_box(loc, ba[b], c.geom);
+                    const amrex::Box own = gust::line_owned_box(loc, ba[b], c.geom);
                     EXPECT_TRUE(ba[b].contains(own)) << loc_name(loc);
                     amrex::LoopOnCpu(own, [&] (int i, int j, int k) {
                         amrex::IntVect iv(i, j, k);
@@ -341,10 +341,10 @@ TEST (LineSweeps, EveryFaceIsOwnedAndSweptOnce)
                 amrex::MultiFab A, ap, rhs;
                 random_system(c, loc, 11u + static_cast<unsigned>(L.boxes), 0.3, 3.0, A, ap, rhs);
                 for (const int n_o : {0, 2}) {
-                    if (!ablsteady::check_line_overlap_layout(c.ba, n_o).empty()) { continue; }
+                    if (!gust::check_line_overlap_layout(c.ba, n_o).empty()) { continue; }
                     for (const int sweeps : {1, 2}) {
                         amrex::MultiFab delta;
-                        ablsteady::zline_lusgs(loc, A, ap, rhs, sweeps, c.mesh, c.geom, delta, lusgs(LineGhosts::zero, n_o));
+                        gust::zline_lusgs(loc, A, ap, rhs, sweeps, c.mesh, c.geom, delta, lusgs(LineGhosts::zero, n_o));
                         const auto [err, scale] = replay_error(loc, A, ap, rhs, delta, sweeps, n_o, c);
                         EXPECT_GT(scale, 0.1);
                         EXPECT_LT(err, tol(1e-13, 1e-5) * scale) << loc_name(loc) << " periodic " << periodic << " boxes " << L.boxes
@@ -355,8 +355,8 @@ TEST (LineSweeps, EveryFaceIsOwnedAndSweptOnce)
                     // one non-periodic box: nothing lies across a box face, and
                     // the box owns every point: zero and lagged are one sweep
                     amrex::MultiFab dz, dl;
-                    ablsteady::zline_lusgs(loc, A, ap, rhs, 2, c.mesh, c.geom, dz, lusgs(LineGhosts::zero));
-                    ablsteady::zline_lusgs(loc, A, ap, rhs, 2, c.mesh, c.geom, dl, lusgs(LineGhosts::lagged));
+                    gust::zline_lusgs(loc, A, ap, rhs, 2, c.mesh, c.geom, dz, lusgs(LineGhosts::zero));
+                    gust::zline_lusgs(loc, A, ap, rhs, 2, c.mesh, c.geom, dl, lusgs(LineGhosts::lagged));
                     EXPECT_EQ(max_diff(dz, dl), 0) << loc_name(loc);
                 }
             }
@@ -406,21 +406,21 @@ TEST (LineSweeps, OverlapsReachTheSameState)
             amrex::MultiFab A1, ap1, r1, A2, ap2, r2;
             random_system(one, loc, 31u, 0.3, 3.0, A1, ap1, r1);
             const amrex::BoxArray ba2 = amrex::convert(two.ba, type_of(loc));
-            A2.define(ba2, two.dm, ablsteady::n_implicit_coefs, 0);
+            A2.define(ba2, two.dm, gust::n_implicit_coefs, 0);
             ap2.define(ba2, two.dm, 1, 0);
             r2.define(ba2, two.dm, 1, 0);
-            A2.ParallelCopy(A1, 0, 0, ablsteady::n_implicit_coefs);
+            A2.ParallelCopy(A1, 0, 0, gust::n_implicit_coefs);
             ap2.ParallelCopy(ap1);
             r2.ParallelCopy(r1);
             for (const auto order : {LineOrder::sequential, LineOrder::diagonal}) {
                 amrex::MultiFab d1, d2;
-                ablsteady::zline_lusgs(loc, A1, ap1, r1, 3, one.mesh, one.geom, d1, lusgs(LineGhosts::zero, 0, order));
-                ablsteady::zline_lusgs(loc, A2, ap2, r2, 3, two.mesh, two.geom, d2, lusgs(LineGhosts::zero, 4, order));
+                gust::zline_lusgs(loc, A1, ap1, r1, 3, one.mesh, one.geom, d1, lusgs(LineGhosts::zero, 0, order));
+                gust::zline_lusgs(loc, A2, ap2, r2, 3, two.mesh, two.geom, d2, lusgs(LineGhosts::zero, 4, order));
                 amrex::MultiFab g2(d1.boxArray(), d1.DistributionMap(), 1, 0);
                 g2.ParallelCopy(d2);
                 EXPECT_EQ(max_diff(d1, g2), 0) << loc_name(loc);
                 amrex::MultiFab d0;   // without the overlap the box face shows
-                ablsteady::zline_lusgs(loc, A2, ap2, r2, 3, two.mesh, two.geom, d0, lusgs(LineGhosts::zero, 0, order));
+                gust::zline_lusgs(loc, A2, ap2, r2, 3, two.mesh, two.geom, d0, lusgs(LineGhosts::zero, 0, order));
                 amrex::MultiFab g0(d1.boxArray(), d1.DistributionMap(), 1, 0);
                 g0.ParallelCopy(d0);
                 EXPECT_GT(max_diff(d1, g0), 1e-3 * static_cast<double>(d1.norm0())) << loc_name(loc);
@@ -445,25 +445,25 @@ TEST (LineSweeps, ConvergedStateDoesNotDependOnTheLayout)
             for (const LineSweepOptions& opt : {lusgs(LineGhosts::zero, 0), lusgs(LineGhosts::zero, 2), lusgs(LineGhosts::lagged)}) {
                 amrex::MultiFab xref, step1;
                 ASSERT_GT(outer_solve(loc, A1, ap1, r1, opt, 2, c1, tol(1e-12, 1e-5), xref), 0);
-                ablsteady::line_sweeps(opt, loc, A1, ap1, r1, 2, c1.mesh, c1.geom, step1);
+                gust::line_sweeps(opt, loc, A1, ap1, r1, 2, c1.mesh, c1.geom, step1);
                 for (const int m : {8, 4}) {
                     PCase cm = box_mesh(16, 16, 4, periodic, m, m);
                     ASSERT_EQ(cm.ba.size(), (16 / m) * (16 / m));
                     const amrex::BoxArray ba = amrex::convert(cm.ba, type_of(loc));
-                    amrex::MultiFab A(ba, cm.dm, ablsteady::n_implicit_coefs, 0), ap(ba, cm.dm, 1, 0), rhs(ba, cm.dm, 1, 0);
-                    A.ParallelCopy(A1, 0, 0, ablsteady::n_implicit_coefs);
+                    amrex::MultiFab A(ba, cm.dm, gust::n_implicit_coefs, 0), ap(ba, cm.dm, 1, 0), rhs(ba, cm.dm, 1, 0);
+                    A.ParallelCopy(A1, 0, 0, gust::n_implicit_coefs);
                     ap.ParallelCopy(ap1);
                     rhs.ParallelCopy(r1);
                     amrex::MultiFab x, step;
                     const int its = outer_solve(loc, A, ap, rhs, opt, 2, cm, tol(1e-12, 1e-5), x);
                     ASSERT_GT(its, 0);
                     amrex::Print() << "UT-2.2.3 " << loc_name(loc) << " periodic " << periodic << " ghosts "
-                                   << ablsteady::line_ghosts_name(opt.ghosts) << " n_o " << opt.overlap << " boxes "
+                                   << gust::line_ghosts_name(opt.ghosts) << " n_o " << opt.overlap << " boxes "
                                    << cm.ba.size() << ": " << its << " outer iterations\n";
                     amrex::MultiFab g(xref.boxArray(), xref.DistributionMap(), 1, 0);
                     g.ParallelCopy(x);
                     EXPECT_LT(max_diff(g, xref), tol(1e-10, 1e-4) * static_cast<double>(xref.norm0())) << loc_name(loc) << " " << m;
-                    ablsteady::line_sweeps(opt, loc, A, ap, rhs, 2, cm.mesh, cm.geom, step);
+                    gust::line_sweeps(opt, loc, A, ap, rhs, 2, cm.mesh, cm.geom, step);
                     amrex::MultiFab gs(step1.boxArray(), step1.DistributionMap(), 1, 0);
                     gs.ParallelCopy(step);
                     EXPECT_GT(max_diff(gs, step1), 1e-4 * static_cast<double>(step1.norm0())) << loc_name(loc) << " " << m;
@@ -495,18 +495,18 @@ TEST (LineSweeps, DiagonalOrderingEqualsTheSequentialSweep)
                         LineSweepOptions diag = base;
                         diag.order = LineOrder::diagonal;
                         amrex::MultiFab ds, dd;
-                        const auto n0 = ablsteady::line_sweep_launches();
-                        const amrex::Real cs = ablsteady::zline_lusgs(loc, A, ap, rhs, sweeps, c.mesh, c.geom, ds, base);
-                        const auto n1 = ablsteady::line_sweep_launches();
-                        const amrex::Real cd = ablsteady::zline_lusgs(loc, A, ap, rhs, sweeps, c.mesh, c.geom, dd, diag);
-                        const auto n2 = ablsteady::line_sweep_launches();
+                        const auto n0 = gust::line_sweep_launches();
+                        const amrex::Real cs = gust::zline_lusgs(loc, A, ap, rhs, sweeps, c.mesh, c.geom, ds, base);
+                        const auto n1 = gust::line_sweep_launches();
+                        const amrex::Real cd = gust::zline_lusgs(loc, A, ap, rhs, sweeps, c.mesh, c.geom, dd, diag);
+                        const auto n2 = gust::line_sweep_launches();
                         // the kernels each ordering reaches: one launch per box and
                         // pass (sequential), one per plane (diagonal)
                         std::uint64_t planes = 0, boxes = 0;
                         for (amrex::MFIter mfi(ds, false); mfi.isValid(); ++mfi) {
                             const amrex::Box S = base.ghosts == LineGhosts::lagged
                                                  ? mfi.validbox()
-                                                 : ablsteady::line_sweep_box(loc, ablsteady::line_owned_box(loc, mfi.validbox(), c.geom),
+                                                 : gust::line_sweep_box(loc, gust::line_owned_box(loc, mfi.validbox(), c.geom),
                                                                              base.overlap, c.geom);
                             planes += static_cast<std::uint64_t>(S.length(0) + S.length(1) - 1);
                             ++boxes;
@@ -516,7 +516,7 @@ TEST (LineSweeps, DiagonalOrderingEqualsTheSequentialSweep)
                         if (boxes > 0) { EXPECT_GT(n2 - n1, n1 - n0); }   // counts are per rank
                         EXPECT_GT(ds.norm0(), 0.1);
                         EXPECT_EQ(max_diff(ds, dd), 0) << loc_name(loc) << " periodic " << periodic << " boxes " << c.ba.size()
-                                                       << " ghosts " << ablsteady::line_ghosts_name(base.ghosts) << " n_o "
+                                                       << " ghosts " << gust::line_ghosts_name(base.ghosts) << " n_o "
                                                        << base.overlap << " sweeps " << sweeps;
                         EXPECT_EQ(cs, cd);
                     }
@@ -545,13 +545,13 @@ TEST (LineSweeps, AlternatingOrderingSweepsBothDiagonals)
         PCase c = box_mesh(8, 8, 4, false, 8, 8);
         amrex::MultiFab A, ap, rhs;
         random_system(c, Loc::cell, 71u, 0.2, 3.0, A, ap, rhs);
-        A.setVal(0.0, ablsteady::coef_XP, 1);
-        A.setVal(0.0, ablsteady::coef_YM, 1);
+        A.setVal(0.0, gust::coef_XP, 1);
+        A.setVal(0.0, gust::coef_YM, 1);
         LineSweepOptions alt = lusgs(LineGhosts::lagged);
         alt.alternate = 1;
         amrex::MultiFab d0, d1, r0, r1;
-        ablsteady::zline_lusgs(Loc::cell, A, ap, rhs, 2, c.mesh, c.geom, d0, lusgs(LineGhosts::lagged));
-        ablsteady::zline_lusgs(Loc::cell, A, ap, rhs, 2, c.mesh, c.geom, d1, alt);
+        gust::zline_lusgs(Loc::cell, A, ap, rhs, 2, c.mesh, c.geom, d0, lusgs(LineGhosts::lagged));
+        gust::zline_lusgs(Loc::cell, A, ap, rhs, 2, c.mesh, c.geom, d1, alt);
         residual_of(A, ap, rhs, d0, c.geom, r0);
         residual_of(A, ap, rhs, d1, c.geom, r1);
         const amrex::Real scale = rhs.norm0();
@@ -573,17 +573,17 @@ TEST (LineSweeps, AlternatingOrderingSweepsBothDiagonals)
                     diag.order = LineOrder::diagonal;
                     for (const int sweeps : {1, 2, 3}) {
                         amrex::MultiFab dp, ds, dd;
-                        ablsteady::zline_lusgs(loc, A, ap, rhs, sweeps, c.mesh, c.geom, dp, plain);
-                        const auto n0 = ablsteady::line_sweep_launches();
-                        const amrex::Real cs = ablsteady::zline_lusgs(loc, A, ap, rhs, sweeps, c.mesh, c.geom, ds, seq);
-                        const auto n1 = ablsteady::line_sweep_launches();
-                        const amrex::Real cd = ablsteady::zline_lusgs(loc, A, ap, rhs, sweeps, c.mesh, c.geom, dd, diag);
-                        const auto n2 = ablsteady::line_sweep_launches();
+                        gust::zline_lusgs(loc, A, ap, rhs, sweeps, c.mesh, c.geom, dp, plain);
+                        const auto n0 = gust::line_sweep_launches();
+                        const amrex::Real cs = gust::zline_lusgs(loc, A, ap, rhs, sweeps, c.mesh, c.geom, ds, seq);
+                        const auto n1 = gust::line_sweep_launches();
+                        const amrex::Real cd = gust::zline_lusgs(loc, A, ap, rhs, sweeps, c.mesh, c.geom, dd, diag);
+                        const auto n2 = gust::line_sweep_launches();
                         std::uint64_t planes = 0, boxes = 0;
                         for (amrex::MFIter mfi(ds, false); mfi.isValid(); ++mfi) {
                             const amrex::Box S = plain.ghosts == LineGhosts::lagged
                                                  ? mfi.validbox()
-                                                 : ablsteady::line_sweep_box(loc, ablsteady::line_owned_box(loc, mfi.validbox(), c.geom),
+                                                 : gust::line_sweep_box(loc, gust::line_owned_box(loc, mfi.validbox(), c.geom),
                                                                              plain.overlap, c.geom);
                             planes += static_cast<std::uint64_t>(S.length(0) + S.length(1) - 1);
                             ++boxes;
@@ -591,7 +591,7 @@ TEST (LineSweeps, AlternatingOrderingSweepsBothDiagonals)
                         EXPECT_EQ(n1 - n0, 2u * static_cast<unsigned>(sweeps) * boxes) << loc_name(loc);
                         EXPECT_EQ(n2 - n1, 2u * static_cast<unsigned>(sweeps) * planes) << loc_name(loc);
                         EXPECT_EQ(max_diff(ds, dd), 0) << loc_name(loc) << " periodic " << periodic << " boxes " << c.ba.size()
-                                                       << " ghosts " << ablsteady::line_ghosts_name(plain.ghosts) << " sweeps " << sweeps;
+                                                       << " ghosts " << gust::line_ghosts_name(plain.ghosts) << " sweeps " << sweeps;
                         EXPECT_EQ(cs, cd);
                         const double gap = max_diff(dp, ds);
                         if (sweeps == 1) {
@@ -608,7 +608,7 @@ TEST (LineSweeps, AlternatingOrderingSweepsBothDiagonals)
     LineSweepOptions bad = lusgs(LineGhosts::lagged);
     for (const int v : {-1, 2}) {
         bad.alternate = v;
-        const auto err = ablsteady::check_line_options(bad);
+        const auto err = gust::check_line_options(bad);
         ASSERT_EQ(err.size(), 1u) << v;
         EXPECT_NE(err.front().find("steady.line_alternate"), std::string::npos) << err.front();
     }
@@ -619,38 +619,38 @@ TEST (LineSweeps, RefusalsAndNames)
     PCase c = box_mesh(8, 8, 4, true, 4, 4);
     amrex::MultiFab A, ap, rhs;
     random_system(c, Loc::cell, 61u, 0.3, 1.0, A, ap, rhs);
-    for (const LineSweepOptions& bad : {lusgs(LineGhosts::zero, -1), lusgs(LineGhosts::zero, ablsteady::max_line_overlap + 1),
+    for (const LineSweepOptions& bad : {lusgs(LineGhosts::zero, -1), lusgs(LineGhosts::zero, gust::max_line_overlap + 1),
                                         lusgs(LineGhosts::lagged, 2), lusgs(LineGhosts::zero, 5)}) {
         amrex::MultiFab delta;
         try {
-            ablsteady::zline_lusgs(Loc::cell, A, ap, rhs, 1, c.mesh, c.geom, delta, bad);
+            gust::zline_lusgs(Loc::cell, A, ap, rhs, 1, c.mesh, c.geom, delta, bad);
             ADD_FAILURE() << "accepted overlap " << bad.overlap;
         } catch (const std::runtime_error& e) {
             EXPECT_NE(std::string(e.what()).find("steady.line_overlap"), std::string::npos) << e.what();
         }
     }
     amrex::MultiFab delta;   // the widest the 4 x 4 boxes allow
-    EXPECT_NO_THROW(ablsteady::zline_lusgs(Loc::cell, A, ap, rhs, 1, c.mesh, c.geom, delta, lusgs(LineGhosts::zero, 4)));
+    EXPECT_NO_THROW(gust::zline_lusgs(Loc::cell, A, ap, rhs, 1, c.mesh, c.geom, delta, lusgs(LineGhosts::zero, 4)));
     // a 2-D deck (one cell in y): the overlap applies in x alone
     {
         PCase c2 = box_mesh(8, 1, 4, true, 4, 1);
-        EXPECT_EQ(ablsteady::line_overlap_width(3, c2.geom.Domain()), amrex::IntVect(3, 0, 0));
-        EXPECT_EQ(ablsteady::line_overlap_width(3, c.geom.Domain()), amrex::IntVect(3, 3, 0));
-        EXPECT_TRUE(ablsteady::check_line_overlap_layout(c2.ba, 4).empty());
-        EXPECT_FALSE(ablsteady::check_line_overlap_layout(c2.ba, 5).empty());
+        EXPECT_EQ(gust::line_overlap_width(3, c2.geom.Domain()), amrex::IntVect(3, 0, 0));
+        EXPECT_EQ(gust::line_overlap_width(3, c.geom.Domain()), amrex::IntVect(3, 3, 0));
+        EXPECT_TRUE(gust::check_line_overlap_layout(c2.ba, 4).empty());
+        EXPECT_FALSE(gust::check_line_overlap_layout(c2.ba, 5).empty());
         amrex::MultiFab A2, ap2, r2, d2;
         random_system(c2, Loc::xface, 62u, 0.3, 1.0, A2, ap2, r2);
-        EXPECT_NO_THROW(ablsteady::zline_lusgs(Loc::xface, A2, ap2, r2, 1, c2.mesh, c2.geom, d2, lusgs(LineGhosts::zero, 4)));
+        EXPECT_NO_THROW(gust::zline_lusgs(Loc::xface, A2, ap2, r2, 1, c2.mesh, c2.geom, d2, lusgs(LineGhosts::zero, 4)));
     }
-    EXPECT_STREQ(ablsteady::line_ghosts_name(LineGhosts::lagged), "lagged");
-    EXPECT_STREQ(ablsteady::line_ghosts_name(LineGhosts::zero), "zero");
-    EXPECT_STREQ(ablsteady::line_order_name(LineOrder::sequential), "sequential");
-    EXPECT_STREQ(ablsteady::line_order_name(LineOrder::diagonal), "diagonal");
+    EXPECT_STREQ(gust::line_ghosts_name(LineGhosts::lagged), "lagged");
+    EXPECT_STREQ(gust::line_ghosts_name(LineGhosts::zero), "zero");
+    EXPECT_STREQ(gust::line_order_name(LineOrder::sequential), "sequential");
+    EXPECT_STREQ(gust::line_order_name(LineOrder::diagonal), "diagonal");
     // the dispatcher routes the options: zero ghosts through line_sweeps
     amrex::MultiFab d1, d2;
-    ablsteady::line_sweeps(lusgs(LineGhosts::zero, 2), Loc::cell, A, ap, rhs, 2, c.mesh, c.geom, d1);
-    ablsteady::zline_lusgs(Loc::cell, A, ap, rhs, 2, c.mesh, c.geom, d2, lusgs(LineGhosts::zero, 2));
+    gust::line_sweeps(lusgs(LineGhosts::zero, 2), Loc::cell, A, ap, rhs, 2, c.mesh, c.geom, d1);
+    gust::zline_lusgs(Loc::cell, A, ap, rhs, 2, c.mesh, c.geom, d2, lusgs(LineGhosts::zero, 2));
     EXPECT_EQ(max_diff(d1, d2), 0);
-    ablsteady::zline_lusgs(Loc::cell, A, ap, rhs, 2, c.mesh, c.geom, d2, lusgs(LineGhosts::lagged));
+    gust::zline_lusgs(Loc::cell, A, ap, rhs, 2, c.mesh, c.geom, d2, lusgs(LineGhosts::lagged));
     EXPECT_GT(max_diff(d1, d2), 0);
 }

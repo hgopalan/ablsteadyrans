@@ -6,7 +6,7 @@ Requirements
 
 - CMake 3.25 or newer and a C++20 compiler (GCC, Clang, AppleClang, MSVC; nvcc for CUDA, ROCm ``clang++`` for HIP,
   ``icpx`` for SYCL).
-- MPI (Open MPI, MPICH or Cray MPICH), unless ``ABLSTEADY_MPI=OFF``.
+- MPI (Open MPI, MPICH or Cray MPICH), unless ``GUST_MPI=OFF``.
 - An FFT library for AMReX's FFT module: FFTW on the CPU, cuFFT (CUDA), rocFFT (HIP) or oneMKL (SYCL).
 - Python 3, for the test scripts.
 
@@ -23,7 +23,7 @@ Quick start
    cmake --build build-rel -j 8
    ctest --test-dir build-rel --output-on-failure
 
-The executable is ``build-rel/ablsteady``. On a case-insensitive file system, name the build directory something
+The executable is ``build-rel/gust``. On a case-insensitive file system, name the build directory something
 other than ``build``.
 
 CMake options
@@ -38,38 +38,41 @@ An option outside its allowed values stops the configuration.
    * - Option
      - Default
      - Effect
-   * - ``ABLSTEADY_MPI``
+   * - ``GUST_MPI``
      - ``ON``
      - Build with MPI.
-   * - ``ABLSTEADY_OMP``
+   * - ``GUST_OMP``
      - ``OFF``
      - Build with OpenMP.
-   * - ``ABLSTEADY_PRECISION``
+   * - ``GUST_PRECISION``
      - ``DOUBLE``
      - ``DOUBLE`` or ``SINGLE``. The steady stop needs double precision; single precision is kept compiling only.
-   * - ``ABLSTEADY_GPU_BACKEND``
+   * - ``GUST_GPU_BACKEND``
      - ``NONE``
      - ``NONE``, ``CUDA``, ``HIP`` or ``SYCL``. For an H100 add ``-DCMAKE_CUDA_ARCHITECTURES=90``; HIP needs
        ``-DAMReX_AMD_ARCH`` (for example ``gfx90a``) and ROCm's ``clang++`` as the C++ compiler; SYCL needs ``icpx``.
-   * - ``ABLSTEADY_FFT``
+   * - ``GUST_FFT``
      - ``ON``
      - AMReX FFT. Required: the Poisson solver uses its FFT preconditioner. Configuring with ``OFF`` stops
        with an error, and an external AMReX must have been built with FFT (``find_package`` asks for it).
-   * - ``ABLSTEADY_HYPRE``
+   * - ``GUST_HYPRE``
      - ``OFF``
      - AMReX with hypre, for the optional Newton–Krylov preconditioner (in development).
-   * - ``ABLSTEADY_TESTING``
+   * - ``GUST_TESTING``
      - ``OFF``
      - ``AMReX_TESTING`` and assertions on, as in GPU CI.
-   * - ``ABLSTEADY_ENABLE_TESTS``
+   * - ``GUST_ENABLE_TESTS``
      - ``ON``
      - Build the unit tests and register all tests with CTest.
-   * - ``ABLSTEADY_MPIEXEC_PREFLAGS``
+   * - ``GUST_MPIEXEC_PREFLAGS``
      - empty
      - Extra ``mpiexec`` flags for the tests. CI passes ``--oversubscribe`` to Open MPI.
-   * - ``ABLSTEADY_USE_INTERNAL_AMREX``
+   * - ``GUST_USE_INTERNAL_AMREX``
      - ``ON``
      - Use the AMReX submodule. ``OFF`` uses an installed AMReX found through ``AMReX_ROOT``.
+
+The options were called ``ABLSTEADY_*`` before the rename to GUST (October 2026). The old names still work: each
+sets its ``GUST_*`` option and prints a warning.
 
 Windows
 -------
@@ -90,7 +93,7 @@ clone. From a "Developer PowerShell for VS":
    cd ablsteadyrans
    cmake -S . -B build-rel -G Ninja -DCMAKE_BUILD_TYPE=Release `
      -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" `
-     -DVCPKG_TARGET_TRIPLET=x64-windows -DABLSTEADY_MPI=OFF
+     -DVCPKG_TARGET_TRIPLET=x64-windows -DGUST_MPI=OFF
    cmake --build build-rel
    $env:PATH = "$env:VCPKG_ROOT/installed/x64-windows/bin;$env:PATH"
    ctest --test-dir build-rel -L "unit|smoke" --output-on-failure

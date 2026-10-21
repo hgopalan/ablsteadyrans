@@ -12,7 +12,7 @@
 #include <limits>
 #include <string>
 
-namespace ablsteady {
+namespace gust {
 
 namespace {
 
@@ -58,18 +58,18 @@ InitOptions read_init_options ()
     for (const char* key : kKeys) {
         if (!pp.contains(key)) { continue; }
         opt.given.emplace_back(key);
-        if (pp.countname(key) > 1) { amrex::Abort(std::string("ablsteady: init.") + key + " is given more than once"); }
-        if (pp.countval(key) != 1) { amrex::Abort(std::string("ablsteady: init.") + key + " takes exactly one value"); }
+        if (pp.countname(key) > 1) { amrex::Abort(std::string("gust: init.") + key + " is given more than once"); }
+        if (pp.countval(key) != 1) { amrex::Abort(std::string("gust: init.") + key + " takes exactly one value"); }
     }
     std::string fg = "none";
     pp.query("first_guess", fg);
     if (fg == "none") { opt.first_guess = InitOptions::FirstGuess::none; }
     else if (fg == "profile") { opt.first_guess = InitOptions::FirstGuess::profile; }
     else if (fg == "column") { opt.first_guess = InitOptions::FirstGuess::column; }
-    else { amrex::Abort("ablsteady: init.first_guess = " + fg + ": must be none, profile or column"); }
+    else { amrex::Abort("gust: init.first_guess = " + fg + ": must be none, profile or column"); }
     int proj = 1;
     pp.query("projection", proj);
-    if (proj != 0 && proj != 1) { amrex::Abort("ablsteady: init.projection must be 0 or 1"); }
+    if (proj != 0 && proj != 1) { amrex::Abort("gust: init.projection must be 0 or 1"); }
     opt.projection = (proj == 1);
     pp.query("column_tol", opt.column_tol);
     pp.query("column_max_iterations", opt.column_max_iterations);
@@ -79,11 +79,11 @@ InitOptions read_init_options ()
     pp.query("k_decay_height", opt.k_decay_height);
     int ob = 0;
     pp.query("obrien", ob);
-    if (ob != 0 && ob != 1) { amrex::Abort("ablsteady: init.obrien must be 0 or 1"); }
+    if (ob != 0 && ob != 1) { amrex::Abort("gust: init.obrien must be 0 or 1"); }
     opt.obrien = (ob == 1);
     const auto err = check_init_options(opt);
     if (!err.empty()) {
-        std::string all = "ablsteady: invalid inputs:";
+        std::string all = "gust: invalid inputs:";
         for (const auto& e : err) { all += "\n  " + e; }
         amrex::Abort(all);
     }
@@ -178,7 +178,7 @@ amrex::Real obrien_omega (const amrex::MultiFab& u, const amrex::MultiFab& v, co
         const amrex::Box zb = z_nd[mfi].box();
         amrex::FArrayBox zn(zb, 1, amrex::The_Pinned_Arena());
         if (vb.smallEnd(2) != klo || vb.length(2) != nz + 1) {
-            amrex::Abort("ablsteady: obrien_omega: every box must span the whole column (mesh.max_grid_size is horizontal)");
+            amrex::Abort("gust: obrien_omega: every box must span the whole column (mesh.max_grid_size is horizontal)");
         }
         J.copy<amrex::RunOn::Device>(mesh.detJ[mfi], cb);
         Dc.copy<amrex::RunOn::Device>(dh[mfi], dcb);
@@ -222,7 +222,7 @@ amrex::Real first_guess_state (const InitOptions& opt, const BoundaryInputs& bc,
 {
     {
         const auto err = check_init_options(opt);
-        if (!err.empty()) { amrex::Abort("ablsteady: first_guess_state: " + err.front()); }
+        if (!err.empty()) { amrex::Abort("gust: first_guess_state: " + err.front()); }
     }
     if (opt.first_guess == InitOptions::FirstGuess::none) { return 0; }
     const char* op = "first_guess_state";
@@ -231,7 +231,7 @@ amrex::Real first_guess_state (const InitOptions& opt, const BoundaryInputs& bc,
     check_nodal_heights(op, q.z_phys_nd, mesh);
     const BoundaryConditions bcs(bc, geom, mesh, coriolis);   // checks bc for this geometry (a geostrophic top needs the run's Coriolis)
     if (opt.first_guess == InitOptions::FirstGuess::column && column == nullptr) {
-        amrex::Abort("ablsteady: first_guess_state: init.first_guess = column needs the column's profile");
+        amrex::Abort("gust: first_guess_state: init.first_guess = column needs the column's profile");
     }
     const InflowProfile::View prof = (column != nullptr) ? column->view() : bcs.profile().view();
     const int klo = geom.Domain().smallEnd(2);
@@ -364,4 +364,4 @@ InitResult initialize_state (const InitOptions& opt, const BoundaryInputs& bc, c
     return res;
 }
 
-} // namespace ablsteady
+} // namespace gust

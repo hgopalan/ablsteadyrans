@@ -1,5 +1,5 @@
-#ifndef ABLSTEADY_DRIVER_H_
-#define ABLSTEADY_DRIVER_H_
+#ifndef GUST_DRIVER_H_
+#define GUST_DRIVER_H_
 
 // The steady driver framework (sub-phase 1.13): stages, switch rules with
 // hysteresis, residual and monitor histories, wall-time and AU accounting,
@@ -47,7 +47,7 @@
 #include <string>
 #include <vector>
 
-namespace ablsteady {
+namespace gust {
 
 //! The solver stage the application runs (steady.stage): none writes the
 //! state and stops (the behaviour before sub-phase 1.15); simplec runs the
@@ -282,6 +282,6 @@ private:
     bool m_need_init{true};
 };
 
-} // namespace ablsteady
+} // namespace gust
 
 #endif

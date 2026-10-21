@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run ablsteady on the Neutral_ABL_Flat deck and apply ERF's checks (RT-1.15.2).
+"""Run GUST on the Neutral_ABL_Flat deck and apply ERF's checks (RT-1.15.2).
 
     check_steady_neutral.py -- COMMAND [ARGS ...]
 
@@ -33,9 +33,9 @@ def main(argv):
     if run.returncode != 0:
         sys.stdout.write(run.stderr)
         raise SystemExit("check_steady_neutral: the command failed with code %d" % run.returncode)
-    ok = "ablsteady: steady after" in run.stdout
+    ok = "gust: steady after" in run.stdout
     print("  steady verdict reached: %s" % ("pass" if ok else "FAIL"))
-    wrote = [ln.split()[-1] for ln in run.stdout.splitlines() if ln.startswith("ablsteady: wrote ")]
+    wrote = [ln.split()[-1] for ln in run.stdout.splitlines() if ln.startswith("gust: wrote ")]
     turb = [n for n in wrote if "_turb" in n]   # the files this run wrote, not earlier output
     if not turb:
         raise SystemExit("check_steady_neutral: no turbulence plotfile written")

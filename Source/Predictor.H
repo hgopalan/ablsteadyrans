@@ -1,5 +1,5 @@
-#ifndef ABLSTEADY_PREDICTOR_H_
-#define ABLSTEADY_PREDICTOR_H_
+#ifndef GUST_PREDICTOR_H_
+#define GUST_PREDICTOR_H_
 
 // The SIMPLEC momentum predictor (sub-phase 1.14): the momentum equations in
 // delta form with pseudo-time relaxation and defect correction,
@@ -189,7 +189,7 @@
 #include <AMReX_Geometry.H>
 #include <AMReX_MultiFab.H>
 
-namespace ablsteady {
+namespace gust {
 
 //! dtau on the x-, y- and z-faces from the cell-centred step: the mean of the
 //! two cells sharing the face (periodic images through the geometry; on a
@@ -267,6 +267,6 @@ amrex::Real line_sweeps (const LineSweepOptions& opt, Loc loc, const amrex::Mult
 amrex::Real zline_jacobi (Loc loc, const amrex::MultiFab& A, const amrex::MultiFab& ap, const amrex::MultiFab& rhs,
                           int sweeps, const Mesh& mesh, const amrex::Geometry& geom, amrex::MultiFab& delta);
 
-} // namespace ablsteady
+} // namespace gust
 
 #endif

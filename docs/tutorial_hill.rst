@@ -64,19 +64,19 @@ Run the case
 .. code-block:: bash
 
    mkdir -p runs/hill && cd runs/hill
-   mpirun -n 2 ../../build-rel/ablsteady ../../Tests/Canonical_RANS/Neutral_Hill_2D/inputs_steady_hill2d_lusgs
+   mpirun -n 2 ../../build-rel/gust ../../Tests/Canonical_RANS/Neutral_Hill_2D/inputs_steady_hill2d_lusgs
 
 Over terrain the initial field needs a Poisson solve to conserve mass. The log reports it:
 
 .. code-block:: text
 
-   ablsteady: initializer: 12 Poisson iterations (gmres_mlmg, reltol 1.000e-10), divergence 1.815778083e-01 before, 4.144210521e-12 after
+   gust: initializer: 12 Poisson iterations (gmres_mlmg, reltol 1.000e-10), divergence 1.815778083e-01 before, 4.144210521e-12 after
 
 and the run ends after about 3050 iterations:
 
 .. code-block:: text
 
-   ablsteady: steady after 3048 iterations (3048 over the run)
+   gust: steady after 3048 iterations (3048 over the run)
 
 Check the speed-up
 ------------------
@@ -110,14 +110,14 @@ The input file ``inputs_steady_hill2d_column`` differs only in this line:
 
 .. code-block:: bash
 
-   mpirun -n 2 ../../build-rel/ablsteady ../../Tests/Canonical_RANS/Neutral_Hill_2D/inputs_steady_hill2d_column
+   mpirun -n 2 ../../build-rel/gust ../../Tests/Canonical_RANS/Neutral_Hill_2D/inputs_steady_hill2d_column
 
 The log reports the column solve, then the 3-D run:
 
 .. code-block:: text
 
-   ablsteady: column guess: converged after 129 steps (0.018 s), 64 levels, u* 0.3785 m/s, u 10.0000 v -0.0000 m/s at the top
-   ablsteady: steady after 1231 iterations (1231 over the run)
+   gust: column guess: converged after 129 steps (0.018 s), 64 levels, u* 0.3785 m/s, u 10.0000 v -0.0000 m/s at the top
+   gust: steady after 1231 iterations (1231 over the run)
 
 The run converges in 1231 iterations instead of 3048. The column profile is written to ``column_guess.dat``.
 

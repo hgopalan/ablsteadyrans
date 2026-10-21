@@ -31,19 +31,19 @@ namespace {
 // A self-contained mesh problem: inputs, geometry, layout and nodal heights.
 struct MeshCase
 {
-    ablsteady::Inputs in;
+    gust::Inputs in;
     amrex::Geometry geom;
     amrex::BoxArray ba;
     amrex::DistributionMapping dm;
     amrex::MultiFab z;
-    ablsteady::Mesh mesh;
+    gust::Mesh mesh;
 
     void make ()
     {
-        geom = ablsteady::make_geometry(in.mesh);
-        ba = ablsteady::make_box_array(in.mesh);
+        geom = gust::make_geometry(in.mesh);
+        ba = gust::make_box_array(in.mesh);
         dm = amrex::DistributionMapping(ba);
-        z.define(amrex::convert(ba, amrex::IntVect(1)), dm, 1, ablsteady::ngrow_nodal);
+        z.define(amrex::convert(ba, amrex::IntVect(1)), dm, 1, gust::ngrow_nodal);
         z.setVal(0.0);
         mesh.define(ba, dm);
     }
@@ -183,16 +183,16 @@ std::pair<double, double> max_diff (const amrex::MultiFab& a, int ca, const amre
 // Tolerances: the double-precision value, or a single-precision one.
 constexpr double tol (double dbl, double flt) { return std::is_same_v<amrex::Real, double> ? dbl : flt; }
 
-std::string gold (const std::string& name) { return std::string(ABLSTEADY_SOURCE_DIR) + "/Tests/Unit_Tests/Gold/" + name; }
+std::string gold (const std::string& name) { return std::string(GUST_SOURCE_DIR) + "/Tests/Unit_Tests/Gold/" + name; }
 
 // UT-1.4.1: the three vertical-grid modes.
 TEST (Mesh, VerticalLevels)
 {
-    ablsteady::MeshInputs m;
+    gust::MeshInputs m;
     m.n_cell = amrex::IntVect(4, 4, 40);
     m.prob_hi = {400, 400, 1000};
     // Uniform: z_k = k dz.
-    auto z = ablsteady::make_zlevels(m, ablsteady::make_geometry(m));
+    auto z = gust::make_zlevels(m, gust::make_geometry(m));
     ASSERT_EQ(z.size(), 41u);
     EXPECT_EQ(z[0], 0);
     EXPECT_EQ(z[40], 1000);
@@ -201,7 +201,7 @@ TEST (Mesh, VerticalLevels)
     // Solved ratio (Newton, as ERF): the top is reached exactly; the ratio is
     // the one an independent exact-rational bisection gives (1.0421553943273616).
     m.dz0 = 10;
-    z = ablsteady::make_zlevels(m, ablsteady::make_geometry(m));
+    z = gust::make_zlevels(m, gust::make_geometry(m));
     EXPECT_EQ(z[0], 0);
     EXPECT_EQ(z[1], 10);
     EXPECT_EQ(z[40], 1000);
@@ -216,14 +216,14 @@ TEST (Mesh, VerticalLevels)
     m.prob_hi[2] = 440;
     m.dz0 = 20;
     m.stretch_ratio = amrex::Real(1.08);
-    z = ablsteady::make_zlevels(m, ablsteady::make_geometry(m));
+    z = gust::make_zlevels(m, gust::make_geometry(m));
     EXPECT_EQ(z[1], 20);
     EXPECT_NEAR(z[18], 749.0048747962335, tol(1e-9, 1e-5) * 749);
 }
 
 TEST (Mesh, ZLevelsFile)
 {
-    ablsteady::MeshInputs m;
+    gust::MeshInputs m;
     m.n_cell = amrex::IntVect(2, 2, 3);
     m.prob_hi = {10, 10, 100};
     m.zlevels_file = "ut_zlevels.txt";
@@ -232,14 +232,14 @@ TEST (Mesh, ZLevelsFile)
         amrex::ParallelDescriptor::Barrier();
     };
     write("# heights\n0 10\n35  # comment\n120\n");
-    const auto z = ablsteady::make_zlevels(m, ablsteady::make_geometry(m));
+    const auto z = gust::make_zlevels(m, gust::make_geometry(m));
     EXPECT_EQ(z, (amrex::Vector<amrex::Real>{0, 10, 35, 120}));
     write("0 10 35\n");   // too few
-    EXPECT_THROW((void)ablsteady::make_zlevels(m, ablsteady::make_geometry(m)), std::runtime_error);
+    EXPECT_THROW((void)gust::make_zlevels(m, gust::make_geometry(m)), std::runtime_error);
     write("0 10 5 120\n");   // not increasing
-    EXPECT_THROW((void)ablsteady::make_zlevels(m, ablsteady::make_geometry(m)), std::runtime_error);
+    EXPECT_THROW((void)gust::make_zlevels(m, gust::make_geometry(m)), std::runtime_error);
     write("1 10 35 120\n");   // does not start at 0
-    EXPECT_THROW((void)ablsteady::make_zlevels(m, ablsteady::make_geometry(m)), std::runtime_error);
+    EXPECT_THROW((void)gust::make_zlevels(m, gust::make_geometry(m)), std::runtime_error);
     if (amrex::ParallelDescriptor::IOProcessor()) { fs::remove("ut_zlevels.txt"); }
 }
 
@@ -281,13 +281,13 @@ TEST (Mesh, FreeStreamIsPreserved)
         MeshCase s = hill3d(sm);
         s.mesh.build(s.in, s.geom, s.z);
         const double scale = 15.0 * s.geom.InvCellSize(0);   // |U| + |V| over dx
-        EXPECT_LT(ablsteady::free_stream_divergence(s.mesh, s.geom, s.z, 10, 5), tol(1e-12, 1e-4) * scale)
+        EXPECT_LT(gust::free_stream_divergence(s.mesh, s.geom, s.z, 10, 5), tol(1e-12, 1e-4) * scale)
             << "agnesi, smoothing " << sm;
 
         MeshCase g = hill3d(sm);
         fill_gaussian(g.z, g.geom, 150, 400);
         g.mesh.build_from_ground(g.in, g.geom, g.z);
-        EXPECT_LT(ablsteady::free_stream_divergence(g.mesh, g.geom, g.z, -7, 12), tol(1e-12, 1e-4) * scale)
+        EXPECT_LT(gust::free_stream_divergence(g.mesh, g.geom, g.z, -7, 12), tol(1e-12, 1e-4) * scale)
             << "gaussian, smoothing " << sm;
     }
 }
@@ -346,18 +346,18 @@ TEST (Mesh, VolumesSumToTheDomain)
 // periodic domain: damped by 1 - beta (4 - 2 cos(kx dx) - 2 cos(ky dy)) per pass.
 TEST (Mesh, SmoothSurfaceKernel)
 {
-    ablsteady::MeshInputs m;
+    gust::MeshInputs m;
     m.n_cell = amrex::IntVect(32, 24, 2);
     m.prob_hi = {3200, 2400, 100};
     m.is_periodic = {1, 1, 0};
     m.max_grid_size = {16, 8};
-    const auto geom = ablsteady::make_geometry(m);
-    const auto ba = ablsteady::make_box_array(m);
+    const auto geom = gust::make_geometry(m);
+    const auto ba = gust::make_box_array(m);
     const amrex::DistributionMapping dm(ba);
     amrex::MultiFab h(amrex::convert(ba, amrex::IntVect(1)), dm, 1, 1);
 
     h.setVal(123.25);
-    ablsteady::smooth_surface(h, geom, 5, amrex::Real(0.2));
+    gust::smooth_surface(h, geom, 5, amrex::Real(0.2));
     auto [d0, m0] = max_diff(h, 0, h, 0);
     EXPECT_EQ(h.min(0, 0), 123.25);
     EXPECT_EQ(h.max(0, 0), 123.25);
@@ -368,7 +368,7 @@ TEST (Mesh, SmoothSurfaceKernel)
     fill_mode(h, geom, kx, ky);
     const double beta = 0.1;
     const double g = 1 - beta * (4 - 2 * std::cos(kx * dx[0]) - 2 * std::cos(ky * dx[1]));
-    ablsteady::smooth_surface(h, geom, 3, amrex::Real(beta));
+    gust::smooth_surface(h, geom, 3, amrex::Real(beta));
     // Every node of the k = 0 slab equals g^3 times its starting value.
     double worst = 0;
     for (amrex::MFIter mfi(h, false); mfi.isValid(); ++mfi) {
@@ -384,8 +384,8 @@ TEST (Mesh, SmoothSurfaceKernel)
     }
     amrex::ParallelAllReduce::Max(worst, amrex::ParallelDescriptor::Communicator());
     EXPECT_LT(worst, tol(1e-12, 1e-6));
-    EXPECT_THROW(ablsteady::smooth_surface(h, geom, 1, amrex::Real(0.3)), std::runtime_error);
-    EXPECT_THROW(ablsteady::smooth_surface(h, geom, 1, amrex::Real(0.25)), std::runtime_error);
+    EXPECT_THROW(gust::smooth_surface(h, geom, 1, amrex::Real(0.3)), std::runtime_error);
+    EXPECT_THROW(gust::smooth_surface(h, geom, 1, amrex::Real(0.25)), std::runtime_error);
     (void)d0; (void)m0;
 }
 
@@ -395,18 +395,18 @@ TEST (Mesh, SmoothSurfaceKernel)
 // ghost nodes outside the faces equal to the nearest domain node.
 TEST (Mesh, SmoothSurfaceNonPeriodic)
 {
-    ablsteady::MeshInputs m;
+    gust::MeshInputs m;
     m.n_cell = amrex::IntVect(16, 4, 2);
     m.prob_hi = {1600, 400, 100};
     m.max_grid_size = {8, 4};
-    const auto geom = ablsteady::make_geometry(m);
-    const auto ba = ablsteady::make_box_array(m);
+    const auto geom = gust::make_geometry(m);
+    const auto ba = gust::make_box_array(m);
     const amrex::DistributionMapping dm(ba);
     amrex::MultiFab h(amrex::convert(ba, amrex::IntVect(1)), dm, 1, 1);
     const double kx = 2 * M_PI / 1600.0;
     fill_mode(h, geom, kx, 0.0);
     const double beta = 0.2;
-    ablsteady::smooth_surface(h, geom, 1, amrex::Real(beta));
+    gust::smooth_surface(h, geom, 1, amrex::Real(beta));
     const double dx = 100;
     auto h0 = [&] (int i) { return std::cos(kx * amrex::max(0, amrex::min(16, i)) * dx); };
     double worst = 0;
@@ -434,7 +434,7 @@ TEST (Mesh, SmoothSurfaceNonPeriodic)
 TEST (Mesh, TerrainInterpolation)
 {
     auto plane = [] (double x, double y) { return 3.0 + 0.02 * x - 0.05 * y; };
-    ablsteady::TerrainPoints pts;
+    gust::TerrainPoints pts;
     for (int j = 0; j < 11; ++j) {
         for (int i = 0; i < 13; ++i) {
             pts.x.push_back(100.0 * i);
@@ -442,11 +442,11 @@ TEST (Mesh, TerrainInterpolation)
             pts.z.push_back(plane(100.0 * i, 80.0 * j));
         }
     }
-    const ablsteady::IdwInterpolator idw4(pts, 4, 2);
+    const gust::IdwInterpolator idw4(pts, 4, 2);
     EXPECT_EQ(idw4(500.0, 320.0), pts.z[4 * 13 + 5]);   // an input point: its stored height
     EXPECT_NEAR(idw4(550.0, 360.0), plane(550.0, 360.0), 1e-12);   // centre of 4 points (double in every build)
 
-    ablsteady::TerrainGrid g;
+    gust::TerrainGrid g;
     g.nx = 5;
     g.ny = 4;
     for (int i = 0; i < 5; ++i) { g.x.push_back(10.0 * i * i); }   // uneven spacing
@@ -455,14 +455,14 @@ TEST (Mesh, TerrainInterpolation)
         for (int j = 0; j < 4; ++j) { g.z.push_back(plane(g.x[i], g.y[j])); }   // contiguous in y
     }
     for (const auto& [x, y] : std::vector<std::pair<double, double>>{{3.3, 7.1}, {57.0, 41.0}, {159.9, 74.9}, {90.0, 50.0}}) {
-        EXPECT_NEAR(ablsteady::erf_bilinear(g, x, y), plane(x, y), 1e-12) << x << " " << y;
+        EXPECT_NEAR(gust::erf_bilinear(g, x, y), plane(x, y), 1e-12) << x << " " << y;
     }
     // More neighbours than points: refused, naming the input.
-    EXPECT_THROW(ablsteady::IdwInterpolator(pts, 144, 2), std::runtime_error);
-    EXPECT_NO_THROW(ablsteady::IdwInterpolator(pts, 143, 2));
+    EXPECT_THROW(gust::IdwInterpolator(pts, 144, 2), std::runtime_error);
+    EXPECT_NO_THROW(gust::IdwInterpolator(pts, 143, 2));
 
     // Outside the table: ERF's fallback clamps to the edge value.
-    EXPECT_EQ(ablsteady::erf_bilinear(g, 1000.0, 1000.0), g.z.back());
+    EXPECT_EQ(gust::erf_bilinear(g, 1000.0, 1000.0), g.z.back());
 }
 
 // The bucket search and brute force pick the same neighbours and weights, but
@@ -471,7 +471,7 @@ TEST (Mesh, TerrainInterpolation)
 constexpr double kSameBits = 1e-13;
 
 // Brute-force IDW (k nearest by distance, ties by index), as the bucket search.
-double idw_brute (const ablsteady::TerrainPoints& pts, int k, double xq, double yq)
+double idw_brute (const gust::TerrainPoints& pts, int k, double xq, double yq)
 {
     std::vector<std::pair<double, int>> d(pts.x.size());
     for (std::size_t i = 0; i < pts.x.size(); ++i) {
@@ -498,13 +498,13 @@ TEST (Mesh, IdwBucketsEqualBruteForce)
 {
     std::mt19937 rng(7);
     std::uniform_real_distribution<double> u(0, 1000), h(0, 50);
-    ablsteady::TerrainPoints cloud;
+    gust::TerrainPoints cloud;
     for (int n = 0; n < 2000; ++n) {
         cloud.x.push_back(u(rng));
         cloud.y.push_back(u(rng) * 0.4);
         cloud.z.push_back(h(rng));
     }
-    const ablsteady::IdwInterpolator idw(cloud, 6, 2);
+    const gust::IdwInterpolator idw(cloud, 6, 2);
     for (int q = 0; q < 300; ++q) {
         const double xq = u(rng) * 1.2 - 100, yq = u(rng) * 0.6 - 50;
         ASSERT_NEAR(idw(xq, yq), idw_brute(cloud, 6, xq, yq), kSameBits * std::abs(idw_brute(cloud, 6, xq, yq))) << xq << " " << yq;
@@ -513,7 +513,7 @@ TEST (Mesh, IdwBucketsEqualBruteForce)
         ASSERT_NEAR(idw(xq, yq), idw_brute(cloud, 6, xq, yq), kSameBits * std::abs(idw_brute(cloud, 6, xq, yq))) << xq << " " << yq;
     }
 
-    ablsteady::TerrainPoints grid;
+    gust::TerrainPoints grid;
     for (int j = 0; j < 10; ++j) {
         for (int i = 0; i < 10; ++i) {
             grid.x.push_back(10.0 * i);
@@ -522,7 +522,7 @@ TEST (Mesh, IdwBucketsEqualBruteForce)
         }
     }
     for (const int k : {1, 4, 6, 9}) {
-        const ablsteady::IdwInterpolator g(grid, k, 2);
+        const gust::IdwInterpolator g(grid, k, 2);
         for (int j = -2; j <= 20; ++j) {
             for (int i = -2; i <= 20; ++i) {
                 const double xq = 5.0 * i, yq = 5.0 * j;
@@ -531,13 +531,13 @@ TEST (Mesh, IdwBucketsEqualBruteForce)
         }
     }
 
-    ablsteady::TerrainPoints line;
+    gust::TerrainPoints line;
     for (int i = 0; i < 200; ++i) {
         line.x.push_back(10.0 * i);
         line.y.push_back(0.0);
         line.z.push_back(50.0 * (i % 7));
     }
-    const ablsteady::IdwInterpolator tl(line, 6, 2);
+    const gust::IdwInterpolator tl(line, 6, 2);
     for (int j = 0; j <= 16; ++j) {
         for (int i = 0; i <= 16; ++i) {
             const double xq = 125.0 * i, yq = 125.0 * j;
@@ -549,19 +549,19 @@ TEST (Mesh, IdwBucketsEqualBruteForce)
     // line make two buckets split at x = 5. From x = 2.5 the 2nd nearest
     // inside the first bucket (x = 0) is 2.5 away, exactly the distance to
     // the edge, where x = 5 also lies; x = 5 has the lower index and wins.
-    ablsteady::TerrainPoints tie;
+    gust::TerrainPoints tie;
     tie.x = {5.0, 0.0, 4.0, 10.0};
     tie.y = {0.0, 0.0, 0.0, 0.0};
     tie.z = {100.0, 0.0, 50.0, 7.0};
-    const ablsteady::IdwInterpolator ti(tie, 2, 2);
+    const gust::IdwInterpolator ti(tie, 2, 2);
     EXPECT_NEAR(ti(2.5, 0.0), idw_brute(tie, 2, 2.5, 0.0), kSameBits * 100);
     EXPECT_NEAR(idw_brute(tie, 2, 2.5, 0.0), (50.0 / 2.25 + 100.0 / 6.25) / (1 / 2.25 + 1 / 6.25), kSameBits * 100);
 
-    ablsteady::TerrainPoints one;
+    gust::TerrainPoints one;
     one.x = {3.0};
     one.y = {4.0};
     one.z = {12.5};
-    const ablsteady::IdwInterpolator o(one, 1, 2);
+    const gust::IdwInterpolator o(one, 1, 2);
     EXPECT_EQ(o(3.0, 4.0), 12.5);
     EXPECT_EQ(o(-1e9, 1e9), 12.5);
 }
@@ -571,7 +571,7 @@ TEST (Mesh, IdwBucketsEqualBruteForce)
 // exactly in every build (in float the coordinates alone are 0.5 m apart).
 TEST (Mesh, TerrainAtMapCoordinates)
 {
-    const fs::path dir = fs::temp_directory_path() / ("ablsteady_utm_" + std::to_string(amrex::ParallelDescriptor::NProcs()));
+    const fs::path dir = fs::temp_directory_path() / ("gust_utm_" + std::to_string(amrex::ParallelDescriptor::NProcs()));
     const std::string file = (dir / "utm.xyz").string();
     if (amrex::ParallelDescriptor::IOProcessor()) {
         fs::create_directories(dir);
@@ -582,8 +582,8 @@ TEST (Mesh, TerrainAtMapCoordinates)
         }
     }
     amrex::ParallelDescriptor::Barrier();
-    const auto pts = ablsteady::read_xyz_points(file);
-    const ablsteady::IdwInterpolator idw(pts, 6, 2);
+    const auto pts = gust::read_xyz_points(file);
+    const gust::IdwInterpolator idw(pts, 6, 2);
     EXPECT_EQ(idw(4.6e6 + 0.3, 5.2e6 + 0.6), 121.0);
 }
 
@@ -592,7 +592,7 @@ TEST (Mesh, TerrainAtMapCoordinates)
 // cloud itself is not periodic.
 TEST (Mesh, FileTerrainSeamIsPeriodic)
 {
-    const fs::path dir = fs::temp_directory_path() / ("ablsteady_seam_" + std::to_string(amrex::ParallelDescriptor::NProcs()));
+    const fs::path dir = fs::temp_directory_path() / ("gust_seam_" + std::to_string(amrex::ParallelDescriptor::NProcs()));
     const std::string file = (dir / "ramp.xyz").string();
     if (amrex::ParallelDescriptor::IOProcessor()) {
         fs::create_directories(dir);
@@ -610,7 +610,7 @@ TEST (Mesh, FileTerrainSeamIsPeriodic)
     s.in.terrain.type = "xyz";
     s.in.terrain.file = file;
     s.make();
-    ablsteady::fill_terrain_surface(s.z, s.geom, s.in.terrain);
+    gust::fill_terrain_surface(s.z, s.geom, s.in.terrain);
     // Every node (i, j) with i = 12 or a ghost equals the node at i mod 12.
     double worst = 0;
     for (amrex::MFIter mfi(s.z, false); mfi.isValid(); ++mfi) {
@@ -729,12 +729,12 @@ TEST (Mesh, TerrainThatFillsTheDomainIsRefused)
 
 // Beyond the plan: every mapping keeps the ground layer exactly as the surface
 // was given. ERF's BTF rewrote it as h z_top / z_top (within 1 ulp of h) while
-// other threads read it, a race on GPU; ablsteady's copy leaves it alone.
+// other threads read it, a race on GPU; GUST's copy leaves it alone.
 TEST (Mesh, GroundLayerIsTheGivenSurface)
 {
     for (const int sm : {0, 1, 2}) {
         MeshCase s = hill3d(sm);
-        ablsteady::fill_terrain_surface(s.z, s.geom, s.in.terrain);
+        gust::fill_terrain_surface(s.z, s.geom, s.in.terrain);
         amrex::MultiFab ground(s.z.boxArray(), s.dm, 1, 0);
         amrex::MultiFab::Copy(ground, s.z, 0, 0, 1, 0);
         s.mesh.build_from_ground(s.in, s.geom, s.z);
@@ -829,7 +829,7 @@ TEST (Mesh, GhostNodesStandForTheirImages)
                 // Boxes split in z as well (ERF's construction supports it).
                 s.ba.maxSize(amrex::IntVect(8, 8, 5));
                 s.dm = amrex::DistributionMapping(s.ba);
-                s.z.define(amrex::convert(s.ba, amrex::IntVect(1)), s.dm, 1, ablsteady::ngrow_nodal);
+                s.z.define(amrex::convert(s.ba, amrex::IntVect(1)), s.dm, 1, gust::ngrow_nodal);
                 s.z.setVal(0.0);
                 s.mesh.define(s.ba, s.dm);
             }

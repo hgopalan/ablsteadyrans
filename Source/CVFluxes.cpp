@@ -4,7 +4,7 @@
 
 #include <string>
 
-namespace ablsteady {
+namespace gust {
 
 namespace {
 
@@ -86,7 +86,7 @@ void check_cv_fluxes (const char* op, Loc loc, const amrex::Array<amrex::MultiFa
     for (int d = 0; d < AMREX_SPACEDIM; ++d) {
         const amrex::BoxArray want = amrex::convert(mesh.detJ.boxArray(), index_type(t ^ (1 << d)));
         if (G[d].boxArray() != want || G[d].DistributionMap() != mesh.detJ.DistributionMap() || G[d].nGrow() < 1) {
-            amrex::Abort(std::string("ablsteady: ") + op + ": flux G[" + std::to_string(d)
+            amrex::Abort(std::string("gust: ") + op + ": flux G[" + std::to_string(d)
                          + "] must be on the control-volume faces of the field, on the mesh's layout, with one ghost cell");
         }
     }
@@ -105,7 +105,7 @@ void check_operator_field (const char* op, const char* what, const amrex::MultiF
         err = "needs at least " + std::to_string(ngrow) + " ghost cells (has " + std::to_string(mf.nGrow()) + ")";
     }
     if (!err.empty()) {
-        amrex::Abort(std::string("ablsteady: ") + op + ": " + what + " " + err);
+        amrex::Abort(std::string("gust: ") + op + ": " + what + " " + err);
     }
 }
 
@@ -113,9 +113,9 @@ void check_nodal_heights (const char* op, const amrex::MultiFab& z_nd, const Mes
 {
     if (z_nd.boxArray() != amrex::convert(mesh.detJ.boxArray(), amrex::IntVect(1))
         || z_nd.DistributionMap() != mesh.detJ.DistributionMap() || z_nd.nGrow() < 1) {
-        amrex::Abort(std::string("ablsteady: ") + op
+        amrex::Abort(std::string("gust: ") + op
                      + ": z_nd must be the mesh's node heights (nodal, same layout, one ghost node)");
     }
 }
 
-} // namespace ablsteady
+} // namespace gust

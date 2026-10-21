@@ -16,7 +16,7 @@ The Tucker wall distance on ERF's Neutral_Hill_2D mesh: a 2-D Witch of Agnesi ri
 
 ## Expected Results
 - Maximum relative error at most 0.15, mean at most 0.03, at most 0.2 cells below 100 m, all values finite.
-- The field matches `Gold/walldist_hill2d_plt00000` at relative 1e-8 (a gold written by ablsteady).
+- The field matches `Gold/walldist_hill2d_plt00000` at relative 1e-8 (a gold written by GUST).
 
 ## How to run
 ```bash

@@ -1,5 +1,5 @@
-#ifndef ABLSTEADY_DIFFUSION_H_
-#define ABLSTEADY_DIFFUSION_H_
+#ifndef GUST_DIFFUSION_H_
+#define GUST_DIFFUSION_H_
 
 // Diffusion operators on the terrain-following C-grid (sub-phase 1.5), as
 // the divergence of fluxes through the faces of each control volume
@@ -31,7 +31,7 @@
 #include <AMReX_Geometry.H>
 #include <AMReX_MultiFab.H>
 
-namespace ablsteady {
+namespace gust {
 
 //! mean: how the cell diffusivity is averaged to the faces (Diffusion_K.H).
 //! Diffusive fluxes gamma (grad q . A) of a cell-centred q on the cell faces,
@@ -58,6 +58,6 @@ void momentum_diffusion (const amrex::Array<const amrex::MultiFab*, AMREX_SPACED
                          const amrex::MultiFab& z_nd, const Mesh& mesh, const amrex::Geometry& geom,
                          const amrex::Array<amrex::MultiFab*, AMREX_SPACEDIM>& out, FaceMean mean = FaceMean::arithmetic);
 
-} // namespace ablsteady
+} // namespace gust
 
 #endif

@@ -1,5 +1,5 @@
-#ifndef ABLSTEADY_PSEUDO_TIME_H_
-#define ABLSTEADY_PSEUDO_TIME_H_
+#ifndef GUST_PSEUDO_TIME_H_
+#define GUST_PSEUDO_TIME_H_
 
 // The local pseudo-time step (sub-phase 1.13, task 4): in every cell
 //
@@ -20,7 +20,7 @@
 #include <AMReX_Geometry.H>
 #include <AMReX_MultiFab.H>
 
-namespace ablsteady {
+namespace gust {
 
 //! 1/s; dtau <= CFL / kMinRate.
 inline constexpr amrex::Real kMinRate = amrex::Real(1.0e-12);
@@ -45,6 +45,6 @@ void local_dtau (const State& q, const amrex::MultiFab* nu, const Mesh& mesh, co
 amrex::Real ser_cfl (amrex::Real cfl, amrex::Real r, amrex::Real cfl0, amrex::Real cfl_max, amrex::Real p,
                      amrex::Real growth);
 
-} // namespace ablsteady
+} // namespace gust
 
 #endif

@@ -12,7 +12,7 @@
 #include <sstream>
 #include <string>
 
-namespace ablsteady {
+namespace gust {
 
 namespace {
 
@@ -73,15 +73,15 @@ amrex::Vector<amrex::Real> make_zlevels (const MeshInputs& m, const amrex::Geome
         std::string error;
         z = read_levels(m.zlevels_file, error);
         const std::string where = "mesh.zlevels_file = " + m.zlevels_file + ": ";
-        if (!error.empty()) { amrex::Abort("ablsteady: " + where + error); }
+        if (!error.empty()) { amrex::Abort("gust: " + where + error); }
         if (static_cast<int>(z.size()) != nz + 1) {
-            amrex::Abort("ablsteady: " + where + "has " + std::to_string(z.size())
+            amrex::Abort("gust: " + where + "has " + std::to_string(z.size())
                          + " values; n_cell z + 1 = " + std::to_string(nz + 1) + " are needed");
         }
-        if (z[0] != 0) { amrex::Abort("ablsteady: " + where + "the first value must be 0"); }
+        if (z[0] != 0) { amrex::Abort("gust: " + where + "the first value must be 0"); }
         for (int k = 1; k <= nz; ++k) {
             if (!std::isfinite(z[k]) || !(z[k] > z[k - 1])) {
-                amrex::Abort("ablsteady: " + where + "values must be finite and increase (value "
+                amrex::Abort("gust: " + where + "values must be finite and increase (value "
                              + std::to_string(k + 1) + ")");
             }
         }
@@ -109,7 +109,7 @@ amrex::Vector<amrex::Real> make_zlevels (const MeshInputs& m, const amrex::Geome
         const erf_grid_utils::GeometricStretch gs =
             erf_grid_utils::build_geometric_zlevels(z, m.dz0, geom.ProbHi(2), tol);
         if (!gs.converged) {
-            amrex::Abort("ablsteady: mesh.dz0 = " + std::to_string(m.dz0)
+            amrex::Abort("gust: mesh.dz0 = " + std::to_string(m.dz0)
                          + ": no geometric stretch factor reaches prob_hi z with n_cell z layers");
         }
         return z;
@@ -125,4 +125,4 @@ amrex::Vector<amrex::Real> make_zlevels (const MeshInputs& m, const amrex::Geome
     return z;
 }
 
-} // namespace ablsteady
+} // namespace gust

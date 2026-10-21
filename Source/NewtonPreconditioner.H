@@ -1,5 +1,5 @@
-#ifndef ABLSTEADY_NEWTON_PRECONDITIONER_H_
-#define ABLSTEADY_NEWTON_PRECONDITIONER_H_
+#ifndef GUST_NEWTON_PRECONDITIONER_H_
+#define GUST_NEWTON_PRECONDITIONER_H_
 
 // The Newton preconditioner of sub-phase 3.3: one SIMPLEC iteration
 // (Simplec.H) on the Newton system linearized at q,
@@ -107,7 +107,7 @@
 
 #include <memory>
 
-namespace ablsteady {
+namespace gust {
 
 //! The denominators of the pressure correction (the header): stage, the
 //! stage's SIMPLEC d = a_P - sum a_nb; diagonal, the SIMPLE d = a_P.
@@ -194,6 +194,6 @@ std::unique_ptr<NewtonPreconditioner> make_newton_preconditioner (NewtonPrecondi
                                                                   const amrex::DistributionMapping& dm,
                                                                   const LineSweepOptions& sweep = LineSweepOptions());
 
-} // namespace ablsteady
+} // namespace gust
 
 #endif

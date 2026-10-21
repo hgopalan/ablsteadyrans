@@ -1,5 +1,5 @@
-#ifndef ABLSTEADY_CONVECTION_H_
-#define ABLSTEADY_CONVECTION_H_
+#ifndef GUST_CONVECTION_H_
+#define GUST_CONVECTION_H_
 
 // Convection operator on the terrain-following C-grid (sub-phase 1.5):
 //   C(q) = (1/J) [ d_xi (F_x q) + d_eta (F_y q) + d_zeta (F_z q) ]
@@ -32,7 +32,7 @@
 #include <string>
 #include <vector>
 
-namespace ablsteady {
+namespace gust {
 
 struct ConvectionOptions
 {
@@ -86,6 +86,6 @@ void subtract_transport_divergence (Loc loc, const amrex::MultiFab& q,
                                     const amrex::Array<const amrex::MultiFab*, AMREX_SPACEDIM>& F, const Mesh& mesh,
                                     const amrex::Geometry& geom, amrex::MultiFab& out);
 
-} // namespace ablsteady
+} // namespace gust
 
 #endif

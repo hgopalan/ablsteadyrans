@@ -4,7 +4,7 @@ Turbulence model
 RANS equations describe the mean flow. The effect of turbulent eddies on the mean flow appears as extra mixing,
 which is modelled by a turbulent viscosity :math:`\nu_t`. A turbulence model computes :math:`\nu_t` from the flow.
 
-ablsteady uses the one-equation k–L model of Axell and Liungman (2001), referred to below as AL01. The model needs
+GUST uses the one-equation k–L model of Axell and Liungman (2001), referred to below as AL01. The model needs
 two quantities:
 
 - the turbulent kinetic energy :math:`k`, how energetic the eddies are, from its own transport equation

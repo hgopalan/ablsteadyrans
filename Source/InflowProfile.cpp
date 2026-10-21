@@ -9,7 +9,7 @@
 #include <sstream>
 #include <string>
 
-namespace ablsteady {
+namespace gust {
 
 std::vector<std::string> check_inflow_profile_options (const InflowProfileOptions& opt)
 {
@@ -51,7 +51,7 @@ InflowProfile::InflowProfile (const InflowProfileOptions& opt, const ReferencePr
 {
     auto err = check_inflow_profile_options(opt);
     for (const auto& e : check_reference_profile(theta_ref)) { err.push_back(e); }
-    if (!err.empty()) { amrex::Abort("ablsteady: InflowProfile: " + err.front()); }
+    if (!err.empty()) { amrex::Abort("gust: InflowProfile: " + err.front()); }
     m_hrz = theta_ref.z;
     m_hrt = theta_ref.theta;
     m_rz.resize(theta_ref.z.size());
@@ -62,7 +62,7 @@ InflowProfile::InflowProfile (const InflowProfileOptions& opt, const ReferencePr
 
     // The file, read on every rank (a small text table).
     std::ifstream is(opt.file);
-    if (!is) { amrex::Abort("ablsteady: bc.inflow_file = " + opt.file + ": cannot be opened"); }
+    if (!is) { amrex::Abort("gust: bc.inflow_file = " + opt.file + ": cannot be opened"); }
     amrex::Vector<amrex::Real> z, u, v, t, k;
     std::string line;
     int ncol = 0, lineno = 0;
@@ -76,33 +76,33 @@ InflowProfile::InflowProfile (const InflowProfileOptions& opt, const ReferencePr
         while (ss >> x) { vals.push_back(x); }
         if (vals.empty()) { continue; }
         if (vals.size() != 4 && vals.size() != 5) {
-            amrex::Abort("ablsteady: bc.inflow_file = " + opt.file + ": line " + std::to_string(lineno)
+            amrex::Abort("gust: bc.inflow_file = " + opt.file + ": line " + std::to_string(lineno)
                          + " must hold z u v theta [k] (4 or 5 values)");
         }
         if (ncol == 0) { ncol = static_cast<int>(vals.size()); }
         if (static_cast<int>(vals.size()) != ncol) {
-            amrex::Abort("ablsteady: bc.inflow_file = " + opt.file + ": line " + std::to_string(lineno)
+            amrex::Abort("gust: bc.inflow_file = " + opt.file + ": line " + std::to_string(lineno)
                          + " has a different number of columns than the first row");
         }
         for (double y : vals) {
             if (!std::isfinite(y)) {
-                amrex::Abort("ablsteady: bc.inflow_file = " + opt.file + ": line " + std::to_string(lineno)
+                amrex::Abort("gust: bc.inflow_file = " + opt.file + ": line " + std::to_string(lineno)
                              + " holds a value that is not finite");
             }
         }
         if (!z.empty() && !(vals[0] > static_cast<double>(z.back()))) {
-            amrex::Abort("ablsteady: bc.inflow_file = " + opt.file + ": heights must increase strictly (line "
+            amrex::Abort("gust: bc.inflow_file = " + opt.file + ": heights must increase strictly (line "
                          + std::to_string(lineno) + ")");
         }
         if (z.empty() && vals[0] != 0) {
-            amrex::Abort("ablsteady: bc.inflow_file = " + opt.file + ": the first height must be 0 (the ground)");
+            amrex::Abort("gust: bc.inflow_file = " + opt.file + ": the first height must be 0 (the ground)");
         }
         if (vals[3] <= 0) {
-            amrex::Abort("ablsteady: bc.inflow_file = " + opt.file + ": theta must be > 0 (line "
+            amrex::Abort("gust: bc.inflow_file = " + opt.file + ": theta must be > 0 (line "
                          + std::to_string(lineno) + ")");
         }
         if (ncol == 5 && vals[4] < 0) {
-            amrex::Abort("ablsteady: bc.inflow_file = " + opt.file + ": k must be >= 0 (line "
+            amrex::Abort("gust: bc.inflow_file = " + opt.file + ": k must be >= 0 (line "
                          + std::to_string(lineno) + ")");
         }
         z.push_back(static_cast<amrex::Real>(vals[0]));
@@ -112,7 +112,7 @@ InflowProfile::InflowProfile (const InflowProfileOptions& opt, const ReferencePr
         k.push_back(static_cast<amrex::Real>(ncol == 5 ? vals[4] : 0.0));
     }
     if (z.size() < 2) {
-        amrex::Abort("ablsteady: bc.inflow_file = " + opt.file + ": needs at least two rows");
+        amrex::Abort("gust: bc.inflow_file = " + opt.file + ": needs at least two rows");
     }
     m_has_k = (ncol == 5);
     m_hz = z; m_hu = u; m_hv = v; m_ht = t; m_hk = k;
@@ -133,19 +133,19 @@ InflowProfile::InflowProfile (const amrex::Vector<amrex::Real>& z, const amrex::
     // m_opt keeps the default Cmu0, kappa, z0, length and l_max: the table
     // always has k, and its users (the initializer) do not read nu_t, so
     // they are not used.
-    for (const auto& e : check_reference_profile(theta_ref)) { amrex::Abort("ablsteady: InflowProfile: " + e); }
+    for (const auto& e : check_reference_profile(theta_ref)) { amrex::Abort("gust: InflowProfile: " + e); }
     const amrex::Long n = z.size();
     if (n < 2 || u.size() != n || v.size() != n || theta.size() != n || k.size() != n) {
-        amrex::Abort("ablsteady: column guess: the table needs at least two rows of equal length");
+        amrex::Abort("gust: column guess: the table needs at least two rows of equal length");
     }
-    if (z[0] != 0) { amrex::Abort("ablsteady: column guess: the first height must be 0 (the ground)"); }
+    if (z[0] != 0) { amrex::Abort("gust: column guess: the first height must be 0 (the ground)"); }
     for (amrex::Long i = 0; i < n; ++i) {
         for (const amrex::Real x : {z[i], u[i], v[i], theta[i], k[i]}) {
-            if (!std::isfinite(x)) { amrex::Abort("ablsteady: column guess: the table holds a value that is not finite"); }
+            if (!std::isfinite(x)) { amrex::Abort("gust: column guess: the table holds a value that is not finite"); }
         }
-        if (i > 0 && !(z[i] > z[i - 1])) { amrex::Abort("ablsteady: column guess: heights must increase strictly"); }
-        if (!(theta[i] > 0)) { amrex::Abort("ablsteady: column guess: theta must be > 0"); }
-        if (k[i] < 0) { amrex::Abort("ablsteady: column guess: k must be >= 0"); }
+        if (i > 0 && !(z[i] > z[i - 1])) { amrex::Abort("gust: column guess: heights must increase strictly"); }
+        if (!(theta[i] > 0)) { amrex::Abort("gust: column guess: theta must be > 0"); }
+        if (k[i] < 0) { amrex::Abort("gust: column guess: k must be >= 0"); }
     }
     m_hrz = theta_ref.z;
     m_hrt = theta_ref.theta;
@@ -204,4 +204,4 @@ InflowProfile::View InflowProfile::view_with (const amrex::Real* tz, const amrex
     return p;
 }
 
-} // namespace ablsteady
+} // namespace gust

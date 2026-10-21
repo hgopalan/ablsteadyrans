@@ -9,9 +9,9 @@
 #                                              archive (run on a CPU login node)
 #
 # Environment:
-#   ABLSTEADY_ACCOUNT   Kestrel allocation (required for submit)
-#   ABLSTEADY_REF_WORK  work directory (default /scratch/$USER/ablsteady-refs)
-#   ABLSTEADY_REFAVG    ablsteady_refavg to use (default build-kestrel-cpu/ablsteady_refavg)
+#   GUST_ACCOUNT   Kestrel allocation (required for submit)
+#   GUST_REF_WORK  work directory (default /scratch/$USER/gust-refs)
+#   GUST_REFAVG    gust_refavg to use (default build-kestrel-cpu/gust_refavg)
 #
 # Each run writes a plotfile every window/24 seconds of physical time
 # (erf.plot_per_1); the archive is the trapezoid time average of the
@@ -25,12 +25,16 @@
 # documentation as of October 2026 and may need adjusting.
 set -euo pipefail
 
+# Called ABLSTEADY_* before the rename to GUST (October 2026); the old names still work.
+GUST_ACCOUNT=${GUST_ACCOUNT:-${ABLSTEADY_ACCOUNT:-}}
+[ -n "$GUST_ACCOUNT" ] || unset GUST_ACCOUNT
+
 here=$(cd "$(dirname "$0")" && pwd)
 src=$(cd "$here/../.." && pwd)
-work=${ABLSTEADY_REF_WORK:-/scratch/$USER/ablsteady-refs}
+work=${GUST_REF_WORK:-${ABLSTEADY_REF_WORK:-/scratch/$USER/gust-refs}}
 erf_sha=$(awk '$1 == "erf" {print $2}' "$src/external/VERSIONS")
 erf_src="$work/ERF"
-refavg=${ABLSTEADY_REFAVG:-$src/build-kestrel-cpu/ablsteady_refavg}
+refavg=${GUST_REFAVG:-${ABLSTEADY_REFAVG:-$src/build-kestrel-cpu/gust_refavg}}
 
 usage () { sed -n '2,25p' "$0" >&2; exit 2; }
 
@@ -93,14 +97,14 @@ build)
         opts+=(-DERF_ENABLE_CUDA=ON -DAMReX_CUDA_ARCH=9.0 -DCMAKE_CUDA_HOST_COMPILER=CC)
     fi
     cmake -S "$erf_src" -B "$erf_build" "${opts[@]}"
-    cmake --build "$erf_build" -j "${ABLSTEADY_BUILD_JOBS:-16}"
+    cmake --build "$erf_build" -j "${GUST_BUILD_JOBS:-${ABLSTEADY_BUILD_JOBS:-16}}"
     echo "ERF $erf_sha built in $erf_build"
     ;;
 
 smoke)
     # RT-1.1.1: guards the reference generation. Needs compute nodes.
     if [ -z "${SLURM_JOB_ID:-}" ]; then
-        echo "run inside an allocation, e.g. salloc -A \$ABLSTEADY_ACCOUNT -N 1 -t 01:00:00" >&2
+        echo "run inside an allocation, e.g. salloc -A \$GUST_ACCOUNT -N 1 -t 01:00:00" >&2
         exit 2
     fi
     # shellcheck source=kestrel_env.sh
@@ -109,7 +113,7 @@ smoke)
     ;;
 
 submit)
-    : "${ABLSTEADY_ACCOUNT:?set ABLSTEADY_ACCOUNT to the Kestrel allocation}"
+    : "${GUST_ACCOUNT:?set GUST_ACCOUNT to the Kestrel allocation}"
     [ "$#" -gt 0 ] || usage
     [ "$1" = all ] && set -- $all_cases
     for c in "$@"; do
@@ -141,7 +145,7 @@ submit)
         }
         cat > "$run/job.sh" <<JOB
 #!/usr/bin/env bash
-#SBATCH --account=$ABLSTEADY_ACCOUNT
+#SBATCH --account=$GUST_ACCOUNT
 #SBATCH --job-name=ref-$c-$target
 #SBATCH --time=$walltime
 #SBATCH --nodes=1

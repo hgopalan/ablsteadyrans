@@ -23,11 +23,11 @@
 
 namespace {
 
-using ablsteady::Loc;
-using ablsteady::PoissonFace;
-using ablsteady::SurfaceLayerOptions;
-using ablsteady::ptest::PCase;
-using ablsteady::trtest::tol;
+using gust::Loc;
+using gust::PoissonFace;
+using gust::SurfaceLayerOptions;
+using gust::ptest::PCase;
+using gust::trtest::tol;
 
 // UT-1.7.1. ERF's similarity functions (the copied ERF_MOSTUtils.H; the drift
 // check keeps the file byte-identical to ERF's) against a table computed
@@ -52,7 +52,7 @@ TEST(SimilarityFunctions, MatchTheReferenceTable)
     const double t = tol(1e-14, 1e-6);
     // ERF's functions select between their branches; the compiler may evaluate
     // the unstable sqrt(1 - 16 zeta) for a stable zeta too (ERF builds without
-    // -fno-math-errno, where sqrt cannot be hoisted; ablsteady with it), which
+    // -fno-math-errno, where sqrt cannot be hoisted; GUST with it), which
     // would raise the invalid trap on a discarded value. Off while they are called.
     const auto prev_fpe = amrex::disableFPExcept(amrex::FPExcept::invalid);
     for (const Row& r : rows) {
@@ -64,17 +64,17 @@ TEST(SimilarityFunctions, MatchTheReferenceTable)
             EXPECT_NEAR(got[n], want[n], t * (1 + std::abs(want[n]))) << names[n] << " at z/L = " << r.zeta;
         }
     }
-    // ablsteady's branch-safe most_phi (the ground ghost fill) equals the
+    // GUST's branch-safe most_phi (the ground ghost fill) equals the
     // table's phi at every row and ERF's functions in between.
     for (const Row& r : rows) {
         amrex::Real pm, ph;
-        ablsteady::most_phi(static_cast<amrex::Real>(r.zeta), pm, ph);
+        gust::most_phi(static_cast<amrex::Real>(r.zeta), pm, ph);
         EXPECT_NEAR(pm, r.phi_m, t * (1 + std::abs(r.phi_m))) << r.zeta;
         EXPECT_NEAR(ph, r.phi_h, t * (1 + std::abs(r.phi_h))) << r.zeta;
     }
     for (double zeta = -5; zeta <= 5; zeta += 0.125) {
         amrex::Real pm, ph;
-        ablsteady::most_phi(static_cast<amrex::Real>(zeta), pm, ph);
+        gust::most_phi(static_cast<amrex::Real>(zeta), pm, ph);
         const auto z = static_cast<amrex::Real>(zeta);
         EXPECT_NEAR(pm, sf.calc_phi_m(z), t * (1 + std::abs(double(pm)))) << zeta;
         EXPECT_NEAR(ph, sf.calc_phi_h(z), t * (1 + std::abs(double(ph)))) << zeta;
@@ -118,15 +118,15 @@ TEST(SurfaceLayer, ReferenceIntervalIsHalfOpen)
     const std::vector<double> h = centres(10, 1.1, n);
     auto H = [&] (int k) { return static_cast<amrex::Real>(h[static_cast<std::size_t>(k)]); };
     for (int k = 0; k < n - 1; ++k) {
-        EXPECT_EQ(ablsteady::reference_interval(H, n, H(k)), k) << "centre " << k;
+        EXPECT_EQ(gust::reference_interval(H, n, H(k)), k) << "centre " << k;
         const double face = h[static_cast<std::size_t>(k)] + 0.5 * 10 * std::pow(1.1, k);   // top face of cell k
-        EXPECT_EQ(ablsteady::reference_interval(H, n, static_cast<amrex::Real>(face)), k) << "face above centre " << k;
+        EXPECT_EQ(gust::reference_interval(H, n, static_cast<amrex::Real>(face)), k) << "face above centre " << k;
     }
-    EXPECT_EQ(ablsteady::reference_interval(H, n, H(n - 1)), n - 2);
-    EXPECT_EQ(ablsteady::reference_interval(H, n, amrex::Real(10)), 0);
-    EXPECT_EQ(ablsteady::reference_interval(H, n, amrex::Real(55.3)), 4);   // [53.7, 69.1)
-    EXPECT_EQ(ablsteady::reference_interval(H, n, amrex::Real(4.9)), -1);
-    EXPECT_EQ(ablsteady::reference_interval(H, n, H(n - 1) * amrex::Real(1.01)), n - 1);
+    EXPECT_EQ(gust::reference_interval(H, n, H(n - 1)), n - 2);
+    EXPECT_EQ(gust::reference_interval(H, n, amrex::Real(10)), 0);
+    EXPECT_EQ(gust::reference_interval(H, n, amrex::Real(55.3)), 4);   // [53.7, 69.1)
+    EXPECT_EQ(gust::reference_interval(H, n, amrex::Real(4.9)), -1);
+    EXPECT_EQ(gust::reference_interval(H, n, H(n - 1) * amrex::Real(1.01)), n - 1);
 }
 
 
@@ -151,14 +151,14 @@ PCase flat_column (int nz, int nx = 4, double dz0 = 10)
 // The 120 m cosine hill of the transport tests, 16 x 12 x 8 cells.
 PCase hill ()
 {
-    ablsteady::ptest::Manufactured ms;
+    gust::ptest::Manufactured ms;
     ms.Lx = 1000;
     ms.Ly = 800;
     ms.H0 = 120;
-    return ablsteady::ptest::make_case(16, 12, 8, PoissonFace::periodic, PoissonFace::periodic, ms, 0, true);
+    return gust::ptest::make_case(16, 12, 8, PoissonFace::periodic, PoissonFace::periodic, ms, 0, true);
 }
 
-void define_state (ablsteady::State& q, const PCase& c)
+void define_state (gust::State& q, const PCase& c)
 {
     q.define(c.ba, c.dm);
     amrex::MultiFab::Copy(q.z_phys_nd, c.z, 0, 0, 1, c.z.nGrow());
@@ -175,7 +175,7 @@ double at00 (const amrex::MultiFab& mf)
     return v;
 }
 
-const ablsteady::BuoyancyOptions kBuoyancy{};
+const gust::BuoyancyOptions kBuoyancy{};
 
 // UT-1.7.3. u* from the log law at z_ref on the stretched column (dz0 = 10 m,
 // ratio 1.1, 24 layers): the state carries u = (u*/kappa) ln((z + z0)/z0) at
@@ -187,21 +187,21 @@ const ablsteady::BuoyancyOptions kBuoyancy{};
 TEST(SurfaceLayer, LogLawFrictionVelocityOnAStretchedColumn)
 {
     PCase c = flat_column(24);
-    ablsteady::State q;
+    gust::State q;
     define_state(q, c);
     const double us = 0.45, z0 = 0.1, kappa = 0.41;
     // Clamped at 0: ghost cells below the ground (z < 0) are not used.
     auto logu = [&] (double z) { return us / kappa * std::log((std::max(z, 0.0) + z0) / z0) / std::sqrt(2.0); };
-    ablsteady::trtest::fill_loc(q.u, Loc::xface, c, [&] (double, double, double z) { return logu(z); });
-    ablsteady::trtest::fill_loc(q.v, Loc::yface, c, [&] (double, double, double z) { return logu(z); });
+    gust::trtest::fill_loc(q.u, Loc::xface, c, [&] (double, double, double z) { return logu(z); });
+    gust::trtest::fill_loc(q.v, Loc::yface, c, [&] (double, double, double z) { return logu(z); });
     q.w.setVal(0.0);
     const std::vector<double> h = centres(10, 1.1, 24);
     for (double zr : {0.0, 10.0, 55.3, h[6]}) {
         SurfaceLayerOptions opt;
         opt.z0 = static_cast<amrex::Real>(z0);
         opt.zref = static_cast<amrex::Real>(zr);
-        ablsteady::SurfaceState s;
-        ablsteady::compute_surface_state(q, opt, kBuoyancy, c.mesh, c.geom, s);
+        gust::SurfaceState s;
+        gust::compute_surface_state(q, opt, kBuoyancy, c.mesh, c.geom, s);
         EXPECT_NEAR(at00(s.ustar), us, tol(2e-5, 1e-4) * us) << "zref " << zr;
     }
 }
@@ -232,7 +232,7 @@ double most_ustar (double U, double d, double z0, double qs, double m)
 TEST(SurfaceLayer, MostFrictionVelocityWithAHeatFlux)
 {
     PCase c = flat_column(24);
-    ablsteady::State q;
+    gust::State q;
     define_state(q, c);
     q.v.setVal(0.0);
     q.w.setVal(0.0);
@@ -245,8 +245,8 @@ TEST(SurfaceLayer, MostFrictionVelocityWithAHeatFlux)
         opt.z0 = static_cast<amrex::Real>(z0);
         opt.stability = SurfaceLayerOptions::Stability::heat_flux;
         opt.heat_flux = static_cast<amrex::Real>(cs.qs);
-        ablsteady::SurfaceState s;
-        ablsteady::compute_surface_state(q, opt, kBuoyancy, c.mesh, c.geom, s);
+        gust::SurfaceState s;
+        gust::compute_surface_state(q, opt, kBuoyancy, c.mesh, c.geom, s);
         const double want = most_ustar(cs.U, d, z0, cs.qs, 1.0);   // ln((d + z0)/z0) = 3.9: both floors are 1
         EXPECT_GT(at00(s.ustar), 0.0);
         EXPECT_NEAR(at00(s.ustar), want, tol(1e-10, 1e-4) * want) << "U " << cs.U << " q " << cs.qs;
@@ -267,12 +267,12 @@ TEST(SurfaceLayer, MostFrictionVelocityWithAHeatFlux)
 TEST(SurfaceLayer, RoughWallFollowsTheLogLaw)
 {
     PCase c = flat_column(24, 4, 1.0);
-    ablsteady::State q;
+    gust::State q;
     define_state(q, c);
     const double us = 0.45, z0 = 0.5, kappa = 0.41;
     auto logu = [&] (double z) { return us / kappa * std::log((std::max(z, 0.0) + z0) / z0) / std::sqrt(2.0); };
-    ablsteady::trtest::fill_loc(q.u, Loc::xface, c, [&] (double, double, double z) { return logu(z); });
-    ablsteady::trtest::fill_loc(q.v, Loc::yface, c, [&] (double, double, double z) { return logu(z); });
+    gust::trtest::fill_loc(q.u, Loc::xface, c, [&] (double, double, double z) { return logu(z); });
+    gust::trtest::fill_loc(q.v, Loc::yface, c, [&] (double, double, double z) { return logu(z); });
     q.w.setVal(0.0);
     const double d = centres(1, 1.1, 24)[0];
     const double lz = std::log((d + z0) / z0);
@@ -282,16 +282,16 @@ TEST(SurfaceLayer, RoughWallFollowsTheLogLaw)
         SurfaceLayerOptions opt;
         opt.z0 = static_cast<amrex::Real>(z0);
         opt.zref = static_cast<amrex::Real>(zr);
-        ablsteady::SurfaceState s;
-        ablsteady::compute_surface_state(q, opt, kBuoyancy, c.mesh, c.geom, s);
+        gust::SurfaceState s;
+        gust::compute_surface_state(q, opt, kBuoyancy, c.mesh, c.geom, s);
         EXPECT_NEAR(at00(s.ustar), us, tol(2e-5, 1e-4) * us) << "log_law, zref " << zr;
     }
     {
         SurfaceLayerOptions opt;
         opt.z0 = static_cast<amrex::Real>(z0);
         opt.denominator_floor = Floor::one;
-        ablsteady::SurfaceState s;
-        ablsteady::compute_surface_state(q, opt, kBuoyancy, c.mesh, c.geom, s);
+        gust::SurfaceState s;
+        gust::compute_surface_state(q, opt, kBuoyancy, c.mesh, c.geom, s);
         EXPECT_NEAR(at00(s.ustar), us * lz, tol(2e-5, 1e-4) * us) << "one";
     }
     struct Case { double U, qs; };
@@ -304,8 +304,8 @@ TEST(SurfaceLayer, RoughWallFollowsTheLogLaw)
             opt.stability = SurfaceLayerOptions::Stability::heat_flux;
             opt.heat_flux = static_cast<amrex::Real>(cs.qs);
             opt.denominator_floor = fl;
-            ablsteady::SurfaceState s;
-            ablsteady::compute_surface_state(q, opt, kBuoyancy, c.mesh, c.geom, s);
+            gust::SurfaceState s;
+            gust::compute_surface_state(q, opt, kBuoyancy, c.mesh, c.geom, s);
             const double want = most_ustar(cs.U, d, z0, cs.qs, fl == Floor::one ? 1.0 : std::min(lz, 1.0));
             EXPECT_GT(at00(s.ustar), 0.0);
             EXPECT_NEAR(at00(s.ustar), want, tol(1e-10, 1e-4) * want)
@@ -321,7 +321,7 @@ TEST(SurfaceLayer, DenominatorFloorKeyIsChecked)
     pp.add("surface_denominator_floor", std::string("two"));
     std::string what;
     try {
-        (void) ablsteady::read_surface_layer_options();
+        (void) gust::read_surface_layer_options();
     } catch (const std::runtime_error& e) {
         what = e.what();
     }
@@ -336,7 +336,7 @@ TEST(SurfaceLayer, DenominatorFloorKeyIsChecked)
 TEST(SurfaceLayer, WallKAndWallViscosity)
 {
     PCase c = flat_column(24);
-    ablsteady::State q;
+    gust::State q;
     define_state(q, c);
     q.u.setVal(6.0);
     q.v.setVal(2.0);
@@ -347,8 +347,8 @@ TEST(SurfaceLayer, WallKAndWallViscosity)
             opt.stability = SurfaceLayerOptions::Stability::heat_flux;
             opt.heat_flux = static_cast<amrex::Real>(qs);
         }
-        ablsteady::SurfaceState s;
-        ablsteady::compute_surface_state(q, opt, kBuoyancy, c.mesh, c.geom, s);
+        gust::SurfaceState s;
+        gust::compute_surface_state(q, opt, kBuoyancy, c.mesh, c.geom, s);
         for (amrex::MFIter mfi(s.ustar, false); mfi.isValid(); ++mfi) {
             const auto us = s.ustar.const_array(mfi);
             const auto kw = s.kwall.const_array(mfi);
@@ -358,7 +358,7 @@ TEST(SurfaceLayer, WallKAndWallViscosity)
                 const amrex::Real inv = amrex::Real(1) / (opt.Cmu0 * opt.Cmu0);
                 if (qs == 0) {
                     EXPECT_EQ(kw(i, j, 0), u * u * inv);
-                    const double nut = ablsteady::wall_eddy_viscosity(opt.kappa, u, d0(i, j, 0), opt.z0);
+                    const double nut = gust::wall_eddy_viscosity(opt.kappa, u, d0(i, j, 0), opt.z0);
                     EXPECT_NEAR(nut, opt.Cmu0 * std::sqrt(kw(i, j, 0)) * opt.kappa * (d0(i, j, 0) + opt.z0),
                                 tol(1e-14, 1e-6) * nut);
                 } else {
@@ -372,17 +372,17 @@ TEST(SurfaceLayer, WallKAndWallViscosity)
 }
 
 // The manufactured flow of the transport tests on the hill, theta and k varying.
-void hill_state (ablsteady::State& q, const PCase& c)
+void hill_state (gust::State& q, const PCase& c)
 {
     define_state(q, c);
-    const auto fl = ablsteady::trtest::make_flow(c, 120);
+    const auto fl = gust::trtest::make_flow(c, 120);
     const amrex::Array<amrex::MultiFab*, 3> vel{&q.u, &q.v, &q.w};
     for (int d = 0; d < 3; ++d) {
-        ablsteady::trtest::fill_loc(*vel[d], ablsteady::velocity_loc(d), c,
+        gust::trtest::fill_loc(*vel[d], gust::velocity_loc(d), c,
                                     [&] (double x, double y, double z) { return fl.vel(d, x, y, z); });
     }
-    ablsteady::trtest::fill_loc(q.theta, Loc::cell, c, [&] (double x, double y, double z) { return 300 + fl.q(x, y, z); });
-    ablsteady::trtest::fill_loc(q.tke, Loc::cell, c, [&] (double x, double y, double z) { return 0.3 + 0.1 * fl.q(x, y, z); });
+    gust::trtest::fill_loc(q.theta, Loc::cell, c, [&] (double x, double y, double z) { return 300 + fl.q(x, y, z); });
+    gust::trtest::fill_loc(q.tke, Loc::cell, c, [&] (double x, double y, double z) { return 0.3 + 0.1 * fl.q(x, y, z); });
     q.p.setVal(0.0);
 }
 
@@ -393,11 +393,11 @@ void hill_state (ablsteady::State& q, const PCase& c)
 TEST(SurfaceLayer, ColumnsOverTheHill)
 {
     PCase c = hill();
-    ablsteady::State q;
+    gust::State q;
     hill_state(q, c);
     SurfaceLayerOptions opt;
-    ablsteady::SurfaceState s;
-    ablsteady::compute_surface_state(q, opt, kBuoyancy, c.mesh, c.geom, s);
+    gust::SurfaceState s;
+    gust::compute_surface_state(q, opt, kBuoyancy, c.mesh, c.geom, s);
     const auto dxinv = c.geom.InvCellSizeArray();
     for (amrex::MFIter mfi(s.tau, false); mfi.isValid(); ++mfi) {
         const auto ta = s.tau.const_array(mfi);
@@ -442,7 +442,7 @@ TEST(SurfaceLayer, ColumnsOverTheHill)
 TEST(SurfaceLayer, WallModelInTheResidual)
 {
     PCase c = hill();
-    ablsteady::State q;
+    gust::State q;
     hill_state(q, c);
     SurfaceLayerOptions opt;
     opt.stability = SurfaceLayerOptions::Stability::heat_flux;
@@ -450,29 +450,29 @@ TEST(SurfaceLayer, WallModelInTheResidual)
     amrex::MultiFab nu(c.ba, c.dm, 1, 1), gk(c.ba, c.dm, 1, 1);
     nu.setVal(2.0);
     gk.setVal(1.0);
-    ablsteady::ResidualInputs in;
+    gust::ResidualInputs in;
     in.nu = &nu;
     in.gamma_theta = &nu;
     in.gamma_tke = &gk;
     in.theta_ref.z = {0};
     in.theta_ref.theta = {300};
-    ablsteady::SurfaceState s;
-    ablsteady::compute_surface_state(q, opt, in.buoyancy, c.mesh, c.geom, s);
+    gust::SurfaceState s;
+    gust::compute_surface_state(q, opt, in.buoyancy, c.mesh, c.geom, s);
     // The interior fluxes and the wall fluxes on the ground faces.
     amrex::Array<amrex::Array<amrex::MultiFab, 3>, 3> Gm;
     amrex::Array<amrex::MultiFab, 3> Gt, Gk;
-    ablsteady::momentum_diffusive_fluxes({&q.u, &q.v, &q.w}, nu, c.z, c.mesh, c.geom, Gm);
-    ablsteady::scalar_diffusive_fluxes(q.theta, nu, c.z, c.mesh, c.geom, Gt);
-    ablsteady::scalar_diffusive_fluxes(q.tke, gk, c.z, c.mesh, c.geom, Gk);
+    gust::momentum_diffusive_fluxes({&q.u, &q.v, &q.w}, nu, c.z, c.mesh, c.geom, Gm);
+    gust::scalar_diffusive_fluxes(q.theta, nu, c.z, c.mesh, c.geom, Gt);
+    gust::scalar_diffusive_fluxes(q.tke, gk, c.z, c.mesh, c.geom, Gk);
     const amrex::Real dzinv = c.geom.InvCellSize(2);
 
     for (auto mode : {SurfaceLayerOptions::WallK::dirichlet, SurfaceLayerOptions::WallK::source}) {
         opt.wall_k = mode;
-        ablsteady::ResidualFields R, R0;
+        gust::ResidualFields R, R0;
         in.surface = &opt;
-        ablsteady::residual(q, in, c.mesh, c.geom, R);
+        gust::residual(q, in, c.mesh, c.geom, R);
         in.surface = nullptr;
-        ablsteady::residual(q, in, c.mesh, c.geom, R0);
+        gust::residual(q, in, c.mesh, c.geom, R0);
         // field, location, interior flux, wall flux
         // The wall fluxes, written out independently of set_ground_fluxes.
         struct F { const amrex::MultiFab* r; const amrex::MultiFab* r0; int t; const amrex::MultiFab* gi; };
@@ -550,29 +550,29 @@ TEST(SurfaceLayer, WallModelInTheResidual)
 TEST(SurfaceLayer, WallRowsOfTheLineJacobian)
 {
     PCase c = hill();
-    ablsteady::State q;
+    gust::State q;
     hill_state(q, c);
     SurfaceLayerOptions opt;
     amrex::MultiFab nu(c.ba, c.dm, 1, 1);
     nu.setVal(2.0);
-    ablsteady::ResidualInputs in;
+    gust::ResidualInputs in;
     in.nu = &nu;
     in.gamma_theta = &nu;
     in.gamma_tke = &nu;
     in.theta_ref.z = {0};
     in.theta_ref.theta = {300};
-    ablsteady::SurfaceState s;
-    ablsteady::compute_surface_state(q, opt, in.buoyancy, c.mesh, c.geom, s);
+    gust::SurfaceState s;
+    gust::compute_surface_state(q, opt, in.buoyancy, c.mesh, c.geom, s);
     const amrex::Real dzinv = c.geom.InvCellSize(2);
-    using E = ablsteady::Equation;
+    using E = gust::Equation;
     for (auto mode : {SurfaceLayerOptions::WallK::dirichlet, SurfaceLayerOptions::WallK::source}) {
         opt.wall_k = mode;
         for (E eq : {E::u, E::v, E::theta, E::tke}) {
             amrex::MultiFab tri, tri0;
             in.surface = &opt;
-            ablsteady::line_jacobian(q, in, eq, 2, c.mesh, c.geom, tri);
+            gust::line_jacobian(q, in, eq, 2, c.mesh, c.geom, tri);
             in.surface = nullptr;
-            ablsteady::line_jacobian(q, in, eq, 2, c.mesh, c.geom, tri0);
+            gust::line_jacobian(q, in, eq, 2, c.mesh, c.geom, tri0);
             double worst = 0, scale = 0;
             for (amrex::MFIter mfi(tri, false); mfi.isValid(); ++mfi) {
                 const auto t = tri.const_array(mfi);
@@ -618,7 +618,7 @@ TEST(SurfaceLayer, WallRowsOfTheLineJacobian)
 TEST(SurfaceLayer, WallKRowAtLowWind)
 {
     PCase c = flat_column(24);
-    ablsteady::State q;
+    gust::State q;
     define_state(q, c);
     q.u.setVal(0.01);
     q.v.setVal(0.0);
@@ -626,12 +626,12 @@ TEST(SurfaceLayer, WallKRowAtLowWind)
     q.tke.setVal(0.2);
     SurfaceLayerOptions opt;
     opt.z0 = amrex::Real(0.001);
-    ablsteady::SurfaceState s;
-    ablsteady::compute_surface_state(q, opt, kBuoyancy, c.mesh, c.geom, s);
+    gust::SurfaceState s;
+    gust::compute_surface_state(q, opt, kBuoyancy, c.mesh, c.geom, s);
     EXPECT_LT(at00(s.ustar), 0.01);
     amrex::MultiFab R(c.ba, c.dm, 1, 0);
     R.setVal(0.0);
-    ablsteady::apply_wall_k(s, opt, q.tke, R);
+    gust::apply_wall_k(s, opt, q.tke, R);
     double r00 = 0;
     for (amrex::MFIter mfi(R, false); mfi.isValid(); ++mfi) {
         if (mfi.validbox().contains(amrex::IntVect(0, 0, 0))) { r00 = R[mfi](amrex::IntVect(0, 0, 0)); }
@@ -646,7 +646,7 @@ TEST(SurfaceLayer, WallKRowAtLowWind)
 TEST(SurfaceLayer, InvalidOptionsAreRefused)
 {
     SurfaceLayerOptions opt;
-    EXPECT_TRUE(ablsteady::check_surface_layer_options(opt).empty());
+    EXPECT_TRUE(gust::check_surface_layer_options(opt).empty());
     struct Bad { const char* name; amrex::Real SurfaceLayerOptions::* field; amrex::Real value; };
     const Bad bad[] = {{"z0", &SurfaceLayerOptions::z0, 0}, {"Cmu0", &SurfaceLayerOptions::Cmu0, -1},
                        {"kappa", &SurfaceLayerOptions::kappa, std::numeric_limits<amrex::Real>::quiet_NaN()},
@@ -654,43 +654,43 @@ TEST(SurfaceLayer, InvalidOptionsAreRefused)
     for (const Bad& b : bad) {
         SurfaceLayerOptions o;
         o.*(b.field) = b.value;
-        const auto err = ablsteady::check_surface_layer_options(o);
+        const auto err = gust::check_surface_layer_options(o);
         ASSERT_FALSE(err.empty()) << b.name;
         EXPECT_NE(err.at(0).find(b.name), std::string::npos) << b.name;
     }
     opt.heat_flux = 1;
-    EXPECT_NE(ablsteady::check_surface_layer_options(opt).at(0).find("neutral"), std::string::npos);
+    EXPECT_NE(gust::check_surface_layer_options(opt).at(0).find("neutral"), std::string::npos);
     opt.stability = SurfaceLayerOptions::Stability::heat_flux;
     opt.heat_flux = std::numeric_limits<amrex::Real>::infinity();
-    EXPECT_NE(ablsteady::check_surface_layer_options(opt).at(0).find("heat_flux"), std::string::npos);
+    EXPECT_NE(gust::check_surface_layer_options(opt).at(0).find("heat_flux"), std::string::npos);
     opt = SurfaceLayerOptions{};
 
     PCase c = flat_column(24);
-    ablsteady::State q;
+    gust::State q;
     define_state(q, c);
     q.u.setVal(5.0);
     q.v.setVal(0.0);
     q.w.setVal(0.0);
-    ablsteady::SurfaceState s;
+    gust::SurfaceState s;
     opt.zref = 1.0e5;
-    EXPECT_THROW(ablsteady::compute_surface_state(q, opt, kBuoyancy, c.mesh, c.geom, s), std::runtime_error);
+    EXPECT_THROW(gust::compute_surface_state(q, opt, kBuoyancy, c.mesh, c.geom, s), std::runtime_error);
     opt.zref = 2;   // below the first centre (5 m)
-    EXPECT_THROW(ablsteady::compute_surface_state(q, opt, kBuoyancy, c.mesh, c.geom, s), std::runtime_error);
+    EXPECT_THROW(gust::compute_surface_state(q, opt, kBuoyancy, c.mesh, c.geom, s), std::runtime_error);
     opt.zref = 0;
-    ablsteady::BuoyancyOptions b;
+    gust::BuoyancyOptions b;
     b.theta0 = 0;
-    EXPECT_THROW(ablsteady::compute_surface_state(q, opt, b, c.mesh, c.geom, s), std::runtime_error);
+    EXPECT_THROW(gust::compute_surface_state(q, opt, b, c.mesh, c.geom, s), std::runtime_error);
     // The F overload of line_jacobian needs the surface state with a wall model.
     amrex::MultiFab nu(c.ba, c.dm, 1, 1), tri;
     nu.setVal(1.0);
-    ablsteady::ResidualInputs in;
+    gust::ResidualInputs in;
     in.nu = &nu;
     in.gamma_theta = &nu;
     in.gamma_tke = &nu;
     in.surface = &opt;
     amrex::Array<amrex::MultiFab, 3> F;
-    ablsteady::transport_fluxes(q.u, q.v, q.w, q.z_phys_nd, c.mesh, c.geom, F);
-    EXPECT_THROW(ablsteady::line_jacobian({&F[0], &F[1], &F[2]}, q.z_phys_nd, in, ablsteady::Equation::u, 2, c.mesh,
+    gust::transport_fluxes(q.u, q.v, q.w, q.z_phys_nd, c.mesh, c.geom, F);
+    EXPECT_THROW(gust::line_jacobian({&F[0], &F[1], &F[2]}, q.z_phys_nd, in, gust::Equation::u, 2, c.mesh,
                                           c.geom, tri), std::runtime_error);
 }
 

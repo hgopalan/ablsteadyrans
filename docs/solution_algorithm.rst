@@ -2,7 +2,7 @@ Solution algorithm
 ==================
 
 The steady equations :math:`R(q) = 0` are nonlinear and strongly coupled, so they cannot be solved in one step.
-ablsteady approaches the solution by a *pseudo-time* iteration: it marches an artificial time until nothing changes
+GUST approaches the solution by a *pseudo-time* iteration: it marches an artificial time until nothing changes
 any more. The march does not need to be time-accurate, so each cell may take its own, as-large-as-stable time step.
 Only the end point matters.
 

@@ -35,8 +35,8 @@
 
 namespace {
 
-using namespace ablsteady::ptest;
-using ablsteady::PoissonFace;
+using namespace gust::ptest;
+using gust::PoissonFace;
 
 
 // UT-1.10.1: second order for every lateral BC (periodic, Neumann, Dirichlet)
@@ -54,7 +54,7 @@ TEST (Poisson, ManufacturedSecondOrderAllBCs)
             for (const int nx : {16, 32, 64}) {
                 PCase c = make_case(nx, 1, nx / 2, kx, PoissonFace::periodic, ms, 1, true);
                 const auto out = solve_ms(c, ms, make_bc(kx, PoissonFace::periodic, top));
-                EXPECT_LE(out.res.final_residual, 10 * ablsteady::PoissonOptions{}.reltol * out.res.initial_residual);
+                EXPECT_LE(out.res.final_residual, 10 * gust::PoissonOptions{}.reltol * out.res.initial_residual);
                 EXPECT_EQ(out.res.singular, kx != PoissonFace::dirichlet && top != PoissonFace::dirichlet);
                 err[n++] = out.err;
             }
@@ -70,7 +70,7 @@ TEST (Poisson, ManufacturedSecondOrderAllBCs)
     for (const int nx : {16, 32}) {
         PCase c = make_case(nx, nx, nx / 2, PoissonFace::neumann, PoissonFace::dirichlet, ms, 1, true);
         const auto out = solve_ms(c, ms, make_bc(PoissonFace::neumann, PoissonFace::dirichlet, PoissonFace::dirichlet));
-        EXPECT_LE(out.res.final_residual, 10 * ablsteady::PoissonOptions{}.reltol * out.res.initial_residual);
+        EXPECT_LE(out.res.final_residual, 10 * gust::PoissonOptions{}.reltol * out.res.initial_residual);
         err[n++] = out.err;
     }
     EXPECT_GE(order_of(err, 0), tol(1.9, 1.8)) << "3-D: " << err[0] << " " << err[1];
@@ -182,16 +182,16 @@ TEST (Poisson, UnitCoefficientsAreThePlainOperator)
         b[d].setVal(1.0);
     }
     const auto bc = make_bc(PoissonFace::neumann, PoissonFace::periodic, PoissonFace::dirichlet);
-    ablsteady::PoissonSolver s0(c.mesh, c.geom, c.z, back_end_a()), s1(c.mesh, c.geom, c.z, back_end_a());
+    gust::PoissonSolver s0(c.mesh, c.geom, c.z, back_end_a()), s1(c.mesh, c.geom, c.z, back_end_a());
     const auto r0 = s0.solve(rhs, p0, {}, bc, &f0);
-    ablsteady::FaceCoeffs ones;
+    gust::FaceCoeffs ones;
     ones.x = &b[0];
     ones.y = &b[1];
     ones.z = &b[2];
     const auto r1 = s1.solve(rhs1, p1, ones, bc, &f1);
     EXPECT_EQ(r0.iterations, r1.iterations);
-    EXPECT_EQ(ablsteady::test::count_bit_differences(p0, p1, 1), 0);
-    for (int d = 0; d < 3; ++d) { EXPECT_EQ(ablsteady::test::count_bit_differences(f0[d], f1[d], 0), 0) << d; }
+    EXPECT_EQ(gust::test::count_bit_differences(p0, p1, 1), 0);
+    for (int d = 0; d < 3; ++d) { EXPECT_EQ(gust::test::count_bit_differences(f0[d], f1[d], 0), 0) << d; }
 
     // A constant beta = c on every face (z_cross too) scales the operator by
     // c: phi = phi_1 / c and the coefficient-weighted fluxes are unchanged.
@@ -199,7 +199,7 @@ TEST (Poisson, UnitCoefficientsAreThePlainOperator)
     amrex::MultiFab bc4(c.mesh.az.boxArray(), c.dm, 1, 0);
     for (int d = 0; d < 3; ++d) { b[d].setVal(cval); }
     bc4.setVal(cval);
-    ablsteady::FaceCoeffs cs;
+    gust::FaceCoeffs cs;
     cs.x = &b[0];
     cs.y = &b[1];
     cs.z = &b[2];
@@ -208,7 +208,7 @@ TEST (Poisson, UnitCoefficientsAreThePlainOperator)
     amrex::Array<amrex::MultiFab, 3> f2;
     for (int d = 0; d < 3; ++d) { f2[d].define(areas[d]->boxArray(), c.dm, 1, 0); }
     fill_cells(rhs2, c, [ms] (double x, double y, double z) { return ms.phi(x, y, z) * 1e-5; });
-    ablsteady::PoissonSolver s2(c.mesh, c.geom, c.z, back_end_a());
+    gust::PoissonSolver s2(c.mesh, c.geom, c.z, back_end_a());
     s2.solve(rhs2, p2, cs, bc, &f2);
     p2.mult(cval);
     EXPECT_LE(l2_diff(p2, p0, c.mesh.detJ, false), tol(1e-9, 1e-4) * p0.norm2() / std::sqrt(double(c.ba.numPts())));
@@ -224,7 +224,7 @@ struct RampSolve
     PCase c;
     amrex::MultiFab phi, rhs;
     amrex::Array<amrex::MultiFab, 3> flux;
-    ablsteady::PoissonResult res;
+    gust::PoissonResult res;
 };
 void ramp_solve (RampSolve& r)
 {
@@ -240,7 +240,7 @@ void ramp_solve (RampSolve& r)
     });
     const amrex::MultiFab* areas[3] = {&r.c.mesh.ax, &r.c.mesh.ay, &r.c.mesh.az};
     for (int d = 0; d < 3; ++d) { r.flux[d].define(areas[d]->boxArray(), r.c.dm, 1, 0); }
-    ablsteady::PoissonSolver s(r.c.mesh, r.c.geom, r.c.z, back_end_a());
+    gust::PoissonSolver s(r.c.mesh, r.c.geom, r.c.z, back_end_a());
     r.res = s.solve(r.rhs, r.phi, {}, make_bc(PoissonFace::neumann, PoissonFace::neumann, PoissonFace::dirichlet),
                     &r.flux);
 }
@@ -303,7 +303,7 @@ TEST (Poisson, NeumannFacesCarryNoFlux)
 
     const auto dx = r.c.geom.CellSizeArray();
     amrex::MultiFab div(r.c.ba, r.c.dm, 1, 0);
-    ablsteady::face_divergence(r.c.mesh, r.c.geom, {&r.flux[0], &r.flux[1], &r.flux[2]}, div);
+    gust::face_divergence(r.c.mesh, r.c.geom, {&r.flux[0], &r.flux[1], &r.flux[2]}, div);
     // Sums in double on the host; in single precision the cell values carry
     // the cancellation of the face differences (about 1e-5 relative).
     double inside = 0;
@@ -332,7 +332,7 @@ TEST (Poisson, OperatorMatchesFluxDivergence)
     fill_faces(b[1], 1, c, bh);
     fill_faces(b[2], 2, c, bv);
     fill_faces(b[3], 2, c, bh);
-    ablsteady::FaceCoeffs fc;
+    gust::FaceCoeffs fc;
     fc.x = &b[0];
     fc.y = &b[1];
     fc.z = &b[2];
@@ -346,10 +346,10 @@ TEST (Poisson, OperatorMatchesFluxDivergence)
         });
         amrex::Array<amrex::MultiFab, 3> F;
         for (int d = 0; d < 3; ++d) { F[d].define(areas[d]->boxArray(), c.dm, 1, 0); }
-        ablsteady::PoissonSolver s(c.mesh, c.geom, c.z, back_end_a());
+        gust::PoissonSolver s(c.mesh, c.geom, c.z, back_end_a());
         s.solve(rhs, phi, fc, bc, &F);
         s.apply(Aphi, phi, fc, bc);
-        ablsteady::face_divergence(c.mesh, c.geom, {&F[0], &F[1], &F[2]}, div);
+        gust::face_divergence(c.mesh, c.geom, {&F[0], &F[1], &F[2]}, div);
         amrex::MultiFab::Add(div, Aphi, 0, 0, 1, 0);
         EXPECT_GT(Aphi.norminf(), 0);
         EXPECT_LE(div.norminf(), tol(1e-12, 1e-4) * Aphi.norminf()) << "top " << name(top);
@@ -376,14 +376,14 @@ TEST (Poisson, ProjectedFieldIsDivergenceFree)
     // No normal flow through the ground.
     U[2].setVal(0.0, amrex::Box(c.geom.Domain()).setBig(2, 0).surroundingNodes(2).setBig(2, 0), 0, 1);
     amrex::MultiFab rhs(c.ba, c.dm, 1, 0), phi(c.ba, c.dm, 1, 1), div(c.ba, c.dm, 1, 0);
-    ablsteady::face_divergence(c.mesh, c.geom, {&U[0], &U[1], &U[2]}, rhs);
+    gust::face_divergence(c.mesh, c.geom, {&U[0], &U[1], &U[2]}, rhs);
     const double div0 = rhs.norm2();
-    ablsteady::PoissonSolver s(c.mesh, c.geom, c.z, back_end_a());
+    gust::PoissonSolver s(c.mesh, c.geom, c.z, back_end_a());
     const auto res = s.solve(rhs, phi, {}, make_bc(PoissonFace::neumann, PoissonFace::periodic, PoissonFace::dirichlet), &F);
     for (int d = 0; d < 3; ++d) { amrex::MultiFab::Add(U[d], F[d], 0, 0, 1, 0); }
-    ablsteady::face_divergence(c.mesh, c.geom, {&U[0], &U[1], &U[2]}, div);
+    gust::face_divergence(c.mesh, c.geom, {&U[0], &U[1], &U[2]}, div);
     EXPECT_GT(div0, 0);
-    EXPECT_LE(div.norm2(), 10 * ablsteady::PoissonOptions{}.reltol * div0);
+    EXPECT_LE(div.norm2(), 10 * gust::PoissonOptions{}.reltol * div0);
     // The divergence left is the residual of the solve.
     EXPECT_NEAR(div.norm2(), res.final_residual, tol(1e-3, 1e-1) * res.final_residual + tol(1e-14, 1e-6) * div0);
 }
@@ -403,7 +403,7 @@ TEST (Poisson, MirrorSymmetry)
         fill_cells(rhs, c, [] (double x, double y, double z) {
             return 1e-5 * std::cos(2 * M_PI * (x - 500) / 1000) * (1 + 0.5 * std::sin(2 * M_PI * y / 800)) * (1 - z / 600);
         });
-        ablsteady::PoissonSolver s(c.mesh, c.geom, c.z, back_end_a());
+        gust::PoissonSolver s(c.mesh, c.geom, c.z, back_end_a());
         s.solve(rhs, phi, {}, make_bc(kx, PoissonFace::periodic, PoissonFace::dirichlet));
         amrex::FArrayBox a(c.geom.Domain(), 1, amrex::The_Pinned_Arena());
         phi.copyTo(a);
@@ -445,16 +445,16 @@ TEST (Poisson, SplitOperatorKeepsTheMirrorSymmetries)
     by.setVal(1.0);
     bz.setVal(0.36);
     bzc.setVal(1.0);
-    ablsteady::FaceCoeffs fc;
+    gust::FaceCoeffs fc;
     fc.x = &bx;
     fc.y = &by;
     fc.z = &bz;
     fc.z_cross = &bzc;
     fc.precond_ratio = amrex::Real(0.36);
-    ablsteady::PoissonOptions opt = back_end_a();
+    gust::PoissonOptions opt = back_end_a();
     opt.reltol = tol(3e-15, 2e-6);   // >= 10 machine epsilon
     opt.max_iter = 2000;
-    ablsteady::PoissonSolver s(c.mesh, c.geom, c.z, opt);
+    gust::PoissonSolver s(c.mesh, c.geom, c.z, opt);
     phi.setVal(0.0);
     s.solve(rhs, phi, fc, make_bc(PoissonFace::dirichlet, PoissonFace::neumann, PoissonFace::neumann));
     amrex::FArrayBox a(c.geom.Domain(), 1, amrex::The_Pinned_Arena());
@@ -485,7 +485,7 @@ TEST (Poisson, PreconditionerCutsIterations)
     ms.zero_gradient_ground = true;
     PCase c = make_case(32, 24, 16, PoissonFace::neumann, PoissonFace::periodic, ms, 1, true);
     const auto bc = make_bc(PoissonFace::neumann, PoissonFace::periodic, PoissonFace::dirichlet);
-    ablsteady::PoissonOptions none = back_end_a();
+    gust::PoissonOptions none = back_end_a();
     none.precond = "none";
     none.max_iter = 5000;
     const auto with = solve_ms(c, ms, bc);
@@ -520,7 +520,7 @@ TEST (Poisson, SingularProblemRemovesTheMean)
     fill_cells(rhs, c, [ms] (double x, double y, double z) { return 1e-5 * ms.phi(x, y, z); });
     const double mean = amrex::MultiFab::Dot(c.mesh.detJ, 0, rhs, 0, 1, 0) / c.mesh.detJ.sum(0);
     rhs.plus(3e-6, 0, 1, 0);
-    ablsteady::PoissonSolver s(c.mesh, c.geom, c.z, back_end_a());
+    gust::PoissonSolver s(c.mesh, c.geom, c.z, back_end_a());
     const auto res = s.solve(rhs, phi, {}, bc);
     EXPECT_TRUE(res.singular);
     EXPECT_NEAR(res.removed_mean, mean + 3e-6, tol(1e-12, 1e-5) * 3e-6);
@@ -532,33 +532,33 @@ TEST (Poisson, SingularProblemRemovesTheMean)
 TEST (Poisson, ChecksNameTheInput)
 {
     auto msg = [] (const std::vector<std::string>& v) { return v.empty() ? std::string() : v.front(); };
-    ablsteady::PoissonOptions o;
-    EXPECT_TRUE(ablsteady::check_poisson_options(o).empty());
+    gust::PoissonOptions o;
+    EXPECT_TRUE(gust::check_poisson_options(o).empty());
     o.reltol = 0;
-    EXPECT_NE(msg(ablsteady::check_poisson_options(o)).find("solver.poisson_reltol"), std::string::npos);
+    EXPECT_NE(msg(gust::check_poisson_options(o)).find("solver.poisson_reltol"), std::string::npos);
     o = {};
     o.abstol = -1;
-    EXPECT_NE(msg(ablsteady::check_poisson_options(o)).find("solver.poisson_abstol"), std::string::npos);
+    EXPECT_NE(msg(gust::check_poisson_options(o)).find("solver.poisson_abstol"), std::string::npos);
     o = {};
     o.max_iter = 0;
-    EXPECT_NE(msg(ablsteady::check_poisson_options(o)).find("solver.poisson_max_iter"), std::string::npos);
+    EXPECT_NE(msg(gust::check_poisson_options(o)).find("solver.poisson_max_iter"), std::string::npos);
     o = {};
     o.restart = 0;
-    EXPECT_NE(msg(ablsteady::check_poisson_options(o)).find("solver.poisson_restart"), std::string::npos);
+    EXPECT_NE(msg(gust::check_poisson_options(o)).find("solver.poisson_restart"), std::string::npos);
     o = {};
     o.precond = "mg";
-    EXPECT_NE(msg(ablsteady::check_poisson_options(o)).find("solver.poisson_precond"), std::string::npos);
+    EXPECT_NE(msg(gust::check_poisson_options(o)).find("solver.poisson_precond"), std::string::npos);
     o = {};
     o.verbose = -1;
-    EXPECT_NE(msg(ablsteady::check_poisson_options(o)).find("solver.poisson_verbose"), std::string::npos);
+    EXPECT_NE(msg(gust::check_poisson_options(o)).find("solver.poisson_verbose"), std::string::npos);
 
     Manufactured ms{1000, 800, 60, 0, PoissonFace::neumann, PoissonFace::periodic, PoissonFace::dirichlet};
     PCase c = make_case(16, 8, 8, PoissonFace::neumann, PoissonFace::periodic, ms, 1, false);
-    EXPECT_TRUE(ablsteady::check_poisson_bc(make_bc(PoissonFace::neumann, PoissonFace::periodic, PoissonFace::dirichlet), c.geom).empty());
-    EXPECT_FALSE(ablsteady::check_poisson_bc(make_bc(PoissonFace::periodic, PoissonFace::periodic, PoissonFace::dirichlet), c.geom).empty());
-    EXPECT_FALSE(ablsteady::check_poisson_bc(make_bc(PoissonFace::neumann, PoissonFace::neumann, PoissonFace::dirichlet), c.geom).empty());
+    EXPECT_TRUE(gust::check_poisson_bc(make_bc(PoissonFace::neumann, PoissonFace::periodic, PoissonFace::dirichlet), c.geom).empty());
+    EXPECT_FALSE(gust::check_poisson_bc(make_bc(PoissonFace::periodic, PoissonFace::periodic, PoissonFace::dirichlet), c.geom).empty());
+    EXPECT_FALSE(gust::check_poisson_bc(make_bc(PoissonFace::neumann, PoissonFace::neumann, PoissonFace::dirichlet), c.geom).empty());
     // A Dirichlet ground is valid (the Tucker distance, sub-phase 1.11).
-    EXPECT_TRUE(ablsteady::check_poisson_bc(make_bc(PoissonFace::neumann, PoissonFace::periodic, PoissonFace::dirichlet,
+    EXPECT_TRUE(gust::check_poisson_bc(make_bc(PoissonFace::neumann, PoissonFace::periodic, PoissonFace::dirichlet,
                                                     PoissonFace::dirichlet), c.geom).empty());
 
     auto thrown = [] (auto&& f) -> std::string {
@@ -566,7 +566,7 @@ TEST (Poisson, ChecksNameTheInput)
         return "";
     };
     const auto bc = make_bc(PoissonFace::neumann, PoissonFace::periodic, PoissonFace::dirichlet);
-    ablsteady::PoissonOptions one = back_end_a();
+    gust::PoissonOptions one = back_end_a();
     one.max_iter = 1;
     EXPECT_NE(thrown([&] { solve_ms(c, ms, bc, nullptr, 1, 1, false, one); }).find("solver.poisson_max_iter"),
               std::string::npos);
@@ -581,7 +581,7 @@ TEST (Poisson, ChecksNameTheInput)
     other.maxSize(4);
     amrex::MultiFab rhs(other, amrex::DistributionMapping(other), 1, 0), phi(c.ba, c.dm, 1, 1);
     rhs.setVal(0);
-    ablsteady::PoissonSolver s(c.mesh, c.geom, c.z, back_end_a());
+    gust::PoissonSolver s(c.mesh, c.geom, c.z, back_end_a());
     EXPECT_NE(thrown([&] { s.solve(rhs, phi, {}, bc); }).find("rhs must be on the mesh's BoxArray"), std::string::npos);
 }
 

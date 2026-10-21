@@ -33,45 +33,45 @@
 
 namespace {
 
-using ablsteady::ClosureConstants;
-using ablsteady::ClosureOptions;
-using ablsteady::Dual;
-using ablsteady::Equation;
-using ablsteady::FaceMean;
-using ablsteady::Loc;
-using ablsteady::PoissonFace;
-using ablsteady::Switches;
-using ablsteady::ptest::PCase;
-using ablsteady::trtest::tol;
-namespace cl = ablsteady::closure;
+using gust::ClosureConstants;
+using gust::ClosureOptions;
+using gust::Dual;
+using gust::Equation;
+using gust::FaceMean;
+using gust::Loc;
+using gust::PoissonFace;
+using gust::Switches;
+using gust::ptest::PCase;
+using gust::trtest::tol;
+namespace cl = gust::closure;
 
 constexpr double kKappa = 0.41, kCmu0 = 0.5562, kCb = 0.35;
 
 // (nx, ny, nz) cells over a cosine hill of height H0 (0: flat), periodic sides.
 PCase make_mesh (int nx, int ny, int nz, double H0, bool stretched = true)
 {
-    ablsteady::ptest::Manufactured ms;
+    gust::ptest::Manufactured ms;
     ms.Lx = 1000;
     ms.Ly = 800;
     ms.H0 = H0;
-    PCase c = ablsteady::ptest::make_case(nx, ny, nz, PoissonFace::periodic, PoissonFace::periodic, ms, 0, stretched);
-    ablsteady::trtest::smooth_vertical_ghost_nodes(c);
+    PCase c = gust::ptest::make_case(nx, ny, nz, PoissonFace::periodic, PoissonFace::periodic, ms, 0, stretched);
+    gust::trtest::smooth_vertical_ghost_nodes(c);
     return c;
 }
 
 // The same mesh with a Neumann (non-periodic) x boundary.
 PCase make_mesh_np (int nx, int ny, int nz)
 {
-    ablsteady::ptest::Manufactured ms;
+    gust::ptest::Manufactured ms;
     ms.Lx = 1000;
     ms.Ly = 800;
     ms.H0 = 0;
-    PCase c = ablsteady::ptest::make_case(nx, ny, nz, PoissonFace::neumann, PoissonFace::periodic, ms, 0, true);
-    ablsteady::trtest::smooth_vertical_ghost_nodes(c);
+    PCase c = gust::ptest::make_case(nx, ny, nz, PoissonFace::neumann, PoissonFace::periodic, ms, 0, true);
+    gust::trtest::smooth_vertical_ghost_nodes(c);
     return c;
 }
 
-void define_state (ablsteady::State& q, const PCase& c)
+void define_state (gust::State& q, const PCase& c)
 {
     q.define(c.ba, c.dm);
     amrex::MultiFab::Copy(q.z_phys_nd, c.z, 0, 0, 1, c.z.nGrow());
@@ -111,7 +111,7 @@ ErfPoint erf_point (amrex::Real k, amrex::Real N2, amrex::Real d, amrex::Real z0
 // inputs across the neutral, stable, unstable, smoothed and floored cases.
 TEST(Closure, KernelsMatchErfBitForBit)
 {
-    const ClosureConstants c = ablsteady::closure_constants(ClosureOptions{});
+    const ClosureConstants c = gust::closure_constants(ClosureOptions{});
     std::mt19937 gen(1909);
     std::uniform_real_distribution<double> uk(-8, 1), un(-3, -1), ud(-1, 3), sign(-1, 1);
     int smoothed = 0, stable = 0, unstable = 0, floored = 0;
@@ -157,7 +157,7 @@ TEST(Closure, KernelsMatchErfBitForBit)
 // kappa z), nu_t = Cmu sqrt(k) l, eps = Cmu^3 k^1.5 / l, P = nu_t S^2.
 TEST(Closure, MatchesKynemaKLAxellWhereTheyCoincide)
 {
-    const ClosureConstants c = ablsteady::closure_constants(ClosureOptions{});
+    const ClosureConstants c = gust::closure_constants(ClosureOptions{});
     const double lambda = 30, kappa = 0.41, Cmu = 0.5562;
     for (double z : {2.5, 7.5, 40.0, 300.0}) {
         for (double k : {0.01, 0.5, 3.0}) {
@@ -192,7 +192,7 @@ TEST(Closure, MatchesKynemaKLAxellWhereTheyCoincide)
 // finite and below its bound for tiny k under strong convection.
 TEST(Closure, SmoothingLimitsAndLargeRichardsonNumbers)
 {
-    const ClosureConstants c = ablsteady::closure_constants(ClosureOptions{});
+    const ClosureConstants c = gust::closure_constants(ClosureOptions{});
     EXPECT_EQ(cl::smooth_Rt(amrex::Real(0.5), false, c.Rt_crit, c.Rt_min), amrex::Real(0.5));
     EXPECT_EQ(cl::smooth_Rt(c.Rt_crit, true, c.Rt_crit, c.Rt_min), c.Rt_crit);
     EXPECT_NEAR(cl::smooth_Rt(c.Rt_crit - amrex::Real(1e-6), true, c.Rt_crit, c.Rt_min), c.Rt_crit, 1e-5);
@@ -229,7 +229,7 @@ TEST(Closure, SmoothingLimitsAndLargeRichardsonNumbers)
 // infinity on random states (stable, unstable, strong shear or none).
 TEST(Closure, PointImplicitUpdateStaysPositive)
 {
-    const ClosureConstants c = ablsteady::closure_constants(ClosureOptions{});
+    const ClosureConstants c = gust::closure_constants(ClosureOptions{});
     std::mt19937 gen(1904);
     std::uniform_real_distribution<double> uk(-6, 1), un(-4, -1), us(-6, -1), sign(-1, 1);
     int neg_sources = 0;
@@ -263,7 +263,7 @@ TEST(Closure, PointImplicitUpdateStaysPositive)
 // held) against central finite differences, relative 1e-6, and d nu_t / dk.
 TEST(Closure, SourceJacobianMatchesFiniteDifferences)
 {
-    const ClosureConstants c = ablsteady::closure_constants(ClosureOptions{});
+    const ClosureConstants c = gust::closure_constants(ClosureOptions{});
     std::mt19937 gen(1905);
     std::uniform_real_distribution<double> uk(-4, 1), un(-4, -1), sign(-1, 1);
     int checked = 0;
@@ -293,7 +293,7 @@ TEST(Closure, SourceJacobianMatchesFiniteDifferences)
         };
         const double dS_fd = (S_of(k + h) - S_of(k - h)) / (2 * h);
         const double dnut_fd = (nut_of(k + h) - nut_of(k - h)) / (2 * h);
-        const double dS = ablsteady::derivative(cl::source(pd)), dnut = pd.nut.d;
+        const double dS = gust::derivative(cl::source(pd)), dnut = pd.nut.d;
         const double t = tol(1e-6, 1e-2);
         EXPECT_NEAR(dS, dS_fd, t * (std::abs(dS_fd) + 1e-30)) << "k " << k << " N2 " << N2 << " branch " << s.branch;
         EXPECT_NEAR(dnut, dnut_fd, t * (std::abs(dnut_fd) + 1e-30)) << "k " << k << " N2 " << N2;
@@ -302,7 +302,7 @@ TEST(Closure, SourceJacobianMatchesFiniteDifferences)
         // instantiations: a few ulp).
         // S_k is a difference of nearly equal terms, so the scale is their size.
         const double scale = std::abs(double(pd.Ps.v)) + std::abs(double(pd.Pb.v)) + std::abs(double(pd.eps.v));
-        EXPECT_NEAR(ablsteady::value(cl::source(pd)), S_of(k), tol(1e-14, 1e-6) * scale);
+        EXPECT_NEAR(gust::value(cl::source(pd)), S_of(k), tol(1e-14, 1e-6) * scale);
         ++checked;
     }
     EXPECT_GT(checked, 2400);
@@ -327,8 +327,8 @@ TEST(Closure, InputsAreReadAndChecked)
     amrex::ParmParse::addfile(fname);
     amrex::ParallelDescriptor::Barrier();
     if (amrex::ParallelDescriptor::IOProcessor()) { std::remove(fname.c_str()); }
-    const ClosureOptions o = ablsteady::read_closure_options();
-    for (const auto& e : ablsteady::unknown_inputs(ablsteady::parmparse_entries(), {"turb"})) {
+    const ClosureOptions o = gust::read_closure_options();
+    for (const auto& e : gust::unknown_inputs(gust::parmparse_entries(), {"turb"})) {
         if (e.find("turb.") != std::string::npos) { ADD_FAILURE() << e; }
     }
     {
@@ -352,13 +352,13 @@ TEST(Closure, InputsAreReadAndChecked)
     EXPECT_FALSE(o.frozen_switch);   // the default is 1 (below)
     EXPECT_EQ(o.ri_gate, amrex::Real(0.05));
     EXPECT_EQ(o.face_mean, FaceMean::logarithmic);
-    EXPECT_EQ(o.wall_distance, ablsteady::WallDistanceKind::tucker);
+    EXPECT_EQ(o.wall_distance, gust::WallDistanceKind::tucker);
     // The constants: the floor from the input, Cmu0^3 and 1/Cb^2.
-    const ClosureConstants c = ablsteady::closure_constants(o);
+    const ClosureConstants c = gust::closure_constants(o);
     EXPECT_EQ(c.tke_floor, amrex::Real(1e-6));
     EXPECT_EQ(c.Cmu0_pow3, amrex::Real(0.55) * amrex::Real(0.55) * amrex::Real(0.55));
-    EXPECT_EQ(ablsteady::closure_constants(ClosureOptions{}).tke_floor, std::numeric_limits<amrex::Real>::epsilon());
-    EXPECT_TRUE(ablsteady::check_closure_options(o).empty());
+    EXPECT_EQ(gust::closure_constants(ClosureOptions{}).tke_floor, std::numeric_limits<amrex::Real>::epsilon());
+    EXPECT_TRUE(gust::check_closure_options(o).empty());
     struct Bad { const char* key; void (*mutate) (ClosureOptions&); };
     const Bad bads[] = {
         {"turb.Cmu0", [] (ClosureOptions& b) { b.Cmu0 = 0; }},
@@ -381,35 +381,35 @@ TEST(Closure, InputsAreReadAndChecked)
     for (const Bad& b : bads) {
         ClosureOptions x = o;
         b.mutate(x);
-        const auto err = ablsteady::check_closure_options(x);
+        const auto err = gust::check_closure_options(x);
         ASSERT_FALSE(err.empty()) << b.key;
         bool found = false;
         for (const auto& e : err) { found = found || e.find(b.key) != std::string::npos; }
         EXPECT_TRUE(found) << b.key << ": " << err.front();
-        EXPECT_THROW(ablsteady::Closure{x}, std::runtime_error);
+        EXPECT_THROW(gust::Closure{x}, std::runtime_error);
     }
     // The reader's own refusals: a two-valued key, frozen_switch outside {0, 1},
     // unknown names for face_mean and wall_distance, a floor below epsilon.
     {
         amrex::ParmParse pp("turb");
         pp.addarr("Cmu0", std::vector<amrex::Real>{amrex::Real(0.5), amrex::Real(0.6)});
-        EXPECT_THROW(ablsteady::read_closure_options(), std::runtime_error);
+        EXPECT_THROW(gust::read_closure_options(), std::runtime_error);
         while (pp.remove("Cmu0") > 0) {}
         pp.add("frozen_switch", 2);
-        EXPECT_THROW(ablsteady::read_closure_options(), std::runtime_error);
+        EXPECT_THROW(gust::read_closure_options(), std::runtime_error);
         while (pp.remove("frozen_switch") > 0) {}
         pp.add("face_mean", std::string("harmonic"));
-        EXPECT_THROW(ablsteady::read_closure_options(), std::runtime_error);
+        EXPECT_THROW(gust::read_closure_options(), std::runtime_error);
         while (pp.remove("face_mean") > 0) {}
         pp.add("wall_distance", std::string("vertical"));
-        EXPECT_THROW(ablsteady::read_closure_options(), std::runtime_error);
+        EXPECT_THROW(gust::read_closure_options(), std::runtime_error);
         while (pp.remove("wall_distance") > 0) {}
         pp.add("tke_floor", amrex::Real(1e-20));
-        EXPECT_THROW(ablsteady::read_closure_options(), std::runtime_error);
+        EXPECT_THROW(gust::read_closure_options(), std::runtime_error);
         while (pp.remove("tke_floor") > 0) {}
-        EXPECT_NO_THROW(ablsteady::read_closure_options());
+        EXPECT_NO_THROW(gust::read_closure_options());
         // The defaults: the floor frozen in the Newton stage (Smoothness.H), no gate.
-        const ClosureOptions d = ablsteady::read_closure_options();
+        const ClosureOptions d = gust::read_closure_options();
         EXPECT_TRUE(d.frozen_switch);
         EXPECT_EQ(d.ri_gate, 0);
     }
@@ -437,24 +437,24 @@ TEST(Closure, FieldsMatchClosedForms)
     opt.alpha_molecular = amrex::Real(2e-5);
     opt.max_geom_lscale = 30;
     opt.kappa = amrex::Real(0.39);   // not the default: the constant must flow into l_g
-    ablsteady::Closure closure(opt);
+    gust::Closure closure(opt);
     const ClosureConstants cst = closure.constants();
     EXPECT_EQ(cst.kappa, amrex::Real(0.39));
     EXPECT_EQ(cst.l_g_max, 30);
-    const ablsteady::BuoyancyOptions buoy;
+    const gust::BuoyancyOptions buoy;
     const auto prev_fpe = amrex::disableFPExcept(amrex::FPExcept::invalid);   // erf_point's branches (see UT-1.9.1)
     for (double gamma : {0.004, -0.004}) {
-        ablsteady::State q;
+        gust::State q;
         define_state(q, c);
-        ablsteady::trtest::fill_loc(q.u, Loc::xface, c, [&] (double, double y, double z) { return a * z + b * std::sin(2 * M_PI * y / Ly); });
-        ablsteady::trtest::fill_loc(q.v, Loc::yface, c, [&] (double x, double, double) { return cc_ * std::sin(2 * M_PI * x / Lx); });
+        gust::trtest::fill_loc(q.u, Loc::xface, c, [&] (double, double y, double z) { return a * z + b * std::sin(2 * M_PI * y / Ly); });
+        gust::trtest::fill_loc(q.v, Loc::yface, c, [&] (double x, double, double) { return cc_ * std::sin(2 * M_PI * x / Lx); });
         q.w.setVal(0.0);
         q.p.setVal(0.0);
-        ablsteady::trtest::fill_loc(q.theta, Loc::cell, c, [&] (double, double, double z) { return 300 + gamma * z; });
+        gust::trtest::fill_loc(q.theta, Loc::cell, c, [&] (double, double, double z) { return 300 + gamma * z; });
         q.tke.setVal(static_cast<amrex::Real>(kval));
         amrex::MultiFab dist;
-        ablsteady::height_above_ground(q.z_phys_nd, dist);
-        ablsteady::ClosureFields f;
+        gust::height_above_ground(q.z_phys_nd, dist);
+        gust::ClosureFields f;
         closure.evaluate(q, dist, static_cast<amrex::Real>(z0), buoy, c.mesh, c.geom, f);
         const double N2 = buoy.gravity / buoy.theta0 * gamma;
         const double t = tol(1e-12, 1e-5);
@@ -516,7 +516,7 @@ TEST(Closure, FieldsMatchClosedForms)
 // cells (averaged arithmetically over the lateral footprint of an edge).
 TEST(Closure, FaceMeanIsLogarithmicAcrossVerticalPairsOnly)
 {
-    using namespace ablsteady::stencil;
+    using namespace gust::stencil;
     const amrex::Box b(amrex::IntVect(-1, -1, -1), amrex::IntVect(4, 4, 4));
     amrex::FArrayBox g(b, 1, amrex::The_Pinned_Arena());
     amrex::LoopOnCpu(b, [&] (int i, int j, int k) { g(amrex::IntVect(i, j, k)) = static_cast<amrex::Real>(1 + 0.3 * i + 0.7 * j + 0.1 * k + 0.01 * i * j); });
@@ -524,14 +524,14 @@ TEST(Closure, FaceMeanIsLogarithmicAcrossVerticalPairsOnly)
     for (int i = 0; i < 3; ++i) {
         for (int j = 0; j < 3; ++j) {
             for (int k = 0; k < 3; ++k) {
-                EXPECT_EQ(ablsteady::face_gamma<XF>(arr, i, j, k, true), (interp<CC, XF>(arr, i, j, k)));
-                EXPECT_EQ(ablsteady::face_gamma<YF>(arr, i, j, k, true), (interp<CC, YF>(arr, i, j, k)));
-                EXPECT_EQ(ablsteady::face_gamma<XF | YF>(arr, i, j, k, true), (interp<CC, XF | YF>(arr, i, j, k)));
-                EXPECT_EQ(ablsteady::face_gamma<ZF>(arr, i, j, k, true), ablsteady::log_mean(arr(i, j, k - 1), arr(i, j, k)));
-                const amrex::Real edge = amrex::Real(0.5) * (ablsteady::log_mean(arr(i - 1, j, k - 1), arr(i - 1, j, k))
-                                                             + ablsteady::log_mean(arr(i, j, k - 1), arr(i, j, k)));
-                EXPECT_NEAR(ablsteady::face_gamma<XF | ZF>(arr, i, j, k, true), edge, tol(1e-15, 1e-6) * edge);
-                EXPECT_EQ(ablsteady::face_gamma<ZF>(arr, i, j, k, false), (interp<CC, ZF>(arr, i, j, k)));
+                EXPECT_EQ(gust::face_gamma<XF>(arr, i, j, k, true), (interp<CC, XF>(arr, i, j, k)));
+                EXPECT_EQ(gust::face_gamma<YF>(arr, i, j, k, true), (interp<CC, YF>(arr, i, j, k)));
+                EXPECT_EQ(gust::face_gamma<XF | YF>(arr, i, j, k, true), (interp<CC, XF | YF>(arr, i, j, k)));
+                EXPECT_EQ(gust::face_gamma<ZF>(arr, i, j, k, true), gust::log_mean(arr(i, j, k - 1), arr(i, j, k)));
+                const amrex::Real edge = amrex::Real(0.5) * (gust::log_mean(arr(i - 1, j, k - 1), arr(i - 1, j, k))
+                                                             + gust::log_mean(arr(i, j, k - 1), arr(i, j, k)));
+                EXPECT_NEAR(gust::face_gamma<XF | ZF>(arr, i, j, k, true), edge, tol(1e-15, 1e-6) * edge);
+                EXPECT_EQ(gust::face_gamma<ZF>(arr, i, j, k, false), (interp<CC, ZF>(arr, i, j, k)));
             }
         }
     }
@@ -551,30 +551,30 @@ TEST(Closure, LogarithmicFaceMeanReproducesTheLogLawFlux)
         const double a = std::pow(10.0, u(gen)), b = std::pow(10.0, u(gen));
         const double want = (a == b) ? a : (a - b) / std::log(a / b);
         // 1e-13: the direct form loses epsilon/|x| at the window's edge (|x| = 0.01).
-        EXPECT_NEAR(ablsteady::log_mean(static_cast<amrex::Real>(a), static_cast<amrex::Real>(b)), want, tol(1e-13, 1e-5) * want);
+        EXPECT_NEAR(gust::log_mean(static_cast<amrex::Real>(a), static_cast<amrex::Real>(b)), want, tol(1e-13, 1e-5) * want);
     }
-    EXPECT_EQ(ablsteady::log_mean(amrex::Real(2), amrex::Real(2)), amrex::Real(2));
-    EXPECT_EQ(ablsteady::log_mean(amrex::Real(0), amrex::Real(0)), amrex::Real(0));
+    EXPECT_EQ(gust::log_mean(amrex::Real(2), amrex::Real(2)), amrex::Real(2));
+    EXPECT_EQ(gust::log_mean(amrex::Real(0), amrex::Real(0)), amrex::Real(0));
     // Continuity across the series window (|x| = log_mean_window): both sides agree.
-    const double w = static_cast<double>(ablsteady::log_mean_window);
+    const double w = static_cast<double>(gust::log_mean_window);
     const double x1 = w * 1.0001, x2 = w * 0.9999;   // just outside and just inside
     const double a = 1.0, b1 = a * (1 - x1) / (1 + x1), b2 = a * (1 - x2) / (1 + x2);
-    EXPECT_NEAR(ablsteady::log_mean(amrex::Real(a), static_cast<amrex::Real>(b1)), (a - b1) / std::log(a / b1), tol(1e-14, 1e-6));
-    EXPECT_NEAR(ablsteady::log_mean(amrex::Real(a), static_cast<amrex::Real>(b2)), (a - b2) / std::log(a / b2), tol(1e-14, 1e-6));
+    EXPECT_NEAR(gust::log_mean(amrex::Real(a), static_cast<amrex::Real>(b1)), (a - b1) / std::log(a / b1), tol(1e-14, 1e-6));
+    EXPECT_NEAR(gust::log_mean(amrex::Real(a), static_cast<amrex::Real>(b2)), (a - b2) / std::log(a / b2), tol(1e-14, 1e-6));
 
     // A flat column: u = (u*/kappa) ln((z + z0)/z0), nu = kappa u* (z + z0).
     PCase c = make_mesh(4, 4, 16, 0);
-    ablsteady::State q;
+    gust::State q;
     define_state(q, c);
     const double ustar = 0.35, z0 = 0.1;
-    ablsteady::trtest::fill_loc(q.u, Loc::xface, c, [&] (double, double, double z) { return ustar / kKappa * std::log((std::max(z, 0.0) + z0) / z0); });
+    gust::trtest::fill_loc(q.u, Loc::xface, c, [&] (double, double, double z) { return ustar / kKappa * std::log((std::max(z, 0.0) + z0) / z0); });
     q.v.setVal(0.0);
     q.w.setVal(0.0);
     amrex::MultiFab nu(c.ba, c.dm, 1, 1);
-    ablsteady::trtest::fill_loc(nu, Loc::cell, c, [&] (double, double, double z) { return kKappa * ustar * (std::max(z, 0.0) + z0); });
+    gust::trtest::fill_loc(nu, Loc::cell, c, [&] (double, double, double z) { return kKappa * ustar * (std::max(z, 0.0) + z0); });
     for (const FaceMean mean : {FaceMean::logarithmic, FaceMean::arithmetic}) {
         amrex::Array<amrex::Array<amrex::MultiFab, 3>, 3> G;
-        ablsteady::momentum_diffusive_fluxes({&q.u, &q.v, &q.w}, nu, q.z_phys_nd, c.mesh, c.geom, G, mean);
+        gust::momentum_diffusive_fluxes({&q.u, &q.v, &q.w}, nu, q.z_phys_nd, c.mesh, c.geom, G, mean);
         double worst = 0, first = 0;
         for (amrex::MFIter mfi(G[0][2], false); mfi.isValid(); ++mfi) {
             const auto f = host_copy(G[0][2], mfi);
@@ -599,13 +599,13 @@ TEST(Closure, LogarithmicFaceMeanReproducesTheLogLawFlux)
     // The implicit operator uses the same face mean: A1 u = -D(u) with the
     // logarithmic mean too.
     amrex::Array<amrex::MultiFab, 3> F;
-    ablsteady::transport_fluxes(q.u, q.v, q.w, q.z_phys_nd, c.mesh, c.geom, F);
+    gust::transport_fluxes(q.u, q.v, q.w, q.z_phys_nd, c.mesh, c.geom, F);
     for (auto& f : F) { f.setVal(0.0); }
     amrex::MultiFab A, Au(q.u.boxArray(), c.dm, 1, 0), D(q.u.boxArray(), c.dm, 1, 0);
-    ablsteady::implicit_coefficients(Loc::xface, {&F[0], &F[1], &F[2]}, nu, q.z_phys_nd, c.mesh, c.geom, A, FaceMean::logarithmic);
-    ablsteady::apply_implicit(Loc::xface, A, q.u, c.mesh, Au);
+    gust::implicit_coefficients(Loc::xface, {&F[0], &F[1], &F[2]}, nu, q.z_phys_nd, c.mesh, c.geom, A, FaceMean::logarithmic);
+    gust::apply_implicit(Loc::xface, A, q.u, c.mesh, Au);
     amrex::MultiFab dv(q.v.boxArray(), c.dm, 1, 0), dw(q.w.boxArray(), c.dm, 1, 0);
-    ablsteady::momentum_diffusion({&q.u, &q.v, &q.w}, nu, q.z_phys_nd, c.mesh, c.geom, {&D, &dv, &dw}, FaceMean::logarithmic);
+    gust::momentum_diffusion({&q.u, &q.v, &q.w}, nu, q.z_phys_nd, c.mesh, c.geom, {&D, &dv, &dw}, FaceMean::logarithmic);
     double worst = 0;
     for (amrex::MFIter mfi(Au, false); mfi.isValid(); ++mfi) {
         const auto au = host_copy(Au, mfi), dd = host_copy(D, mfi);
@@ -629,18 +629,18 @@ TEST(Closure, LogarithmicFaceMeanReproducesTheLogLawFlux)
 TEST(Closure, ResidualWithClosureIsTheResidualWithItsFields)
 {
     PCase c = make_mesh(16, 12, 8, 120);
-    ablsteady::State q;
+    gust::State q;
     define_state(q, c);
-    const auto fl = ablsteady::trtest::make_flow(c, 120);
+    const auto fl = gust::trtest::make_flow(c, 120);
     const amrex::Array<amrex::MultiFab*, 3> vel{&q.u, &q.v, &q.w};
     for (int d = 0; d < 3; ++d) {
-        ablsteady::trtest::fill_loc(*vel[d], ablsteady::velocity_loc(d), c, [&] (double x, double y, double z) { return 3 + fl.vel(d, x, y, z); });
+        gust::trtest::fill_loc(*vel[d], gust::velocity_loc(d), c, [&] (double x, double y, double z) { return 3 + fl.vel(d, x, y, z); });
     }
-    ablsteady::trtest::fill_loc(q.theta, Loc::cell, c, [&] (double x, double y, double z) { return 300 + 0.004 * z + 0.5 * fl.q(x, y, z); });
-    ablsteady::trtest::fill_loc(q.tke, Loc::cell, c, [&] (double x, double y, double z) { return 0.3 + 0.1 * fl.q(x, y, z); });
+    gust::trtest::fill_loc(q.theta, Loc::cell, c, [&] (double x, double y, double z) { return 300 + 0.004 * z + 0.5 * fl.q(x, y, z); });
+    gust::trtest::fill_loc(q.tke, Loc::cell, c, [&] (double x, double y, double z) { return 0.3 + 0.1 * fl.q(x, y, z); });
     q.p.setVal(0.0);
     amrex::MultiFab dist;
-    ablsteady::height_above_ground(q.z_phys_nd, dist);
+    gust::height_above_ground(q.z_phys_nd, dist);
     // dist: node-mean height minus node-mean ground, valid cells and lateral ghosts.
     for (amrex::MFIter mfi(dist, false); mfi.isValid(); ++mfi) {
         const auto d = host_copy(dist, mfi), z = host_copy(q.z_phys_nd, mfi);
@@ -658,15 +658,15 @@ TEST(Closure, ResidualWithClosureIsTheResidualWithItsFields)
     }
     ClosureOptions opt;
     opt.nu_molecular = amrex::Real(1.5e-5);
-    ablsteady::Closure closure(opt);
-    ablsteady::ResidualInputs in;
+    gust::Closure closure(opt);
+    gust::ResidualInputs in;
     in.theta_ref.z = {0};
     in.theta_ref.theta = {300};
     in.closure = &closure;
     in.wall_distance = &dist;
-    ablsteady::ResidualFields R;
-    ablsteady::ClosureFields f;
-    ablsteady::residual(q, in, c.mesh, c.geom, R, &f);
+    gust::ResidualFields R;
+    gust::ClosureFields f;
+    gust::residual(q, in, c.mesh, c.geom, R, &f);
     // Every field finite, ghosts included (nu, gammas, nut carry one).
     for (const auto* mf : {&f.nu, &f.gamma_theta, &f.gamma_tke, &f.nut}) {
         EXPECT_TRUE(mf->contains_nan(1) == false && mf->contains_inf(1) == false);
@@ -677,14 +677,14 @@ TEST(Closure, ResidualWithClosureIsTheResidualWithItsFields)
     EXPECT_GT(f.eps.min(0), 0);
     // Pr_t(Rt) = cmu/cmu' from the fields: gamma_theta = nu_t cmu'/cmu, 1 when neutral.
     // The same residual with the fields given and the sources subtracted by hand.
-    ablsteady::ResidualInputs in2 = in;
+    gust::ResidualInputs in2 = in;
     in2.closure = nullptr;
     in2.wall_distance = nullptr;
     in2.nu = &f.nu;
     in2.gamma_theta = &f.gamma_theta;
     in2.gamma_tke = &f.gamma_tke;
-    ablsteady::ResidualFields R2;
-    ablsteady::residual(q, in2, c.mesh, c.geom, R2);
+    gust::ResidualFields R2;
+    gust::residual(q, in2, c.mesh, c.geom, R2);
     amrex::MultiFab::Subtract(R2.tke, f.Ps, 0, 0, 1, 0);
     amrex::MultiFab::Subtract(R2.tke, f.Pb, 0, 0, 1, 0);
     amrex::MultiFab::Add(R2.tke, f.eps, 0, 0, 1, 0);
@@ -698,16 +698,16 @@ TEST(Closure, ResidualWithClosureIsTheResidualWithItsFields)
     // the fields given plus dSdk, exactly; the other equations are unchanged.
     for (int dir = 0; dir < 3; ++dir) {
         amrex::MultiFab t1, t2, u1, u2;
-        ablsteady::line_jacobian(q, in, Equation::tke, dir, c.mesh, c.geom, t1);
-        ablsteady::line_jacobian(q, in2, Equation::tke, dir, c.mesh, c.geom, t2);
-        amrex::MultiFab::Add(t2, f.dSdk, 0, ablsteady::line_diag, 1, 0);
-        amrex::MultiFab::Subtract(t1, t2, 0, 0, ablsteady::n_line_coefs, 0);
+        gust::line_jacobian(q, in, Equation::tke, dir, c.mesh, c.geom, t1);
+        gust::line_jacobian(q, in2, Equation::tke, dir, c.mesh, c.geom, t2);
+        amrex::MultiFab::Add(t2, f.dSdk, 0, gust::line_diag, 1, 0);
+        amrex::MultiFab::Subtract(t1, t2, 0, 0, gust::n_line_coefs, 0);
         EXPECT_EQ(t1.norm0(0), 0);
         EXPECT_EQ(t1.norm0(1), 0);
         EXPECT_EQ(t1.norm0(2), 0);
-        ablsteady::line_jacobian(q, in, Equation::u, dir, c.mesh, c.geom, u1);
-        ablsteady::line_jacobian(q, in2, Equation::u, dir, c.mesh, c.geom, u2);
-        amrex::MultiFab::Subtract(u1, u2, 0, 0, ablsteady::n_line_coefs, 0);
+        gust::line_jacobian(q, in, Equation::u, dir, c.mesh, c.geom, u1);
+        gust::line_jacobian(q, in2, Equation::u, dir, c.mesh, c.geom, u2);
+        amrex::MultiFab::Subtract(u1, u2, 0, 0, gust::n_line_coefs, 0);
         EXPECT_EQ(u1.norm0(1), 0);
     }
     // The closure's face mean reaches the residual and the line Jacobian: with
@@ -715,15 +715,15 @@ TEST(Closure, ResidualWithClosureIsTheResidualWithItsFields)
     // with the same option, and differs from the arithmetic one.
     ClosureOptions lopt = opt;
     lopt.face_mean = FaceMean::logarithmic;
-    ablsteady::Closure lclosure(lopt);
-    ablsteady::ResidualInputs lin = in;
+    gust::Closure lclosure(lopt);
+    gust::ResidualInputs lin = in;
     lin.closure = &lclosure;
-    ablsteady::ResidualFields RL, RL2;
-    ablsteady::ClosureFields fl2;
-    ablsteady::residual(q, lin, c.mesh, c.geom, RL, &fl2);
-    ablsteady::ResidualInputs lin2 = in2;
+    gust::ResidualFields RL, RL2;
+    gust::ClosureFields fl2;
+    gust::residual(q, lin, c.mesh, c.geom, RL, &fl2);
+    gust::ResidualInputs lin2 = in2;
     lin2.face_mean = FaceMean::logarithmic;
-    ablsteady::residual(q, lin2, c.mesh, c.geom, RL2);
+    gust::residual(q, lin2, c.mesh, c.geom, RL2);
     amrex::MultiFab::Subtract(RL2.tke, fl2.Ps, 0, 0, 1, 0);
     amrex::MultiFab::Subtract(RL2.tke, fl2.Pb, 0, 0, 1, 0);
     amrex::MultiFab::Add(RL2.tke, fl2.eps, 0, 0, 1, 0);
@@ -740,22 +740,22 @@ TEST(Closure, ResidualWithClosureIsTheResidualWithItsFields)
     }
     {
         amrex::MultiFab t1, t2;
-        ablsteady::line_jacobian(q, lin, Equation::u, 2, c.mesh, c.geom, t1);
-        ablsteady::line_jacobian(q, lin2, Equation::u, 2, c.mesh, c.geom, t2);
-        amrex::MultiFab::Subtract(t1, t2, 0, 0, ablsteady::n_line_coefs, 0);
+        gust::line_jacobian(q, lin, Equation::u, 2, c.mesh, c.geom, t1);
+        gust::line_jacobian(q, lin2, Equation::u, 2, c.mesh, c.geom, t2);
+        amrex::MultiFab::Subtract(t1, t2, 0, 0, gust::n_line_coefs, 0);
         EXPECT_EQ(t1.norm0(1), 0);
         amrex::MultiFab t3;
-        ablsteady::line_jacobian(q, in, Equation::u, 2, c.mesh, c.geom, t3);
-        amrex::MultiFab::Subtract(t3, t2, 0, 0, ablsteady::n_line_coefs, 0);
+        gust::line_jacobian(q, in, Equation::u, 2, c.mesh, c.geom, t3);
+        amrex::MultiFab::Subtract(t3, t2, 0, 0, gust::n_line_coefs, 0);
         EXPECT_GT(t3.norm0(1), 1e-12);
     }
     // Misuse is refused: fields given together with a closure, or no wall distance.
-    ablsteady::ResidualInputs bad = in;
+    gust::ResidualInputs bad = in;
     bad.nu = &f.nu;
-    EXPECT_THROW(ablsteady::residual(q, bad, c.mesh, c.geom, R), std::runtime_error);
+    EXPECT_THROW(gust::residual(q, bad, c.mesh, c.geom, R), std::runtime_error);
     bad = in;
     bad.wall_distance = nullptr;
-    EXPECT_THROW(ablsteady::residual(q, bad, c.mesh, c.geom, R), std::runtime_error);
+    EXPECT_THROW(gust::residual(q, bad, c.mesh, c.geom, R), std::runtime_error);
 }
 
 // ---------------------------------------------------------------------------
@@ -766,23 +766,23 @@ TEST(Closure, ResidualWithClosureIsTheResidualWithItsFields)
 TEST(Closure, RelaxationCheckpointAndFrozenSwitches)
 {
     PCase c = make_mesh(8, 8, 8, 0);
-    ablsteady::State q;
+    gust::State q;
     define_state(q, c);
-    const auto fl = ablsteady::trtest::make_flow(c, 0);
+    const auto fl = gust::trtest::make_flow(c, 0);
     const amrex::Array<amrex::MultiFab*, 3> vel{&q.u, &q.v, &q.w};
     for (int d = 0; d < 3; ++d) {
-        ablsteady::trtest::fill_loc(*vel[d], ablsteady::velocity_loc(d), c, [&] (double x, double y, double z) { return 2 + fl.vel(d, x, y, z); });
+        gust::trtest::fill_loc(*vel[d], gust::velocity_loc(d), c, [&] (double x, double y, double z) { return 2 + fl.vel(d, x, y, z); });
     }
-    ablsteady::trtest::fill_loc(q.theta, Loc::cell, c, [&] (double x, double y, double z) { return 300 + 0.003 * z + 0.2 * fl.q(x, y, z); });
-    ablsteady::trtest::fill_loc(q.tke, Loc::cell, c, [&] (double x, double y, double z) { return 0.2 + 0.1 * fl.q(x, y, z); });
+    gust::trtest::fill_loc(q.theta, Loc::cell, c, [&] (double x, double y, double z) { return 300 + 0.003 * z + 0.2 * fl.q(x, y, z); });
+    gust::trtest::fill_loc(q.tke, Loc::cell, c, [&] (double x, double y, double z) { return 0.2 + 0.1 * fl.q(x, y, z); });
     q.p.setVal(0.0);
     amrex::MultiFab dist;
-    ablsteady::height_above_ground(q.z_phys_nd, dist);
-    const ablsteady::BuoyancyOptions buoy;
+    gust::height_above_ground(q.z_phys_nd, dist);
+    const gust::BuoyancyOptions buoy;
     ClosureOptions opt;
     opt.nut_relax = amrex::Real(0.6);
-    ablsteady::Closure closure(opt);
-    ablsteady::ClosureFields f1, f2, f3;
+    gust::Closure closure(opt);
+    gust::ClosureFields f1, f2, f3;
     closure.evaluate(q, dist, amrex::Real(0.1), buoy, c.mesh, c.geom, f1);   // no history: unrelaxed
     EXPECT_FALSE(closure.has_history());
     closure.accept(f1);
@@ -790,7 +790,7 @@ TEST(Closure, RelaxationCheckpointAndFrozenSwitches)
     // A changed state: the relaxed nu_t is 0.6 new + 0.4 old, old = f1.nut.
     q.tke.mult(amrex::Real(2), 0, 1, 2);
     ClosureOptions unrelaxed;
-    ablsteady::Closure plain(unrelaxed);
+    gust::Closure plain(unrelaxed);
     plain.evaluate(q, dist, amrex::Real(0.1), buoy, c.mesh, c.geom, f2);
     closure.evaluate(q, dist, amrex::Real(0.1), buoy, c.mesh, c.geom, f3);
     for (amrex::MFIter mfi(f3.nut, false); mfi.isValid(); ++mfi) {
@@ -823,11 +823,11 @@ TEST(Closure, RelaxationCheckpointAndFrozenSwitches)
     c2.in = c.in;
     c2.in.mesh.max_grid_size = {4, 8};
     c2.make([] (double, double) { return 0.0; });
-    ablsteady::trtest::smooth_vertical_ghost_nodes(c2);
-    ablsteady::Closure restored(opt);
+    gust::trtest::smooth_vertical_ghost_nodes(c2);
+    gust::Closure restored(opt);
     restored.read_checkpoint(dir, c2.ba, c2.dm, c2.geom);
     EXPECT_TRUE(restored.has_history());
-    ablsteady::State q2;
+    gust::State q2;
     define_state(q2, c2);
     q2.u.ParallelCopy(q.u, 0, 0, 1, 2, 2, c.geom.periodicity());
     q2.v.ParallelCopy(q.v, 0, 0, 1, 2, 2, c.geom.periodicity());
@@ -836,8 +836,8 @@ TEST(Closure, RelaxationCheckpointAndFrozenSwitches)
     q2.theta.ParallelCopy(q.theta, 0, 0, 1, 2, 2, c.geom.periodicity());
     q2.tke.ParallelCopy(q.tke, 0, 0, 1, 2, 2, c.geom.periodicity());
     amrex::MultiFab dist2;
-    ablsteady::height_above_ground(q2.z_phys_nd, dist2);
-    ablsteady::ClosureFields f4;
+    gust::height_above_ground(q2.z_phys_nd, dist2);
+    gust::ClosureFields f4;
     restored.evaluate(q2, dist2, amrex::Real(0.1), buoy, c2.mesh, c2.geom, f4);
     amrex::MultiFab back(c.ba, c.dm, 1, 0);
     back.ParallelCopy(f4.nut, 0, 0, 1, 0, 0, c.geom.periodicity());
@@ -846,17 +846,17 @@ TEST(Closure, RelaxationCheckpointAndFrozenSwitches)
     amrex::ParallelDescriptor::Barrier();
     if (amrex::ParallelDescriptor::IOProcessor()) { amrex::FileSystem::RemoveAll(dir); }
     // No history: nothing is written, and a read of a checkpoint without one leaves none.
-    ablsteady::Closure fresh(opt);
+    gust::Closure fresh(opt);
     fresh.read_checkpoint("ut_closure_no_such_dir", c.ba, c.dm, c.geom);
     EXPECT_FALSE(fresh.has_history());
 
     // Frozen switches: freeze at a state above the floor, drop k below it:
     // the frozen evaluation keeps k (unfloored); the thawed one floors it.
-    ablsteady::Closure fz(unrelaxed);
+    gust::Closure fz(unrelaxed);
     fz.freeze_switches(q, dist, amrex::Real(0.1), buoy, c.mesh, c.geom);
     EXPECT_TRUE(fz.frozen());
     q.tke.setVal(amrex::Real(1e-20));
-    ablsteady::ClosureFields ff, ft;
+    gust::ClosureFields ff, ft;
     fz.evaluate(q, dist, amrex::Real(0.1), buoy, c.mesh, c.geom, ff);
     fz.thaw();
     EXPECT_FALSE(fz.frozen());
@@ -875,31 +875,31 @@ TEST(Closure, RelaxationCheckpointAndFrozenSwitches)
     // theta gradient flips sign, the frozen evaluation keeps the stable
     // decisions (closure_point with the recorded switches), the thawed one
     // takes the unstable branch.
-    ablsteady::State qs;
+    gust::State qs;
     define_state(qs, c);
     for (int d = 0; d < 3; ++d) {
-        ablsteady::trtest::fill_loc(*std::array<amrex::MultiFab*, 3>{&qs.u, &qs.v, &qs.w}[d], ablsteady::velocity_loc(d), c,
+        gust::trtest::fill_loc(*std::array<amrex::MultiFab*, 3>{&qs.u, &qs.v, &qs.w}[d], gust::velocity_loc(d), c,
                                     [&] (double x, double y, double z) { return 2 + fl.vel(d, x, y, z); });
     }
-    ablsteady::trtest::fill_loc(qs.theta, Loc::cell, c, [&] (double, double, double z) { return 300 + 0.0002 * z; });
+    gust::trtest::fill_loc(qs.theta, Loc::cell, c, [&] (double, double, double z) { return 300 + 0.0002 * z; });
     qs.tke.setVal(amrex::Real(0.5));
     qs.p.setVal(0.0);
-    ablsteady::Closure fs(unrelaxed);
+    gust::Closure fs(unrelaxed);
     fs.freeze_switches(qs, dist, amrex::Real(0.1), buoy, c.mesh, c.geom);
-    ablsteady::ClosureFields a1, a2;
+    gust::ClosureFields a1, a2;
     fs.evaluate(qs, dist, amrex::Real(0.1), buoy, c.mesh, c.geom, a1);
     plain.evaluate(qs, dist, amrex::Real(0.1), buoy, c.mesh, c.geom, a2);
     amrex::MultiFab::Subtract(a2.nut, a1.nut, 0, 0, 1, 0);
     EXPECT_EQ(a2.nut.norm0(), 0);
     // Flipped to weakly unstable: under the recorded (stable) decisions Rt stays
     // above Rt_crit (a frozen evaluation is for perturbations, Closure.H).
-    ablsteady::trtest::fill_loc(qs.theta, Loc::cell, c, [&] (double, double, double z) { return 300 - 0.0002 * z; });
-    ablsteady::ClosureFields a3, a4;
+    gust::trtest::fill_loc(qs.theta, Loc::cell, c, [&] (double, double, double z) { return 300 - 0.0002 * z; });
+    gust::ClosureFields a3, a4;
     fs.evaluate(qs, dist, amrex::Real(0.1), buoy, c.mesh, c.geom, a3);     // frozen: stable decisions
     plain.evaluate(qs, dist, amrex::Real(0.1), buoy, c.mesh, c.geom, a4);  // thawed: unstable
     {
         amrex::MultiFab N2, S2;
-        ablsteady::stratification_and_strain(qs, buoy, c.geom, N2, S2);
+        gust::stratification_and_strain(qs, buoy, c.geom, N2, S2);
         const ClosureConstants cst = fs.constants();
         int seen = 0;
         for (amrex::MFIter mfi(a3.nut, false); mfi.isValid(); ++mfi) {
@@ -926,19 +926,19 @@ TEST(Closure, RelaxationCheckpointAndFrozenSwitches)
     // exact there too.
     {
         PCase cn = make_mesh_np(8, 8, 8);
-        ablsteady::State qn;
+        gust::State qn;
         define_state(qn, cn);
         for (int d = 0; d < 3; ++d) {
-            ablsteady::trtest::fill_loc(*std::array<amrex::MultiFab*, 3>{&qn.u, &qn.v, &qn.w}[d], ablsteady::velocity_loc(d), cn,
+            gust::trtest::fill_loc(*std::array<amrex::MultiFab*, 3>{&qn.u, &qn.v, &qn.w}[d], gust::velocity_loc(d), cn,
                                         [&] (double x, double y, double z) { return 2 + fl.vel(d, x, y, z) + 0.001 * x; });
         }
-        ablsteady::trtest::fill_loc(qn.theta, Loc::cell, cn, [&] (double x, double, double z) { return 300 + 0.003 * z + 0.001 * x; });
-        ablsteady::trtest::fill_loc(qn.tke, Loc::cell, cn, [&] (double x, double, double) { return 0.2 + 0.0001 * x; });
+        gust::trtest::fill_loc(qn.theta, Loc::cell, cn, [&] (double x, double, double z) { return 300 + 0.003 * z + 0.001 * x; });
+        gust::trtest::fill_loc(qn.tke, Loc::cell, cn, [&] (double x, double, double) { return 0.2 + 0.0001 * x; });
         qn.p.setVal(0.0);
         amrex::MultiFab dn;
-        ablsteady::height_above_ground(qn.z_phys_nd, dn);
-        ablsteady::Closure cl1(opt);
-        ablsteady::ClosureFields g1;
+        gust::height_above_ground(qn.z_phys_nd, dn);
+        gust::Closure cl1(opt);
+        gust::ClosureFields g1;
         cl1.evaluate(qn, dn, amrex::Real(0.1), buoy, cn.mesh, cn.geom, g1);
         cl1.accept(g1);
         const std::string dir2 = "ut_closure_chk_np_tmp";
@@ -949,22 +949,22 @@ TEST(Closure, RelaxationCheckpointAndFrozenSwitches)
         cn2.in = cn.in;
         cn2.in.mesh.max_grid_size = {4, 8};
         cn2.make([] (double, double) { return 0.0; });
-        ablsteady::trtest::smooth_vertical_ghost_nodes(cn2);
-        ablsteady::Closure cl2(opt);
+        gust::trtest::smooth_vertical_ghost_nodes(cn2);
+        gust::Closure cl2(opt);
         cl2.read_checkpoint(dir2, cn2.ba, cn2.dm, cn2.geom);
         // The restored history equals the stored one on the ghost ring too:
         // compare through host copies of a copy on the second layout.
-        ablsteady::ClosureFields g2;
-        ablsteady::State qn2;
+        gust::ClosureFields g2;
+        gust::State qn2;
         define_state(qn2, cn2);
         const std::vector<std::pair<amrex::MultiFab*, const amrex::MultiFab*>> pairs{
             {&qn2.u, &qn.u}, {&qn2.v, &qn.v}, {&qn2.w, &qn.w}, {&qn2.theta, &qn.theta}, {&qn2.tke, &qn.tke}, {&qn2.p, &qn.p}};
         for (const auto& pr : pairs) { pr.first->ParallelCopy(*pr.second, 0, 0, 1, 2, 2, cn.geom.periodicity()); }
         amrex::MultiFab dn2;
-        ablsteady::height_above_ground(qn2.z_phys_nd, dn2);
+        gust::height_above_ground(qn2.z_phys_nd, dn2);
         qn2.tke.mult(amrex::Real(1.5), 0, 1, 2);
         qn.tke.mult(amrex::Real(1.5), 0, 1, 2);
-        ablsteady::ClosureFields r1, r2;
+        gust::ClosureFields r1, r2;
         cl1.evaluate(qn, dn, amrex::Real(0.1), buoy, cn.mesh, cn.geom, r1);
         cl2.evaluate(qn2, dn2, amrex::Real(0.1), buoy, cn2.mesh, cn2.geom, r2);
         amrex::MultiFab back(cn.ba, cn.dm, 1, 1);

@@ -27,7 +27,7 @@
 #include <memory>
 #include <string>
 
-namespace ablsteady {
+namespace gust {
 
 namespace {
 
@@ -146,7 +146,7 @@ void run ()
     }
     for (const auto& e : check_column_guess(iopt, sopt, fopt, bin, surf, surface_layer)) { err.push_back(e); }
     if (!err.empty()) {
-        std::string all = "ablsteady: invalid inputs:";
+        std::string all = "gust: invalid inputs:";
         for (const auto& e : err) { all += "\n  " + e; }
         amrex::Abort(all);
     }
@@ -165,11 +165,11 @@ void run ()
             lay = check_line_overlap_layout(amrex::BoxArray(ba).coarsen(amrex::IntVect(AMREX_D_DECL(r, r, 1))), sopt.line_overlap);
             if (!lay.empty()) { lay += " (on grid hierarchy level " + std::to_string(l) + ", steady.sequencing = 1)"; }
         }
-        if (!lay.empty()) { amrex::Abort("ablsteady: invalid inputs:\n  " + lay); }
+        if (!lay.empty()) { amrex::Abort("gust: invalid inputs:\n  " + lay); }
     }
     const amrex::DistributionMapping dm(ba);
 
-    amrex::Print() << "ablsteady: " << in.mesh.n_cell << " cells, " << ba.size()
+    amrex::Print() << "gust: " << in.mesh.n_cell << " cells, " << ba.size()
                    << " boxes (each spans the full z column)\n";
 
     State state;
@@ -188,13 +188,13 @@ void run ()
             if (iopt.first_guess == InitOptions::FirstGuess::column) {
                 const ColumnGuessResult cg = run_column_guess(in, iopt, sopt, bin, surf, surface_layer, copt, fopt, "column_guess.dat");
                 char cl[256];
-                std::snprintf(cl, sizeof(cl), "ablsteady: column guess: converged after %d steps (%.3f s), %d levels, "
+                std::snprintf(cl, sizeof(cl), "gust: column guess: converged after %d steps (%.3f s), %d levels, "
                               "u* %.4f m/s, u %.4f v %.4f m/s at the top\n", cg.iterations, cg.wall_seconds,
                               static_cast<int>(cg.z.size()) - 1, static_cast<double>(cg.ustar), static_cast<double>(cg.u.back()),
                               static_cast<double>(cg.v.back()));
                 amrex::Print() << cl;
                 if (cg.tol > static_cast<double>(iopt.column_tol)) {
-                    std::snprintf(cl, sizeof(cl), "ablsteady: column guess: init.column_tol = %.3e lifted to %.3e (100 epsilon of Real)\n",
+                    std::snprintf(cl, sizeof(cl), "gust: column guess: init.column_tol = %.3e lifted to %.3e (100 epsilon of Real)\n",
                                   static_cast<double>(iopt.column_tol), cg.tol);
                     amrex::Print() << cl;
                 }
@@ -208,7 +208,7 @@ void run ()
     } else {
         read_checkpoint(in.io.restart, state, in.mesh);
         mesh.check_restart(in, geom, state.z_phys_nd);
-        amrex::Print() << "ablsteady: restarted from " << in.io.restart
+        amrex::Print() << "gust: restarted from " << in.io.restart
                        << " at step " << state.step << "\n";
     }
     // Writing a checkpoint of the same name as the one read would move it to
@@ -218,7 +218,7 @@ void run ()
         std::string from = in.io.restart;
         while (from.size() > 1 && from.back() == '/') { from.pop_back(); }
         if (amrex::Concatenate(in.io.chk_file, state.step, 5) == from) {
-            amrex::Abort("ablsteady: io.chk_file = " + in.io.chk_file + " would overwrite io.restart = "
+            amrex::Abort("gust: io.chk_file = " + in.io.chk_file + " would overwrite io.restart = "
                          + in.io.restart + "; choose another io.chk_file or set io.write_checkpoint = 0");
         }
     };
@@ -253,7 +253,7 @@ void run ()
     auto write_hierarchy = [&] {
         if (!hierarchy) { return; }
         for (const auto& name : hierarchy->write_plotfiles(in.io.plot_file, state.step)) {
-            amrex::Print() << "ablsteady: wrote " << name << "\n";
+            amrex::Print() << "gust: wrote " << name << "\n";
         }
     };
 
@@ -284,12 +284,12 @@ void run ()
             driver.restore(read_driver_history(in.io.restart), state);
             closure.read_checkpoint(in.io.restart, ba, dm, geom);
             if (newton_stage != nullptr) { newton_stage->read_checkpoint(in.io.restart, ba, dm, geom); }
-            amrex::Print() << "ablsteady: driver history restored: " << driver.history().records.size()
+            amrex::Print() << "gust: driver history restored: " << driver.history().records.size()
                            << " iterations, cfl " << driver.cfl() << ", reference hold " << driver.hold_iterations()
                            << " iterations" << (driver.history().hold == 0 ? " (released: a seeded level of grid sequencing)" : "")
                            << "\n";
         }
-        amrex::Print() << "ablsteady: SIMPLEC stage: " << sopt.zline_sweeps << " " << sweep_name(sopt.sweep) << " sweeps";
+        amrex::Print() << "gust: SIMPLEC stage: " << sopt.zline_sweeps << " " << sweep_name(sopt.sweep) << " sweeps";
         if (sopt.sweep == SweepKind::lusgs) {
             amrex::Print() << " (ghosts " << line_ghosts_name(sopt.line_ghosts) << ", overlap " << sopt.line_overlap << ", "
                            << line_order_name(sopt.line_order) << " order"
@@ -307,7 +307,7 @@ void run ()
         amrex::Print() << ", cfl0 " << sopt.cfl0
                        << ", cfl_max " << sopt.cfl_max << "\n";
         if (newton) {
-            amrex::Print() << "ablsteady: Newton stage after " << sopt.switch_window << " iterations at r <= " << sopt.switch_residual
+            amrex::Print() << "gust: Newton stage after " << sopt.switch_window << " iterations at r <= " << sopt.switch_residual
                            << (sopt.switch_monitor_tol > 0 ? " with the monitors settled" : "") << "; GMRES("
                            << newton_opt.newton.gmres_restart << "), " << newton_preconditioner_name(sopt.newton_preconditioner)
                            << " preconditioner, back to SIMPLEC after " << sopt.newton_fallback_failures << " failed steps\n";
@@ -316,7 +316,7 @@ void run ()
         // prolongation into the level-0 state (Sequencing.H).
         std::vector<LevelSummary> levels;
         if (sequencing) {
-            amrex::Print() << "ablsteady: grid sequencing over " << hierarchy->num_levels() << " levels: loose stop at "
+            amrex::Print() << "gust: grid sequencing over " << hierarchy->num_levels() << " levels: loose stop at "
                            << seq.drop_orders << " orders";
             if (seq.monitor_tol > 0) { amrex::Print() << " or monitors within " << seq.monitor_tol; }
             amrex::Print() << ", strict stop on level 0; "
@@ -325,7 +325,7 @@ void run ()
                            << (seq.cfl_previous ? ", starting at the previous level's CFL" : "") << "\n";
             levels = sequence_coarse_levels(*hierarchy, setup, seq, iopt, column.get(), level0, state);
         } else if (solve && seq.enabled) {
-            amrex::Print() << "ablsteady: grid sequencing: the restart continues on level 0; the coarse levels are not run"
+            amrex::Print() << "gust: grid sequencing: the restart continues on level 0; the coarse levels are not run"
                            << " (steady.sequencing, sequencing_drop_orders, sequencing_monitor_tol, sequencing_hold and sequencing_cfl_start"
                            << " have no effect; the checkpoint keeps level 0's reference hold)\n";
         }
@@ -344,17 +344,17 @@ void run ()
                            : (v.status == SteadyStatus::Diverged) ? "diverged" : "not steady";
         std::string reasons;
         for (const auto& r : v.reasons) { reasons += "\n  " + r; }
-        amrex::Print() << "ablsteady: " << status << " after " << done << " iterations ("
+        amrex::Print() << "gust: " << status << " after " << done << " iterations ("
                        << driver.history().records.size() << " over the run)" << reasons << "\n";
         for (const auto& acc : driver.history().accounts) {
-            amrex::Print() << "ablsteady: stage account: " << acc.iterations << " iterations, " << acc.wall_seconds
+            amrex::Print() << "gust: stage account: " << acc.iterations << " iterations, " << acc.wall_seconds
                            << " s, " << acc.au << " AU\n";
         }
         if (!levels.empty()) { amrex::Print() << sequencing_report(levels, driver.history(), status, sopt.criterion.residual_ref_iterations); }
         check_overwrite();   // the step is final here, before any output
         if (in.io.write_plotfile == 1) {
             const auto name = write_plotfile(in.io.plot_file, state, geom, &mesh.detJ);
-            amrex::Print() << "ablsteady: wrote " << name << "\n";
+            amrex::Print() << "gust: wrote " << name << "\n";
             write_hierarchy();
         }
         // The checkpoint first, with the Newton stage as it is (a restart
@@ -367,7 +367,7 @@ void run ()
             write_driver_history(name, driver.history());
             closure.write_checkpoint(name);
             if (newton_stage != nullptr) { newton_stage->write_checkpoint(name); }
-            amrex::Print() << "ablsteady: wrote " << name << "\n";
+            amrex::Print() << "gust: wrote " << name << "\n";
         }
         if (newton_stage != nullptr && driver.stage() == 1 && v.status != SteadyStatus::Diverged) { newton_stage->leave(state); }
         if (!in.io.turb_plot_file.empty()) {
@@ -381,22 +381,22 @@ void run ()
             residual(state, res_in, mesh, geom, R);
             const auto name = write_turbulence_plotfile(in.io.turb_plot_file, state, cf, dist, surface_layer ? &ss : nullptr,
                                                         copt, geom, &R);
-            amrex::Print() << "ablsteady: wrote " << name << "\n";
+            amrex::Print() << "gust: wrote " << name << "\n";
         }
-        if (v.status == SteadyStatus::Diverged) { amrex::Abort("ablsteady: the run diverged" + reasons); }
+        if (v.status == SteadyStatus::Diverged) { amrex::Abort("gust: the run diverged" + reasons); }
         return;
     }
 
     // No stage: the run writes its state and stops.
     if (in.io.write_plotfile == 1) {
         const auto name = write_plotfile(in.io.plot_file, state, geom, &mesh.detJ);
-        amrex::Print() << "ablsteady: wrote " << name << "\n";
+        amrex::Print() << "gust: wrote " << name << "\n";
         write_hierarchy();
     }
     if (in.io.write_checkpoint == 1) {
         const auto name = write_checkpoint(in.io.chk_file, state, in.mesh);
-        amrex::Print() << "ablsteady: wrote " << name << "\n";
+        amrex::Print() << "gust: wrote " << name << "\n";
     }
 }
 
-} // namespace ablsteady
+} // namespace gust

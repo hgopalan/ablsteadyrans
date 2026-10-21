@@ -1,5 +1,5 @@
-#ifndef ABLSTEADY_NEWTON_H_
-#define ABLSTEADY_NEWTON_H_
+#ifndef GUST_NEWTON_H_
+#define GUST_NEWTON_H_
 
 // The Newton–Krylov core (plan sub-phase 3.1): one Newton step
 //
@@ -79,7 +79,7 @@
 #include <string>
 #include <vector>
 
-namespace ablsteady {
+namespace gust {
 
 //! The Newton–Krylov inputs. The defaults are provisional: sub-phase 3.6
 //! (the phase 3 checkpoint) tunes them.
@@ -327,6 +327,6 @@ private:
     int m_verbose{1};
 };
 
-} // namespace ablsteady
+} // namespace gust
 
 #endif

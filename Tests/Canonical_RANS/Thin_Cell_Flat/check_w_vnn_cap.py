@@ -52,13 +52,13 @@ def run(cmd, where, extra):
 
 def verdict(stdout):
     for ln in stdout.splitlines():
-        if ln.startswith("ablsteady: steady after "):
+        if ln.startswith("gust: steady after "):
             return int(ln.split()[3])
     return None
 
 
 def last_plotfile(stdout, where):
-    wrote = [ln.split()[-1] for ln in stdout.splitlines() if ln.startswith("ablsteady: wrote ") and "_plt" in ln]
+    wrote = [ln.split()[-1] for ln in stdout.splitlines() if ln.startswith("gust: wrote ") and "_plt" in ln]
     if not wrote:
         raise SystemExit("check_w_vnn_cap: no plotfile written in %s/" % where)
     return os.path.join(where, wrote[-1])
@@ -121,7 +121,7 @@ def main(argv):
 
     capped = ["simplec.w_vnn_cap=%g" % cap]
     first = run(cmd, "first", capped + ["init.first_guess=profile", "steady.max_iterations=40"])
-    chk = [ln.split()[-1] for ln in first.splitlines() if ln.startswith("ablsteady: wrote ") and "_chk" in ln]
+    chk = [ln.split()[-1] for ln in first.splitlines() if ln.startswith("gust: wrote ") and "_chk" in ln]
     if not chk:
         raise SystemExit("check_w_vnn_cap: no checkpoint written in first/")
     cont = subprocess.run(cmd + capped + ["steady.max_iterations=80", "io.restart=" + chk[-1]], cwd="first",

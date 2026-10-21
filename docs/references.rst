@@ -1,9 +1,9 @@
 ERF reference solutions
 =======================
 
-ablsteady is validated against ERF. ERF solves the same equations with the same turbulence model, but in time
+GUST is validated against ERF. ERF solves the same equations with the same turbulence model, but in time
 (unsteady RANS). Running ERF long enough and averaging over the final hour gives a reference steady solution for each
-test case (:doc:`test_cases`). The wall time and cost of each ERF run is also the baseline that ablsteady aims to
+test case (:doc:`test_cases`). The wall time and cost of each ERF run is also the baseline that GUST aims to
 beat.
 
 .. note::
@@ -14,7 +14,7 @@ beat.
 Pinned versions
 ---------------
 
-``external/VERSIONS`` pins the commits that ablsteady builds on or compares with (the file holds the full
+``external/VERSIONS`` pins the commits that GUST builds on or compares with (the file holds the full
 40-character hashes):
 
 .. list-table::
@@ -44,10 +44,10 @@ Producing the references
 
 .. code-block:: bash
 
-   export ABLSTEADY_ACCOUNT=<allocation>
-   tools/kestrel/build_kestrel.sh cpu                 # ablsteady and ablsteady_refavg
+   export GUST_ACCOUNT=<allocation>
+   tools/kestrel/build_kestrel.sh cpu                 # GUST and gust_refavg
    tools/kestrel/erf_references.sh build cpu          # ERF at the pinned commit
-   salloc -A $ABLSTEADY_ACCOUNT -N 1 -t 01:00:00
+   salloc -A $GUST_ACCOUNT -N 1 -t 01:00:00
    tools/kestrel/erf_references.sh smoke cpu          # ERF's own RANS tests, inside the allocation
    tools/kestrel/erf_references.sh submit cpu all
    tools/kestrel/erf_references.sh archive cpu Neutral_ABL_Flat   # after each job ends
@@ -126,7 +126,7 @@ scale. A run that is still drifting, or that oscillates with a period close to t
 Archive
 -------
 
-The tool ``ablsteady_refavg`` writes one archive directory per case:
+The tool ``gust_refavg`` writes one archive directory per case:
 
 .. code-block:: text
 
@@ -137,7 +137,7 @@ The tool ``ablsteady_refavg`` writes one archive directory per case:
                   per-variable sum, minimum, maximum and half-window change, and a SHA-256 of every file
 
 The allocation units (AU) are nodes × wall hours × the machine's rate: 10 AU per node-hour on Kestrel CPU nodes and
-100 on GPU nodes. Partial nodes count as whole nodes, for ERF and ablsteady alike.
+100 on GPU nodes. Partial nodes count as whole nodes, for ERF and GUST alike.
 
 Before an archive is used, it is checked. The check fails, naming the file or variable, if a file's checksum
 differs, a file is missing or not listed, the AU do not match, the manifest does not parse, or the fields do not
@@ -146,4 +146,4 @@ have exactly the recorded sum, minimum and maximum.
 Only cell-centred variables are averaged. On terrain cases the cell-centre height ``z_phys`` is kept when the ERF
 input file writes it (both hills and Askervein do).
 
-The inputs of ``ablsteady_refavg`` are listed in :doc:`inputs`.
+The inputs of ``gust_refavg`` are listed in :doc:`inputs`.

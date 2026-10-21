@@ -16,7 +16,7 @@
 #include <limits>
 #include <sstream>
 
-namespace ablsteady {
+namespace gust {
 
 namespace {
 
@@ -41,7 +41,7 @@ amrex::Real weighted_mean (const amrex::MultiFab& mf, const amrex::MultiFab& J)
 
 [[noreturn]] void abort_all (const std::vector<std::string>& err)
 {
-    std::string all = "ablsteady: invalid inputs:";
+    std::string all = "gust: invalid inputs:";
     for (const auto& e : err) { all += "\n  " + e; }
     amrex::Abort(all);
     std::abort();
@@ -407,13 +407,13 @@ void PoissonSolver::check_layout (const amrex::MultiFab& mf, const char* what) c
 {
     const amrex::BoxArray cc = amrex::convert(mf.boxArray(), amrex::IntVect(0));
     if (cc != m_mesh.detJ.boxArray() || mf.DistributionMap() != m_mesh.detJ.DistributionMap()) {
-        amrex::Abort(std::string("ablsteady: PoissonSolver: ") + what
+        amrex::Abort(std::string("gust: PoissonSolver: ") + what
                      + " must be on the mesh's BoxArray and DistributionMapping");
     }
     // The ghost fills assume boxes that span the z column (make_box_array).
     for (int b = 0; b < cc.size(); ++b) {
         if (cc[b].smallEnd(2) != m_geom.Domain().smallEnd(2) || cc[b].bigEnd(2) != m_geom.Domain().bigEnd(2)) {
-            amrex::Abort("ablsteady: PoissonSolver: every box must span the full z column");
+            amrex::Abort("gust: PoissonSolver: every box must span the full z column");
         }
     }
 }
@@ -423,7 +423,7 @@ void PoissonSolver::prepare (const FaceCoeffs& coeffs, const PoissonBC& bc)
     auto err = check_poisson_bc(bc, m_geom);
     if (!err.empty()) { abort_all(err); }
     if (!std::isfinite(coeffs.precond_ratio) || !(coeffs.precond_ratio > 0)) {
-        amrex::Abort("ablsteady: FaceCoeffs::precond_ratio must be finite and > 0");
+        amrex::Abort("gust: FaceCoeffs::precond_ratio must be finite and > 0");
     }
     const amrex::MultiFab* b[4] = {coeffs.x, coeffs.y, coeffs.z, coeffs.z_cross};
     const char* bname[4] = {"FaceCoeffs::x", "FaceCoeffs::y", "FaceCoeffs::z", "FaceCoeffs::z_cross"};
@@ -432,10 +432,10 @@ void PoissonSolver::prepare (const FaceCoeffs& coeffs, const PoissonBC& bc)
         if (b[d] == nullptr) { continue; }
         const amrex::MultiFab& ref = *a[d < 3 ? d : 2];
         if (b[d]->boxArray() != ref.boxArray() || b[d]->DistributionMap() != ref.DistributionMap()) {
-            amrex::Abort(std::string("ablsteady: ") + bname[d] + " must be a face MultiFab on the mesh's box array");
+            amrex::Abort(std::string("gust: ") + bname[d] + " must be a face MultiFab on the mesh's box array");
         }
         if (!all_positive(*b[d])) {
-            amrex::Abort(std::string("ablsteady: ") + bname[d] + " must be finite and > 0 everywhere");
+            amrex::Abort(std::string("gust: ") + bname[d] + " must be finite and > 0 everywhere");
         }
     }
 
@@ -462,11 +462,11 @@ void PoissonSolver::prepare (const FaceCoeffs& coeffs, const PoissonBC& bc)
     // ground; its kernel has no Dirichlet ground face).
     m_split = coeffs.z_cross != nullptr;
     if (m_split && m_opt.backend != "gmres_fft") {
-        amrex::Abort("ablsteady: FaceCoeffs::z_cross needs solver.poisson_backend = gmres_fft "
+        amrex::Abort("gust: FaceCoeffs::z_cross needs solver.poisson_backend = gmres_fft "
                      "(MLTerrainPoisson has no split coefficient)");
     }
     if (m_split && bc.face[amrex::Orientation(2, amrex::Orientation::low)] == PoissonFace::dirichlet) {
-        amrex::Abort("ablsteady: FaceCoeffs::z_cross with a Dirichlet ground is not supported");
+        amrex::Abort("gust: FaceCoeffs::z_cross with a Dirichlet ground is not supported");
     }
     if (m_split) {
         if (!m_dcross.ok() || new_layout) { m_dcross.define(m_mesh.az.boxArray(), m_mesh.az.DistributionMap(), 1, 0); }
@@ -517,11 +517,11 @@ void PoissonSolver::prepare (const FaceCoeffs& coeffs, const PoissonBC& bc)
 void PoissonSolver::apply (amrex::MultiFab& Aphi, amrex::MultiFab& phi, const FaceCoeffs& coeffs,
                            const PoissonBC& bc)
 {
-    if (phi.nGrowVect().min() < 1) { amrex::Abort("ablsteady: PoissonSolver::apply needs phi with a ghost cell"); }
+    if (phi.nGrowVect().min() < 1) { amrex::Abort("gust: PoissonSolver::apply needs phi with a ghost cell"); }
     check_layout(phi, "phi");
     check_layout(Aphi, "Aphi");
     if (m_opt.backend != "gmres_fft") {
-        amrex::Abort("ablsteady: PoissonSolver::apply is back end A's operator (solver.poisson_backend = gmres_fft)");
+        amrex::Abort("gust: PoissonSolver::apply is back end A's operator (solver.poisson_backend = gmres_fft)");
     }
     prepare(coeffs, bc);
     Op op(*m_op, m_geom, m_mesh, m_z, m_split ? &m_dcross : nullptr, nullptr, bc, m_ax, m_ay, m_az);
@@ -530,7 +530,7 @@ void PoissonSolver::apply (amrex::MultiFab& Aphi, amrex::MultiFab& phi, const Fa
 
 void PoissonSolver::fill_ghosts (amrex::MultiFab& phi, const PoissonBC& bc)
 {
-    if (phi.nGrowVect().min() < 1) { amrex::Abort("ablsteady: PoissonSolver::fill_ghosts needs phi with a ghost cell"); }
+    if (phi.nGrowVect().min() < 1) { amrex::Abort("gust: PoissonSolver::fill_ghosts needs phi with a ghost cell"); }
     check_layout(phi, "phi");
     auto err = check_poisson_bc(bc, m_geom);
     if (!err.empty()) { abort_all(err); }
@@ -540,7 +540,7 @@ void PoissonSolver::fill_ghosts (amrex::MultiFab& phi, const PoissonBC& bc)
 PoissonResult PoissonSolver::solve (amrex::MultiFab& rhs, amrex::MultiFab& phi, const FaceCoeffs& coeffs,
                                     const PoissonBC& bc, amrex::Array<amrex::MultiFab, AMREX_SPACEDIM>* fluxes)
 {
-    if (phi.nGrowVect().min() < 1) { amrex::Abort("ablsteady: PoissonSolver::solve needs phi with a ghost cell"); }
+    if (phi.nGrowVect().min() < 1) { amrex::Abort("gust: PoissonSolver::solve needs phi with a ghost cell"); }
     check_layout(rhs, "rhs");
     check_layout(phi, "phi");
     if (fluxes != nullptr) {
@@ -550,7 +550,7 @@ PoissonResult PoissonSolver::solve (amrex::MultiFab& rhs, amrex::MultiFab& phi, 
             // TerrainPoisson::getFluxes writes every point of its fluxes.
             if (f.nGrowVect().max() != 0 || f.boxArray() != a[d]->boxArray()
                 || f.DistributionMap() != a[d]->DistributionMap()) {
-                amrex::Abort("ablsteady: PoissonSolver::solve: fluxes must be face MultiFabs on the mesh's box "
+                amrex::Abort("gust: PoissonSolver::solve: fluxes must be face MultiFabs on the mesh's box "
                              "array, without ghost cells");
             }
         }
@@ -594,7 +594,7 @@ PoissonResult PoissonSolver::solve (amrex::MultiFab& rhs, amrex::MultiFab& phi, 
 
     if (gmres.getStatus() != 0) {
         std::ostringstream os;
-        os << "ablsteady: the Poisson solve did not converge in solver.poisson_max_iter = " << m_opt.max_iter
+        os << "gust: the Poisson solve did not converge in solver.poisson_max_iter = " << m_opt.max_iter
            << " iterations (residual " << res.final_residual << " of " << res.initial_residual
            << "; solver.poisson_reltol = " << m_opt.reltol << ", solver.poisson_abstol = " << m_opt.abstol << ")";
         amrex::Abort(os.str());
@@ -614,7 +614,7 @@ PoissonResult PoissonSolver::solve (amrex::MultiFab& rhs, amrex::MultiFab& phi, 
         if (m_split) { op.add_cross_flux((*fluxes)[2], phi); }
     }
     if (m_opt.verbose > 0) {
-        amrex::Print() << "ablsteady: Poisson solve: " << res.iterations << " iterations, residual "
+        amrex::Print() << "gust: Poisson solve: " << res.iterations << " iterations, residual "
                        << res.final_residual << " of " << res.initial_residual;
         if (res.singular) { amrex::Print() << ", removed mean " << res.removed_mean; }
         amrex::Print() << "\n";
@@ -694,7 +694,7 @@ PoissonResult PoissonSolver::solve_mlmg (amrex::MultiFab& rhs, amrex::MultiFab& 
     std::feclearexcept(FE_ALL_EXCEPT);
     amrex::setFPExcept(prev_fpe);
     if (phi.contains_nan(0, 1, 0) || phi.contains_inf(0, 1, 0)) {
-        amrex::Abort("ablsteady: the Poisson solve (solver.poisson_backend = " + m_opt.backend
+        amrex::Abort("gust: the Poisson solve (solver.poisson_backend = " + m_opt.backend
                      + ") returned non-finite values");
     }
     if (res.singular) { phi.plus(-weighted_mean(phi, m_mesh.detJ), 0, 1, 0); }
@@ -707,7 +707,7 @@ PoissonResult PoissonSolver::solve_mlmg (amrex::MultiFab& rhs, amrex::MultiFab& 
     res.final_residual = r.norm2();
     if (!converged) {
         std::ostringstream os;
-        os << "ablsteady: the Poisson solve (solver.poisson_backend = " << m_opt.backend
+        os << "gust: the Poisson solve (solver.poisson_backend = " << m_opt.backend
            << ") did not converge in solver.poisson_max_iter = " << m_opt.max_iter << " iterations (residual "
            << res.final_residual << " of " << res.initial_residual << "; solver.poisson_reltol = " << m_opt.reltol
            << ", solver.poisson_abstol = " << m_opt.abstol << ")";
@@ -724,7 +724,7 @@ PoissonResult PoissonSolver::solve_mlmg (amrex::MultiFab& rhs, amrex::MultiFab& 
         }
     }
     if (m_opt.verbose > 0) {
-        amrex::Print() << "ablsteady: Poisson solve (" << m_opt.backend << "): " << res.iterations
+        amrex::Print() << "gust: Poisson solve (" << m_opt.backend << "): " << res.iterations
                        << " iterations, residual " << res.final_residual << " of " << res.initial_residual << "\n";
     }
     return res;
@@ -736,11 +736,11 @@ void face_divergence (const Mesh& mesh, const amrex::Geometry& geom,
     const amrex::MultiFab* a[3] = {&mesh.ax, &mesh.ay, &mesh.az};
     for (int d = 0; d < 3; ++d) {
         if (F[d]->boxArray() != a[d]->boxArray() || F[d]->DistributionMap() != a[d]->DistributionMap()) {
-            amrex::Abort("ablsteady: face_divergence: F must be face MultiFabs on the mesh's box array");
+            amrex::Abort("gust: face_divergence: F must be face MultiFabs on the mesh's box array");
         }
     }
     if (div.boxArray() != mesh.detJ.boxArray() || div.DistributionMap() != mesh.detJ.DistributionMap()) {
-        amrex::Abort("ablsteady: face_divergence: div must be on the mesh's box array");
+        amrex::Abort("gust: face_divergence: div must be on the mesh's box array");
     }
     const auto dxinv = geom.InvCellSizeArray();
     for (amrex::MFIter mfi(div, amrex::TilingIfNotGPU()); mfi.isValid(); ++mfi) {
@@ -763,4 +763,4 @@ void face_divergence (const Mesh& mesh, const amrex::Geometry& geom,
     }
 }
 
-} // namespace ablsteady
+} // namespace gust

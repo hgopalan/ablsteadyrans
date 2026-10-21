@@ -1,5 +1,5 @@
-#ifndef ABLSTEADY_CLOSURE_H_
-#define ABLSTEADY_CLOSURE_H_
+#ifndef GUST_CLOSURE_H_
+#define GUST_CLOSURE_H_
 
 // The Axell–Liungman (2001) k–L closure (sub-phase 1.9): the eddy viscosity
 // and diffusivities from the state, and the sources of k. The point relations
@@ -75,7 +75,7 @@
 #include <string>
 #include <vector>
 
-namespace ablsteady {
+namespace gust {
 
 enum class WallDistanceKind { terrain_height, tucker };
 
@@ -211,6 +211,6 @@ void stratification_and_strain (const State& q, const BuoyancyOptions& buoyancy,
 //! included); ri0 > 0. 0 where N2 = 0 (S2 = 0 included).
 void gate_stratification (amrex::MultiFab& N2, const amrex::MultiFab& S2, amrex::Real ri0);
 
-} // namespace ablsteady
+} // namespace gust
 
 #endif

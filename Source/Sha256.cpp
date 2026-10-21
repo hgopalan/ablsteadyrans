@@ -5,7 +5,7 @@
 #include <fstream>
 #include <vector>
 
-namespace ablsteady {
+namespace gust {
 
 namespace {
 
@@ -121,4 +121,4 @@ std::string sha256_file (const std::string& path)
     return s.hex();
 }
 
-} // namespace ablsteady
+} // namespace gust

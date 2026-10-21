@@ -23,15 +23,15 @@ namespace fs = std::filesystem;
 
 namespace {
 
-using ablsteady::test::count_bit_differences;
-using ablsteady::test::pattern;
+using gust::test::count_bit_differences;
+using gust::test::pattern;
 
 const amrex::Vector<std::string> kVars{"x_velocity", "theta", "KE", "z_phys"};
 const std::string kSha = "92410d578f612ab9e844c450bf8e900194becfb5";
 
-ablsteady::MeshInputs ref_mesh ()
+gust::MeshInputs ref_mesh ()
 {
-    ablsteady::MeshInputs m;
+    gust::MeshInputs m;
     m.n_cell = amrex::IntVect(12, 8, 6);
     m.prob_lo = {0, 0, 0};
     m.prob_hi = {1200, 800, 600};
@@ -57,7 +57,7 @@ void fill_snapshot (amrex::MultiFab& mf, int s)
         amrex::ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
         {
             for (int c = 0; c < nc; ++c) {
-                a(i, j, k, c) = ablsteady::test::pattern(i, j, k, c) * amrex::Real(1 + s);
+                a(i, j, k, c) = gust::test::pattern(i, j, k, c) * amrex::Real(1 + s);
             }
         });
     }
@@ -67,8 +67,8 @@ void fill_snapshot (amrex::MultiFab& mf, int s)
 std::vector<std::string> write_snapshots (const std::string& prefix, const std::vector<double>& times)
 {
     const auto mesh = ref_mesh();
-    const auto geom = ablsteady::make_geometry(mesh);
-    const auto ba = ablsteady::make_box_array(mesh);
+    const auto geom = gust::make_geometry(mesh);
+    const auto ba = gust::make_box_array(mesh);
     const amrex::DistributionMapping dm(ba);
     std::vector<std::string> names;
     for (std::size_t s = 0; s < times.size(); ++s) {
@@ -111,12 +111,12 @@ bool mentions (const std::vector<std::string>& v, const std::string& s)
     return false;
 }
 
-ablsteady::ReferenceMeta meta_kestrel_gpu ()
+gust::ReferenceMeta meta_kestrel_gpu ()
 {
-    ablsteady::ReferenceMeta m;
+    gust::ReferenceMeta m;
     m.case_name = "Neutral_Hill_3D";
     m.erf_sha = kSha;
-    m.machine = ablsteady::Machine::KestrelGpu;
+    m.machine = gust::Machine::KestrelGpu;
     m.nodes = 2;
     m.wall_seconds = 5400;   // 2 nodes x 1.5 h x 100 AU = 300 AU
     m.ranks = 4;
@@ -133,29 +133,29 @@ void on_io_rank (F&& f)
 
 TEST (Reference, AllocationUnits)
 {
-    using ablsteady::Machine;
-    EXPECT_EQ(ablsteady::allocation_units(Machine::KestrelCpu, 1, 3600), 10.0);
-    EXPECT_EQ(ablsteady::allocation_units(Machine::KestrelGpu, 2, 5400), 300.0);
-    EXPECT_EQ(ablsteady::allocation_units(Machine::Local, 8, 1.0e6), 0.0);
+    using gust::Machine;
+    EXPECT_EQ(gust::allocation_units(Machine::KestrelCpu, 1, 3600), 10.0);
+    EXPECT_EQ(gust::allocation_units(Machine::KestrelGpu, 2, 5400), 300.0);
+    EXPECT_EQ(gust::allocation_units(Machine::Local, 8, 1.0e6), 0.0);
     Machine m{};
-    EXPECT_TRUE(ablsteady::parse_machine("kestrel-gpu", m));
+    EXPECT_TRUE(gust::parse_machine("kestrel-gpu", m));
     EXPECT_EQ(m, Machine::KestrelGpu);
-    EXPECT_FALSE(ablsteady::parse_machine("kestrel", m));
+    EXPECT_FALSE(gust::parse_machine("kestrel", m));
 }
 
 TEST (Reference, TrapezoidWeights)
 {
-    const auto w = ablsteady::trapezoid_weights({0.0, 1.0, 3.0});
+    const auto w = gust::trapezoid_weights({0.0, 1.0, 3.0});
     ASSERT_EQ(w.size(), 3u);
     EXPECT_DOUBLE_EQ(w[0], 1.0 / 6.0);
     EXPECT_DOUBLE_EQ(w[1], 1.0 / 2.0);
     EXPECT_DOUBLE_EQ(w[2], 1.0 / 3.0);
-    const auto u = ablsteady::trapezoid_weights({10.0, 20.0, 30.0, 40.0, 50.0});
+    const auto u = gust::trapezoid_weights({10.0, 20.0, 30.0, 40.0, 50.0});
     EXPECT_EQ(u[0], 0.125);
     EXPECT_EQ(u[1], 0.25);
     EXPECT_EQ(u[4], 0.125);
-    EXPECT_THROW(ablsteady::trapezoid_weights({1.0}), std::runtime_error);
-    EXPECT_THROW(ablsteady::trapezoid_weights({0.0, 2.0, 2.0}), std::runtime_error);
+    EXPECT_THROW(gust::trapezoid_weights({1.0}), std::runtime_error);
+    EXPECT_THROW(gust::trapezoid_weights({0.0, 2.0, 2.0}), std::runtime_error);
 }
 
 // The average equals the host-side fma accumulation bit for bit, and, since
@@ -165,14 +165,14 @@ TEST (Reference, AverageIsTheTrapezoidTimeAverage)
 {
     const std::vector<double> times{100.0, 200.0, 300.0, 400.0};
     const ScopedPaths keep{write_snapshots("ut_ref_avg", times)};
-    const auto avg = ablsteady::average_plotfiles(keep.paths);
+    const auto avg = gust::average_plotfiles(keep.paths);
     ASSERT_EQ(avg.names, kVars);
     ASSERT_EQ(avg.snapshots.size(), 4u);
     EXPECT_EQ(avg.snapshots[2].plotfile, "ut_ref_avg_2");
     EXPECT_EQ(avg.snapshots[2].time, 300.0);
     EXPECT_EQ(avg.snapshots[3].step, 300);
 
-    const auto w = ablsteady::trapezoid_weights(times);
+    const auto w = gust::trapezoid_weights(times);
     amrex::MultiFab expect(avg.fields.boxArray(), avg.fields.DistributionMap(), avg.fields.nComp(), 0,
                            amrex::MFInfo().SetArena(amrex::The_Pinned_Arena()));
     double worst = 0;
@@ -198,21 +198,21 @@ TEST (Reference, NaNSnapshotIsRefused)
 {
     ScopedPaths keep{write_snapshots("ut_ref_nan", {0.0, 1.0, 2.0})};
     const auto mesh = ref_mesh();
-    const auto ba = ablsteady::make_box_array(mesh);
+    const auto ba = gust::make_box_array(mesh);
     const amrex::DistributionMapping dm(ba);
     amrex::MultiFab mf(ba, dm, static_cast<int>(kVars.size()), 0);
     fill_snapshot(mf, 1);
     amrex::MultiFab theta(mf, amrex::make_alias, 1, 1);
-    ablsteady::test::set_one_nan(theta, amrex::IntVect(5, 3, 2));
+    gust::test::set_one_nan(theta, amrex::IntVect(5, 3, 2));
     remove_stale("ut_ref_nan_1");
     {
         // Only the deliberate NaN write runs without the trap; the averaging
         // below runs with it, so it must not touch the NaN arithmetically.
-        const ablsteady::test::ScopedNoInvalidTrap no_trap;
-        amrex::WriteSingleLevelPlotfile("ut_ref_nan_1", mf, kVars, ablsteady::make_geometry(mesh),
+        const gust::test::ScopedNoInvalidTrap no_trap;
+        amrex::WriteSingleLevelPlotfile("ut_ref_nan_1", mf, kVars, gust::make_geometry(mesh),
                                         amrex::Real(1.0), 100);
     }
-    EXPECT_NE(thrown([&] { (void)ablsteady::average_plotfiles(keep.paths); })
+    EXPECT_NE(thrown([&] { (void)gust::average_plotfiles(keep.paths); })
                   .find("ut_ref_nan_1 has NaN in theta"), std::string::npos);
 }
 
@@ -220,10 +220,10 @@ TEST (Reference, AverageRejectsBadSnapshotLists)
 {
     const ScopedPaths keep{write_snapshots("ut_ref_bad", {10.0, 20.0, 15.0})};
     // Fewer than 3 (no two half windows), times not increasing, a missing plotfile.
-    EXPECT_NE(thrown([&] { (void)ablsteady::average_plotfiles({keep.paths[0], keep.paths[1]}); })
+    EXPECT_NE(thrown([&] { (void)gust::average_plotfiles({keep.paths[0], keep.paths[1]}); })
                   .find("needs at least 3 plotfiles"), std::string::npos);
-    EXPECT_THROW(ablsteady::average_plotfiles(keep.paths), std::runtime_error);
-    EXPECT_THROW(ablsteady::average_plotfiles({keep.paths[0], keep.paths[1], "no_such_plotfile"}),
+    EXPECT_THROW(gust::average_plotfiles(keep.paths), std::runtime_error);
+    EXPECT_THROW(gust::average_plotfiles({keep.paths[0], keep.paths[1], "no_such_plotfile"}),
                  std::runtime_error);
 }
 
@@ -240,14 +240,14 @@ TEST (Reference, ArchiveRoundTripVerifies)
     on_io_rank([&] { std::ofstream(deck) << "erf.rans_type = kEqn\n"; });
 
     // Paths with a trailing '/', as shell completion writes them.
-    const auto avg = ablsteady::average_plotfiles({keep.paths[0] + "/", keep.paths[1] + "/", keep.paths[2] + "/"});
-    ablsteady::write_reference(dir, avg, meta_kestrel_gpu(), {deck});
-    EXPECT_TRUE(ablsteady::verify_reference(dir).empty());
+    const auto avg = gust::average_plotfiles({keep.paths[0] + "/", keep.paths[1] + "/", keep.paths[2] + "/"});
+    gust::write_reference(dir, avg, meta_kestrel_gpu(), {deck});
+    EXPECT_TRUE(gust::verify_reference(dir).empty());
 
-    const auto ref = ablsteady::load_reference(dir);
+    const auto ref = gust::load_reference(dir);
     EXPECT_EQ(ref.meta.case_name, "Neutral_Hill_3D");
     EXPECT_EQ(ref.meta.erf_sha, kSha);
-    EXPECT_EQ(ref.meta.machine, ablsteady::Machine::KestrelGpu);
+    EXPECT_EQ(ref.meta.machine, gust::Machine::KestrelGpu);
     EXPECT_EQ(ref.meta.nodes, 2);
     EXPECT_EQ(ref.meta.ranks, 4);
     EXPECT_EQ(ref.meta.wall_seconds, 5400.0);
@@ -269,11 +269,11 @@ TEST (Reference, ArchiveRoundTripVerifies)
     EXPECT_EQ(count_bit_differences(back, avg.fields, 0), 0);
 
     // The archive refuses to be overwritten.
-    EXPECT_NE(thrown([&] { ablsteady::write_reference(dir, avg, meta_kestrel_gpu(), {}); })
+    EXPECT_NE(thrown([&] { gust::write_reference(dir, avg, meta_kestrel_gpu(), {}); })
                   .find("refavg.output = ut_ref_rt_archive already exists"), std::string::npos);
     // So does a missing inputs file, before anything is created.
     remove_stale(dir + "_2");
-    EXPECT_THROW(ablsteady::write_reference(dir + "_2", avg, meta_kestrel_gpu(), {"no_such_inputs"}),
+    EXPECT_THROW(gust::write_reference(dir + "_2", avg, meta_kestrel_gpu(), {"no_such_inputs"}),
                  std::runtime_error);
     on_io_rank([&] { EXPECT_FALSE(fs::exists(dir + "_2")); });
 }
@@ -282,13 +282,13 @@ TEST (Reference, ArchiveRoundTripVerifies)
 TEST (Reference, DamagedArchivesAreRefused)
 {
     ScopedPaths keep{write_snapshots("ut_ref_dmg", {0.0, 10.0, 20.0})};
-    const auto avg = ablsteady::average_plotfiles({keep.paths[0], keep.paths[1], keep.paths[2]});
+    const auto avg = gust::average_plotfiles({keep.paths[0], keep.paths[1], keep.paths[2]});
 
     auto fresh = [&] (const std::string& dir) {
         remove_stale(dir);
         keep.paths.push_back(dir);
-        ablsteady::write_reference(dir, avg, meta_kestrel_gpu(), {});
-        EXPECT_TRUE(ablsteady::verify_reference(dir).empty());
+        gust::write_reference(dir, avg, meta_kestrel_gpu(), {});
+        EXPECT_TRUE(gust::verify_reference(dir).empty());
     };
 
     // One changed byte in the averaged data.
@@ -301,9 +301,9 @@ TEST (Reference, DamagedArchivesAreRefused)
         f.seekp(-1, std::ios::end);
         f.put(static_cast<char>(c ^ 0x01));
     });
-    auto err = ablsteady::verify_reference("ut_ref_dmg_byte");
+    auto err = gust::verify_reference("ut_ref_dmg_byte");
     EXPECT_TRUE(mentions(err, "average/Level_0/Cell_D_00000: SHA-256 differs")) << (err.empty() ? "" : err[0]);
-    EXPECT_THROW(ablsteady::load_reference("ut_ref_dmg_byte"), std::runtime_error);
+    EXPECT_THROW(gust::load_reference("ut_ref_dmg_byte"), std::runtime_error);
 
     // A missing file and an extra one.
     fresh("ut_ref_dmg_files");
@@ -311,7 +311,7 @@ TEST (Reference, DamagedArchivesAreRefused)
         fs::remove("ut_ref_dmg_files/average/Header");
         std::ofstream("ut_ref_dmg_files/average/stray.txt") << "x";
     });
-    err = ablsteady::verify_reference("ut_ref_dmg_files");
+    err = gust::verify_reference("ut_ref_dmg_files");
     EXPECT_TRUE(mentions(err, "average/Header: listed in MANIFEST but missing"));
     EXPECT_TRUE(mentions(err, "average/stray.txt: not listed in MANIFEST"));
 
@@ -327,7 +327,7 @@ TEST (Reference, DamagedArchivesAreRefused)
         s.replace(p, 7, "nodes 1");
         std::ofstream("ut_ref_dmg_au/MANIFEST") << s;
     });
-    err = ablsteady::verify_reference("ut_ref_dmg_au");
+    err = gust::verify_reference("ut_ref_dmg_au");
     EXPECT_TRUE(mentions(err, "au does not equal nodes x wall hours"));
 
     // Data changed and its checksum updated to match: the file check passes,
@@ -351,12 +351,12 @@ TEST (Reference, DamagedArchivesAreRefused)
         const std::string key = "file average/Level_0/Cell_D_00000 ";
         const auto p = s.find(key);
         ASSERT_NE(p, std::string::npos);
-        s.replace(p + key.size(), 64, ablsteady::sha256_file(data));
+        s.replace(p + key.size(), 64, gust::sha256_file(data));
         std::ofstream("ut_ref_dmg_data/MANIFEST") << s;
     });
-    EXPECT_TRUE(ablsteady::verify_reference("ut_ref_dmg_data").empty());
+    EXPECT_TRUE(gust::verify_reference("ut_ref_dmg_data").empty());
     try {
-        (void)ablsteady::load_reference("ut_ref_dmg_data");
+        (void)gust::load_reference("ut_ref_dmg_data");
         ADD_FAILURE() << "load_reference accepted changed data";
     } catch (const std::runtime_error& e) {
         EXPECT_NE(std::string(e.what()).find("sum, minimum or maximum differs from MANIFEST"), std::string::npos)
@@ -364,25 +364,25 @@ TEST (Reference, DamagedArchivesAreRefused)
     }
 
     // Not an archive at all.
-    EXPECT_TRUE(mentions(ablsteady::verify_reference("ut_ref_no_such_dir"), "not a directory"));
+    EXPECT_TRUE(mentions(gust::verify_reference("ut_ref_no_such_dir"), "not a directory"));
 }
 
 TEST (Reference, MetadataRangeChecks)
 {
-    EXPECT_TRUE(ablsteady::validate(meta_kestrel_gpu()).empty());
-    struct Case { const char* key; void (*mutate)(ablsteady::ReferenceMeta&); };
+    EXPECT_TRUE(gust::validate(meta_kestrel_gpu()).empty());
+    struct Case { const char* key; void (*mutate)(gust::ReferenceMeta&); };
     const Case cases[] = {
-        {"refavg.case",         [] (ablsteady::ReferenceMeta& m) { m.case_name = "two words"; }},
-        {"refavg.erf_sha",      [] (ablsteady::ReferenceMeta& m) { m.erf_sha = "92410d5"; }},
-        {"refavg.nodes",        [] (ablsteady::ReferenceMeta& m) { m.nodes = 0; }},
-        {"refavg.ranks",        [] (ablsteady::ReferenceMeta& m) { m.ranks = 0; }},
-        {"refavg.wall_seconds", [] (ablsteady::ReferenceMeta& m) {
+        {"refavg.case",         [] (gust::ReferenceMeta& m) { m.case_name = "two words"; }},
+        {"refavg.erf_sha",      [] (gust::ReferenceMeta& m) { m.erf_sha = "92410d5"; }},
+        {"refavg.nodes",        [] (gust::ReferenceMeta& m) { m.nodes = 0; }},
+        {"refavg.ranks",        [] (gust::ReferenceMeta& m) { m.ranks = 0; }},
+        {"refavg.wall_seconds", [] (gust::ReferenceMeta& m) {
              m.wall_seconds = std::numeric_limits<double>::quiet_NaN(); }},
     };
     for (const auto& c : cases) {
         auto m = meta_kestrel_gpu();
         c.mutate(m);
-        const auto err = ablsteady::validate(m);
+        const auto err = gust::validate(m);
         ASSERT_EQ(err.size(), 1u) << c.key;
         EXPECT_NE(err[0].find(c.key), std::string::npos) << err[0];
     }
@@ -395,7 +395,7 @@ TEST (Reference, MetadataRangeChecks)
 TEST (Reference, HalfWindowChangeMeasuresDrift)
 {
     const ScopedPaths keep{write_snapshots("ut_ref_drift", {0.0, 1.0, 2.0, 3.0, 4.0})};
-    const auto avg = ablsteady::average_plotfiles(keep.paths);
+    const auto avg = gust::average_plotfiles(keep.paths);
     for (int c = 0; c < static_cast<int>(kVars.size()); ++c) {
         double pmax = 0;
         for (int k = 0; k < 6; ++k) {
@@ -429,7 +429,7 @@ TEST (Reference, HalfWindowChangeMeasuresDrift)
     }
     amrex::ParallelDescriptor::Barrier();
     const ScopedPaths copies{{"ut_ref_steady_b", "ut_ref_steady_c"}};
-    const auto steady = ablsteady::average_plotfiles({"ut_ref_steady_0", "ut_ref_steady_b", "ut_ref_steady_c"});
+    const auto steady = gust::average_plotfiles({"ut_ref_steady_0", "ut_ref_steady_b", "ut_ref_steady_c"});
     for (const auto& f : steady.stats) { EXPECT_EQ(f.half_change, 0.0) << f.name; }
 }
 

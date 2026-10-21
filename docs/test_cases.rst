@@ -1,7 +1,7 @@
 Test cases
 ==========
 
-ablsteady is verified on a sequence of cases of increasing complexity. Each case adds one new feature to the case
+GUST is verified on a sequence of cases of increasing complexity. Each case adds one new feature to the case
 before it, so a failure points to the feature just added. A new solver or option is tested on the cases in this
 order. Most cases are ERF's Canonical_RANS cases, so ERF provides a reference solution (:doc:`references`). The input
 files are in ``Tests/Canonical_RANS/``.
@@ -62,7 +62,7 @@ through the west and north faces and leaves through the east and south faces. Th
 Transient cases
 ---------------
 
-ERF's Canonical_RANS set also has two stratified flat cases. They have no steady solution, so ablsteady does not
+ERF's Canonical_RANS set also has two stratified flat cases. They have no steady solution, so GUST does not
 use them as steady references:
 
 .. list-table::

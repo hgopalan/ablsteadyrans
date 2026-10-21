@@ -18,12 +18,12 @@
 
 namespace {
 
-using ablsteady::LooseStop;
-using ablsteady::MonitorSpec;
-using ablsteady::SequencingOptions;
-using ablsteady::SteadyCriterion;
-using ablsteady::SteadyParams;
-using ablsteady::SteadyStatus;
+using gust::LooseStop;
+using gust::MonitorSpec;
+using gust::SequencingOptions;
+using gust::SteadyCriterion;
+using gust::SteadyParams;
+using gust::SteadyStatus;
 using Fn = std::function<double(int)>;
 
 // The first iteration (0-based) after which loose_stop holds, or -1.
@@ -37,7 +37,7 @@ int first_loose (SteadyCriterion& c, const SteadyParams& p, const std::vector<Mo
         for (const auto& f : res) { r.push_back(static_cast<amrex::Real>(f(n))); }
         for (const auto& f : mon) { m.push_back(static_cast<amrex::Real>(f(n))); }
         c.add(r, m);
-        const LooseStop s = ablsteady::loose_stop(c.history(), p, specs, o, hold);
+        const LooseStop s = gust::loose_stop(c.history(), p, specs, o, hold);
         if (s.stop) {
             if (reason != nullptr) { *reason = s.reason; }
             return n;
@@ -151,7 +151,7 @@ TEST (Sequencing, NonFiniteHistoryNeverStops)
     SteadyCriterion c2(p, {"u", "v"}, kOneMon);
     for (int n = 0; n < 200; ++n) {
         c2.add({static_cast<amrex::Real>(res[0](n)), static_cast<amrex::Real>(res[1](n))}, {amrex::Real(1)});
-        if (n >= 7) { EXPECT_FALSE(ablsteady::loose_stop(c2.history(), p, kOneMon, o, p.residual_ref_iterations).stop) << n; }
+        if (n >= 7) { EXPECT_FALSE(gust::loose_stop(c2.history(), p, kOneMon, o, p.residual_ref_iterations).stop) << n; }
     }
     EXPECT_EQ(c2.verdict().status, SteadyStatus::Diverged);
 }
@@ -243,48 +243,48 @@ TEST (Sequencing, InputChecksNameTheirKeys)
         for (const auto& e : err) { if (e.find(s) != std::string::npos) { return true; } }
         return false;
     };
-    ablsteady::MeshInputs m3;
+    gust::MeshInputs m3;
     m3.n_cell = amrex::IntVect(AMREX_D_DECL(32, 16, 8));
     m3.hierarchy_levels = 3;
-    ablsteady::MeshInputs m1 = m3;
+    gust::MeshInputs m1 = m3;
     m1.hierarchy_levels = 1;
     SequencingOptions ok;
     ok.enabled = true;
-    EXPECT_TRUE(ablsteady::check_sequencing_options(ok, p, m3).empty());
+    EXPECT_TRUE(gust::check_sequencing_options(ok, p, m3).empty());
     // The coarsest level of 32 x 16 over four levels is 4 x 2 (accepted);
     // over five it is 2 x 1 (refused).
-    ablsteady::MeshInputs m = m3;
+    gust::MeshInputs m = m3;
     m.hierarchy_levels = 4;
-    EXPECT_TRUE(ablsteady::check_sequencing_options(ok, p, m).empty());
+    EXPECT_TRUE(gust::check_sequencing_options(ok, p, m).empty());
     m.hierarchy_levels = 5;
-    EXPECT_TRUE(has(ablsteady::check_sequencing_options(ok, p, m), "at least 2 cells in x and in y on the coarsest level"));
+    EXPECT_TRUE(has(gust::check_sequencing_options(ok, p, m), "at least 2 cells in x and in y on the coarsest level"));
     for (const double d : {0.0, -1.0, 4.5, std::nan("")}) {
         SequencingOptions o = ok;
         o.drop_orders = static_cast<amrex::Real>(d);
-        EXPECT_TRUE(has(ablsteady::check_sequencing_options(o, p, m3), "steady.sequencing_drop_orders")) << d;
+        EXPECT_TRUE(has(gust::check_sequencing_options(o, p, m3), "steady.sequencing_drop_orders")) << d;
     }
     SequencingOptions edge = ok;
     edge.drop_orders = 4;   // equal to the strict drop: accepted
-    EXPECT_TRUE(ablsteady::check_sequencing_options(edge, p, m3).empty());
+    EXPECT_TRUE(gust::check_sequencing_options(edge, p, m3).empty());
     SequencingOptions zero = ok;
     zero.monitor_tol = 0;   // off: accepted
-    EXPECT_TRUE(ablsteady::check_sequencing_options(zero, p, m3).empty());
+    EXPECT_TRUE(gust::check_sequencing_options(zero, p, m3).empty());
     for (const double t : {1.0, -0.1, std::nan(""), std::numeric_limits<double>::infinity()}) {
         SequencingOptions o = ok;
         o.monitor_tol = static_cast<amrex::Real>(t);
-        EXPECT_TRUE(has(ablsteady::check_sequencing_options(o, p, m3), "steady.sequencing_monitor_tol")) << t;
+        EXPECT_TRUE(has(gust::check_sequencing_options(o, p, m3), "steady.sequencing_monitor_tol")) << t;
     }
-    EXPECT_TRUE(has(ablsteady::check_sequencing_options(ok, p, m1), "needs mesh.hierarchy_levels >= 2"));
+    EXPECT_TRUE(has(gust::check_sequencing_options(ok, p, m1), "needs mesh.hierarchy_levels >= 2"));
     // Off (the default), the defaults are not range-checked: a deck with
     // steady.residual_drop_orders below the default loose drop of 2 runs as before.
     for (const double strict_orders : {1.0, 0.0}) {
         SteadyParams q = p;
         q.residual_drop_orders = static_cast<amrex::Real>(strict_orders);
-        EXPECT_TRUE(ablsteady::check_sequencing_options(SequencingOptions{}, q, m1).empty()) << strict_orders;
+        EXPECT_TRUE(gust::check_sequencing_options(SequencingOptions{}, q, m1).empty()) << strict_orders;
     }
     SequencingOptions off;
     off.given = {"sequencing_drop_orders", "sequencing_monitor_tol", "sequencing_hold", "sequencing_cfl_start"};
-    const auto err = ablsteady::check_sequencing_options(off, p, m1);
+    const auto err = gust::check_sequencing_options(off, p, m1);
     EXPECT_TRUE(has(err, "steady.sequencing_drop_orders has no effect unless steady.sequencing = 1"));
     EXPECT_TRUE(has(err, "steady.sequencing_monitor_tol has no effect unless steady.sequencing = 1"));
     EXPECT_TRUE(has(err, "steady.sequencing_hold has no effect unless steady.sequencing = 1"));
@@ -294,9 +294,9 @@ TEST (Sequencing, InputChecksNameTheirKeys)
     for (const int hold : {0, 1}) {
         SequencingOptions o = ok;
         o.hold = hold;
-        EXPECT_TRUE(ablsteady::check_sequencing_options(o, p, m3).empty()) << hold;
+        EXPECT_TRUE(gust::check_sequencing_options(o, p, m3).empty()) << hold;
         o.cfl_previous = true;
-        EXPECT_EQ(has(ablsteady::check_sequencing_options(o, p, m3),
+        EXPECT_EQ(has(gust::check_sequencing_options(o, p, m3),
                       "steady.sequencing_cfl_start = previous needs steady.sequencing_hold = 0"), hold == 1) << hold;
     }
 }

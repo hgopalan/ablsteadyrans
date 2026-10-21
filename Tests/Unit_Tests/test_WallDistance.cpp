@@ -11,8 +11,8 @@
 #include <limits>
 
 namespace {
-using namespace ablsteady::ptest;
-using ablsteady::PoissonFace;
+using namespace gust::ptest;
+using gust::PoissonFace;
 
 // Shortest distance from (x, z) to the curve z = g(s): ERF's scan over the
 // foot point with a golden-section refinement (check_hill.py exact_distance).
@@ -79,9 +79,9 @@ constexpr int kBoxB = 64;
 // Solver options for the Tucker solves. phi grows to about H^2/2 (5e5 here),
 // so in single precision rounding puts a floor near the default reltol 1e-5;
 // those tests ask for 1e-4.
-ablsteady::PoissonOptions tucker_options (const std::string& backend)
+gust::PoissonOptions tucker_options (const std::string& backend)
 {
-    ablsteady::PoissonOptions o;
+    gust::PoissonOptions o;
     o.backend = backend;
     o.reltol = static_cast<amrex::Real>(tol(1e-10, 1e-4));
     return o;
@@ -109,7 +109,7 @@ void flat_check (const std::string& backend)
 {
     PCase c = ridge_case(1e-6, backend == "gmres_fft" ? 64 : kBoxB);
     amrex::MultiFab dist(c.ba, c.dm, 1, 0);
-    ablsteady::tucker_wall_distance(c.mesh, c.geom, c.z, dist, tucker_options(backend));
+    gust::tucker_wall_distance(c.mesh, c.geom, c.z, dist, tucker_options(backend));
     const auto e = compare(c, dist, [] (double, double, double z) { return z - 1e-6; });
     EXPECT_LE(e.max_rel, tol(3e-3, 1e-2)) << backend;
     EXPECT_LE(e.max_abs_near, tol(0.1, 0.5)) << backend;
@@ -133,7 +133,7 @@ TEST (WallDistance, FlatGroundSecondOrder)
         c.in.mesh.is_periodic = {1, 1, 0};
         c.make([] (double, double) { return 0.0; });
         amrex::MultiFab dist(c.ba, c.dm, 1, 0);
-        ablsteady::tucker_wall_distance(c.mesh, c.geom, c.z, dist, tucker_options("gmres_fft"));
+        gust::tucker_wall_distance(c.mesh, c.geom, c.z, dist, tucker_options("gmres_fft"));
         err[n++] = compare(c, dist, [] (double, double, double z) { return z; }).max_abs_near;
     }
     EXPECT_GE(order_of(err, 0), 1.9) << err[0] << " " << err[1];
@@ -147,7 +147,7 @@ TEST (WallDistance, RidgeWithinErfTolerances)
     PCase c = ridge_case(100);
     amrex::MultiFab dist(c.ba, c.dm, 1, 0);
     const auto opt = tucker_options("gmres_fft");
-    const auto res = ablsteady::tucker_wall_distance(c.mesh, c.geom, c.z, dist, opt);
+    const auto res = gust::tucker_wall_distance(c.mesh, c.geom, c.z, dist, opt);
     EXPECT_LE(res.final_residual, 10 * opt.reltol * res.initial_residual);
     auto g = [] (double s) { return 100.0 / (1 + (s / 500) * (s / 500)); };
     const auto e = compare(c, dist, [&] (double x, double, double z) { return exact_distance(x, z, g, 500); });
@@ -174,7 +174,7 @@ void hill3d_check (const std::string& backend)
         c.make([] (double x, double y) { return 100.0 / (1 + (x * x + y * y) / (500.0 * 500.0)); });
         amrex::MultiFab dist(c.ba, c.dm, 1, 0);
         auto g = [] (double s) { return 100.0 / (1 + (s / 500) * (s / 500)); };
-        ablsteady::tucker_wall_distance(c.mesh, c.geom, c.z, dist, tucker_options(backend));
+        gust::tucker_wall_distance(c.mesh, c.geom, c.z, dist, tucker_options(backend));
         const auto e = compare(c, dist, [&] (double x, double y, double z) {
             return exact_distance(std::hypot(x, y), z, g, 500);
         });
@@ -199,8 +199,8 @@ TEST (WallDistance, GhostFillFollowsTheBoundaryConditions)
     amrex::MultiFab phi(c.ba, c.dm, 1, 1);
     phi.setVal(std::numeric_limits<amrex::Real>::quiet_NaN());
     fill_cells(phi, c, [] (double x, double y, double z) { return 1 + x / 100 + y / 77 + z / 50; });
-    ablsteady::PoissonSolver s(c.mesh, c.geom, c.z, {});
-    const auto bc = ablsteady::tucker_bc(c.geom);
+    gust::PoissonSolver s(c.mesh, c.geom, c.z, {});
+    const auto bc = gust::tucker_bc(c.geom);
     s.fill_ghosts(phi, bc);
     double worst = 0;
     long nonfinite = 0;

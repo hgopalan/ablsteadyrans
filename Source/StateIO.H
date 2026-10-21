@@ -1,5 +1,5 @@
-#ifndef ABLSTEADY_STATEIO_H_
-#define ABLSTEADY_STATEIO_H_
+#ifndef GUST_STATEIO_H_
+#define GUST_STATEIO_H_
 
 // Named StateIO.H, not IO.H: Windows file systems ignore case, so an IO.H on
 // the include path would stand in for the system <io.h>.
@@ -8,7 +8,7 @@
 
 #include <string>
 
-namespace ablsteady {
+namespace gust {
 
 //! Plotfile variable names, in order. Velocities are face averages to cell
 //! centres; z is the mean of the cell's eight node heights.
@@ -35,6 +35,6 @@ std::string write_checkpoint (const std::string& prefix, State& state,
 //! checkpoint may come from a different box layout or rank count.
 void read_checkpoint (const std::string& dir, State& state, const MeshInputs& mesh);
 
-} // namespace ablsteady
+} // namespace gust
 
 #endif

@@ -16,13 +16,13 @@
 
 namespace {
 
-using ablsteady::MonitorSpec;
-using ablsteady::SteadyCriterion;
-using ablsteady::SteadyParams;
-using ablsteady::SteadyStatus;
+using gust::MonitorSpec;
+using gust::SteadyCriterion;
+using gust::SteadyParams;
+using gust::SteadyStatus;
 using Fn = std::function<double(int)>;
 
-bool mentions (const ablsteady::SteadyVerdict& v, const std::string& s)
+bool mentions (const gust::SteadyVerdict& v, const std::string& s)
 {
     for (const auto& r : v.reasons) {
         if (r.find(s) != std::string::npos) { return true; }
@@ -188,7 +188,7 @@ TEST (SteadyCriterion, DropIsMeasuredFromTheEarlyPeak)
 // and the constructor rejects bad monitor scales and size mismatches.
 TEST (SteadyCriterion, ParameterChecks)
 {
-    EXPECT_TRUE(ablsteady::validate(SteadyParams{}).empty());
+    EXPECT_TRUE(gust::validate(SteadyParams{}).empty());
     struct Case { const char* key; void (*mutate)(SteadyParams&); };
     const Case cases[] = {
         {"steady.residual_tol",            [] (SteadyParams& p) { p.residual_tol = 0; }},
@@ -203,7 +203,7 @@ TEST (SteadyCriterion, ParameterChecks)
     for (const auto& c : cases) {
         SteadyParams p;
         c.mutate(p);
-        const auto err = ablsteady::validate(p);
+        const auto err = gust::validate(p);
         ASSERT_EQ(err.size(), 1u) << c.key;
         EXPECT_NE(err[0].find(c.key), std::string::npos) << err[0];
     }
@@ -268,7 +268,7 @@ TEST (SteadyCriterion, RestoredHistoryGivesTheSameVerdicts)
         c.add(r, m);
     };
     for (int n = 0; n < 70; ++n) { feed(whole, n); feed(before, n); }
-    const ablsteady::SteadyHistory saved = before.history();
+    const gust::SteadyHistory saved = before.history();
 
     SteadyCriterion after(SteadyParams{}, {"u", "p"}, mon);
     after.restore(saved);

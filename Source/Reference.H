@@ -1,5 +1,5 @@
-#ifndef ABLSTEADY_REFERENCE_H_
-#define ABLSTEADY_REFERENCE_H_
+#ifndef GUST_REFERENCE_H_
+#define GUST_REFERENCE_H_
 
 #include <AMReX_Geometry.H>
 #include <AMReX_MultiFab.H>
@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 
-namespace ablsteady {
+namespace gust {
 
 //! Where a reference run ran, and its allocation-unit (AU) rate per node-hour
 //! (plan rev. 6): Kestrel CPU nodes 10, Kestrel GPU nodes 100, local 0.
@@ -115,6 +115,6 @@ struct Reference
 //! listed if anything does not match.
 Reference load_reference (const std::string& dir);
 
-} // namespace ablsteady
+} // namespace gust
 
 #endif

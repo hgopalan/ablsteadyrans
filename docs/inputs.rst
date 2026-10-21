@@ -1,7 +1,7 @@
 Input reference
 ===============
 
-This page lists every input of ablsteady. The first table is a quick reference; the sections after it give the
+This page lists every input of GUST. The first table is a quick reference; the sections after it give the
 allowed range and meaning of each input, grouped by namespace.
 
 Input file format
@@ -1057,7 +1057,7 @@ otherwise.
 ``refavg`` (reference-averaging tool)
 -------------------------------------
 
-The separate tool ``ablsteady_refavg`` (:doc:`references`) reads only the ``refavg`` namespace.
+The separate tool ``gust_refavg`` (:doc:`references`) reads only the ``refavg`` namespace.
 
 .. list-table::
    :header-rows: 1

@@ -32,26 +32,26 @@
 
 namespace {
 
-using ablsteady::FaceType;
-using ablsteady::Loc;
-using ablsteady::NewtonKrylov;
-using ablsteady::NewtonOperator;
-using ablsteady::NewtonOptions;
-using ablsteady::NewtonVector;
-using ablsteady::ptest::PCase;
-using ablsteady::trtest::tol;
+using gust::FaceType;
+using gust::Loc;
+using gust::NewtonKrylov;
+using gust::NewtonOperator;
+using gust::NewtonOptions;
+using gust::NewtonVector;
+using gust::ptest::PCase;
+using gust::trtest::tol;
 
 constexpr double kPi = 3.14159265358979323846;
 constexpr bool kDouble = std::is_same_v<amrex::Real, double>;
 constexpr Loc kLoc[6] = {Loc::xface, Loc::yface, Loc::zface, Loc::cell, Loc::cell, Loc::cell};
 
-amrex::MultiFab& field (ablsteady::State& q, int f)
+amrex::MultiFab& field (gust::State& q, int f)
 {
     amrex::MultiFab* p[6] = {&q.u, &q.v, &q.w, &q.p, &q.theta, &q.tke};
     return *p[f];
 }
 
-const amrex::MultiFab& rfield (const ablsteady::ResidualFields& R, int f)
+const amrex::MultiFab& rfield (const gust::ResidualFields& R, int f)
 {
     const amrex::MultiFab* p[6] = {&R.u, &R.v, &R.w, &R.p, &R.theta, &R.tke};
     return *p[f];
@@ -93,11 +93,11 @@ struct HillCase
 {
     PCase c;
     amrex::MultiFab nu, gt, gk;
-    ablsteady::BoundaryInputs bin;
-    std::unique_ptr<ablsteady::BoundaryConditions> bc;
-    ablsteady::SurfaceLayerOptions sl;
-    ablsteady::ResidualInputs in;
-    ablsteady::State q, v;
+    gust::BoundaryInputs bin;
+    std::unique_ptr<gust::BoundaryConditions> bc;
+    gust::SurfaceLayerOptions sl;
+    gust::ResidualInputs in;
+    gust::State q, v;
     static constexpr double Lx = 900, Ly = 600, H = 400;
     HillCase (int max_grid, FaceType ground, bool perx, double hill)
     {
@@ -108,7 +108,7 @@ struct HillCase
         c.make([=] (double x, double) { return hill * std::exp(-(x - 450) * (x - 450) / (150.0 * 150.0)); });
         c.z.FillBoundary(c.geom.periodicity());
         c.mesh.build_from_ground(c.in, c.geom, c.z);
-        ablsteady::trtest::smooth_vertical_ghost_nodes(c);
+        gust::trtest::smooth_vertical_ghost_nodes(c);
         sl.z0 = amrex::Real(0.1);
         for (auto* mf : {&nu, &gt, &gk}) {
             mf->define(c.ba, c.dm, 1, 1);
@@ -120,22 +120,22 @@ struct HillCase
         in.theta_ref.z = {-1000, 5000};
         in.theta_ref.theta = {300, 300};
         in.buoyancy.gravity = 0;
-        in.momentum.limiter = ablsteady::Limiter::upwind;
-        in.theta.limiter = ablsteady::Limiter::upwind;
+        in.momentum.limiter = gust::Limiter::upwind;
+        in.theta.limiter = gust::Limiter::upwind;
         in.surface = (ground == FaceType::surface_layer) ? &sl : nullptr;
         const FaceType xlo = perx ? FaceType::periodic : FaceType::inflow;
         const FaceType xhi = perx ? FaceType::periodic : FaceType::outflow;
         bin.face = {xlo, FaceType::periodic, ground, xhi, FaceType::periodic, FaceType::slip_wall};
-        bc = std::make_unique<ablsteady::BoundaryConditions>(bin, c.geom, c.mesh, in.coriolis);
+        bc = std::make_unique<gust::BoundaryConditions>(bin, c.geom, c.mesh, in.coriolis);
         in.bc = bc.get();
-        for (ablsteady::State* s : {&q, &v}) {
+        for (gust::State* s : {&q, &v}) {
             s->define(c.ba, c.dm);
             amrex::MultiFab::Copy(s->z_phys_nd, c.z, 0, 0, 1, c.z.nGrow());
         }
         for (int f = 0; f < 6; ++f) {
-            ablsteady::trtest::fill_loc(field(q, f), kLoc[f], c,
+            gust::trtest::fill_loc(field(q, f), kLoc[f], c,
                                         [&] (double x, double y, double z) { return base_value(f, x, y, z, Lx, Ly, H); });
-            ablsteady::trtest::fill_loc(field(v, f), kLoc[f], c,
+            gust::trtest::fill_loc(field(v, f), kLoc[f], c,
                                         [&] (double x, double y, double z) { return pert_value(f, x, y, z, Lx, Ly, H); });
         }
         bc->fill_ghosts(q, in.surface, in.buoyancy);
@@ -144,7 +144,7 @@ struct HillCase
 };
 
 // to = fill(a + s b) (every field, ghosts included).
-void combine_fill (ablsteady::State& to, ablsteady::State& a, ablsteady::State& b, double s, const HillCase& hc)
+void combine_fill (gust::State& to, gust::State& a, gust::State& b, double s, const HillCase& hc)
 {
     to.define(hc.c.ba, hc.c.dm);
     amrex::MultiFab::Copy(to.z_phys_nd, a.z_phys_nd, 0, 0, 1, a.z_phys_nd.nGrow());
@@ -156,7 +156,7 @@ void combine_fill (ablsteady::State& to, ablsteady::State& a, ablsteady::State& 
 }
 
 // x = S^-1 v on the valid points.
-void to_vector (ablsteady::State& v, const NewtonOperator& op, NewtonVector& x)
+void to_vector (gust::State& v, const NewtonOperator& op, NewtonVector& x)
 {
     for (int f = 0; f < 6; ++f) {
         amrex::MultiFab::Copy(x.f[f], field(v, f), 0, 0, 1, 0);
@@ -176,17 +176,17 @@ double rel_diff (const NewtonOperator& op, const NewtonVector& a, const NewtonVe
 void central_jv (HillCase& hc, const NewtonOperator& op, const NewtonVector& x, NewtonVector& E)
 {
     const double h = 1e-4;
-    ablsteady::State qp, qm;
+    gust::State qp, qm;
     combine_fill(qp, hc.q, hc.v, h, hc);
     combine_fill(qm, hc.q, hc.v, -h, hc);
-    ablsteady::ResidualFields Rp, Rm;
-    ablsteady::residual(qp, hc.in, hc.c.mesh, hc.c.geom, Rp);
-    ablsteady::residual(qm, hc.in, hc.c.mesh, hc.c.geom, Rm);
+    gust::ResidualFields Rp, Rm;
+    gust::residual(qp, hc.in, hc.c.mesh, hc.c.geom, Rp);
+    gust::residual(qm, hc.in, hc.c.mesh, hc.c.geom, Rm);
     for (int f = 0; f < 6; ++f) {
         const auto s = static_cast<amrex::Real>(0.5 / h) / op.row_scales()[f];
         amrex::MultiFab::LinComb(E.f[f], s, rfield(Rp, f), 0, -s, rfield(Rm, f), 0, 0, 1, 0);
     }
-    const ablsteady::Equation eqs[3] = {ablsteady::Equation::u, ablsteady::Equation::v, ablsteady::Equation::w};
+    const gust::Equation eqs[3] = {gust::Equation::u, gust::Equation::v, gust::Equation::w};
     for (int d = 0; d < 3; ++d) {
         amrex::MultiFab dir;
         hc.in.bc->dirichlet_rows(eqs[d], kLoc[d], hc.c.mesh, dir);
@@ -195,13 +195,13 @@ void central_jv (HillCase& hc, const NewtonOperator& op, const NewtonVector& x, 
 }
 
 // R(fill(q)) on a copy of q: the base point NewtonOperator needs.
-void residual_of_refill (const HillCase& hc, ablsteady::State& q, ablsteady::ResidualFields& R)
+void residual_of_refill (const HillCase& hc, gust::State& q, gust::ResidualFields& R)
 {
-    ablsteady::State qf;
-    ablsteady::State zero;
+    gust::State qf;
+    gust::State zero;
     zero.define(hc.c.ba, hc.c.dm);
     combine_fill(qf, q, zero, 0, hc);
-    ablsteady::residual(qf, hc.in, hc.c.mesh, hc.c.geom, R);
+    gust::residual(qf, hc.in, hc.c.mesh, hc.c.geom, R);
     amrex::Gpu::streamSynchronize();
 }
 
@@ -234,9 +234,9 @@ TEST(Newton, TerrainWallLawOperatorMatchesCentralDifference)
     for (const auto& cf : configs) {
         for (const int max_grid : {64, 4}) {
             HillCase hc(max_grid, cf.ground, cf.perx, cf.hill);
-            ablsteady::ResidualFields Rf, Rq;
+            gust::ResidualFields Rf, Rq;
             residual_of_refill(hc, hc.q, Rf);
-            ablsteady::residual(hc.q, hc.in, hc.c.mesh, hc.c.geom, Rq);
+            gust::residual(hc.q, hc.in, hc.c.mesh, hc.c.geom, Rq);
             NewtonOperator op(hc.q, Rf, hc.in, hc.c.mesh, hc.c.geom, nullptr);
             NewtonOperator opq(hc.q, Rq, hc.in, hc.c.mesh, hc.c.geom, nullptr);
             NewtonVector x = op.makeVecLHS(), Ax = op.makeVecRHS(), Aq = op.makeVecRHS(), E = op.makeVecRHS();
@@ -284,7 +284,7 @@ TEST(Newton, TerrainWallLawStepsReduceResidual)
             EXPECT_TRUE(info.applied) << L << " " << n;
             EXPECT_LE(static_cast<double>(info.krylov_relative), 1e-2 * (1 + 1e-6)) << L << " " << n;
         }
-        ablsteady::ResidualFields R;
+        gust::ResidualFields R;
         residual_of_refill(hc, hc.q, R);
         NewtonOperator op(hc.q, R, nk.residual_inputs(), hc.c.mesh, hc.c.geom, nullptr);
         NewtonVector b = op.makeVecRHS();
@@ -304,7 +304,7 @@ TEST(Newton, TerrainWallLawStepsReduceResidual)
         for (std::size_t n = 0; n + 1 < r.size(); ++n) { EXPECT_LT(r[n + 1], r[n]) << n; }
         EXPECT_LT(r.back(), 0.05 * r.front());
     }
-    ablsteady::ResidualFields R;
+    gust::ResidualFields R;
     NewtonOperator opr(ref.q, R, ref.in, ref.c.mesh, ref.c.geom, nullptr);
     EXPECT_LT(rel_diff(opr, qs[1], qs[0]), tol(1e-6, 1e-1));
 }
@@ -315,7 +315,7 @@ TEST(Newton, TerrainWallLawStepsReduceResidual)
 // raises no invalid flag (StepSkipsUnusableUpdate runs it inside a step).
 TEST(Newton, UpdateSkippedAboveRhsNorm)
 {
-    using ablsteady::newton_update_usable;
+    using gust::newton_update_usable;
     const amrex::Real one = 1;
     EXPECT_TRUE(newton_update_usable(0));
     EXPECT_TRUE(newton_update_usable(amrex::Real(1e-2)));
@@ -347,7 +347,7 @@ TEST(Newton, UpdateSkippedAboveRhsNorm)
 // flat case with a slip ground, whose ghost fill is idempotent: exactly the
 // same bits). The invalid trap is off around both: NaN is the input here.
 namespace {
-class NaNHook : public ablsteady::NewtonPreconditioner
+class NaNHook : public gust::NewtonPreconditioner
 {
 public:
     void apply (NewtonVector& dq, const NewtonVector& /*r*/) override
@@ -357,7 +357,7 @@ public:
 };
 
 // max |a - b| over the six fields' valid points; NaN where both are NaN counts as equal.
-double valid_diff (ablsteady::State& a, ablsteady::State& b)
+double valid_diff (gust::State& a, gust::State& b)
 {
     double d = 0;
     for (int f = 0; f < 6; ++f) {
@@ -378,9 +378,9 @@ double valid_diff (ablsteady::State& a, ablsteady::State& b)
     return d;
 }
 
-void copy_state (ablsteady::State& to, ablsteady::State& from, const HillCase& hc)
+void copy_state (gust::State& to, gust::State& from, const HillCase& hc)
 {
-    ablsteady::State zero;
+    gust::State zero;
     zero.define(hc.c.ba, hc.c.dm);
     combine_fill(to, from, zero, 0, hc);
 }
@@ -393,7 +393,7 @@ TEST(Newton, StepSkipsUnusableUpdate)
     opt.gmres_restart = 5;
     {
         HillCase hc(4, FaceType::slip_wall, true, 0);
-        ablsteady::State before;
+        gust::State before;
         copy_state(before, hc.q, hc);
         NewtonKrylov nk(opt, hc.in, hc.c.mesh, hc.c.geom, hc.c.ba, hc.c.dm, 0);
         NaNHook nan;
@@ -419,7 +419,7 @@ TEST(Newton, StepSkipsUnusableUpdate)
             hc.q.theta[mfi].setVal<amrex::RunOn::Device>(std::numeric_limits<amrex::Real>::quiet_NaN(), one);
         }
         amrex::Gpu::streamSynchronize();
-        ablsteady::State before;
+        gust::State before;
         copy_state(before, hc.q, hc);
         NewtonKrylov nk(opt, hc.in, hc.c.mesh, hc.c.geom, hc.c.ba, hc.c.dm, 0);
         const auto info = nk.step(hc.q, nullptr);
@@ -449,8 +449,8 @@ TEST(Newton, KrylovBudgetIsPerRank)
     const amrex::DistributionMapping dms(spread), dmp(packed);
     const double per = (3 * 512.0 * 512 * 128 + 513.0 * 512 * 128 + 512.0 * 513 * 128 + 512.0 * 512 * 129)
                        * sizeof(amrex::Real);
-    const auto ms = ablsteady::krylov_memory(20, ba, dms);
-    const auto mp = ablsteady::krylov_memory(20, ba, dmp);
+    const auto ms = gust::krylov_memory(20, ba, dms);
+    const auto mp = gust::krylov_memory(20, ba, dmp);
     EXPECT_EQ(ms.vectors, 43);
     EXPECT_EQ(ms.total_bytes, 43 * per * np);
     EXPECT_EQ(ms.max_rank_bytes, 43 * per);
@@ -480,16 +480,16 @@ TEST(Newton, InnerProductSameBitsWithAllBoxesOnRankZero)
     HillCase a(2, FaceType::slip_wall, true, 30);
     // Rough values (a hash of the position, as rough as a Krylov vector), so
     // that partial sums grouped differently round apart.
-    for (ablsteady::State* s : {&a.q, &a.v}) {
+    for (gust::State* s : {&a.q, &a.v}) {
         const double seed = (s == &a.q) ? 0.0 : 1.7;
         for (int f = 0; f < 6; ++f) {
-            ablsteady::trtest::fill_loc(field(*s, f), kLoc[f], a.c, [&] (double x, double y, double z) {
+            gust::trtest::fill_loc(field(*s, f), kLoc[f], a.c, [&] (double x, double y, double z) {
                 const double h = std::sin(12.9898 * x + 78.233 * y + 37.719 * z + 4.1 * f + seed) * 43758.5453;
                 return h - std::floor(h) - 0.5;
             });
         }
     }
-    ablsteady::ResidualFields R;
+    gust::ResidualFields R;
     NewtonOperator op(a.q, R, a.in, a.c.mesh, a.c.geom, nullptr);
     NewtonVector x = op.makeVecLHS(), y = op.makeVecLHS();
     to_vector(a.q, op, x);
@@ -506,7 +506,7 @@ TEST(Newton, InnerProductSameBitsWithAllBoxesOnRankZero)
     c0.z.ParallelCopy(a.c.z, 0, 0, 1, a.c.z.nGrow(), a.c.z.nGrow());
     c0.mesh.define(c0.ba, dm0);
     c0.mesh.build_from_ground(c0.in, c0.geom, c0.z);
-    ablsteady::State q0;
+    gust::State q0;
     q0.define(c0.ba, dm0);
     amrex::MultiFab::Copy(q0.z_phys_nd, c0.z, 0, 0, 1, c0.z.nGrow());
     NewtonOperator op0(q0, R, a.in, c0.mesh, c0.geom, nullptr);
@@ -529,7 +529,7 @@ TEST(Newton, StepDiagnosticsAndEpsRange)
 {
     HillCase hc(4, FaceType::surface_layer, false, 30);
     {
-        ablsteady::ResidualFields R;
+        gust::ResidualFields R;
         residual_of_refill(hc, hc.q, R);
         NewtonOperator op(hc.q, R, hc.in, hc.c.mesh, hc.c.geom, nullptr);
         NewtonVector x = op.makeVecLHS(), x10 = op.makeVecLHS(), Ax = op.makeVecRHS();
@@ -568,7 +568,7 @@ TEST(Newton, NonUniformDtauOnFaces)
     HillCase hc(4, FaceType::slip_wall, true, 30);
     const int nx = 9, ny = 6;
     amrex::MultiFab dtau(hc.c.ba, hc.c.dm, 1, 0);
-    ablsteady::trtest::fill_loc(dtau, Loc::cell, hc.c, [&] (double x, double y, double) {
+    gust::trtest::fill_loc(dtau, Loc::cell, hc.c, [&] (double x, double y, double) {
         const auto i = static_cast<int>(std::floor(x / (HillCase::Lx / nx)));
         const auto j = static_cast<int>(std::floor(y / (HillCase::Ly / ny)));
         return 10.0 + i + 2.0 * j;
@@ -577,8 +577,8 @@ TEST(Newton, NonUniformDtauOnFaces)
     // periodic image nx - 1 in x and ny - 1 in y).
     auto cell = [&] (int i, int j) { return 10.0 + ((i + nx) % nx) + 2.0 * ((j + ny) % ny); };
     const double dx = HillCase::Lx / nx, dy = HillCase::Ly / ny;
-    ablsteady::ResidualFields R;
-    ablsteady::residual(hc.q, hc.in, hc.c.mesh, hc.c.geom, R);
+    gust::ResidualFields R;
+    gust::residual(hc.q, hc.in, hc.c.mesh, hc.c.geom, R);
     NewtonOperator op0(hc.q, R, hc.in, hc.c.mesh, hc.c.geom, nullptr);
     NewtonOperator opd(hc.q, R, hc.in, hc.c.mesh, hc.c.geom, &dtau);
     NewtonVector x = op0.makeVecLHS(), A0 = op0.makeVecRHS(), Ad = op0.makeVecRHS(), D = op0.makeVecRHS(),
@@ -588,35 +588,35 @@ TEST(Newton, NonUniformDtauOnFaces)
     opd.apply(Ad, x);
     op0.linComb(D, 1, Ad, -1, A0);
     // The expected x / dtau, point by point.
-    ablsteady::State inv;
+    gust::State inv;
     inv.define(hc.c.ba, hc.c.dm);
-    ablsteady::trtest::fill_loc(inv.u, Loc::xface, hc.c, [&] (double x0, double y0, double) {
+    gust::trtest::fill_loc(inv.u, Loc::xface, hc.c, [&] (double x0, double y0, double) {
         const auto i = static_cast<int>(std::lround(x0 / dx)), j = static_cast<int>(std::floor(y0 / dy));
         return 1.0 / (0.5 * (cell(i - 1, j) + cell(i, j)));
     });
-    ablsteady::trtest::fill_loc(inv.v, Loc::yface, hc.c, [&] (double x0, double y0, double) {
+    gust::trtest::fill_loc(inv.v, Loc::yface, hc.c, [&] (double x0, double y0, double) {
         const auto i = static_cast<int>(std::floor(x0 / dx)), j = static_cast<int>(std::lround(y0 / dy));
         return 1.0 / (0.5 * (cell(i, j - 1) + cell(i, j)));
     });
-    ablsteady::trtest::fill_loc(inv.w, Loc::zface, hc.c, [&] (double x0, double y0, double) {
+    gust::trtest::fill_loc(inv.w, Loc::zface, hc.c, [&] (double x0, double y0, double) {
         return 1.0 / cell(static_cast<int>(std::floor(x0 / dx)), static_cast<int>(std::floor(y0 / dy)));
     });
     for (amrex::MultiFab* mf : {&inv.theta, &inv.tke}) {
-        ablsteady::trtest::fill_loc(*mf, Loc::cell, hc.c, [&] (double x0, double y0, double) {
+        gust::trtest::fill_loc(*mf, Loc::cell, hc.c, [&] (double x0, double y0, double) {
             return 1.0 / cell(static_cast<int>(std::floor(x0 / dx)), static_cast<int>(std::floor(y0 / dy)));
         });
     }
     // The Dirichlet w faces (ground and top) have no pseudo-time term.
     amrex::MultiFab dir;
-    hc.in.bc->dirichlet_rows(ablsteady::Equation::w, Loc::zface, hc.c.mesh, dir);
+    hc.in.bc->dirichlet_rows(gust::Equation::w, Loc::zface, hc.c.mesh, dir);
     for (int f = 0; f < 6; ++f) {
         E.f[f].setVal(0.0);
-        if (f == ablsteady::nf_p) { continue; }
+        if (f == gust::nf_p) { continue; }
         amrex::MultiFab::AddProduct(E.f[f], field(inv, f), 0, x.f[f], 0, 0, 1, 0);
     }
     amrex::MultiFab keep(dir.boxArray(), dir.DistributionMap(), 1, 0);
     keep.setVal(1.0);
     amrex::MultiFab::Subtract(keep, dir, 0, 0, 1, 0);
-    amrex::MultiFab::Multiply(E.f[ablsteady::nf_w], keep, 0, 0, 1, 0);
+    amrex::MultiFab::Multiply(E.f[gust::nf_w], keep, 0, 0, 1, 0);
     EXPECT_LT(rel_diff(op0, D, E), tol(1e-12, 1e-5));
 }

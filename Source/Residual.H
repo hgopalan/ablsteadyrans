@@ -1,5 +1,5 @@
-#ifndef ABLSTEADY_RESIDUAL_H_
-#define ABLSTEADY_RESIDUAL_H_
+#ifndef GUST_RESIDUAL_H_
+#define GUST_RESIDUAL_H_
 
 // The steady residual and its linearisations (sub-phase 1.6):
 //
@@ -53,7 +53,7 @@
 #include <cmath>
 #include <limits>
 
-namespace ablsteady {
+namespace gust {
 
 class BoundaryConditions;
 
@@ -186,6 +186,6 @@ amrex::Real jvp (const State& q, const State& v, const ResidualInputs& in, const
                  const amrex::Geometry& geom, ResidualFields& Jv, const ResidualFields* R0 = nullptr,
                  bool refill = false);
 
-} // namespace ablsteady
+} // namespace gust
 
 #endif

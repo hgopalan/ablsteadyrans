@@ -2,12 +2,12 @@ Tutorial 1: A neutral surface layer
 ===================================
 
 This first tutorial runs the simplest case: wind over flat, uniform ground with no temperature effects. The
-answer is known exactly, so you can check that ablsteady reproduces it. The run takes a few seconds on a laptop.
+answer is known exactly, so you can check that GUST reproduces it. The run takes a few seconds on a laptop.
 
-**You will learn to:** run ablsteady, read its log, find its output and compare a wind profile with theory.
+**You will learn to:** run GUST, read its log, find its output and compare a wind profile with theory.
 
-**Before you start:** build ablsteady (:doc:`building`). The commands below assume you are in the repository
-directory and the executable is ``build-rel/ablsteady``.
+**Before you start:** build GUST (:doc:`building`). The commands below assume you are in the repository
+directory and the executable is ``build-rel/gust``.
 
 The physical problem
 --------------------
@@ -93,7 +93,7 @@ Run it in a new directory, on two MPI ranks:
 .. code-block:: bash
 
    mkdir -p runs/column && cd runs/column
-   mpirun -n 2 ../../build-rel/ablsteady ../../Tests/Canonical_RANS/Neutral_Column/inputs_steady_column
+   mpirun -n 2 ../../build-rel/gust ../../Tests/Canonical_RANS/Neutral_Column/inputs_steady_column
 
 Read the log
 ------------
@@ -102,19 +102,19 @@ The log starts with the mesh and the initial field:
 
 .. code-block:: text
 
-   ablsteady: (4,4,64) cells, 1 boxes (each spans the full z column)
-   ablsteady: initializer: 0 Poisson iterations (gmres_mlmg, reltol 1.000e-10), divergence 0.000000000e+00 ...
-   ablsteady: mesh quality
+   gust: (4,4,64) cells, 1 boxes (each spans the full z column)
+   gust: initializer: 0 Poisson iterations (gmres_mlmg, reltol 1.000e-10), divergence 0.000000000e+00 ...
+   gust: mesh quality
      min cell thickness / flat layer thickness  = 1.000000000e+00
      ...
-   ablsteady: SIMPLEC stage: 2 zjacobi sweeps, pressure gmres_mlmg reltol 0.001, alpha_p 1, w_vnn_cap off, cfl0 1, cfl_max 50
+   gust: SIMPLEC stage: 2 zjacobi sweeps, pressure gmres_mlmg reltol 0.001, alpha_p 1, w_vnn_cap off, cfl0 1, cfl_max 50
 
 Over flat ground the initial profile already conserves mass, so the initializer needs no Poisson iterations. Then
 the solver prints one line per iteration (the first ten, then every tenth):
 
 .. code-block:: text
 
-   ablsteady: it 300 cfl 5.000e+01 r 1.935e-02 res 9.669e-05 0.000e+00 0.000e+00 0.000e+00 0.000e+00 1.352e-03 mon 6.937e+00 2.165e-01 3.362e-01 poisson 0 ...
+   gust: it 300 cfl 5.000e+01 r 1.935e-02 res 9.669e-05 0.000e+00 0.000e+00 0.000e+00 0.000e+00 1.352e-03 mon 6.937e+00 2.165e-01 3.362e-01 poisson 0 ...
 
 .. list-table::
    :header-rows: 1
@@ -142,12 +142,12 @@ The run ends with the verdict:
 
 .. code-block:: text
 
-   ablsteady: it 2231 cfl 5.000e+01 r 1.373e-07 res 6.863e-10 ... mon 7.228e+00 2.375e-01 3.500e-01 ...
-   ablsteady: steady after 2231 iterations (2231 over the run)
-   ablsteady: stage account: 2231 iterations, 3.459247747 s, 0 AU
-   ablsteady: wrote steady_column_plt02231
-   ablsteady: wrote steady_column_turb02231
-   ablsteady: wrote steady_column_chk02231
+   gust: it 2231 cfl 5.000e+01 r 1.373e-07 res 6.863e-10 ... mon 7.228e+00 2.375e-01 3.500e-01 ...
+   gust: steady after 2231 iterations (2231 over the run)
+   gust: stage account: 2231 iterations, 3.459247747 s, 0 AU
+   gust: wrote steady_column_plt02231
+   gust: wrote steady_column_turb02231
+   gust: wrote steady_column_chk02231
 
 The mean friction velocity (the last monitor) is 0.3500 m/s, the exact value.
 

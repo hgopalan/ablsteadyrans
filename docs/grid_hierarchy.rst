@@ -2,7 +2,7 @@ Grid hierarchy
 ==============
 
 Iterative solvers remove short-wavelength errors quickly and long-wavelength errors slowly. Coarser grids help: a
-long wave on the fine grid is a short wave on a coarse grid, and coarse iterations are cheap. ablsteady builds a
+long wave on the fine grid is a short wave on a coarse grid, and coarse iterations are cheap. GUST builds a
 hierarchy of coarser meshes for this purpose. Grid sequencing (``steady.sequencing``, :doc:`solution_algorithm`)
 uses it: it solves on the coarse meshes first and interpolates each result to the next finer mesh. Nonlinear
 multigrid, in development, will also use it. The code is in

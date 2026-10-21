@@ -3,7 +3,7 @@
 #include "Diffusion_K.H"
 #include "Stencil_K.H"
 
-namespace ablsteady {
+namespace gust {
 
 namespace {
 
@@ -109,7 +109,7 @@ void implicit_coefficients (Loc loc, const amrex::Array<const amrex::MultiFab*, 
         A.define(amrex::convert(mesh.detJ.boxArray(), t), mesh.detJ.DistributionMap(), n_implicit_coefs, 0);
     }
     check_operator_field(op, "A", A, loc, mesh, 0);
-    if (A.nComp() != n_implicit_coefs) { amrex::Abort("ablsteady: implicit_coefficients: A needs 7 components"); }
+    if (A.nComp() != n_implicit_coefs) { amrex::Abort("gust: implicit_coefficients: A needs 7 components"); }
     const auto dxinv = geom.InvCellSizeArray();
     const bool logz = (mean == FaceMean::logarithmic);
     switch (loc) {
@@ -134,4 +134,4 @@ void apply_implicit (Loc loc, const amrex::MultiFab& A, const amrex::MultiFab& q
     }
 }
 
-} // namespace ablsteady
+} // namespace gust

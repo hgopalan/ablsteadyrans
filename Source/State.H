@@ -1,12 +1,12 @@
-#ifndef ABLSTEADY_STATE_H_
-#define ABLSTEADY_STATE_H_
+#ifndef GUST_STATE_H_
+#define GUST_STATE_H_
 
 #include "Inputs.H"
 
 #include <AMReX_Geometry.H>
 #include <AMReX_MultiFab.H>
 
-namespace ablsteady {
+namespace gust {
 
 //! Ghost cells on the solution fields (the MUSCL reconstruction of
 //! Convection.H reads two cells upwind of a face) and on the nodal heights.
@@ -46,6 +46,6 @@ void init_flat_z_phys_nd (amrex::MultiFab& z_phys_nd, const amrex::Geometry& geo
 amrex::Geometry make_geometry (const MeshInputs& mesh);
 amrex::BoxArray make_box_array (const MeshInputs& mesh);
 
-} // namespace ablsteady
+} // namespace gust
 
 #endif

@@ -23,12 +23,12 @@ int main (int argc, char* argv[])
 {
     amrex::Initialize(argc, argv);
     {
-        ablsteady::Inputs in = ablsteady::parse_inputs();
-        auto err = ablsteady::validate(in);
+        gust::Inputs in = gust::parse_inputs();
+        auto err = gust::validate(in);
         // The tool works on level 0 alone: a grid hierarchy would be ignored.
         if (in.mesh.hierarchy_levels != 1) { err.emplace_back("mesh.hierarchy_levels has no effect in wall_distance"); }
-        const auto opt = ablsteady::read_poisson_options();
-        for (const auto& e : ablsteady::unknown_inputs(ablsteady::parmparse_entries(),
+        const auto opt = gust::read_poisson_options();
+        for (const auto& e : gust::unknown_inputs(gust::parmparse_entries(),
                                                        {"mesh", "terrain", "io", "solver"})) {
             err.push_back(e);
         }
@@ -37,18 +37,18 @@ int main (int argc, char* argv[])
             for (const auto& e : err) { all += "\n  " + e; }
             amrex::Abort(all);
         }
-        const amrex::Geometry geom = ablsteady::make_geometry(in.mesh);
-        const amrex::BoxArray ba = ablsteady::make_box_array(in.mesh);
+        const amrex::Geometry geom = gust::make_geometry(in.mesh);
+        const amrex::BoxArray ba = gust::make_box_array(in.mesh);
         const amrex::DistributionMapping dm(ba);
-        amrex::MultiFab z(amrex::convert(ba, amrex::IntVect(1)), dm, 1, ablsteady::ngrow_nodal);
+        amrex::MultiFab z(amrex::convert(ba, amrex::IntVect(1)), dm, 1, gust::ngrow_nodal);
         z.setVal(0.0);
-        ablsteady::Mesh mesh;
+        gust::Mesh mesh;
         mesh.define(ba, dm);
         mesh.build(in, geom, z);
 
         amrex::MultiFab out(ba, dm, 2, 0);
         amrex::MultiFab dist(ba, dm, 1, 0);
-        const auto res = ablsteady::tucker_wall_distance(mesh, geom, z, dist, opt);
+        const auto res = gust::tucker_wall_distance(mesh, geom, z, dist, opt);
         amrex::MultiFab::Copy(out, dist, 0, 0, 1, 0);
         amrex::MultiFab::Copy(out, mesh.z_cc, 0, 1, 1, 0);
 

@@ -8,7 +8,7 @@
 
 sample: the horizontal speed sqrt(u^2 + v^2) at H (default 10 m) above the
 ground at each mast of LINES (columns line, d, x, y, zg: Tests/Real_Terrain/
-Askervein_210/askervein_lines.csv). PLOTFILE is an ablsteady plotfile (u, v,
+Askervein_210/askervein_lines.csv). PLOTFILE is a GUST plotfile (u, v,
 z) or an ERF one, or an ERF reference archive's average (x_velocity,
 y_velocity, z_phys); a directory with an "average" plotfile inside is taken
 as an archive. Both are sampled the same way: in each of the four cell
@@ -30,7 +30,7 @@ every |speed_test - speed_ref| <= rel_tol * speed_ref, and prints each
 mast's relative difference and the largest. Masts are matched by line and d.
 With --lee_d D, masts more than D m past the hilltop (d > D) are judged
 against --lee_rel_tol instead (RT-2.6.1: the lee, where the advection scheme
-sets the wake: ablsteady's second order against ERF's fifth).
+sets the wake: GUST's second order against ERF's fifth).
 """
 import argparse
 import csv
@@ -42,7 +42,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "extern_erf"))
 import erf_plotfile  # noqa: E402  (ERF's reader, extern_erf/)
 
-NAMES = {"ablsteady": ("u", "v", "z"), "erf": ("x_velocity", "y_velocity", "z_phys")}
+NAMES = {"gust": ("u", "v", "z"), "erf": ("x_velocity", "y_velocity", "z_phys")}
 
 
 def read_terrain(path):
@@ -107,7 +107,7 @@ class Columns:
             plotfile = os.path.join(plotfile, "average")
         self.hdr = erf_plotfile._read_header(plotfile)
         names = self.hdr["names"]
-        kind = "ablsteady" if all(n in names for n in NAMES["ablsteady"]) else "erf"
+        kind = "gust" if all(n in names for n in NAMES["gust"]) else "erf"
         for n in NAMES[kind]:
             if n not in names:
                 sys.exit(f"{plotfile}: no field {n} (have {', '.join(names)})")

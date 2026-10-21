@@ -13,7 +13,7 @@
 #include <limits>
 #include <string>
 
-namespace ablsteady {
+namespace gust {
 
 void ResidualFields::define (const amrex::BoxArray& ba, const amrex::DistributionMapping& dm)
 {
@@ -50,7 +50,7 @@ void check_diffusivities (const char* op, const ResidualInputs& in)
     } else if (in.nu == nullptr) { err = "nu is not set"; }
     else if (in.gamma_theta == nullptr) { err = "gamma_theta is not set"; }
     else if (in.gamma_tke == nullptr) { err = "gamma_tke is not set"; }
-    if (!err.empty()) { amrex::Abort(std::string("ablsteady: ") + op + ": ResidualInputs: " + err); }
+    if (!err.empty()) { amrex::Abort(std::string("gust: ") + op + ": ResidualInputs: " + err); }
 }
 
 //! The face average in use.
@@ -94,7 +94,7 @@ void check_inputs (const char* op, const ResidualInputs& in)
         }
     }
     if (err.empty() && !all.empty()) { err = all.front(); }
-    if (!err.empty()) { amrex::Abort(std::string("ablsteady: ") + op + ": ResidualInputs: " + err); }
+    if (!err.empty()) { amrex::Abort(std::string("gust: ") + op + ": ResidualInputs: " + err); }
 }
 
 // Over the owned points of q (shared faces once): sum of |(q - offset) / s|,
@@ -265,7 +265,7 @@ void implicit_rows (const amrex::Array<const amrex::MultiFab*, AMREX_SPACEDIM>& 
     check_diffusivities("implicit_rows", in);
     const bool closure = (in.closure != nullptr);
     if (closure && (fields == nullptr || fields->empty())) {
-        amrex::Abort("ablsteady: implicit_rows: with a closure the rows need its fields at the state (Closure::evaluate)");
+        amrex::Abort("gust: implicit_rows: with a closure the rows need its fields at the state (Closure::evaluate)");
     }
     Loc loc = Loc::cell;
     const amrex::MultiFab* g = closure ? &fields->nu : in.nu;
@@ -284,7 +284,7 @@ void implicit_rows (const amrex::Array<const amrex::MultiFab*, AMREX_SPACEDIM>& 
     const bool wall = (in.surface != nullptr && eq != Equation::w);
     if (wall) {
         if (surface == nullptr) {
-            amrex::Abort("ablsteady: implicit_rows: with a wall model the first cells' rows need the surface state");
+            amrex::Abort("gust: implicit_rows: with a wall model the first cells' rows need the surface state");
         }
         apply_wall_to_implicit(*surface, loc, mesh, geom, A);
         if (eq == Equation::tke) { apply_wall_k_to_implicit(*surface, *in.surface, A); }
@@ -296,13 +296,13 @@ void line_jacobian (const amrex::Array<const amrex::MultiFab*, AMREX_SPACEDIM>& 
                     const ResidualInputs& in, Equation eq, int dir, const Mesh& mesh, const amrex::Geometry& geom,
                     amrex::MultiFab& tri, const SurfaceState* surface, const ClosureFields* fields)
 {
-    if (dir < 0 || dir > 2) { amrex::Abort("ablsteady: line_jacobian: dir must be 0, 1 or 2"); }
+    if (dir < 0 || dir > 2) { amrex::Abort("gust: line_jacobian: dir must be 0, 1 or 2"); }
     amrex::MultiFab A;
     implicit_rows(F, z_nd, in, eq, mesh, geom, A, surface, fields);
     const Loc loc = (eq == Equation::u) ? Loc::xface : (eq == Equation::v) ? Loc::yface : (eq == Equation::w) ? Loc::zface : Loc::cell;
     if (tri.empty()) { tri.define(A.boxArray(), A.DistributionMap(), n_line_coefs, 0); }
     check_operator_field("line_jacobian", "tri", tri, loc, mesh, 0);
-    if (tri.nComp() != n_line_coefs) { amrex::Abort("ablsteady: line_jacobian: tri needs 3 components"); }
+    if (tri.nComp() != n_line_coefs) { amrex::Abort("gust: line_jacobian: tri needs 3 components"); }
     amrex::MultiFab::Copy(tri, A, coef_XM + 2 * dir, line_lower, 1, 0);
     amrex::MultiFab::Copy(tri, A, coef_P, line_diag, 1, 0);
     amrex::MultiFab::Copy(tri, A, coef_XP + 2 * dir, line_upper, 1, 0);
@@ -314,7 +314,7 @@ amrex::Real jvp (const State& q, const State& v, const ResidualInputs& in, const
                  const amrex::Geometry& geom, ResidualFields& Jv, const ResidualFields* R0, bool refill)
 {
     if (refill && in.bc == nullptr) {
-        amrex::Abort("ablsteady: jvp: refill needs ResidualInputs::bc (the ghost fill of q + eps v)");
+        amrex::Abort("gust: jvp: refill needs ResidualInputs::bc (the ghost fill of q + eps v)");
     }
     if (Jv.u.empty()) { Jv.define(q.p.boxArray(), q.p.DistributionMap()); }
     const auto qf = solution_fields(q);
@@ -322,7 +322,7 @@ amrex::Real jvp (const State& q, const State& v, const ResidualInputs& in, const
     for (int n = 0; n < static_cast<int>(qf.size()); ++n) {
         if (vf[n]->boxArray() != qf[n]->boxArray() || vf[n]->DistributionMap() != qf[n]->DistributionMap()
             || vf[n]->nGrow() < qf[n]->nGrow()) {
-            amrex::Abort("ablsteady: jvp: v must be a state on q's layout with q's ghost cells");
+            amrex::Abort("gust: jvp: v must be a state on q's layout with q's ghost cells");
         }
     }
     check_inputs("jvp", in);
@@ -384,4 +384,4 @@ amrex::Real jvp (const State& q, const State& v, const ResidualInputs& in, const
     return static_cast<amrex::Real>(eps);
 }
 
-} // namespace ablsteady
+} // namespace gust

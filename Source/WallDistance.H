@@ -1,5 +1,5 @@
-#ifndef ABLSTEADY_WALL_DISTANCE_H_
-#define ABLSTEADY_WALL_DISTANCE_H_
+#ifndef GUST_WALL_DISTANCE_H_
+#define GUST_WALL_DISTANCE_H_
 
 #include "Mesh.H"
 #include "Poisson.H"
@@ -7,7 +7,7 @@
 #include <AMReX_Geometry.H>
 #include <AMReX_MultiFab.H>
 
-namespace ablsteady {
+namespace gust {
 
 //! Tucker's (2003, J. Comput. Phys. 190:229-248, Eq. 2) differential wall
 //! distance, the algorithm of ERF's ERF::poisson_wall_dist lifted into a free
@@ -32,6 +32,6 @@ PoissonResult tucker_wall_distance (const Mesh& mesh, const amrex::Geometry& geo
 //! The boundary conditions of the Tucker solve for this geometry.
 PoissonBC tucker_bc (const amrex::Geometry& geom);
 
-} // namespace ablsteady
+} // namespace gust
 
 #endif

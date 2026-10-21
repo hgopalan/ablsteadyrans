@@ -25,13 +25,13 @@
 
 namespace {
 
-using ablsteady::Limiter;
-using ablsteady::StageKind;
-using ablsteady::hilltest::HillRun;
+using gust::Limiter;
+using gust::StageKind;
+using gust::hilltest::HillRun;
 
 constexpr bool kDouble = std::is_same_v<amrex::Real, double>;
 
-amrex::MultiFab& field (ablsteady::State& q, int f)
+amrex::MultiFab& field (gust::State& q, int f)
 {
     amrex::MultiFab* p[6] = {&q.u, &q.v, &q.w, &q.p, &q.theta, &q.tke};
     return *p[f];
@@ -39,7 +39,7 @@ amrex::MultiFab& field (ablsteady::State& q, int f)
 
 // max |a - b| over the valid points; b may be on another DistributionMapping
 // of the same BoxArray (two runs built separately need not share one).
-double diff (ablsteady::State& a, ablsteady::State& b, int f)
+double diff (gust::State& a, gust::State& b, int f)
 {
     amrex::MultiFab d(field(a, f).boxArray(), field(a, f).DistributionMap(), 1, 0);
     d.ParallelCopy(field(b, f), 0, 0, 1);
@@ -50,7 +50,7 @@ double diff (ablsteady::State& a, ablsteady::State& b, int f)
 // The hill with the criterion of these tests (6 orders, residual_tol 1e-9)
 // and the switch at r <= switch_residual.
 std::unique_ptr<HillRun> make_run (Limiter lim, StageKind stage, double switch_residual = 1e-4,
-                                   ablsteady::NewtonPreconditionerKind pc = ablsteady::NewtonPreconditionerKind::simplec)
+                                   gust::NewtonPreconditionerKind pc = gust::NewtonPreconditionerKind::simplec)
 {
     auto hr = std::make_unique<HillRun>(0.01, 8, 8, 4, 0, lim, stage);
     hr->s.sopt.newton_preconditioner = pc;
@@ -58,7 +58,7 @@ std::unique_ptr<HillRun> make_run (Limiter lim, StageKind stage, double switch_r
     hr->s.sopt.criterion.residual_drop_orders = 6;
     hr->s.sopt.switch_residual = amrex::Real(switch_residual);
     // The driver copies the options: rebuild the level's solver with them.
-    hr->ls = std::make_unique<ablsteady::LevelSolver>(hr->s, hr->c.mesh, hr->c.geom, hr->c.z, hr->c.ba, hr->c.dm, "",
+    hr->ls = std::make_unique<gust::LevelSolver>(hr->s, hr->c.mesh, hr->c.geom, hr->c.z, hr->c.ba, hr->c.dm, "",
                                                       stage == StageKind::simplec_newton);
     return hr;
 }
@@ -66,15 +66,15 @@ std::unique_ptr<HillRun> make_run (Limiter lim, StageKind stage, double switch_r
 struct RunResult
 {
     int simplec{0}, newton{0};
-    ablsteady::SteadyStatus status{ablsteady::SteadyStatus::NotSteady};
+    gust::SteadyStatus status{gust::SteadyStatus::NotSteady};
 };
 
 RunResult run (HillRun& hr, int limit)
 {
-    ablsteady::SteadyVerdict v;
+    gust::SteadyVerdict v;
     for (int it = 0; it < limit; ++it) {
         v = hr.ls->driver().step(hr.q);
-        if (v.status != ablsteady::SteadyStatus::NotSteady) { break; }
+        if (v.status != gust::SteadyStatus::NotSteady) { break; }
     }
     RunResult out;
     out.status = v.status;
@@ -86,10 +86,10 @@ RunResult run (HillRun& hr, int limit)
 // lambda decreases |R|, and every attempt is rejected, so every step fails.
 // (A NaN hook would put NaN into GMRES's perturbed states, where the wall
 // law aborts.)
-class ZeroHook : public ablsteady::NewtonPreconditioner
+class ZeroHook : public gust::NewtonPreconditioner
 {
 public:
-    void apply (ablsteady::NewtonVector& dq, const ablsteady::NewtonVector&) override
+    void apply (gust::NewtonVector& dq, const gust::NewtonVector&) override
     {
         for (auto& f : dq.f) { f.setVal(0.0); }
     }
@@ -110,15 +110,15 @@ TEST(NewtonStage, SwitchesOnceAndConvergesInNewton)
     if constexpr (!kDouble) { GTEST_SKIP() << "the 6-order drop is near single precision"; }
     auto ref = make_run(Limiter::van_albada, StageKind::simplec);
     const RunResult a = run(*ref, 20000);
-    ASSERT_EQ(a.status, ablsteady::SteadyStatus::Steady);
+    ASSERT_EQ(a.status, gust::SteadyStatus::Steady);
     auto hr = make_run(Limiter::van_albada, StageKind::simplec_newton);
     const RunResult b = run(*hr, 20000);
-    ASSERT_EQ(b.status, ablsteady::SteadyStatus::Steady);
+    ASSERT_EQ(b.status, gust::SteadyStatus::Steady);
     const auto& sw = hr->ls->driver().history().switches;
     ASSERT_EQ(sw.size(), 1u);
     EXPECT_EQ(sw[0].to, 1);
     EXPECT_EQ(hr->ls->driver().stage(), 1);
-    const ablsteady::NewtonStage* ns = hr->ls->newton_stage();
+    const gust::NewtonStage* ns = hr->ls->newton_stage();
     ASSERT_NE(ns, nullptr);
     EXPECT_LE(ns->continuation().state().steps, 16);
     EXPECT_GE(ns->continuation().state().steps, 2);
@@ -153,7 +153,7 @@ TEST(NewtonStage, HandsBackForTheFinalPassAfterTheSwap)
     EXPECT_EQ(sw[0].to, 1);
     EXPECT_EQ(sw[1].to, 0);
     EXPECT_NE(sw[1].reason.find("the final SIMPLEC pass"), std::string::npos) << sw[1].reason;
-    const ablsteady::NewtonStage* ns = hr->ls->newton_stage();
+    const gust::NewtonStage* ns = hr->ls->newton_stage();
     EXPECT_TRUE(ns->handed_back());
     EXPECT_FALSE(ns->accepts_switch());
     EXPECT_FALSE(hr->ls->closure.frozen());
@@ -175,7 +175,7 @@ TEST(NewtonStage, HandsBackWhenConvergedWithoutAVerdict)
     auto hr = std::make_unique<HillRun>(0.01, 8, 8, 4, 0, Limiter::van_albada, StageKind::simplec_newton);
     hr->s.sopt.criterion.residual_tol = amrex::Real(1e-30);
     hr->s.sopt.criterion.residual_drop_orders = 6;
-    hr->ls = std::make_unique<ablsteady::LevelSolver>(hr->s, hr->c.mesh, hr->c.geom, hr->c.z, hr->c.ba, hr->c.dm, "", true);
+    hr->ls = std::make_unique<gust::LevelSolver>(hr->s, hr->c.mesh, hr->c.geom, hr->c.z, hr->c.ba, hr->c.dm, "", true);
     auto& d = hr->ls->driver();
     for (int it = 0; it < 20000 && d.history().switches.size() < 2; ++it) { d.step(hr->q); }
     const auto& sw = d.history().switches;
@@ -197,13 +197,13 @@ TEST(NewtonStage, FallsBackAfterFailedSteps)
     auto hr = make_run(Limiter::van_albada, StageKind::simplec);
     for (int it = 0; it < 300; ++it) { hr->ls->driver().step(hr->q); }
     for (const int limit : {2, 1}) {
-        ablsteady::SteadyOptions so = hr->s.sopt;
+        gust::SteadyOptions so = hr->s.sopt;
         so.newton_fallback_failures = limit;
         ZeroHook hook;
-        ablsteady::NewtonStage ns(so, hr->s.newton, hr->s.simplec, hr->s.popt, hr->ls->res_in, &hr->ls->closure, hr->c.mesh,
+        gust::NewtonStage ns(so, hr->s.newton, hr->s.simplec, hr->s.popt, hr->ls->res_in, &hr->ls->closure, hr->c.mesh,
                                   hr->c.geom, hr->c.z, hr->s.copt.tke_floor,
                                   hr->ls->stage().norm_height(), hr->c.ba, hr->c.dm, &hook, 0);
-        ablsteady::State q;
+        gust::State q;
         q.define(hr->c.ba, hr->c.dm);
         for (int f = 0; f < 6; ++f) { amrex::MultiFab::Copy(field(q, f), field(hr->q, f), 0, 0, 1, field(q, f).nGrowVect()); }
         amrex::MultiFab::Copy(q.z_phys_nd, hr->q.z_phys_nd, 0, 0, 1, q.z_phys_nd.nGrowVect());
@@ -212,7 +212,7 @@ TEST(NewtonStage, FallsBackAfterFailedSteps)
         amrex::MultiFab dtau(hr->c.ba, hr->c.dm, 1, 0);
         dtau.setVal(1.0);
         ns.iterate(q, dtau);
-        EXPECT_EQ(ns.last_status(), ablsteady::ContinuationStatus::failed);
+        EXPECT_EQ(ns.last_status(), gust::ContinuationStatus::failed);
         EXPECT_EQ(ns.failures(), 1);
         EXPECT_EQ(ns.fallback_requested(), limit == 1) << limit;
         if (limit == 2) {
@@ -264,8 +264,8 @@ TEST(NewtonStage, FallsBackAfterFailedSteps)
 TEST(NewtonStage, RestartInsideTheStage)
 {
     if constexpr (!kDouble) { GTEST_SKIP() << "the switch at 1e-3 is near single precision"; }
-    for (const auto pc : {ablsteady::NewtonPreconditionerKind::identity, ablsteady::NewtonPreconditionerKind::simplec}) {
-        const bool exact = (pc == ablsteady::NewtonPreconditionerKind::identity);
+    for (const auto pc : {gust::NewtonPreconditionerKind::identity, gust::NewtonPreconditionerKind::simplec}) {
+        const bool exact = (pc == gust::NewtonPreconditionerKind::identity);
         auto hr = make_run(Limiter::van_albada, StageKind::simplec_newton, 1e-3, pc);
         auto& d = hr->ls->driver();
         int in_newton = 0;
@@ -274,15 +274,15 @@ TEST(NewtonStage, RestartInsideTheStage)
             in_newton += (d.history().records.back().stage == 1) ? 1 : 0;
         }
         ASSERT_EQ(d.stage(), 1);
-        const std::string dir = ablsteady::write_checkpoint("ut_newton_stage_chk", hr->q, hr->c.in.mesh);
-        ablsteady::write_driver_history(dir, d.history());
+        const std::string dir = gust::write_checkpoint("ut_newton_stage_chk", hr->q, hr->c.in.mesh);
+        gust::write_driver_history(dir, d.history());
         hr->ls->closure.write_checkpoint(dir);
         hr->ls->newton_stage()->write_checkpoint(dir);
         for (int it = 0; it < 3; ++it) { d.step(hr->q); }
 
         auto hr2 = make_run(Limiter::van_albada, StageKind::simplec_newton, 1e-3, pc);
-        ablsteady::read_checkpoint(dir, hr2->q, hr2->c.in.mesh);
-        hr2->ls->driver().restore(ablsteady::read_driver_history(dir), hr2->q);
+        gust::read_checkpoint(dir, hr2->q, hr2->c.in.mesh);
+        hr2->ls->driver().restore(gust::read_driver_history(dir), hr2->q);
         hr2->ls->closure.read_checkpoint(dir, hr2->c.ba, hr2->c.dm, hr2->c.geom);
         hr2->ls->newton_stage()->read_checkpoint(dir, hr2->c.ba, hr2->c.dm, hr2->c.geom);
         EXPECT_TRUE(hr2->ls->closure.frozen());

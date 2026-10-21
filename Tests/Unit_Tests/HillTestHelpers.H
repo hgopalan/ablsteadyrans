@@ -1,5 +1,5 @@
-#ifndef ABLSTEADY_HILL_TEST_HELPERS_H_
-#define ABLSTEADY_HILL_TEST_HELPERS_H_
+#ifndef GUST_HILL_TEST_HELPERS_H_
+#define GUST_HILL_TEST_HELPERS_H_
 
 // The 2-D hill case of test_Smoothness.cpp and test_NewtonStage.cpp, run as
 // the application runs it (LevelSolver).
@@ -13,12 +13,12 @@
 #include <cmath>
 #include <memory>
 
-namespace ablsteady::hilltest {
+namespace gust::hilltest {
 
-using ablsteady::FaceType;
-using ablsteady::Limiter;
-using ablsteady::Loc;
-using ablsteady::ptest::PCase;
+using gust::FaceType;
+using gust::Limiter;
+using gust::Loc;
+using gust::ptest::PCase;
 
 // The 2-D periodic hill with a capping inversion, run as the application
 // runs it (LevelSolver, the SIMPLEC stage under its driver): nx x 2 x nz
@@ -32,13 +32,13 @@ using ablsteady::ptest::PCase;
 struct HillRun
 {
     PCase c;
-    ablsteady::RunSetup s;
-    std::unique_ptr<ablsteady::LevelSolver> ls;
-    ablsteady::State q;
+    gust::RunSetup s;
+    std::unique_ptr<gust::LevelSolver> ls;
+    gust::State q;
     static constexpr double kPi = 3.14159265358979323846;
     static constexpr double Lx = 1000, Ly = 125, H = 500;
     HillRun (double lapse, int nx, int nz, int max_grid, double ri_gate = 0, Limiter lim = Limiter::van_leer,
-             ablsteady::StageKind stage = ablsteady::StageKind::simplec)
+             gust::StageKind stage = gust::StageKind::simplec)
     {
         c.in.mesh.n_cell = amrex::IntVect(nx, 2, nz);
         c.in.mesh.prob_hi = {amrex::Real(Lx), amrex::Real(Ly), amrex::Real(H)};
@@ -47,7 +47,7 @@ struct HillRun
         c.make([] (double x, double) { return 20 * (1 - std::cos(2 * kPi * x / Lx)); });
         c.z.FillBoundary(c.geom.periodicity());
         c.mesh.build_from_ground(c.in, c.geom, c.z);
-        ablsteady::trtest::smooth_vertical_ghost_nodes(c);
+        gust::trtest::smooth_vertical_ghost_nodes(c);
         s.bin.face = {FaceType::periodic, FaceType::periodic, FaceType::surface_layer, FaceType::periodic,
                       FaceType::periodic, FaceType::slip_wall};
         s.bin.theta_ref = {amrex::Vector<amrex::Real>{0, amrex::Real(0.6 * H), amrex::Real(H)},
@@ -64,7 +64,7 @@ struct HillRun
         s.cin.momentum.limiter = lim;
         s.cin.theta.limiter = lim;
         s.sopt.stage = stage;
-        s.sopt.sweep = ablsteady::SweepKind::lusgs;
+        s.sopt.sweep = gust::SweepKind::lusgs;
         s.sopt.zline_sweeps = 2;
         s.sopt.cfl_max = 8;
         s.sopt.max_iterations = 100000;
@@ -72,20 +72,20 @@ struct HillRun
         s.sopt.criterion.residual_drop_orders = 12;
         // The Newton stage (steady.stage = simplec_newton): the SER ramp of the
         // driver's keys, GMRES(200) on this small case.
-        s.newton.continuation = ablsteady::continuation_options(s.sopt);
+        s.newton.continuation = gust::continuation_options(s.sopt);
         s.newton.newton.gmres_restart = 200;
-        ablsteady::use_closure_constants(s.bin, s.surf, s.copt.Cmu0, s.copt.kappa, s.copt.max_geom_lscale);
-        ls = std::make_unique<ablsteady::LevelSolver>(s, c.mesh, c.geom, c.z, c.ba, c.dm, "",
-                                                      stage == ablsteady::StageKind::simplec_newton);
+        gust::use_closure_constants(s.bin, s.surf, s.copt.Cmu0, s.copt.kappa, s.copt.max_geom_lscale);
+        ls = std::make_unique<gust::LevelSolver>(s, c.mesh, c.geom, c.z, c.ba, c.dm, "",
+                                                      stage == gust::StageKind::simplec_newton);
         q.define(c.ba, c.dm);
         amrex::MultiFab::Copy(q.z_phys_nd, c.z, 0, 0, 1, c.z.nGrow());
-        ablsteady::trtest::fill_loc(q.u, Loc::xface, c, [] (double, double, double z) {
+        gust::trtest::fill_loc(q.u, Loc::xface, c, [] (double, double, double z) {
             return 8 * std::log((std::max(z, 0.0) + 0.1) / 0.1) / std::log(5000.0);   // ghosts below the ground: z < 0
         });
         q.v.setVal(0.0);
         q.w.setVal(0.0);
         q.p.setVal(0.0);
-        ablsteady::trtest::fill_loc(q.theta, Loc::cell, c, [=] (double, double, double z) { return 300 + lapse * std::max(0.0, z - 0.6 * H); });
+        gust::trtest::fill_loc(q.theta, Loc::cell, c, [=] (double, double, double z) { return 300 + lapse * std::max(0.0, z - 0.6 * H); });
         q.tke.setVal(amrex::Real(0.2));
         ls->bc.fill_ghosts(q, ls->surface(), s.fopt.buoyancy);
     }
@@ -102,6 +102,6 @@ struct HillRun
     }
 };
 
-} // namespace ablsteady::hilltest
+} // namespace gust::hilltest
 
 #endif

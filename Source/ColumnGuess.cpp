@@ -17,7 +17,7 @@
 #include <limits>
 #include <vector>
 
-namespace ablsteady {
+namespace gust {
 
 std::vector<std::string> check_column_guess (const InitOptions& iopt, const SteadyOptions& sopt, const ForcingOptions& fopt,
                                              const BoundaryInputs& bin, const SurfaceLayerOptions& surf, bool surface_layer)
@@ -137,7 +137,7 @@ ColumnGuessResult run_column_guess (const Inputs& in, const InitOptions& iopt, c
 {
     {
         const auto err = check_column_guess(iopt, sopt, fopt, bin, surf, surface_layer);
-        if (!err.empty()) { amrex::Abort("ablsteady: column guess: " + err.front()); }
+        if (!err.empty()) { amrex::Abort("gust: column guess: " + err.front()); }
     }
     const double t0 = amrex::second();
     double ztop = 0;
@@ -290,14 +290,14 @@ ColumnGuessResult run_column_guess (const Inputs& in, const InitOptions& iopt, c
         }
         res.iterations = it + 1;
         last_change = change;
-        if (!(change == change)) { amrex::Abort("ablsteady: column guess: the column produced a NaN (init.column_tol, the deck's forcing)"); }
+        if (!(change == change)) { amrex::Abort("gust: column guess: the column produced a NaN (init.column_tol, the deck's forcing)"); }
         if (change < tol) { converged = true; break; }
         // A stall: the change has not improved for 200 steps once the step is
         // at its cap (the asymptotic contraction is about 0.88 per step).
         if (change < best_change) { best_change = change; best_at = it; }
         else if (dt >= dt_max && it - best_at > 200) {
             char msg[256];
-            std::snprintf(msg, sizeof(msg), "ablsteady: column guess: the column is not converging (the change %.3e has not decreased "
+            std::snprintf(msg, sizeof(msg), "gust: column guess: the column is not converging (the change %.3e has not decreased "
                           "over 200 steps): the deck's forcing has no steady column", change);
             amrex::Abort(msg);
         }
@@ -306,7 +306,7 @@ ColumnGuessResult run_column_guess (const Inputs& in, const InitOptions& iopt, c
     res.steady = converged;
     if (!converged) {
         char msg[256];
-        std::snprintf(msg, sizeof(msg), "ablsteady: column guess: the column did not converge to the tolerance %.3e (init.column_tol) in %d "
+        std::snprintf(msg, sizeof(msg), "gust: column guess: the column did not converge to the tolerance %.3e (init.column_tol) in %d "
                       "iterations (the last step's scaled change %.3e; init.column_max_iterations)", tol, res.iterations, last_change);
         amrex::Abort(msg);
     }
@@ -340,4 +340,4 @@ ColumnGuessResult run_column_guess (const Inputs& in, const InitOptions& iopt, c
     return res;
 }
 
-} // namespace ablsteady
+} // namespace gust

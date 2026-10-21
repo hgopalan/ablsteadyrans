@@ -1,5 +1,5 @@
-#ifndef ABLSTEADY_MESH_HIERARCHY_H_
-#define ABLSTEADY_MESH_HIERARCHY_H_
+#ifndef GUST_MESH_HIERARCHY_H_
+#define GUST_MESH_HIERARCHY_H_
 
 // The horizontal-only grid hierarchy (sub-phase 2.3). Levels l = 0 ... L-1
 // (L = mesh.hierarchy_levels); level 0 is the run's mesh and level l has
@@ -38,7 +38,7 @@
 #include <string>
 #include <vector>
 
-namespace ablsteady {
+namespace gust {
 
 //! Largest mesh.hierarchy_levels and terrain.hierarchy_passes the range checks accept.
 inline constexpr int kMaxHierarchyLevels = 10;
@@ -127,6 +127,6 @@ private:
 //! its ghost nodes in x and y (fill_surface_ghosts).
 void inject_ground (const amrex::MultiFab& z_fine, int r, amrex::MultiFab& z_coarse, const amrex::Geometry& geom_coarse);
 
-} // namespace ablsteady
+} // namespace gust
 
 #endif

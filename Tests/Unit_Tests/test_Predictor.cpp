@@ -27,20 +27,20 @@
 
 namespace {
 
-using ablsteady::Equation;
-using ablsteady::Loc;
-using ablsteady::ptest::PCase;
-using ablsteady::trtest::tol;
+using gust::Equation;
+using gust::Loc;
+using gust::ptest::PCase;
+using gust::trtest::tol;
 
 PCase make_mesh (int nx, int ny, int nz, double H0, bool periodic_x = true, bool periodic_y = true, int max_grid = 0)
 {
-    ablsteady::ptest::Manufactured ms;
+    gust::ptest::Manufactured ms;
     ms.Lx = 1000;
     ms.Ly = 800;
     ms.H0 = H0;
-    const auto px = periodic_x ? ablsteady::PoissonFace::periodic : ablsteady::PoissonFace::neumann;
-    const auto py = periodic_y ? ablsteady::PoissonFace::periodic : ablsteady::PoissonFace::neumann;
-    PCase c = ablsteady::ptest::make_case(nx, ny, nz, px, py, ms, 0, true);
+    const auto px = periodic_x ? gust::PoissonFace::periodic : gust::PoissonFace::neumann;
+    const auto py = periodic_y ? gust::PoissonFace::periodic : gust::PoissonFace::neumann;
+    PCase c = gust::ptest::make_case(nx, ny, nz, px, py, ms, 0, true);
     if (max_grid > 0) {   // several boxes in x and y
         c.in.mesh.max_grid_size = {max_grid, max_grid};
         c.make([ms] (double x, double y) { return ms.h(x, y); });
@@ -50,11 +50,11 @@ PCase make_mesh (int nx, int ny, int nz, double H0, bool periodic_x = true, bool
     // get different coefficients. Refill the ghosts and rebuild the mesh.
     c.z.FillBoundary(c.geom.periodicity());
     c.mesh.build_from_ground(c.in, c.geom, c.z);
-    ablsteady::trtest::smooth_vertical_ghost_nodes(c);
+    gust::trtest::smooth_vertical_ghost_nodes(c);
     return c;
 }
 
-void define_state (ablsteady::State& q, const PCase& c)
+void define_state (gust::State& q, const PCase& c)
 {
     q.define(c.ba, c.dm);
     amrex::MultiFab::Copy(q.z_phys_nd, c.z, 0, 0, 1, c.z.nGrow());
@@ -100,7 +100,7 @@ amrex::FArrayBox host_copy (const amrex::MultiFab& mf, const amrex::MFIter& mfi)
 
 // A state with a smooth, non-uniform wind (so that the residual and the
 // transport are not trivial), uniform theta, k = 1.
-void fill_state (ablsteady::State& q, const PCase& c, unsigned seed)
+void fill_state (gust::State& q, const PCase& c, unsigned seed)
 {
     fill_random(q.u, 5, 10, seed, c);
     fill_random(q.v, -2, 2, seed + 1, c);
@@ -114,7 +114,7 @@ void fill_state (ablsteady::State& q, const PCase& c, unsigned seed)
 struct Coefficients
 {
     amrex::MultiFab nu, gt, gk;
-    ablsteady::ResidualInputs in;
+    gust::ResidualInputs in;
     void make (const PCase& c, double numax, unsigned seed)
     {
         for (auto* mf : {&nu, &gt, &gk}) { mf->define(c.ba, c.dm, 1, 1); }
@@ -185,8 +185,8 @@ void dense_solve (const amrex::MultiFab& A, const amrex::MultiFab& ap, const amr
             M[static_cast<std::size_t>(row) * n + row] += p(iv);
             rr[row] = r(iv);
             const int nb[6][3] = {{i - 1, j, k}, {i + 1, j, k}, {i, j - 1, k}, {i, j + 1, k}, {i, j, k - 1}, {i, j, k + 1}};
-            const int comp[6] = {ablsteady::coef_XM, ablsteady::coef_XP, ablsteady::coef_YM, ablsteady::coef_YP,
-                                 ablsteady::coef_ZM, ablsteady::coef_ZP};
+            const int comp[6] = {gust::coef_XM, gust::coef_XP, gust::coef_YM, gust::coef_YP,
+                                 gust::coef_ZM, gust::coef_ZP};
             for (int m = 0; m < 6; ++m) {
                 const int ii = wrap(nb[m][0], 0), jj = wrap(nb[m][1], 1), kk = nb[m][2];
                 if (ii < 0 || jj < 0 || kk < b.smallEnd(2) || kk > b.bigEnd(2)) { continue; }
@@ -245,13 +245,13 @@ double max_abs (const amrex::MultiFab& a) { return static_cast<double>(a.norm0()
 struct Problem
 {
     amrex::Array<amrex::MultiFab, 3> F;
-    ablsteady::ResidualFields R;
+    gust::ResidualFields R;
     amrex::MultiFab A;
-    void make (const ablsteady::State& q, const Coefficients& co, const PCase& c, Equation eq)
+    void make (const gust::State& q, const Coefficients& co, const PCase& c, Equation eq)
     {
-        ablsteady::transport_fluxes(q.u, q.v, q.w, q.z_phys_nd, c.mesh, c.geom, F);
-        ablsteady::residual(q, co.in, c.mesh, c.geom, R);
-        ablsteady::implicit_rows({&F[0], &F[1], &F[2]}, q.z_phys_nd, co.in, eq, c.mesh, c.geom, A);
+        gust::transport_fluxes(q.u, q.v, q.w, q.z_phys_nd, c.mesh, c.geom, F);
+        gust::residual(q, co.in, c.mesh, c.geom, R);
+        gust::implicit_rows({&F[0], &F[1], &F[2]}, q.z_phys_nd, co.in, eq, c.mesh, c.geom, A);
     }
 };
 
@@ -266,7 +266,7 @@ struct Problem
 TEST (Predictor, APIsTheDiagonalPlusThePseudoTimeTerm)
 {
     PCase c = make_mesh(8, 4, 6, 60);
-    ablsteady::State q;
+    gust::State q;
     define_state(q, c);
     fill_state(q, c, 11);
     Coefficients co;
@@ -274,10 +274,10 @@ TEST (Predictor, APIsTheDiagonalPlusThePseudoTimeTerm)
     amrex::MultiFab dtau(c.ba, c.dm, 1, 0);
     fill_random(dtau, 0.5, 2.0, 31, c);
     amrex::Array<amrex::MultiFab, 3> df;
-    ablsteady::face_dtau(dtau, c.mesh, c.geom, df);
+    gust::face_dtau(dtau, c.mesh, c.geom, df);
     Problem pr;
     pr.make(q, co, c, Equation::u);
-    ablsteady::State q1;
+    gust::State q1;
     define_state(q1, c);
     amrex::MultiFab::Copy(q1.u, q.u, 0, 0, 1, 2);
     amrex::MultiFab::Copy(q1.v, q.v, 0, 0, 1, 2);
@@ -285,13 +285,13 @@ TEST (Predictor, APIsTheDiagonalPlusThePseudoTimeTerm)
     amrex::MultiFab::Copy(q1.p, q.p, 0, 0, 1, 2);
     amrex::MultiFab::Copy(q1.theta, q.theta, 0, 0, 1, 2);
     amrex::MultiFab::Copy(q1.tke, q.tke, 0, 0, 1, 2);
-    ablsteady::PredictorFields ap;
-    const auto r = ablsteady::momentum_predictor(q1, pr.R, {&pr.F[0], &pr.F[1], &pr.F[2]}, co.in, df, c.mesh, c.geom, 3, ap);
+    gust::PredictorFields ap;
+    const auto r = gust::momentum_predictor(q1, pr.R, {&pr.F[0], &pr.F[1], &pr.F[2]}, co.in, df, c.mesh, c.geom, 3, ap);
     {
         // Sub-phase 2.2: the line options reach the sweeps of u, v and w (the
         // diagonal ordering's launches, one per wavefront plane of the owned
         // region with the zero ghosts), not only steady.sweep.
-        ablsteady::State q2;
+        gust::State q2;
         define_state(q2, c);
         // The element type is spelt out: nvcc cannot deduce a braced list
         // whose first element is a deduced std::pair{...}.
@@ -300,21 +300,21 @@ TEST (Predictor, APIsTheDiagonalPlusThePseudoTimeTerm)
                                                            {&q2.theta, &q.theta}, {&q2.tke, &q.tke}}) {
             amrex::MultiFab::Copy(*d, *s, 0, 0, 1, 2);
         }
-        ablsteady::LineSweepOptions opt(ablsteady::SweepKind::lusgs);
-        opt.ghosts = ablsteady::LineGhosts::zero;
-        opt.order = ablsteady::LineOrder::diagonal;
+        gust::LineSweepOptions opt(gust::SweepKind::lusgs);
+        opt.ghosts = gust::LineGhosts::zero;
+        opt.order = gust::LineOrder::diagonal;
         std::uint64_t planes = 0;
         for (const amrex::MultiFab* f : {&q2.u, &q2.v, &q2.w}) {
             const Loc loc = f->ixType().nodeCentered(0) ? Loc::xface : f->ixType().nodeCentered(1) ? Loc::yface : Loc::zface;
             for (amrex::MFIter mfi(*f, false); mfi.isValid(); ++mfi) {
-                const amrex::Box o = ablsteady::line_owned_box(loc, mfi.validbox(), c.geom);
+                const amrex::Box o = gust::line_owned_box(loc, mfi.validbox(), c.geom);
                 planes += static_cast<std::uint64_t>(o.length(0) + o.length(1) - 1);
             }
         }
-        ablsteady::PredictorFields ap2;
-        const auto n0 = ablsteady::line_sweep_launches();
-        ablsteady::momentum_predictor(q2, pr.R, {&pr.F[0], &pr.F[1], &pr.F[2]}, co.in, df, c.mesh, c.geom, 3, ap2, nullptr, nullptr, 1, opt);
-        EXPECT_EQ(ablsteady::line_sweep_launches() - n0, 2u * 3u * planes);
+        gust::PredictorFields ap2;
+        const auto n0 = gust::line_sweep_launches();
+        gust::momentum_predictor(q2, pr.R, {&pr.F[0], &pr.F[1], &pr.F[2]}, co.in, df, c.mesh, c.geom, 3, ap2, nullptr, nullptr, 1, opt);
+        EXPECT_EQ(gust::line_sweep_launches() - n0, 2u * 3u * planes);
     }
     EXPECT_GT(r.max_du, 0);
     EXPECT_GT(r.max_dv, 0);
@@ -323,13 +323,13 @@ TEST (Predictor, APIsTheDiagonalPlusThePseudoTimeTerm)
     const amrex::MultiFab* aps[3] = {&ap.ap_u, &ap.ap_v, &ap.ap_w};
     for (int comp = 0; comp < 3; ++comp) {
         amrex::MultiFab tri;
-        ablsteady::line_jacobian({&pr.F[0], &pr.F[1], &pr.F[2]}, q.z_phys_nd, co.in, eqs[comp], 2, c.mesh, c.geom, tri);
+        gust::line_jacobian({&pr.F[0], &pr.F[1], &pr.F[2]}, q.z_phys_nd, co.in, eqs[comp], 2, c.mesh, c.geom, tri);
         int seen = 0;
         for (amrex::MFIter mfi(tri, false); mfi.isValid(); ++mfi) {
             const auto t = host_copy(tri, mfi), p = host_copy(*aps[comp], mfi), d = host_copy(df[comp], mfi);
             amrex::LoopOnCpu(mfi.validbox(), [&] (int i, int j, int k) {
                 const amrex::IntVect iv(i, j, k);
-                EXPECT_EQ(p(iv), amrex::Real(1) / d(iv) + t(iv, ablsteady::line_diag)) << comp << " " << i << " " << j << " " << k;
+                EXPECT_EQ(p(iv), amrex::Real(1) / d(iv) + t(iv, gust::line_diag)) << comp << " " << i << " " << j << " " << k;
                 EXPECT_GT(p(iv), amrex::Real(1) / d(iv));   // the diagonal is positive
                 ++seen;
             });
@@ -347,7 +347,7 @@ TEST (Predictor, APIsTheDiagonalPlusThePseudoTimeTerm)
             amrex::Box lo = mfi.validbox();
             lo.setRange(0, 0, 1);
             amrex::LoopOnCpu(lo, [&] (int, int j, int k) {
-                for (int n = 0; n < ablsteady::n_implicit_coefs; ++n) {
+                for (int n = 0; n < gust::n_implicit_coefs; ++n) {
                     EXPECT_EQ(a(amrex::IntVect(0, j, k), n), a(amrex::IntVect(nx, j, k), n)) << n << " " << j << " " << k;
                 }
                 EXPECT_EQ(u1(amrex::IntVect(0, j, k)) - u0(amrex::IntVect(0, j, k)), u1(amrex::IntVect(nx, j, k)) - u0(amrex::IntVect(nx, j, k)));
@@ -360,7 +360,7 @@ TEST (Predictor, APIsTheDiagonalPlusThePseudoTimeTerm)
     amrex::MultiFab rhs(pr.A.boxArray(), c.dm, 1, 0), delta;
     amrex::MultiFab::Copy(rhs, pr.R.u, 0, 0, 1, 0);
     rhs.mult(amrex::Real(-1), 0, 1, 0);
-    ablsteady::zline_jacobi(Loc::xface, pr.A, ap.ap_u, rhs, 3, c.mesh, c.geom, delta);
+    gust::zline_jacobi(Loc::xface, pr.A, ap.ap_u, rhs, 3, c.mesh, c.geom, delta);
     amrex::MultiFab du(pr.A.boxArray(), c.dm, 1, 0);
     amrex::MultiFab::Copy(du, q1.u, 0, 0, 1, 0);
     amrex::MultiFab::Subtract(du, q.u, 0, 0, 1, 0);
@@ -383,7 +383,7 @@ TEST (Predictor, ZLineJacobiConvergesToTheDenseSolution)
     const Case cases[] = {{1, 1, 12, 0, 60, 1e-12}, {4, 4, 6, 60, 400, 1e-10}};
     for (const Case& cs : cases) {
         PCase c = make_mesh(cs.nx, cs.ny, cs.nz, cs.H0);
-        ablsteady::State q;
+        gust::State q;
         define_state(q, c);
         fill_state(q, c, 5);
         Coefficients co;
@@ -391,7 +391,7 @@ TEST (Predictor, ZLineJacobiConvergesToTheDenseSolution)
         amrex::MultiFab dtau(c.ba, c.dm, 1, 0);
         dtau.setVal(amrex::Real(20));   // a large step: the horizontal coupling matters
         amrex::Array<amrex::MultiFab, 3> df;
-        ablsteady::face_dtau(dtau, c.mesh, c.geom, df);
+        gust::face_dtau(dtau, c.mesh, c.geom, df);
         Problem pr;
         pr.make(q, co, c, Equation::u);
         amrex::MultiFab ap(pr.A.boxArray(), c.dm, 1, 0);
@@ -400,7 +400,7 @@ TEST (Predictor, ZLineJacobiConvergesToTheDenseSolution)
             amrex::FArrayBox out(mfi.validbox(), 1, amrex::The_Pinned_Arena());
             amrex::LoopOnCpu(mfi.validbox(), [&] (int i, int j, int k) {
                 const amrex::IntVect iv(i, j, k);
-                out(iv) = amrex::Real(1) / d(iv) + a(iv, ablsteady::coef_P);
+                out(iv) = amrex::Real(1) / d(iv) + a(iv, gust::coef_P);
             });
             ap[mfi].copy<amrex::RunOn::Device>(out, mfi.validbox());
             amrex::Gpu::streamSynchronize();
@@ -418,13 +418,13 @@ TEST (Predictor, ZLineJacobiConvergesToTheDenseSolution)
         double prev = 1e300;
         for (int sweeps : {1, 2, 4, 8, 16}) {
             amrex::MultiFab delta;
-            ablsteady::zline_jacobi(Loc::xface, pr.A, ap, rhs, sweeps, c.mesh, c.geom, delta);
+            gust::zline_jacobi(Loc::xface, pr.A, ap, rhs, sweeps, c.mesh, c.geom, delta);
             const double err = max_diff_gathered(delta, exact) / scale;
             if (prev > tol(1e-14, 1e-6)) { EXPECT_LT(err, prev) << sweeps; }   // until round-off
             prev = err;
         }
         amrex::MultiFab delta;
-        const amrex::Real change = ablsteady::zline_jacobi(Loc::xface, pr.A, ap, rhs, cs.sweeps_exact, c.mesh, c.geom, delta);
+        const amrex::Real change = gust::zline_jacobi(Loc::xface, pr.A, ap, rhs, cs.sweeps_exact, c.mesh, c.geom, delta);
         EXPECT_LT(max_diff_gathered(delta, exact) / scale, tol(cs.tol_exact, 1e-4)) << cs.nx;
         EXPECT_LT(change / scale, tol(cs.tol_exact, 1e-4));
         // the ghosts outside the domain stay 0 (the top and ground rows)
@@ -446,7 +446,7 @@ TEST (Predictor, ZLineJacobiConvergesToTheDenseSolution)
 TEST (Predictor, UnderRelaxationIsAPseudoTimeStep)
 {
     PCase c = make_mesh(4, 4, 6, 60);
-    ablsteady::State q;
+    gust::State q;
     define_state(q, c);
     fill_state(q, c, 3);
     Coefficients co;
@@ -464,7 +464,7 @@ TEST (Predictor, UnderRelaxationIsAPseudoTimeStep)
             amrex::FArrayBox dt(mfi.validbox(), 1, amrex::The_Pinned_Arena()), apr(mfi.validbox(), 1, amrex::The_Pinned_Arena());
             amrex::LoopOnCpu(mfi.validbox(), [&] (int i, int j, int k) {
                 const amrex::IntVect iv(i, j, k);
-                const double diag = a(iv, ablsteady::coef_P);
+                const double diag = a(iv, gust::coef_P);
                 dt(iv) = static_cast<amrex::Real>(alpha / (1 - alpha) / diag);
                 apr(iv) = static_cast<amrex::Real>(diag / alpha);
             });
@@ -479,13 +479,13 @@ TEST (Predictor, UnderRelaxationIsAPseudoTimeStep)
             df[d].setVal(1.0);
         }
         amrex::MultiFab::Copy(df[static_cast<int>(loc == Loc::xface ? 0 : loc == Loc::yface ? 1 : 2)], dtau_f, 0, 0, 1, 0);
-        ablsteady::State q1;
+        gust::State q1;
         define_state(q1, c);
         amrex::MultiFab::Copy(q1.u, q.u, 0, 0, 1, 2);
         amrex::MultiFab::Copy(q1.v, q.v, 0, 0, 1, 2);
         amrex::MultiFab::Copy(q1.w, q.w, 0, 0, 1, 2);
-        ablsteady::PredictorFields ap;
-        ablsteady::momentum_predictor(q1, pr.R, {&pr.F[0], &pr.F[1], &pr.F[2]}, co.in, df, c.mesh, c.geom, 400, ap);
+        gust::PredictorFields ap;
+        gust::momentum_predictor(q1, pr.R, {&pr.F[0], &pr.F[1], &pr.F[2]}, co.in, df, c.mesh, c.geom, 400, ap);
         const amrex::MultiFab& apc = eq == Equation::u ? ap.ap_u : eq == Equation::v ? ap.ap_v : ap.ap_w;
         // a_P = diag / alpha to round-off
         amrex::MultiFab dap(pr.A.boxArray(), c.dm, 1, 0);
@@ -520,7 +520,7 @@ TEST (Predictor, UnderRelaxationIsAPseudoTimeStep)
 TEST (Predictor, AConvergedStateIsAFixedPoint)
 {
     PCase c = make_mesh(8, 4, 6, 0);
-    ablsteady::State q;
+    gust::State q;
     define_state(q, c);
     q.u.setVal(amrex::Real(7));
     q.v.setVal(amrex::Real(-3));
@@ -538,9 +538,9 @@ TEST (Predictor, AConvergedStateIsAFixedPoint)
     amrex::MultiFab dtau(c.ba, c.dm, 1, 0);
     dtau.setVal(amrex::Real(5));
     amrex::Array<amrex::MultiFab, 3> df;
-    ablsteady::face_dtau(dtau, c.mesh, c.geom, df);
-    ablsteady::PredictorFields ap;
-    const auto r = ablsteady::momentum_predictor(q, pr.R, {&pr.F[0], &pr.F[1], &pr.F[2]}, co.in, df, c.mesh, c.geom, 4, ap);
+    gust::face_dtau(dtau, c.mesh, c.geom, df);
+    gust::PredictorFields ap;
+    const auto r = gust::momentum_predictor(q, pr.R, {&pr.F[0], &pr.F[1], &pr.F[2]}, co.in, df, c.mesh, c.geom, 4, ap);
     EXPECT_EQ(r.max_du, 0);
     EXPECT_EQ(r.max_dv, 0);
     EXPECT_EQ(r.max_dw, 0);
@@ -565,13 +565,13 @@ TEST (Predictor, AConvergedStateIsAFixedPoint)
         const double before = max_abs(pp.R.u);
         EXPECT_GT(before, 0);
         dtau.setVal(amrex::Real(1e4));
-        ablsteady::face_dtau(dtau, c.mesh, c.geom, df);
-        ablsteady::PredictorFields ap2;
-        const auto r2 = ablsteady::momentum_predictor(q, pp.R, {&pp.F[0], &pp.F[1], &pp.F[2]}, co.in, df, c.mesh, c.geom, 50, ap2);
+        gust::face_dtau(dtau, c.mesh, c.geom, df);
+        gust::PredictorFields ap2;
+        const auto r2 = gust::momentum_predictor(q, pp.R, {&pp.F[0], &pp.F[1], &pp.F[2]}, co.in, df, c.mesh, c.geom, 50, ap2);
         EXPECT_GT(r2.max_du, 0);
         q.u.FillBoundary(c.geom.periodicity());
-        ablsteady::ResidualFields R2;
-        ablsteady::residual(q, co.in, c.mesh, c.geom, R2);
+        gust::ResidualFields R2;
+        gust::residual(q, co.in, c.mesh, c.geom, R2);
         EXPECT_LT(max_abs(R2.u), 0.75 * before);   // measured 0.56: the pressure and transport are frozen
     }
 }
@@ -587,7 +587,7 @@ TEST (Predictor, FaceStepRefusalsAndRankIndependence)
     amrex::MultiFab dtau(c.ba, c.dm, 1, 0);
     fill_random(dtau, 1, 3, 17, c);
     amrex::Array<amrex::MultiFab, 3> df;
-    ablsteady::face_dtau(dtau, c.mesh, c.geom, df);
+    gust::face_dtau(dtau, c.mesh, c.geom, df);
     const amrex::MultiFab gd = gather(dtau), gx = gather(df[0]), gy = gather(df[1]), gz = gather(df[2]);
     int seen = 0;
     for (amrex::MFIter mfi(gd, false); mfi.isValid(); ++mfi) {   // rank 0
@@ -612,43 +612,43 @@ TEST (Predictor, FaceStepRefusalsAndRankIndependence)
     amrex::ParallelDescriptor::ReduceIntSum(seen);
     EXPECT_EQ(seen, 8 * 4 * 6);
     // the predictor on a hill: identical on every rank (max over ranks of the result equals the min)
-    ablsteady::State q;
+    gust::State q;
     define_state(q, c);
     fill_state(q, c, 23);
     Coefficients co;
     co.make(c, 1.0, 29);
     Problem pr;
     pr.make(q, co, c, Equation::u);
-    ablsteady::PredictorFields ap;
-    const auto r = ablsteady::momentum_predictor(q, pr.R, {&pr.F[0], &pr.F[1], &pr.F[2]}, co.in, df, c.mesh, c.geom, 2, ap);
+    gust::PredictorFields ap;
+    const auto r = gust::momentum_predictor(q, pr.R, {&pr.F[0], &pr.F[1], &pr.F[2]}, co.in, df, c.mesh, c.geom, 2, ap);
     EXPECT_GT(r.last_sweep_du, 0);
     EXPECT_LT(r.last_sweep_du, r.max_du);
     // one sweep: the change of the last sweep is the whole correction
-    ablsteady::State q2;
+    gust::State q2;
     define_state(q2, c);
     fill_state(q2, c, 23);
-    ablsteady::PredictorFields ap2;
-    const auto r1 = ablsteady::momentum_predictor(q2, pr.R, {&pr.F[0], &pr.F[1], &pr.F[2]}, co.in, df, c.mesh, c.geom, 1, ap2);
+    gust::PredictorFields ap2;
+    const auto r1 = gust::momentum_predictor(q2, pr.R, {&pr.F[0], &pr.F[1], &pr.F[2]}, co.in, df, c.mesh, c.geom, 1, ap2);
     EXPECT_EQ(r1.last_sweep_du, r1.max_du);
     // refusals
-    EXPECT_THROW(ablsteady::momentum_predictor(q, pr.R, {&pr.F[0], &pr.F[1], &pr.F[2]}, co.in, df, c.mesh, c.geom, 0, ap),
+    EXPECT_THROW(gust::momentum_predictor(q, pr.R, {&pr.F[0], &pr.F[1], &pr.F[2]}, co.in, df, c.mesh, c.geom, 0, ap),
                  std::runtime_error);
     amrex::MultiFab bad(c.ba, c.dm, 1, 0), delta;
-    EXPECT_THROW(ablsteady::zline_jacobi(Loc::xface, pr.A, bad, bad, 1, c.mesh, c.geom, delta), std::runtime_error);
-    EXPECT_THROW(ablsteady::zline_jacobi(Loc::xface, pr.A, ap.ap_u, ap.ap_u, 0, c.mesh, c.geom, delta), std::runtime_error);
+    EXPECT_THROW(gust::zline_jacobi(Loc::xface, pr.A, bad, bad, 1, c.mesh, c.geom, delta), std::runtime_error);
+    EXPECT_THROW(gust::zline_jacobi(Loc::xface, pr.A, ap.ap_u, ap.ap_u, 0, c.mesh, c.geom, delta), std::runtime_error);
     amrex::MultiFab badc(c.mesh.ax.boxArray(), c.dm, 1, 0);
-    EXPECT_THROW(ablsteady::face_dtau(badc, c.mesh, c.geom, df), std::runtime_error);
+    EXPECT_THROW(gust::face_dtau(badc, c.mesh, c.geom, df), std::runtime_error);
     // a non-positive or non-finite step is refused, at the cells and at the faces
     amrex::MultiFab zero(c.ba, c.dm, 1, 0);
     zero.setVal(0.0);
     amrex::Array<amrex::MultiFab, 3> dfz;
-    EXPECT_THROW(ablsteady::face_dtau(zero, c.mesh, c.geom, dfz), std::runtime_error);
+    EXPECT_THROW(gust::face_dtau(zero, c.mesh, c.geom, dfz), std::runtime_error);
     zero.setVal(std::numeric_limits<amrex::Real>::infinity());
-    EXPECT_THROW(ablsteady::face_dtau(zero, c.mesh, c.geom, dfz), std::runtime_error);
+    EXPECT_THROW(gust::face_dtau(zero, c.mesh, c.geom, dfz), std::runtime_error);
     amrex::Array<amrex::MultiFab, 3> dfn;
-    ablsteady::face_dtau(dtau, c.mesh, c.geom, dfn);
+    gust::face_dtau(dtau, c.mesh, c.geom, dfn);
     dfn[1].setVal(amrex::Real(-1));
-    EXPECT_THROW(ablsteady::momentum_predictor(q, pr.R, {&pr.F[0], &pr.F[1], &pr.F[2]}, co.in, dfn, c.mesh, c.geom, 2, ap),
+    EXPECT_THROW(gust::momentum_predictor(q, pr.R, {&pr.F[0], &pr.F[1], &pr.F[2]}, co.in, dfn, c.mesh, c.geom, 2, ap),
                  std::runtime_error);
 }
 
@@ -662,19 +662,19 @@ TEST (Predictor, FaceStepRefusalsAndRankIndependence)
 TEST (Predictor, DirichletRowsAreSetExactly)
 {
     PCase c = make_mesh(8, 4, 6, 40, false, true);
-    ablsteady::State q;
+    gust::State q;
     define_state(q, c);
     fill_state(q, c, 41);
     Coefficients co;
     co.make(c, 1.0, 43);
-    ablsteady::BoundaryInputs bin;
-    bin.face = {ablsteady::FaceType::inflow, ablsteady::FaceType::periodic, ablsteady::FaceType::slip_wall,
-                ablsteady::FaceType::outflow, ablsteady::FaceType::periodic, ablsteady::FaceType::slip_wall};
-    bin.inflow.kind = ablsteady::InflowProfileOptions::Kind::log_law;
+    gust::BoundaryInputs bin;
+    bin.face = {gust::FaceType::inflow, gust::FaceType::periodic, gust::FaceType::slip_wall,
+                gust::FaceType::outflow, gust::FaceType::periodic, gust::FaceType::slip_wall};
+    bin.inflow.kind = gust::InflowProfileOptions::Kind::log_law;
     bin.inflow.ustar = amrex::Real(0.5);
     bin.inflow.z0 = amrex::Real(0.1);
-    const ablsteady::CoriolisOptions cor;
-    const ablsteady::BoundaryConditions bc(bin, c.geom, c.mesh, cor);
+    const gust::CoriolisOptions cor;
+    const gust::BoundaryConditions bc(bin, c.geom, c.mesh, cor);
     bc.fill_ghosts(q, nullptr, co.in.buoyancy);
     co.in.bc = &bc;
     Problem pr;
@@ -682,7 +682,7 @@ TEST (Predictor, DirichletRowsAreSetExactly)
     amrex::MultiFab dtau(c.ba, c.dm, 1, 0);
     fill_random(dtau, 0.5, 2.0, 47, c);
     amrex::Array<amrex::MultiFab, 3> df;
-    ablsteady::face_dtau(dtau, c.mesh, c.geom, df);
+    gust::face_dtau(dtau, c.mesh, c.geom, df);
     // the masks: the xlo face of u (4 x 6 points), the ground and top of w
     // (2 x 8 x 4), none for v (periodic y)
     amrex::MultiFab mu, mv, mw;
@@ -693,14 +693,14 @@ TEST (Predictor, DirichletRowsAreSetExactly)
     EXPECT_EQ(mw.sum(0), 2.0 * 8 * 4);
     EXPECT_EQ(mu.max(0), 1);
     EXPECT_EQ(mu.sum(0), 4.0 * 6);
-    ablsteady::State q1;
+    gust::State q1;
     define_state(q1, c);
     for (auto* f : {&q1.u, &q1.v, &q1.w}) { (void)f; }
     amrex::MultiFab::Copy(q1.u, q.u, 0, 0, 1, 2);
     amrex::MultiFab::Copy(q1.v, q.v, 0, 0, 1, 2);
     amrex::MultiFab::Copy(q1.w, q.w, 0, 0, 1, 2);
-    ablsteady::PredictorFields ap;
-    ablsteady::momentum_predictor(q1, pr.R, {&pr.F[0], &pr.F[1], &pr.F[2]}, co.in, df, c.mesh, c.geom, 3, ap);
+    gust::PredictorFields ap;
+    gust::momentum_predictor(q1, pr.R, {&pr.F[0], &pr.F[1], &pr.F[2]}, co.in, df, c.mesh, c.geom, 3, ap);
     int seen = 0;
     for (amrex::MFIter mfi(ap.ap_u, false); mfi.isValid(); ++mfi) {
         const auto p = host_copy(ap.ap_u, mfi), d = host_copy(ap.d_u, mfi), m = host_copy(mu, mfi), dt = host_copy(df[0], mfi),
@@ -714,9 +714,9 @@ TEST (Predictor, DirichletRowsAreSetExactly)
                 EXPECT_EQ(u1(iv) - u0(iv), -r(iv));   // the face takes V in one step
                 ++seen;
             } else {
-                EXPECT_EQ(p(iv), amrex::Real(1) / dt(iv) + a(iv, ablsteady::coef_P));
+                EXPECT_EQ(p(iv), amrex::Real(1) / dt(iv) + a(iv, gust::coef_P));
                 double nb = 0;
-                for (int n = 1; n < ablsteady::n_implicit_coefs; ++n) { nb += a(iv, n); }
+                for (int n = 1; n < gust::n_implicit_coefs; ++n) { nb += a(iv, n); }
                 EXPECT_NEAR(d(iv), p(iv) - nb, tol(1e-14, 1e-5) * p(iv));
                 EXPECT_GT(d(iv), 0);
             }
@@ -736,14 +736,14 @@ TEST (Predictor, DirichletRowsAreSetExactly)
                 EXPECT_TRUE(k == 0 || k == 6) << k;
                 EXPECT_EQ(p(iv), 1);
                 EXPECT_EQ(d(iv), 0);
-                const amrex::Real wn = ablsteady::massflux::no_flux_w(zn.const_array(), u0.const_array(), v0.const_array(), i, j, k, dxinv[0], dxinv[1]);
+                const amrex::Real wn = gust::massflux::no_flux_w(zn.const_array(), u0.const_array(), v0.const_array(), i, j, k, dxinv[0], dxinv[1]);
                 EXPECT_NEAR(w1(iv), wn, tol(1e-14, 1e-6) * (1 + std::abs(wn)));
             }
         });
     }
     // The inflow faces now hold the profile (the residual's Dirichlet rows are q - V).
-    ablsteady::ResidualFields R1;
-    ablsteady::residual(q1, co.in, c.mesh, c.geom, R1);
+    gust::ResidualFields R1;
+    gust::residual(q1, co.in, c.mesh, c.geom, R1);
     double worst = 0;
     for (amrex::MFIter mfi(R1.u, false); mfi.isValid(); ++mfi) {
         const auto r = host_copy(R1.u, mfi), m = host_copy(mu, mfi);
@@ -768,19 +768,19 @@ TEST (Predictor, DirichletRowsAreSetExactly)
 TEST (Predictor, WVnnCapAddsToTheWDiagonalAndD)
 {
     PCase c = make_mesh(8, 4, 6, 40, false, true, 4);   // 2 x 1 boxes
-    ablsteady::State q;
+    gust::State q;
     define_state(q, c);
     fill_state(q, c, 61);
     Coefficients co;
     co.make(c, 2.0, 63);
-    ablsteady::BoundaryInputs bin;
-    bin.face = {ablsteady::FaceType::inflow, ablsteady::FaceType::periodic, ablsteady::FaceType::slip_wall,
-                ablsteady::FaceType::outflow, ablsteady::FaceType::periodic, ablsteady::FaceType::slip_wall};
-    bin.inflow.kind = ablsteady::InflowProfileOptions::Kind::log_law;
+    gust::BoundaryInputs bin;
+    bin.face = {gust::FaceType::inflow, gust::FaceType::periodic, gust::FaceType::slip_wall,
+                gust::FaceType::outflow, gust::FaceType::periodic, gust::FaceType::slip_wall};
+    bin.inflow.kind = gust::InflowProfileOptions::Kind::log_law;
     bin.inflow.ustar = amrex::Real(0.5);
     bin.inflow.z0 = amrex::Real(0.1);
-    const ablsteady::CoriolisOptions cor;
-    const ablsteady::BoundaryConditions bc(bin, c.geom, c.mesh, cor);
+    const gust::CoriolisOptions cor;
+    const gust::BoundaryConditions bc(bin, c.geom, c.mesh, cor);
     bc.fill_ghosts(q, nullptr, co.in.buoyancy);
     co.in.bc = &bc;
     Problem pr;
@@ -788,27 +788,27 @@ TEST (Predictor, WVnnCapAddsToTheWDiagonalAndD)
     amrex::MultiFab dtau(c.ba, c.dm, 1, 0);
     fill_random(dtau, 400, 1600, 67, c);   // VNN = dtau (a_ZM + a_ZP) up to about 40: above the cap
     amrex::Array<amrex::MultiFab, 3> df;
-    ablsteady::face_dtau(dtau, c.mesh, c.geom, df);
+    gust::face_dtau(dtau, c.mesh, c.geom, df);
     amrex::MultiFab mw;
     bc.dirichlet_rows(Equation::w, Loc::zface, c.mesh, mw);
     const amrex::Array<const amrex::MultiFab*, 3> F{&pr.F[0], &pr.F[1], &pr.F[2]};
-    auto copy_state = [&] (ablsteady::State& to) {
+    auto copy_state = [&] (gust::State& to) {
         define_state(to, c);
         for (auto [d, s] : std::initializer_list<std::pair<amrex::MultiFab*, const amrex::MultiFab*>>{
                  {&to.u, &q.u}, {&to.v, &q.v}, {&to.w, &q.w}, {&to.p, &q.p}, {&to.theta, &q.theta}, {&to.tke, &q.tke}}) {
             amrex::MultiFab::Copy(*d, *s, 0, 0, 1, 2);
         }
     };
-    const ablsteady::LineSweepOptions sweep;
+    const gust::LineSweepOptions sweep;
     const amrex::Real V = 16;
-    ablsteady::State q0, qoff, qcap;
+    gust::State q0, qoff, qcap;
     copy_state(q0);
     copy_state(qoff);
     copy_state(qcap);
-    ablsteady::PredictorFields p0, poff, pcap;
-    ablsteady::momentum_predictor(q0, pr.R, F, co.in, df, c.mesh, c.geom, 3, p0, nullptr, nullptr, 1, sweep);
-    ablsteady::momentum_predictor(qoff, pr.R, F, co.in, df, c.mesh, c.geom, 3, poff, nullptr, nullptr, 1, sweep, 0);
-    ablsteady::momentum_predictor(qcap, pr.R, F, co.in, df, c.mesh, c.geom, 3, pcap, nullptr, nullptr, 1, sweep, V);
+    gust::PredictorFields p0, poff, pcap;
+    gust::momentum_predictor(q0, pr.R, F, co.in, df, c.mesh, c.geom, 3, p0, nullptr, nullptr, 1, sweep);
+    gust::momentum_predictor(qoff, pr.R, F, co.in, df, c.mesh, c.geom, 3, poff, nullptr, nullptr, 1, sweep, 0);
+    gust::momentum_predictor(qcap, pr.R, F, co.in, df, c.mesh, c.geom, 3, pcap, nullptr, nullptr, 1, sweep, V);
     // Off, and the u and v rows with the cap on: bit-identical.
     auto same = [] (const amrex::MultiFab& a, const amrex::MultiFab& b) {
         amrex::MultiFab dff(a.boxArray(), a.DistributionMap(), 1, 0);
@@ -834,16 +834,16 @@ TEST (Predictor, WVnnCapAddsToTheWDiagonalAndD)
                 EXPECT_EQ(d(iv), 0);
                 // Identity rows: no vertical neighbours, so the cap's keep
                 // factor is a guard (a mutant without it is equivalent here).
-                EXPECT_EQ(a(iv, ablsteady::coef_ZM), 0);
-                EXPECT_EQ(a(iv, ablsteady::coef_ZP), 0);
+                EXPECT_EQ(a(iv, gust::coef_ZM), 0);
+                EXPECT_EQ(a(iv, gust::coef_ZP), 0);
                 ++dirichlet;
                 return;
             }
-            const double K = double(a(iv, ablsteady::coef_ZM)) + double(a(iv, ablsteady::coef_ZP));
-            const double expect = 1.0 / double(dt(iv)) + K / double(V) + double(a(iv, ablsteady::coef_P));
+            const double K = double(a(iv, gust::coef_ZM)) + double(a(iv, gust::coef_ZP));
+            const double expect = 1.0 / double(dt(iv)) + K / double(V) + double(a(iv, gust::coef_P));
             EXPECT_NEAR(p(iv), expect, tol(1e-14, 1e-6) * expect) << i << " " << j << " " << k;
             double nb = 0;
-            for (int n = 1; n < ablsteady::n_implicit_coefs; ++n) { nb += a(iv, n); }
+            for (int n = 1; n < gust::n_implicit_coefs; ++n) { nb += a(iv, n); }
             EXPECT_NEAR(d(iv), expect - nb, tol(1e-13, 1e-5) * expect) << i << " " << j << " " << k;
             EXPECT_NEAR(d(iv) - d0(iv), K / double(V), tol(1e-13, 1e-5) * expect) << i << " " << j << " " << k;
             // The effective VNN: K times the step the solver's capped d
@@ -866,7 +866,7 @@ TEST (Predictor, WVnnCapAddsToTheWDiagonalAndD)
     amrex::MultiFab rhs(pr.A.boxArray(), c.dm, 1, 0), delta;
     amrex::MultiFab::Copy(rhs, pr.R.w, 0, 0, 1, 0);
     rhs.mult(amrex::Real(-1), 0, 1, 0);
-    ablsteady::zline_jacobi(Loc::zface, pr.A, pcap.ap_w, rhs, 3, c.mesh, c.geom, delta);
+    gust::zline_jacobi(Loc::zface, pr.A, pcap.ap_w, rhs, 3, c.mesh, c.geom, delta);
     amrex::MultiFab dw(pr.A.boxArray(), c.dm, 1, 0);
     amrex::MultiFab::Copy(dw, qcap.w, 0, 0, 1, 0);
     amrex::MultiFab::Subtract(dw, q.w, 0, 0, 1, 0);
@@ -876,9 +876,9 @@ TEST (Predictor, WVnnCapAddsToTheWDiagonalAndD)
     // Refusals.
     for (const amrex::Real bad : {amrex::Real(-1), std::numeric_limits<amrex::Real>::quiet_NaN(),
                                   std::numeric_limits<amrex::Real>::infinity(), std::numeric_limits<amrex::Real>::denorm_min()}) {
-        ablsteady::State qb;
+        gust::State qb;
         copy_state(qb);
-        EXPECT_THROW(ablsteady::momentum_predictor(qb, pr.R, F, co.in, df, c.mesh, c.geom, 3, pcap, nullptr, nullptr, 1, sweep, bad),
+        EXPECT_THROW(gust::momentum_predictor(qb, pr.R, F, co.in, df, c.mesh, c.geom, 3, pcap, nullptr, nullptr, 1, sweep, bad),
                      std::runtime_error);
     }
 }
@@ -896,19 +896,19 @@ TEST (Predictor, WVnnCapAddsToTheWDiagonalAndD)
 TEST (Predictor, WVnnCapSlopeMarginKeepsThePressureOperatorDefinite)
 {
     PCase c = make_mesh(8, 4, 6, 150, false, true, 4);   // 2 x 1 boxes; slopes up to about 0.9
-    ablsteady::State q;
+    gust::State q;
     define_state(q, c);
     fill_state(q, c, 61);
     Coefficients co;
     co.make(c, 2.0, 63);
-    ablsteady::BoundaryInputs bin;
-    bin.face = {ablsteady::FaceType::inflow, ablsteady::FaceType::periodic, ablsteady::FaceType::slip_wall,
-                ablsteady::FaceType::outflow, ablsteady::FaceType::periodic, ablsteady::FaceType::slip_wall};
-    bin.inflow.kind = ablsteady::InflowProfileOptions::Kind::log_law;
+    gust::BoundaryInputs bin;
+    bin.face = {gust::FaceType::inflow, gust::FaceType::periodic, gust::FaceType::slip_wall,
+                gust::FaceType::outflow, gust::FaceType::periodic, gust::FaceType::slip_wall};
+    bin.inflow.kind = gust::InflowProfileOptions::Kind::log_law;
     bin.inflow.ustar = amrex::Real(0.5);
     bin.inflow.z0 = amrex::Real(0.1);
-    const ablsteady::CoriolisOptions cor;
-    const ablsteady::BoundaryConditions bc(bin, c.geom, c.mesh, cor);
+    const gust::CoriolisOptions cor;
+    const gust::BoundaryConditions bc(bin, c.geom, c.mesh, cor);
     bc.fill_ghosts(q, nullptr, co.in.buoyancy);
     co.in.bc = &bc;
     Problem pr;
@@ -916,11 +916,11 @@ TEST (Predictor, WVnnCapSlopeMarginKeepsThePressureOperatorDefinite)
     amrex::MultiFab dtau(c.ba, c.dm, 1, 0);
     fill_random(dtau, 400, 1600, 67, c);
     amrex::Array<amrex::MultiFab, 3> df;
-    ablsteady::face_dtau(dtau, c.mesh, c.geom, df);
+    gust::face_dtau(dtau, c.mesh, c.geom, df);
     amrex::MultiFab mw;
     bc.dirichlet_rows(Equation::w, Loc::zface, c.mesh, mw);
     const amrex::Array<const amrex::MultiFab*, 3> F{&pr.F[0], &pr.F[1], &pr.F[2]};
-    auto copy_state = [&] (ablsteady::State& to) {
+    auto copy_state = [&] (gust::State& to) {
         define_state(to, c);
         for (auto [d, s] : std::initializer_list<std::pair<amrex::MultiFab*, const amrex::MultiFab*>>{
                  {&to.u, &q.u}, {&to.v, &q.v}, {&to.w, &q.w}, {&to.p, &q.p}, {&to.theta, &q.theta}, {&to.tke, &q.tke}}) {
@@ -933,15 +933,15 @@ TEST (Predictor, WVnnCapSlopeMarginKeepsThePressureOperatorDefinite)
         amrex::MultiFab::Subtract(dff, b, 0, 0, 1, 0);
         return dff.norm0() == 0;
     };
-    const ablsteady::LineSweepOptions sweep;
+    const gust::LineSweepOptions sweep;
     const amrex::Real V = 16;
     const amrex::Real smargin = 10;   // slope^2 reaches 0.12 and VNN 68 here: the limit binds on the steepest rows
-    ablsteady::State q0, qs;
+    gust::State q0, qs;
     copy_state(q0);
     copy_state(qs);
-    ablsteady::PredictorFields p0, ps;
-    ablsteady::momentum_predictor(q0, pr.R, F, co.in, df, c.mesh, c.geom, 3, p0, nullptr, nullptr, 1, sweep);
-    ablsteady::momentum_predictor(qs, pr.R, F, co.in, df, c.mesh, c.geom, 3, ps, nullptr, nullptr, 1, sweep, V, smargin);
+    gust::PredictorFields p0, ps;
+    gust::momentum_predictor(q0, pr.R, F, co.in, df, c.mesh, c.geom, 3, p0, nullptr, nullptr, 1, sweep);
+    gust::momentum_predictor(qs, pr.R, F, co.in, df, c.mesh, c.geom, 3, ps, nullptr, nullptr, 1, sweep, V, smargin);
     EXPECT_TRUE(same(p0.ap_u, ps.ap_u) && same(p0.d_u, ps.d_u) && same(p0.ap_v, ps.ap_v) && same(p0.d_v, ps.d_v));
     EXPECT_TRUE(same(q0.u, qs.u) && same(q0.v, qs.v));
     // r_c = a/(sqrt(1 + a) + 1)^2 is the smaller root of a r^2 - (2a + 4) r + a (the 2 x 2 form's discriminant);
@@ -965,7 +965,7 @@ TEST (Predictor, WVnnCapSlopeMarginKeepsThePressureOperatorDefinite)
             const double hx = 0.5 * (zn(i + 1, j + 1) + zn(i + 1, j) - zn(i, j + 1) - zn(i, j)) * double(dxi[0]);
             const double hy = 0.5 * (zn(i + 1, j + 1) + zn(i, j + 1) - zn(i + 1, j) - zn(i, j)) * double(dxi[1]);
             const double sl = hx * hx + hy * hy;
-            const double K = double(a(iv, ablsteady::coef_ZM)) + double(a(iv, ablsteady::coef_ZP));
+            const double K = double(a(iv, gust::coef_ZM)) + double(a(iv, gust::coef_ZP));
             const double tdt = double(dt(iv));
             double term = K / double(V);
             double rc = 0;
@@ -992,10 +992,10 @@ TEST (Predictor, WVnnCapSlopeMarginKeepsThePressureOperatorDefinite)
     EXPECT_GE(worst, 1 - tol(1e-12, 1e-5)) << "beta_z/beta_h >= s r_c on every sloped row";
     // a margin no cap can meet (s r_c > 1 on the steepest rows): those rows run without the cap, never below it
     {
-        ablsteady::State qh;
+        gust::State qh;
         copy_state(qh);
-        ablsteady::PredictorFields ph;
-        ablsteady::momentum_predictor(qh, pr.R, F, co.in, df, c.mesh, c.geom, 3, ph, nullptr, nullptr, 1, sweep, V,
+        gust::PredictorFields ph;
+        gust::momentum_predictor(qh, pr.R, F, co.in, df, c.mesh, c.geom, 3, ph, nullptr, nullptr, 1, sweep, V,
                                       amrex::Real(100));
         int off = 0;
         for (amrex::MFIter mfi(ph.ap_w, false); mfi.isValid(); ++mfi) {
@@ -1013,11 +1013,11 @@ TEST (Predictor, WVnnCapSlopeMarginKeepsThePressureOperatorDefinite)
     // the range check
     for (const amrex::Real bad : {amrex::Real(0.5), std::numeric_limits<amrex::Real>::quiet_NaN(),
                                   std::numeric_limits<amrex::Real>::infinity()}) {
-        ablsteady::State qb;
+        gust::State qb;
         copy_state(qb);
-        ablsteady::PredictorFields pb;
+        gust::PredictorFields pb;
         try {
-            ablsteady::momentum_predictor(qb, pr.R, F, co.in, df, c.mesh, c.geom, 3, pb, nullptr, nullptr, 1, sweep, V, bad);
+            gust::momentum_predictor(qb, pr.R, F, co.in, df, c.mesh, c.geom, 3, pb, nullptr, nullptr, 1, sweep, V, bad);
             ADD_FAILURE() << "no abort for margin " << bad;
         } catch (const std::runtime_error& e) {
             EXPECT_NE(std::string(e.what()).find("simplec.w_vnn_cap_slope_margin"), std::string::npos) << e.what();
@@ -1032,19 +1032,19 @@ TEST (Predictor, WVnnCapSlopeMarginKeepsThePressureOperatorDefinite)
 TEST (Predictor, WVnnCapSlopeMarginIsBitIdenticalOnFlatGround)
 {
     PCase c = make_mesh(8, 4, 6, 0, false, true, 4);
-    ablsteady::State q;
+    gust::State q;
     define_state(q, c);
     fill_state(q, c, 71);
     Coefficients co;
     co.make(c, 2.0, 73);
-    ablsteady::BoundaryInputs bin;
-    bin.face = {ablsteady::FaceType::inflow, ablsteady::FaceType::periodic, ablsteady::FaceType::slip_wall,
-                ablsteady::FaceType::outflow, ablsteady::FaceType::periodic, ablsteady::FaceType::slip_wall};
-    bin.inflow.kind = ablsteady::InflowProfileOptions::Kind::log_law;
+    gust::BoundaryInputs bin;
+    bin.face = {gust::FaceType::inflow, gust::FaceType::periodic, gust::FaceType::slip_wall,
+                gust::FaceType::outflow, gust::FaceType::periodic, gust::FaceType::slip_wall};
+    bin.inflow.kind = gust::InflowProfileOptions::Kind::log_law;
     bin.inflow.ustar = amrex::Real(0.5);
     bin.inflow.z0 = amrex::Real(0.1);
-    const ablsteady::CoriolisOptions cor;
-    const ablsteady::BoundaryConditions bc(bin, c.geom, c.mesh, cor);
+    const gust::CoriolisOptions cor;
+    const gust::BoundaryConditions bc(bin, c.geom, c.mesh, cor);
     bc.fill_ghosts(q, nullptr, co.in.buoyancy);
     co.in.bc = &bc;
     Problem pr;
@@ -1052,9 +1052,9 @@ TEST (Predictor, WVnnCapSlopeMarginIsBitIdenticalOnFlatGround)
     amrex::MultiFab dtau(c.ba, c.dm, 1, 0);
     fill_random(dtau, 400, 1600, 77, c);
     amrex::Array<amrex::MultiFab, 3> df;
-    ablsteady::face_dtau(dtau, c.mesh, c.geom, df);
+    gust::face_dtau(dtau, c.mesh, c.geom, df);
     const amrex::Array<const amrex::MultiFab*, 3> F{&pr.F[0], &pr.F[1], &pr.F[2]};
-    auto copy_state = [&] (ablsteady::State& to) {
+    auto copy_state = [&] (gust::State& to) {
         define_state(to, c);
         for (auto [d, f] : std::initializer_list<std::pair<amrex::MultiFab*, const amrex::MultiFab*>>{
                  {&to.u, &q.u}, {&to.v, &q.v}, {&to.w, &q.w}, {&to.p, &q.p}, {&to.theta, &q.theta}, {&to.tke, &q.tke}}) {
@@ -1067,15 +1067,15 @@ TEST (Predictor, WVnnCapSlopeMarginIsBitIdenticalOnFlatGround)
         amrex::MultiFab::Subtract(dff, b, 0, 0, 1, 0);
         return dff.norm0() == 0;
     };
-    const ablsteady::LineSweepOptions sweep;   // V = 20: 1/V is inexact, so a regrouped term would show
-    ablsteady::State qn, q0, q4;
+    const gust::LineSweepOptions sweep;   // V = 20: 1/V is inexact, so a regrouped term would show
+    gust::State qn, q0, q4;
     copy_state(qn);
     copy_state(q0);
     copy_state(q4);
-    ablsteady::PredictorFields pn, p0, p4;
-    ablsteady::momentum_predictor(qn, pr.R, F, co.in, df, c.mesh, c.geom, 3, pn, nullptr, nullptr, 1, sweep);
-    ablsteady::momentum_predictor(q0, pr.R, F, co.in, df, c.mesh, c.geom, 3, p0, nullptr, nullptr, 1, sweep, 20, 0);
-    ablsteady::momentum_predictor(q4, pr.R, F, co.in, df, c.mesh, c.geom, 3, p4, nullptr, nullptr, 1, sweep, 20, 4);
+    gust::PredictorFields pn, p0, p4;
+    gust::momentum_predictor(qn, pr.R, F, co.in, df, c.mesh, c.geom, 3, pn, nullptr, nullptr, 1, sweep);
+    gust::momentum_predictor(q0, pr.R, F, co.in, df, c.mesh, c.geom, 3, p0, nullptr, nullptr, 1, sweep, 20, 0);
+    gust::momentum_predictor(q4, pr.R, F, co.in, df, c.mesh, c.geom, 3, p4, nullptr, nullptr, 1, sweep, 20, 4);
     EXPECT_FALSE(same(pn.ap_w, p0.ap_w)) << "not vacuous: the cap changes the w rows";
     EXPECT_TRUE(same(p0.ap_w, p4.ap_w));
     EXPECT_TRUE(same(p0.d_w, p4.d_w));
@@ -1092,7 +1092,7 @@ TEST (Predictor, IndependentOfTheBoxLayout)
     PCase c1 = make_mesh(8, 4, 6, 60);
     PCase c2 = make_mesh(8, 4, 6, 60, true, true, 4);
     ASSERT_GT(c2.ba.size(), c1.ba.size());
-    ablsteady::State q1, q2;
+    gust::State q1, q2;
     define_state(q1, c1);
     define_state(q2, c2);
     fill_state(q1, c1, 51);
@@ -1121,13 +1121,13 @@ TEST (Predictor, IndependentOfTheBoxLayout)
     fill_random(dtau1, 0.5, 2.0, 57, c1);
     copy(dtau1, dtau2);
     amrex::Array<amrex::MultiFab, 3> df1, df2;
-    ablsteady::face_dtau(dtau1, c1.mesh, c1.geom, df1);
-    ablsteady::face_dtau(dtau2, c2.mesh, c2.geom, df2);
+    gust::face_dtau(dtau1, c1.mesh, c1.geom, df1);
+    gust::face_dtau(dtau2, c2.mesh, c2.geom, df2);
     Problem p1, p2;
     p1.make(q1, co1, c1, Equation::u);
     p2.make(q2, co2, c2, Equation::u);
     // the same start for the capped pass below (the predictor updates q)
-    ablsteady::State q3, q4;
+    gust::State q3, q4;
     define_state(q3, c1);
     define_state(q4, c2);
     for (auto [d, f] : std::initializer_list<std::pair<amrex::MultiFab*, const amrex::MultiFab*>>{
@@ -1135,9 +1135,9 @@ TEST (Predictor, IndependentOfTheBoxLayout)
              {&q4.u, &q2.u}, {&q4.v, &q2.v}, {&q4.w, &q2.w}, {&q4.p, &q2.p}, {&q4.theta, &q2.theta}, {&q4.tke, &q2.tke}}) {
         amrex::MultiFab::Copy(*d, *f, 0, 0, 1, f->nGrow());
     }
-    ablsteady::PredictorFields ap1, ap2;
-    const auto r1 = ablsteady::momentum_predictor(q1, p1.R, {&p1.F[0], &p1.F[1], &p1.F[2]}, co1.in, df1, c1.mesh, c1.geom, 3, ap1);
-    const auto r2 = ablsteady::momentum_predictor(q2, p2.R, {&p2.F[0], &p2.F[1], &p2.F[2]}, co2.in, df2, c2.mesh, c2.geom, 3, ap2);
+    gust::PredictorFields ap1, ap2;
+    const auto r1 = gust::momentum_predictor(q1, p1.R, {&p1.F[0], &p1.F[1], &p1.F[2]}, co1.in, df1, c1.mesh, c1.geom, 3, ap1);
+    const auto r2 = gust::momentum_predictor(q2, p2.R, {&p2.F[0], &p2.F[1], &p2.F[2]}, co2.in, df2, c2.mesh, c2.geom, 3, ap2);
     EXPECT_GT(r1.max_du, 0);
     const amrex::MultiFab* a[6] = {&q1.u, &q1.v, &q1.w, &ap1.ap_u, &ap1.d_u, &df1[0]};
     const amrex::MultiFab* b[6] = {&q2.u, &q2.v, &q2.w, &ap2.ap_u, &ap2.d_u, &df2[0]};
@@ -1150,11 +1150,11 @@ TEST (Predictor, IndependentOfTheBoxLayout)
     EXPECT_NEAR(r1.max_du, r2.max_du, tol(1e-12, 1e-5) * r1.max_du);
     // the w rows' cap with its slope margin (simplec.w_vnn_cap_slope_margin) reads the face's node heights: the
     // same on both layouts
-    ablsteady::PredictorFields ap3, ap4;
-    const ablsteady::LineSweepOptions sweep;
-    ablsteady::momentum_predictor(q3, p1.R, {&p1.F[0], &p1.F[1], &p1.F[2]}, co1.in, df1, c1.mesh, c1.geom, 3, ap3,
+    gust::PredictorFields ap3, ap4;
+    const gust::LineSweepOptions sweep;
+    gust::momentum_predictor(q3, p1.R, {&p1.F[0], &p1.F[1], &p1.F[2]}, co1.in, df1, c1.mesh, c1.geom, 3, ap3,
                                   nullptr, nullptr, 1, sweep, 16, 4);
-    ablsteady::momentum_predictor(q4, p2.R, {&p2.F[0], &p2.F[1], &p2.F[2]}, co2.in, df2, c2.mesh, c2.geom, 3, ap4,
+    gust::momentum_predictor(q4, p2.R, {&p2.F[0], &p2.F[1], &p2.F[2]}, co2.in, df2, c2.mesh, c2.geom, 3, ap4,
                                   nullptr, nullptr, 1, sweep, 16, 4);
     const amrex::MultiFab* e[3] = {&q3.w, &ap3.ap_w, &ap3.d_w};
     const amrex::MultiFab* f[3] = {&q4.w, &ap4.ap_w, &ap4.d_w};
@@ -1211,8 +1211,8 @@ DenseSystem build_dense (const amrex::MultiFab& A, const amrex::MultiFab& ap, co
             d.kind[static_cast<std::size_t>(row) * d.n + row] = 1;
             d.rhs[row] = r(iv);
             const int nb[6][3] = {{i - 1, j, k}, {i + 1, j, k}, {i, j - 1, k}, {i, j + 1, k}, {i, j, k - 1}, {i, j, k + 1}};
-            const int comp[6] = {ablsteady::coef_XM, ablsteady::coef_XP, ablsteady::coef_YM, ablsteady::coef_YP,
-                                 ablsteady::coef_ZM, ablsteady::coef_ZP};
+            const int comp[6] = {gust::coef_XM, gust::coef_XP, gust::coef_YM, gust::coef_YP,
+                                 gust::coef_ZM, gust::coef_ZP};
             for (int m = 0; m < 6; ++m) {
                 int ii = nb[m][0], jj = nb[m][1];
                 const int kk = nb[m][2];
@@ -1328,20 +1328,20 @@ double max_abs_vec (const std::vector<double>& a)
 void random_system (const PCase& c, Loc loc, unsigned seed, double extra, amrex::MultiFab& A, amrex::MultiFab& ap, amrex::MultiFab& rhs)
 {
     const amrex::BoxArray ba = amrex::convert(c.ba, type_of(loc));
-    A.define(ba, c.dm, ablsteady::n_implicit_coefs, 0);
+    A.define(ba, c.dm, gust::n_implicit_coefs, 0);
     ap.define(ba, c.dm, 1, 0);
     rhs.define(ba, c.dm, 1, 0);
     std::mt19937 gen(seed);
     std::uniform_real_distribution<double> dist(0.1, 1.0), rd(-1.0, 1.0);
     for (amrex::MFIter mfi(A, false); mfi.isValid(); ++mfi) {
         const amrex::Box b = mfi.validbox();
-        amrex::FArrayBox fa(b, ablsteady::n_implicit_coefs, amrex::The_Pinned_Arena()), fp(b, 1, amrex::The_Pinned_Arena()),
+        amrex::FArrayBox fa(b, gust::n_implicit_coefs, amrex::The_Pinned_Arena()), fp(b, 1, amrex::The_Pinned_Arena()),
                          fr(b, 1, amrex::The_Pinned_Arena());
         amrex::LoopOnCpu(b, [&] (int i, int j, int k) {
             const amrex::IntVect iv(i, j, k);
             double sum = 0;
-            for (int n = 1; n < ablsteady::n_implicit_coefs; ++n) { const double v = dist(gen); fa(iv, n) = static_cast<amrex::Real>(v); sum += v; }
-            fa(iv, ablsteady::coef_P) = static_cast<amrex::Real>(sum);
+            for (int n = 1; n < gust::n_implicit_coefs; ++n) { const double v = dist(gen); fa(iv, n) = static_cast<amrex::Real>(v); sum += v; }
+            fa(iv, gust::coef_P) = static_cast<amrex::Real>(sum);
             fp(iv) = static_cast<amrex::Real>(sum + extra);
             fr(iv) = static_cast<amrex::Real>(rd(gen));
         });
@@ -1375,14 +1375,14 @@ TEST (Predictor, LusgsSweepMatchesTheDenseReference)
             for (int sweeps = 1; sweeps <= 2; ++sweeps) {
                 ref = dense_sgs_sweep(d, ref);
                 amrex::MultiFab delta;
-                ablsteady::zline_lusgs(loc, A, ap, rhs, sweeps, c.mesh, c.geom, delta);
+                gust::zline_lusgs(loc, A, ap, rhs, sweeps, c.mesh, c.geom, delta);
                 const std::vector<double> got = as_vector(delta, d);
                 EXPECT_LT(max_diff_vec(got, ref), tol(1e-12, 1e-5) * max_abs_vec(ref)) << "periodic " << periodic << " sweeps " << sweeps;
             }
             // and the sweeps converge to the dense solution of the full system
             const std::vector<double> exact = solve_dense(d.N, d.rhs);
             amrex::MultiFab delta;
-            ablsteady::zline_lusgs(loc, A, ap, rhs, 40, c.mesh, c.geom, delta);
+            gust::zline_lusgs(loc, A, ap, rhs, 40, c.mesh, c.geom, delta);
             EXPECT_LT(max_diff_vec(as_vector(delta, d), exact), tol(1e-11, 1e-4) * max_abs_vec(exact)) << "periodic " << periodic;
         }
     }
@@ -1404,10 +1404,10 @@ TEST (Predictor, LusgsOnTwoBoxesConvergesAndIsRankIndependent)
         const DenseSystem d = build_dense(A, ap, rhs, c.geom, loc);
         const std::vector<double> exact = solve_dense(d.N, d.rhs);
         amrex::MultiFab delta;
-        ablsteady::zline_lusgs(loc, A, ap, rhs, 40, c.mesh, c.geom, delta);
+        gust::zline_lusgs(loc, A, ap, rhs, 40, c.mesh, c.geom, delta);
         EXPECT_LT(max_diff_vec(as_vector(delta, d), exact), tol(1e-11, 1e-4) * max_abs_vec(exact));
         amrex::MultiFab d2;
-        ablsteady::zline_lusgs(loc, A, ap, rhs, 1, c.mesh, c.geom, d2);
+        gust::zline_lusgs(loc, A, ap, rhs, 1, c.mesh, c.geom, d2);
         // the shared face of the two boxes is single-valued
         if (loc == Loc::xface) {
             amrex::MultiFab copy(d2.boxArray(), d2.DistributionMap(), 1, 0);
@@ -1436,9 +1436,9 @@ TEST (Predictor, LusgsOnTwoBoxesConvergesAndIsRankIndependent)
             auto column = [&] (int i, int j, const amrex::FArrayBox& src) {
                 for (int k = klo; k <= khi; ++k) {
                     const amrex::IntVect iv(i, j, k);
-                    const double rk = r(iv) + a(iv, ablsteady::coef_XM) * src(amrex::IntVect(i - 1, j, k)) + a(iv, ablsteady::coef_XP) * src(amrex::IntVect(i + 1, j, k))
-                                      + a(iv, ablsteady::coef_YM) * src(amrex::IntVect(i, j - 1, k)) + a(iv, ablsteady::coef_YP) * src(amrex::IntVect(i, j + 1, k));
-                    const double lower = -a(iv, ablsteady::coef_ZM), upper = -a(iv, ablsteady::coef_ZP);
+                    const double rk = r(iv) + a(iv, gust::coef_XM) * src(amrex::IntVect(i - 1, j, k)) + a(iv, gust::coef_XP) * src(amrex::IntVect(i + 1, j, k))
+                                      + a(iv, gust::coef_YM) * src(amrex::IntVect(i, j - 1, k)) + a(iv, gust::coef_YP) * src(amrex::IntVect(i, j + 1, k));
+                    const double lower = -a(iv, gust::coef_ZM), upper = -a(iv, gust::coef_ZP);
                     if (k == klo) { cc(iv) = upper / p(iv); ee(iv) = rk / p(iv); }
                     else {
                         const double m = p(iv) - lower * cc(amrex::IntVect(i, j, k - 1));
@@ -1501,16 +1501,16 @@ TEST (Predictor, LusgsOnePassIsExactAlongTheWind)
     PCase c = make_mesh(7, 3, 4, 0, false, false);
     for (const bool plus : {true, false}) {
         const amrex::BoxArray ba = c.ba;
-        amrex::MultiFab A(ba, c.dm, ablsteady::n_implicit_coefs, 0), ap(ba, c.dm, 1, 0), rhs(ba, c.dm, 1, 0);
+        amrex::MultiFab A(ba, c.dm, gust::n_implicit_coefs, 0), ap(ba, c.dm, 1, 0), rhs(ba, c.dm, 1, 0);
         A.setVal(0.0);
-        A.setVal(amrex::Real(3), plus ? ablsteady::coef_XM : ablsteady::coef_XP, 1, 0);
-        A.setVal(amrex::Real(3), ablsteady::coef_P, 1, 0);
+        A.setVal(amrex::Real(3), plus ? gust::coef_XM : gust::coef_XP, 1, 0);
+        A.setVal(amrex::Real(3), gust::coef_P, 1, 0);
         ap.setVal(amrex::Real(3) + amrex::Real(0.25));   // 1/dtau = 0.25
         fill_random(rhs, -1, 1, plus ? 3u : 4u, c);
         const DenseSystem d = build_dense(A, ap, rhs, c.geom, Loc::cell);
         const std::vector<double> exact = solve_dense(d.N, d.rhs);
         amrex::MultiFab delta;
-        const amrex::Real change = ablsteady::zline_lusgs(Loc::cell, A, ap, rhs, 1, c.mesh, c.geom, delta);
+        const amrex::Real change = gust::zline_lusgs(Loc::cell, A, ap, rhs, 1, c.mesh, c.geom, delta);
         EXPECT_LT(max_diff_vec(as_vector(delta, d), exact), tol(1e-12, 1e-5) * max_abs_vec(exact)) << plus;
         // the reported change is the backward pass's: nothing for +x (the
         // forward pass alone was exact), the whole solution for -x
@@ -1518,11 +1518,11 @@ TEST (Predictor, LusgsOnePassIsExactAlongTheWind)
         else { EXPECT_GT(change, 0.5 * max_abs_vec(exact)); }
         // a second sweep changes nothing: the first was exact
         amrex::MultiFab delta2;
-        const amrex::Real change2 = ablsteady::zline_lusgs(Loc::cell, A, ap, rhs, 2, c.mesh, c.geom, delta2);
+        const amrex::Real change2 = gust::zline_lusgs(Loc::cell, A, ap, rhs, 2, c.mesh, c.geom, delta2);
         EXPECT_LT(change2, tol(1e-13, 1e-6) * max_abs_vec(exact)) << plus;
         // z-line Jacobi needs many sweeps for the same system (the lag)
         amrex::MultiFab dj;
-        ablsteady::zline_jacobi(Loc::cell, A, ap, rhs, 2, c.mesh, c.geom, dj);
+        gust::zline_jacobi(Loc::cell, A, ap, rhs, 2, c.mesh, c.geom, dj);
         EXPECT_GT(max_diff_vec(as_vector(dj, d), exact), 1e-3 * max_abs_vec(exact)) << plus;
     }
 }
@@ -1536,7 +1536,7 @@ TEST (Predictor, LusgsConvergesForEitherWindSign)
 {
     for (const double wind : {6.0, -6.0}) {
         PCase c = make_mesh(4, 4, 6, 60);
-        ablsteady::State q;
+        gust::State q;
         define_state(q, c);
         fill_state(q, c, 5);
         q.u.setVal(static_cast<amrex::Real>(wind));
@@ -1547,7 +1547,7 @@ TEST (Predictor, LusgsConvergesForEitherWindSign)
         amrex::MultiFab dtau(c.ba, c.dm, 1, 0);
         dtau.setVal(amrex::Real(20));
         amrex::Array<amrex::MultiFab, 3> df;
-        ablsteady::face_dtau(dtau, c.mesh, c.geom, df);
+        gust::face_dtau(dtau, c.mesh, c.geom, df);
         Problem pr;
         pr.make(q, co, c, Equation::u);
         amrex::MultiFab ap(pr.A.boxArray(), c.dm, 1, 0);
@@ -1556,7 +1556,7 @@ TEST (Predictor, LusgsConvergesForEitherWindSign)
             amrex::FArrayBox out(mfi.validbox(), 1, amrex::The_Pinned_Arena());
             amrex::LoopOnCpu(mfi.validbox(), [&] (int i, int j, int k) {
                 const amrex::IntVect iv(i, j, k);
-                out(iv) = amrex::Real(1) / dd(iv) + a(iv, ablsteady::coef_P);
+                out(iv) = amrex::Real(1) / dd(iv) + a(iv, gust::coef_P);
             });
             ap[mfi].copy<amrex::RunOn::Device>(out, mfi.validbox());
             amrex::Gpu::streamSynchronize();
@@ -1570,17 +1570,17 @@ TEST (Predictor, LusgsConvergesForEitherWindSign)
         double prev = 1e300, err4 = 0;
         for (int sweeps : {1, 2, 4, 8, 16}) {
             amrex::MultiFab delta;
-            ablsteady::zline_lusgs(Loc::xface, pr.A, ap, rhs, sweeps, c.mesh, c.geom, delta);
+            gust::zline_lusgs(Loc::xface, pr.A, ap, rhs, sweeps, c.mesh, c.geom, delta);
             const double err = max_diff_gathered(delta, exact) / scale;
             if (prev > tol(1e-14, 1e-6)) { EXPECT_LT(err, prev) << wind << " " << sweeps; }
             prev = err;
             if (sweeps == 4) { err4 = err; }
         }
         amrex::MultiFab dj;
-        ablsteady::zline_jacobi(Loc::xface, pr.A, ap, rhs, 4, c.mesh, c.geom, dj);
+        gust::zline_jacobi(Loc::xface, pr.A, ap, rhs, 4, c.mesh, c.geom, dj);
         EXPECT_LT(err4, max_diff_gathered(dj, exact) / scale) << wind;
         amrex::MultiFab delta;
-        const amrex::Real change = ablsteady::zline_lusgs(Loc::xface, pr.A, ap, rhs, 40, c.mesh, c.geom, delta);
+        const amrex::Real change = gust::zline_lusgs(Loc::xface, pr.A, ap, rhs, 40, c.mesh, c.geom, delta);
         EXPECT_LT(max_diff_gathered(delta, exact) / scale, tol(1e-10, 1e-4)) << wind;
         EXPECT_LT(change / scale, tol(1e-10, 1e-4)) << wind;
     }
@@ -1598,23 +1598,23 @@ TEST (Predictor, LusgsFixedPointAndRefusals)
     rhs.setVal(0.0);
     for (const int sweeps : {1, 3}) {
         amrex::MultiFab delta;
-        const amrex::Real change = ablsteady::zline_lusgs(Loc::cell, A, ap, rhs, sweeps, c.mesh, c.geom, delta);
+        const amrex::Real change = gust::zline_lusgs(Loc::cell, A, ap, rhs, sweeps, c.mesh, c.geom, delta);
         EXPECT_EQ(delta.norm0(), 0);
         EXPECT_EQ(change, 0);
     }
     random_system(c, Loc::cell, 11u, 0.5, A, ap, rhs);
     amrex::MultiFab d1, d2, d3;
-    ablsteady::line_sweeps(ablsteady::LineSweepOptions(ablsteady::SweepKind::lusgs), Loc::cell, A, ap, rhs, 2, c.mesh, c.geom, d1);
-    ablsteady::zline_lusgs(Loc::cell, A, ap, rhs, 2, c.mesh, c.geom, d2);
-    ablsteady::line_sweeps(ablsteady::LineSweepOptions(ablsteady::SweepKind::zjacobi), Loc::cell, A, ap, rhs, 2, c.mesh, c.geom, d3);
+    gust::line_sweeps(gust::LineSweepOptions(gust::SweepKind::lusgs), Loc::cell, A, ap, rhs, 2, c.mesh, c.geom, d1);
+    gust::zline_lusgs(Loc::cell, A, ap, rhs, 2, c.mesh, c.geom, d2);
+    gust::line_sweeps(gust::LineSweepOptions(gust::SweepKind::zjacobi), Loc::cell, A, ap, rhs, 2, c.mesh, c.geom, d3);
     EXPECT_EQ(max_diff_gathered(d1, gather(d2)), 0);
     EXPECT_GT(max_diff_gathered(d1, gather(d3)), 0);
     amrex::MultiFab delta;
-    EXPECT_THROW(ablsteady::zline_lusgs(Loc::cell, A, ap, rhs, 0, c.mesh, c.geom, delta), std::runtime_error);
+    EXPECT_THROW(gust::zline_lusgs(Loc::cell, A, ap, rhs, 0, c.mesh, c.geom, delta), std::runtime_error);
     amrex::MultiFab bad(c.ba, c.dm, 2, 0);
-    EXPECT_THROW(ablsteady::zline_lusgs(Loc::cell, bad, ap, rhs, 1, c.mesh, c.geom, delta), std::runtime_error);
-    EXPECT_STREQ(ablsteady::sweep_name(ablsteady::SweepKind::lusgs), "lusgs");
-    EXPECT_STREQ(ablsteady::sweep_name(ablsteady::SweepKind::zjacobi), "zjacobi");
+    EXPECT_THROW(gust::zline_lusgs(Loc::cell, bad, ap, rhs, 1, c.mesh, c.geom, delta), std::runtime_error);
+    EXPECT_STREQ(gust::sweep_name(gust::SweepKind::lusgs), "lusgs");
+    EXPECT_STREQ(gust::sweep_name(gust::SweepKind::zjacobi), "zjacobi");
 }
 
 } // namespace

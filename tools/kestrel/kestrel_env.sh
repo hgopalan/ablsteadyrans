@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Kestrel modules for ablsteady and for the ERF reference builds:
+# Kestrel modules for GUST and for the ERF reference builds:
 #
 #   source tools/kestrel/kestrel_env.sh cpu   # CPU nodes (Sapphire Rapids)
 #   source tools/kestrel/kestrel_env.sh gpu   # GPU nodes (H100 + Genoa)

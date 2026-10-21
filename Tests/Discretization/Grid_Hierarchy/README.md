@@ -42,16 +42,16 @@ All carry the labels `regression;smoke`.
 - Restart: the rebuilt levels 1 and 2 match the golds of `rt_askervein_hierarchy`.
 - Each abort message names its input.
 
-The golds were written by ablsteady: they detect changes. The coarse grounds were checked against an independent
+The golds were written by gust: they detect changes. The coarse grounds were checked against an independent
 rebuild in the unit tests (UT-2.3.2).
 
 ## Gold files
 | Gold | How it was made |
 |---|---|
-| `askervein_hierarchy_mesh.json` | `mpiexec -n 2 Supporting_Files/check_mesh.py Gold/askervein_hierarchy_mesh.json --write -- ablsteady inputs_mesh_askervein_hierarchy terrain.file=extern_erf/askervein.txt` |
+| `askervein_hierarchy_mesh.json` | `mpiexec -n 2 Supporting_Files/check_mesh.py Gold/askervein_hierarchy_mesh.json --write -- gust inputs_mesh_askervein_hierarchy terrain.file=extern_erf/askervein.txt` |
 | `askervein_hierarchy_level1_plt00000/`, `askervein_hierarchy_level2_plt00000/` | The same run's `askervein_hier_plt_level{1,2}_00000`, without `Level_0/z_phys_nd*` |
-| `askervein_hierarchy_p0_mesh.json` | `mpiexec -n 2 Supporting_Files/check_mesh.py Gold/askervein_hierarchy_p0_mesh.json --write -- ablsteady inputs_mesh_askervein_hierarchy_p0 terrain.file=extern_erf/askervein.txt` |
-| `steep_ridge_hierarchy_mesh.json` | `Supporting_Files/check_mesh.py Gold/steep_ridge_hierarchy_mesh.json --write -- ablsteady inputs_mesh_steep_ridge_hierarchy` |
+| `askervein_hierarchy_p0_mesh.json` | `mpiexec -n 2 Supporting_Files/check_mesh.py Gold/askervein_hierarchy_p0_mesh.json --write -- gust inputs_mesh_askervein_hierarchy_p0 terrain.file=extern_erf/askervein.txt` |
+| `steep_ridge_hierarchy_mesh.json` | `Supporting_Files/check_mesh.py Gold/steep_ridge_hierarchy_mesh.json --write -- gust inputs_mesh_steep_ridge_hierarchy` |
 
 ## How to run
 ```bash

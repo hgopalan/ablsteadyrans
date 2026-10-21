@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build ablsteady on NLR Kestrel.
+# Build GUST on NLR Kestrel.
 #
 #   tools/kestrel/build_kestrel.sh cpu   # on a CPU login node
 #   tools/kestrel/build_kestrel.sh gpu   # on a GPU login node (kestrel-gpu.hpc.nrel.gov)
@@ -26,19 +26,19 @@ build="$src/build-kestrel-$target"
 source "$here/kestrel_env.sh" "$target"
 
 opts=(-DCMAKE_BUILD_TYPE=Release
-      -DABLSTEADY_MPI=ON
+      -DGUST_MPI=ON
       -DCMAKE_C_COMPILER=cc
       -DCMAKE_CXX_COMPILER=CC
       -DMPIEXEC_EXECUTABLE="$(command -v srun)"
       -DMPIEXEC_NUMPROC_FLAG=-n)
 if [ "$target" = gpu ]; then
     # H100: compute capability 9.0.
-    opts+=(-DABLSTEADY_GPU_BACKEND=CUDA
+    opts+=(-DGUST_GPU_BACKEND=CUDA
            -DAMReX_CUDA_ARCH=9.0
            -DCMAKE_CUDA_HOST_COMPILER=CC)
 fi
 
 git -C "$src" submodule update --init --recursive
 cmake -S "$src" -B "$build" "${opts[@]}"
-cmake --build "$build" -j "${ABLSTEADY_BUILD_JOBS:-16}"
-echo "Built $build/ablsteady and $build/ablsteady_refavg"
+cmake --build "$build" -j "${GUST_BUILD_JOBS:-${ABLSTEADY_BUILD_JOBS:-16}}"
+echo "Built $build/gust and $build/gust_refavg"

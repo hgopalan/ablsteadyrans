@@ -1,7 +1,7 @@
 Results
 ========
 
-This page collects the measured accuracy and cost of ablsteady. Each study states its setup, shows the numbers in a
+This page collects the measured accuracy and cost of GUST. Each study states its setup, shows the numbers in a
 table and lists the main findings. Recommended settings are in **bold**. The cases are described in
 :doc:`test_cases`; the tests that check these numbers are listed in :doc:`testing`.
 
@@ -99,7 +99,7 @@ Mass-consistent initial field
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 *Setup.* FastWindTerrain's bump case: a 100 m Gaussian hill on a 0.1 slope with a power-law inflow. The table gives
-the hilltop speed-up :math:`|u_h|/S_0(h)` at four heights, as ablsteady / FastWindTerrain.
+the hilltop speed-up :math:`|u_h|/S_0(h)` at four heights, as GUST / FastWindTerrain.
 
 .. list-table::
    :header-rows: 1
@@ -190,7 +190,7 @@ Cost compared with ERF
    :widths: 24 22 18 36
 
    * - Case
-     - ablsteady
+     - GUST
      - Cost of one iteration
      - ERF
    * - 2-D hill, 2 ranks
@@ -202,7 +202,7 @@ Cost compared with ERF
      - 2.8 ERF steps (Jacobi)
      - 242 s for 4 h, still a quarter of an inertial period from steady
 
-*Finding.* ablsteady reaches a converged steady state in a fraction of the time ERF needs for a run that is not yet
+*Finding.* GUST reaches a converged steady state in a fraction of the time ERF needs for a run that is not yet
 steady.
 
 Solver settings
@@ -926,9 +926,9 @@ needs 1087 iterations on one level and 299 (306, 37) on three, against 2091 and 
 **Comparison with ERF (RT-2.6.1).** ERF's Askervein deck at the pinned commit (``inputs_anel``: anelastic URANS,
 the k-equation closure, fifth-order horizontal and third-order vertical upwind advection, the power-law inflow from
 210° through the west and south faces) ran to 4800 s on the same mesh (10 378 steps, 8 ranks) and was averaged over
-2400–4800 s (``ablsteady_refavg``; the two half-window averages differ by at most 7.6e-4 m/s). The 10 m speeds on
+2400–4800 s (``gust_refavg``; the two half-window averages differ by at most 7.6e-4 m/s). The 10 m speeds on
 lines A and AA then changed by less than 1e-3 of their final values after about 1500 steps and 3e-4 after 1730.
-ablsteady runs the same setup (``Tests/Real_Terrain/Askervein_210``):
+GUST runs the same setup (``Tests/Real_Terrain/Askervein_210``):
 
 .. list-table:: Askervein, wind from 210°, 10 m speeds against ERF's URANS average
    :header-rows: 1
@@ -962,7 +962,7 @@ ablsteady runs the same setup (``Tests/Real_Terrain/Askervein_210``):
   level-0 iterations.
 - Up to 300 m past the hilltop every mast is within 4.5 % of ERF (4.0 % with the closure's inflow length); the four
   lee masts beyond are 4.9–7.5 % slower (6.6–9.2 %).
-  ablsteady's second-order advection (MUSCL with van Leer) against ERF's fifth order sets the wake there; the
+  GUST's second-order advection (MUSCL with van Leer) against ERF's fifth order sets the wake there; the
   same trend (second-order upwind gives lower lee speeds than a higher-order scheme) is reported for WindNinja by
   Wagenbrenner et al. (2019).
 - A tighter verdict (six orders instead of four, 270 iterations) changes no line speed by more than 1e-4 %.

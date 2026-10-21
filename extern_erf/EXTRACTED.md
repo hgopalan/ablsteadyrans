@@ -1,6 +1,6 @@
 # Code copied from ERF
 
-ablsteady copies some ERF files rather than linking ERF (development plan rev. 6, extraction audit).
+GUST copies some ERF files rather than linking ERF (development plan rev. 6, extraction audit).
 Every copied file lives under `extern_erf/` and has one row below. `tools/check_extern_erf.py` reads this table:
 
 - **Status `unchanged`:** the local file must be byte-identical to `ERF source` at `ERF SHA`.

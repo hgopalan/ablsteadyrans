@@ -1,5 +1,5 @@
-#ifndef ABLSTEADY_MASSFLUX_K_H_
-#define ABLSTEADY_MASSFLUX_K_H_
+#ifndef GUST_MASSFLUX_K_H_
+#define GUST_MASSFLUX_K_H_
 
 // Device helpers of the terrain-following C-grid (MassFlux.H): the slopes
 // z_x, z_y of a z-face from its four nodes (as ERF's TerrainPoisson) and the
@@ -14,7 +14,7 @@
 #include <AMReX_GpuQualifiers.H>
 #include <AMReX_REAL.H>
 
-namespace ablsteady::massflux {
+namespace gust::massflux {
 
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
 amrex::Real slope_x (amrex::Array4<amrex::Real const> const& z, int i, int j, int k, amrex::Real dxinv) noexcept
@@ -38,6 +38,6 @@ amrex::Real no_flux_w (amrex::Array4<amrex::Real const> const& z, amrex::Array4<
          + slope_y(z, i, j, k, dyinv) * stencil::interp<stencil::YF, stencil::ZF>(v, i, j, k);
 }
 
-} // namespace ablsteady::massflux
+} // namespace gust::massflux
 
 #endif

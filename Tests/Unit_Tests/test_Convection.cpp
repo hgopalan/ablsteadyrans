@@ -16,14 +16,14 @@
 
 namespace {
 
-using ablsteady::ConvectionOptions;
-using ablsteady::Limiter;
-using ablsteady::Loc;
-using ablsteady::PoissonFace;
-using ablsteady::ptest::PCase;
-using ablsteady::trtest::Flow;
-using ablsteady::trtest::Norms;
-using ablsteady::trtest::tol;
+using gust::ConvectionOptions;
+using gust::Limiter;
+using gust::Loc;
+using gust::PoissonFace;
+using gust::ptest::PCase;
+using gust::trtest::Flow;
+using gust::trtest::Norms;
+using gust::trtest::tol;
 
 constexpr double kHill = 120;   // slopes up to 0.38 on the 1000 m x 800 m domain
 
@@ -31,13 +31,13 @@ constexpr double kHill = 120;   // slopes up to 0.38 on the 1000 m x 800 m domai
 // geometric layers, the ghost nodes continuing the layers smoothly.
 PCase make_mesh (int m)
 {
-    ablsteady::ptest::Manufactured ms;
+    gust::ptest::Manufactured ms;
     ms.Lx = 1000;
     ms.Ly = 800;
     ms.H0 = kHill;
-    PCase c = ablsteady::ptest::make_case(16 << m, 12 << m, 8 << m, PoissonFace::periodic, PoissonFace::periodic, ms,
+    PCase c = gust::ptest::make_case(16 << m, 12 << m, 8 << m, PoissonFace::periodic, PoissonFace::periodic, ms,
                                           0, true);
-    ablsteady::trtest::smooth_vertical_ghost_nodes(c);
+    gust::trtest::smooth_vertical_ghost_nodes(c);
     return c;
 }
 
@@ -69,22 +69,22 @@ const char* loc_name (Loc loc)
 Norms conv_error (int m, Loc loc, const ConvectionOptions& opt, amrex::MultiFab* keep = nullptr)
 {
     PCase c = make_mesh(m);
-    const Flow fl = ablsteady::trtest::make_flow(c, kHill);
+    const Flow fl = gust::trtest::make_flow(c, kHill);
     const amrex::BoxArray ba = amrex::convert(c.ba, itype(loc));
     amrex::MultiFab q(ba, c.dm, 1, 2), out(ba, c.dm, 1, 0), ex(ba, c.dm, 1, 0);
-    ablsteady::trtest::fill_loc(q, loc, c, [&] (double x, double y, double z) { return field(fl, loc, x, y, z); });
+    gust::trtest::fill_loc(q, loc, c, [&] (double x, double y, double z) { return field(fl, loc, x, y, z); });
     amrex::Array<amrex::MultiFab, 3> F;
-    ablsteady::trtest::fill_transport(F, c, fl);
-    ablsteady::convection(loc, q, {&F[0], &F[1], &F[2]}, opt, c.mesh, c.geom, out);
+    gust::trtest::fill_transport(F, c, fl);
+    gust::convection(loc, q, {&F[0], &F[1], &F[2]}, opt, c.mesh, c.geom, out);
     const bool bounded = opt.bounded;
-    ablsteady::trtest::fill_valid(ex, loc, c, [&] (double x, double y, double z) {
+    gust::trtest::fill_valid(ex, loc, c, [&] (double x, double y, double z) {
         auto qf = [&] (double a, double b, double cc) { return field(fl, loc, a, b, cc); };
         double r = 0;
         for (int d = 0; d < 3; ++d) {
             if (bounded) {
-                r += fl.vel(d, x, y, z) * ablsteady::trtest::D1(qf, x, y, z, d);
+                r += fl.vel(d, x, y, z) * gust::trtest::D1(qf, x, y, z, d);
             } else {
-                r += ablsteady::trtest::D1([&] (double a, double b, double cc) { return fl.vel(d, a, b, cc) * qf(a, b, cc); },
+                r += gust::trtest::D1([&] (double a, double b, double cc) { return fl.vel(d, a, b, cc) * qf(a, b, cc); },
                                           x, y, z, d);
             }
         }
@@ -94,7 +94,7 @@ Norms conv_error (int m, Loc loc, const ConvectionOptions& opt, amrex::MultiFab*
         keep->define(ba, c.dm, 1, 0);
         amrex::MultiFab::Copy(*keep, out, 0, 0, 1, 0);
     }
-    return ablsteady::trtest::error_norms(out, ex, loc, c);
+    return gust::trtest::error_norms(out, ex, loc, c);
 }
 
 double order (double a, double b) { return std::log2(a / b); }
@@ -213,7 +213,7 @@ TEST(ConvectionProperties, BoundedUpwindKeepsKPositive)
     amrex::MultiFab k(c.ba, c.dm, 1, 2), Ck(c.ba, c.dm, 1, 0), nu(c.ba, c.dm, 1, 1), A, Aout;
     fill_random(k, 0, 1, 7, 1.0 / 3.0, c.geom);
     nu.setVal(0.0);
-    ablsteady::implicit_coefficients(Loc::cell, {&rc.F[0], &rc.F[1], &rc.F[2]}, nu, c.z, c.mesh, c.geom, A);
+    gust::implicit_coefficients(Loc::cell, {&rc.F[0], &rc.F[1], &rc.F[2]}, nu, c.z, c.mesh, c.geom, A);
     // Outflow weights: the same coefficients for the reversed transport.
     amrex::Array<amrex::MultiFab, 3> Fneg;
     for (int d = 0; d < 3; ++d) {
@@ -221,7 +221,7 @@ TEST(ConvectionProperties, BoundedUpwindKeepsKPositive)
         amrex::MultiFab::Copy(Fneg[d], rc.F[d], 0, 0, 1, 1);
         Fneg[d].mult(-1.0, 1);
     }
-    ablsteady::implicit_coefficients(Loc::cell, {&Fneg[0], &Fneg[1], &Fneg[2]}, nu, c.z, c.mesh, c.geom, Aout);
+    gust::implicit_coefficients(Loc::cell, {&Fneg[0], &Fneg[1], &Fneg[2]}, nu, c.z, c.mesh, c.geom, Aout);
     const double eps64 = 64 * std::numeric_limits<amrex::Real>::epsilon();
 
     // Smallest k_new, and smallest k_new over its round-off allowance.
@@ -229,7 +229,7 @@ TEST(ConvectionProperties, BoundedUpwindKeepsKPositive)
         ConvectionOptions opt;
         opt.limiter = Limiter::upwind;
         opt.bounded = bounded;
-        ablsteady::convection(Loc::cell, k, {&rc.F[0], &rc.F[1], &rc.F[2]}, opt, c.mesh, c.geom, Ck);
+        gust::convection(Loc::cell, k, {&rc.F[0], &rc.F[1], &rc.F[2]}, opt, c.mesh, c.geom, Ck);
         double mn = 1e300;
         worst_ratio = 1e300;
         for (amrex::MFIter mfi(Ck, false); mfi.isValid(); ++mfi) {
@@ -238,8 +238,8 @@ TEST(ConvectionProperties, BoundedUpwindKeepsKPositive)
                 fa(vb, 1, amrex::The_Pinned_Arena()), fout(vb, 1, amrex::The_Pinned_Arena());
             fc.copy<amrex::RunOn::Device>(Ck[mfi], vb);
             fk.copy<amrex::RunOn::Device>(k[mfi], vb);
-            fa.copy<amrex::RunOn::Device>(A[mfi], vb, ablsteady::coef_P, vb, 0, 1);
-            fout.copy<amrex::RunOn::Device>(Aout[mfi], vb, ablsteady::coef_P, vb, 0, 1);
+            fa.copy<amrex::RunOn::Device>(A[mfi], vb, gust::coef_P, vb, 0, 1);
+            fout.copy<amrex::RunOn::Device>(Aout[mfi], vb, gust::coef_P, vb, 0, 1);
             amrex::Gpu::streamSynchronize();
             amrex::LoopOnCpu(vb, [&] (int i, int j, int kk) {
                 const amrex::IntVect iv(i, j, kk);
@@ -276,9 +276,9 @@ TEST(ConvectionProperties, BoundedFormOfConstantIsZero)
             ConvectionOptions opt;
             opt.limiter = lim;
             opt.bounded = true;
-            ablsteady::convection(loc, q, {&rc.F[0], &rc.F[1], &rc.F[2]}, opt, c.mesh, c.geom, out);
+            gust::convection(loc, q, {&rc.F[0], &rc.F[1], &rc.F[2]}, opt, c.mesh, c.geom, out);
             opt.bounded = false;
-            ablsteady::convection(loc, q, {&rc.F[0], &rc.F[1], &rc.F[2]}, opt, c.mesh, c.geom, cons);
+            gust::convection(loc, q, {&rc.F[0], &rc.F[1], &rc.F[2]}, opt, c.mesh, c.geom, cons);
             const double scale = static_cast<double>(cons.norm0());
             EXPECT_GT(scale, 1.0) << loc_name(loc);
             EXPECT_LE(static_cast<double>(out.norm0()), tol(1e-13, 1e-5) * scale) << loc_name(loc);
@@ -292,7 +292,7 @@ TEST(ConvectionProperties, BoundedFormOfConstantIsZero)
 template <Limiter L>
 double slope (double a, double b, double eps)
 {
-    return static_cast<double>(ablsteady::limited_slope<L>(static_cast<amrex::Real>(a), static_cast<amrex::Real>(b),
+    return static_cast<double>(gust::limited_slope<L>(static_cast<amrex::Real>(a), static_cast<amrex::Real>(b),
                                                            static_cast<amrex::Real>(eps * eps)));
 }
 
@@ -365,11 +365,11 @@ TEST(ConvectionOptions, InvalidEpsIsRejected)
 {
     using Lim = std::numeric_limits<amrex::Real>;
     ConvectionOptions opt;
-    EXPECT_TRUE(ablsteady::check_convection_options(opt).empty());
+    EXPECT_TRUE(gust::check_convection_options(opt).empty());
     const amrex::Real tiny = std::sqrt(Lim::min()) / 2, huge = std::sqrt(Lim::max()) * 2;
     for (amrex::Real e : {amrex::Real(0), amrex::Real(-1), Lim::quiet_NaN(), Lim::infinity(), tiny, huge}) {
         opt.smooth_eps = e;
-        const auto err = ablsteady::check_convection_options(opt);
+        const auto err = gust::check_convection_options(opt);
         ASSERT_EQ(err.size(), 1u) << e;
         EXPECT_NE(err[0].find("smooth_eps"), std::string::npos);
     }
@@ -379,17 +379,17 @@ TEST(ConvectionOptions, InvalidEpsIsRejected)
     amrex::MultiFab q(c.ba, c.dm, 1, 2), out(c.ba, c.dm, 1, 0);
     q.setVal(1.0);
     opt.smooth_eps = 0;
-    EXPECT_THROW(ablsteady::convection(Loc::cell, q, {&rc.F[0], &rc.F[1], &rc.F[2]}, opt, c.mesh, c.geom, out),
+    EXPECT_THROW(gust::convection(Loc::cell, q, {&rc.F[0], &rc.F[1], &rc.F[2]}, opt, c.mesh, c.geom, out),
                  std::runtime_error);
     amrex::Array<amrex::MultiFab, 3> G;
-    EXPECT_THROW(ablsteady::convective_fluxes(Loc::cell, q, {&rc.F[0], &rc.F[1], &rc.F[2]}, opt, c.mesh, G),
+    EXPECT_THROW(gust::convective_fluxes(Loc::cell, q, {&rc.F[0], &rc.F[1], &rc.F[2]}, opt, c.mesh, G),
                  std::runtime_error);
     // Fluxes of a cell field reused for u.
     opt.smooth_eps = 1;
-    ablsteady::convective_fluxes(Loc::cell, q, {&rc.F[0], &rc.F[1], &rc.F[2]}, opt, c.mesh, G);
+    gust::convective_fluxes(Loc::cell, q, {&rc.F[0], &rc.F[1], &rc.F[2]}, opt, c.mesh, G);
     amrex::MultiFab u(amrex::convert(c.ba, itype(Loc::xface)), c.dm, 1, 2);
     u.setVal(1.0);
-    EXPECT_THROW(ablsteady::convective_fluxes(Loc::xface, u, {&rc.F[0], &rc.F[1], &rc.F[2]}, opt, c.mesh, G),
+    EXPECT_THROW(gust::convective_fluxes(Loc::xface, u, {&rc.F[0], &rc.F[1], &rc.F[2]}, opt, c.mesh, G),
                  std::runtime_error);
 }
 

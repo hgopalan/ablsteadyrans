@@ -4,12 +4,12 @@
 
 #include <cmath>
 
-namespace ablsteady {
+namespace gust {
 
 void smooth_surface (amrex::MultiFab& h, const amrex::Geometry& geom, int passes, amrex::Real beta)
 {
     if (passes < 0 || !std::isfinite(beta) || !(beta >= 0) || !(beta < amrex::Real(0.25))) {
-        amrex::Abort("ablsteady: smooth_surface needs passes >= 0 and 0 <= beta < 1/4");
+        amrex::Abort("gust: smooth_surface needs passes >= 0 and 0 <= beta < 1/4");
     }
     if (passes == 0) { return; }
 
@@ -76,4 +76,4 @@ void fill_surface_ghosts (amrex::MultiFab& h, const amrex::Geometry& geom)
     }
 }
 
-} // namespace ablsteady
+} // namespace gust

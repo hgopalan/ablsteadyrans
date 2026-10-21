@@ -1,5 +1,5 @@
-#ifndef ABLSTEADY_INPUTS_H_
-#define ABLSTEADY_INPUTS_H_
+#ifndef GUST_INPUTS_H_
+#define GUST_INPUTS_H_
 
 #include <AMReX_Array.H>
 #include <AMReX_IntVect.H>
@@ -8,9 +8,9 @@
 #include <string>
 #include <vector>
 
-namespace ablsteady {
+namespace gust {
 
-//! The input namespaces ablsteady owns. Every key in one of them must be read
+//! The input namespaces GUST owns. Every key in one of them must be read
 //! by this version of the code, or the run aborts (see unknown_inputs).
 inline const std::vector<std::string>& owned_namespaces ()
 {
@@ -108,7 +108,7 @@ struct Inputs
     std::vector<std::string> parse_errors;
 };
 
-//! Read every key ablsteady knows from ParmParse. No range checks.
+//! Read every key GUST knows from ParmParse. No range checks.
 Inputs parse_inputs ();
 
 //! Range checks. Returns one message per violation, each naming the input.
@@ -127,7 +127,7 @@ struct InputEntry
 std::vector<std::string> unknown_inputs (const std::vector<InputEntry>& entries);
 
 //! The same check for a program that owns other namespaces (a tool such as
-//! ablsteady_refavg owns only "refavg").
+//! gust_refavg owns only "refavg").
 std::vector<std::string> unknown_inputs (const std::vector<InputEntry>& entries,
                                          const std::vector<std::string>& owned);
 
@@ -152,6 +152,6 @@ std::vector<InputEntry> parmparse_entries ();
 //! any check fails. Call after all inputs of this version have been read.
 Inputs read_inputs ();
 
-} // namespace ablsteady
+} // namespace gust
 
 #endif

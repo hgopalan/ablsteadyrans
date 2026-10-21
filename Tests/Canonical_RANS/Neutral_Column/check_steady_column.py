@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Run ablsteady on the 1-D neutral column deck and check the steady state (RT-1.15.1).
+"""Run GUST on the 1-D neutral column deck and check the steady state (RT-1.15.1).
 
     check_steady_column.py --ustar U --z0 Z0 --force F --height H --dz DZ --orders N [--floor log_law|one]
                            [--stress-profile] [--kappa K] [--cmu0 C] -- COMMAND [ARGS ...]
 
 Runs COMMAND (the application on Tests/Canonical_RANS/Neutral_Column/inputs_steady_column) and checks:
-  * the driver reached the steady verdict ("ablsteady: steady after" in its output);
+  * the driver reached the steady verdict ("gust: steady after" in its output);
   * the residual of u fell by at least N orders of magnitude from its reference
     (the <checkpoint>/Driver history: the largest of the first reference
     iterations over the last record);
@@ -115,9 +115,9 @@ def main(argv):
         ok = ok and good
         print("  %-46s measured %14.8e target %14.8e tol %9.2e %s" % (name, value, target, lim, "pass" if good else "FAIL"))
 
-    check("steady verdict reached", 1.0 if "ablsteady: steady after" in run.stdout else 0.0, 1.0, 0.0, "abs")
+    check("steady verdict reached", 1.0 if "gust: steady after" in run.stdout else 0.0, 1.0, 0.0, "abs")
     # The files this run wrote (the run directory may hold earlier output).
-    wrote = [ln.split()[-1] for ln in run.stdout.splitlines() if ln.startswith("ablsteady: wrote ")]
+    wrote = [ln.split()[-1] for ln in run.stdout.splitlines() if ln.startswith("gust: wrote ")]
     turb = [n for n in wrote if "_turb" in n]
     chk = [n for n in wrote if "_chk" in n]
     if not turb or not chk:

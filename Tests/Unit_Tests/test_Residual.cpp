@@ -17,27 +17,27 @@
 
 namespace {
 
-using ablsteady::Equation;
-using ablsteady::Loc;
-using ablsteady::PoissonFace;
-using ablsteady::ptest::PCase;
-using ablsteady::trtest::Flow;
-using ablsteady::trtest::tol;
+using gust::Equation;
+using gust::Loc;
+using gust::PoissonFace;
+using gust::ptest::PCase;
+using gust::trtest::Flow;
+using gust::trtest::tol;
 
 // (nx, ny, nz) cells over a cosine hill of height H0 (0: flat), periodic sides.
 PCase make_mesh (int nx, int ny, int nz, double H0)
 {
-    ablsteady::ptest::Manufactured ms;
+    gust::ptest::Manufactured ms;
     ms.Lx = 1000;
     ms.Ly = 800;
     ms.H0 = H0;
-    PCase c = ablsteady::ptest::make_case(nx, ny, nz, PoissonFace::periodic, PoissonFace::periodic, ms, 0, true);
-    ablsteady::trtest::smooth_vertical_ghost_nodes(c);
+    PCase c = gust::ptest::make_case(nx, ny, nz, PoissonFace::periodic, PoissonFace::periodic, ms, 0, true);
+    gust::trtest::smooth_vertical_ghost_nodes(c);
     return c;
 }
 
 // A state on the mesh, with z_phys_nd copied from it.
-void define_state (ablsteady::State& q, const PCase& c)
+void define_state (gust::State& q, const PCase& c)
 {
     q.define(c.ba, c.dm);
     amrex::MultiFab::Copy(q.z_phys_nd, c.z, 0, 0, 1, c.z.nGrow());
@@ -60,18 +60,18 @@ void fill_random (amrex::MultiFab& mf, double lo, double hi, unsigned seed, cons
     mf.FillBoundary(c.geom.periodicity());
 }
 
-ablsteady::ReferenceProfile constant_profile (double theta)
+gust::ReferenceProfile constant_profile (double theta)
 {
-    ablsteady::ReferenceProfile p;
+    gust::ReferenceProfile p;
     p.z = {0};
     p.theta = {static_cast<amrex::Real>(theta)};
     return p;
 }
 
 // theta_ref = theta_s + gamma z, as a two-point profile spanning the domain.
-ablsteady::ReferenceProfile linear_profile (double theta_s, double gamma)
+gust::ReferenceProfile linear_profile (double theta_s, double gamma)
 {
-    ablsteady::ReferenceProfile p;
+    gust::ReferenceProfile p;
     p.z = {-1000, 5000};
     p.theta = {static_cast<amrex::Real>(theta_s - 1000 * gamma), static_cast<amrex::Real>(theta_s + 5000 * gamma)};
     return p;
@@ -81,7 +81,7 @@ ablsteady::ReferenceProfile linear_profile (double theta_s, double gamma)
 struct Coefficients
 {
     amrex::MultiFab nu, gt, gk;
-    ablsteady::ResidualInputs in;
+    gust::ResidualInputs in;
     void make (const PCase& c, double numax, unsigned seed)
     {
         for (auto* mf : {&nu, &gt, &gk}) { mf->define(c.ba, c.dm, 1, 1); }
@@ -99,7 +99,7 @@ struct Coefficients
     }
 };
 
-amrex::MultiFab& field_of (ablsteady::State& q, Equation eq)
+amrex::MultiFab& field_of (gust::State& q, Equation eq)
 {
     switch (eq) {
     case Equation::u: return q.u;
@@ -122,22 +122,22 @@ const char* name_of (Equation eq)
 
 // The explicit first-order operator for one equation, with the transport F
 // frozen: bounded first-order upwind convection minus the diffusion.
-void first_order_operator (Equation eq, ablsteady::State& q, const amrex::Array<amrex::MultiFab, 3>& F,
+void first_order_operator (Equation eq, gust::State& q, const amrex::Array<amrex::MultiFab, 3>& F,
                            const Coefficients& co, const PCase& c, amrex::MultiFab& out)
 {
-    ablsteady::ConvectionOptions up;
-    up.limiter = ablsteady::Limiter::upwind;
+    gust::ConvectionOptions up;
+    up.limiter = gust::Limiter::upwind;
     up.bounded = true;
     const Loc loc = loc_of(eq);
     amrex::MultiFab& f = field_of(q, eq);
-    ablsteady::convection(loc, f, {&F[0], &F[1], &F[2]}, up, c.mesh, c.geom, out);
+    gust::convection(loc, f, {&F[0], &F[1], &F[2]}, up, c.mesh, c.geom, out);
     amrex::MultiFab d(out.boxArray(), out.DistributionMap(), 1, 0);
     if (loc == Loc::cell) {
-        ablsteady::scalar_diffusion(f, eq == Equation::theta ? co.gt : co.gk, c.z, c.mesh, c.geom, d);
+        gust::scalar_diffusion(f, eq == Equation::theta ? co.gt : co.gk, c.z, c.mesh, c.geom, d);
     } else {
         amrex::Array<amrex::MultiFab, 3> dd;
         for (int e = 0; e < 3; ++e) { dd[e].define(field_of(q, static_cast<Equation>(e)).boxArray(), c.dm, 1, 0); }
-        ablsteady::momentum_diffusion({&q.u, &q.v, &q.w}, co.nu, c.z, c.mesh, c.geom, {&dd[0], &dd[1], &dd[2]});
+        gust::momentum_diffusion({&q.u, &q.v, &q.w}, co.nu, c.z, c.mesh, c.geom, {&dd[0], &dd[1], &dd[2]});
         amrex::MultiFab::Copy(d, dd[static_cast<int>(eq)], 0, 0, 1, 0);
     }
     amrex::MultiFab::Subtract(out, d, 0, 0, 1, 0);
@@ -150,11 +150,11 @@ void first_order_operator (Equation eq, ablsteady::State& q, const amrex::Array<
 // operator is a seven-point stencil, so no row sees two perturbed points).
 double line_jacobian_error (const PCase& c, double numax, Equation eq, int dir)
 {
-    ablsteady::State q;
+    gust::State q;
     define_state(q, c);
-    const Flow fl = ablsteady::trtest::make_flow(c, 120);
+    const Flow fl = gust::trtest::make_flow(c, 120);
     for (int d = 0; d < 3; ++d) {
-        ablsteady::trtest::fill_loc(field_of(q, static_cast<Equation>(d)), ablsteady::velocity_loc(d), c,
+        gust::trtest::fill_loc(field_of(q, static_cast<Equation>(d)), gust::velocity_loc(d), c,
                                     [&] (double x, double y, double z) { return 3 * fl.vel(d, x, y, z); });
     }
     fill_random(q.theta, 290, 310, 5, c);
@@ -164,9 +164,9 @@ double line_jacobian_error (const PCase& c, double numax, Equation eq, int dir)
     co.make(c, numax, 7);
 
     amrex::MultiFab tri;
-    ablsteady::line_jacobian(q, co.in, eq, dir, c.mesh, c.geom, tri);
+    gust::line_jacobian(q, co.in, eq, dir, c.mesh, c.geom, tri);
     amrex::Array<amrex::MultiFab, 3> F;
-    ablsteady::transport_fluxes(q.u, q.v, q.w, q.z_phys_nd, c.mesh, c.geom, F);
+    gust::transport_fluxes(q.u, q.v, q.w, q.z_phys_nd, c.mesh, c.geom, F);
 
     amrex::MultiFab& f = field_of(q, eq);
     amrex::MultiFab base(f.boxArray(), c.dm, 1, 0), pert(f.boxArray(), c.dm, 1, 0), save(f.boxArray(), c.dm, 1, f.nGrow());
@@ -204,9 +204,9 @@ double line_jacobian_error (const PCase& c, double numax, Equation eq, int dir)
                 };
                 const amrex::IntVect e = amrex::IntVect::TheDimensionVector(dir);
                 int comp = -1;
-                if (is_col(iv)) { comp = ablsteady::line_diag; }
-                else if (is_col(iv - e)) { comp = ablsteady::line_lower; }
-                else if (is_col(iv + e)) { comp = ablsteady::line_upper; }
+                if (is_col(iv)) { comp = gust::line_diag; }
+                else if (is_col(iv - e)) { comp = gust::line_lower; }
+                else if (is_col(iv + e)) { comp = gust::line_upper; }
                 if (comp < 0) { return; }
                 const double fd = (static_cast<double>(pb(i, j, k)) - static_cast<double>(bb(i, j, k))) / delta;
                 const double co_ = t(i, j, k, comp);
@@ -223,7 +223,7 @@ double line_jacobian_error (const PCase& c, double numax, Equation eq, int dir)
     }
     // The diagonal is never zero; an off-diagonal can be (u > 0 everywhere
     // with no diffusion has no inflow through the high x-face).
-    EXPECT_GT(max_coef[ablsteady::line_diag], 0.0);
+    EXPECT_GT(max_coef[gust::line_diag], 0.0);
     return worst;
 }
 
@@ -249,7 +249,7 @@ TEST(LineJacobian, MatchesFiniteDifferenceJacobian)
 }
 
 // Max |value| over the valid points of every residual field.
-double max_residual (const ablsteady::ResidualFields& R, std::string* which = nullptr)
+double max_residual (const gust::ResidualFields& R, std::string* which = nullptr)
 {
     double m = 0;
     const char* names[6] = {"u", "v", "w", "p", "theta", "tke"};
@@ -274,7 +274,7 @@ double max_residual (const ablsteady::ResidualFields& R, std::string* which = nu
 TEST(Residual, RestOverSteepTerrainIsBalanced)
 {
     PCase c = make_mesh(32, 24, 16, 300);
-    ablsteady::State q;
+    gust::State q;
     define_state(q, c);
     for (auto* mf : {&q.u, &q.v, &q.w, &q.p}) { mf->setVal(0.0); }
     q.tke.setVal(0.2);
@@ -284,14 +284,14 @@ TEST(Residual, RestOverSteepTerrainIsBalanced)
     co.in.theta_ref = linear_profile(290, 0.003);
     {
         amrex::MultiFab t(c.ba, c.dm, 1, 1);
-        ablsteady::fill_theta_ref(co.in.theta_ref, c.z, t);
+        gust::fill_theta_ref(co.in.theta_ref, c.z, t);
         q.theta.setVal(290.0);
         amrex::MultiFab::Copy(q.theta, t, 0, 0, 1, 1);
     }
     co.in.coriolis.enabled = true;
     co.in.coriolis.latitude = 45;
-    ablsteady::ResidualFields R;
-    ablsteady::residual(q, co.in, c.mesh, c.geom, R);
+    gust::ResidualFields R;
+    gust::residual(q, co.in, c.mesh, c.geom, R);
     // Momentum, continuity and k (theta itself diffuses: a stratified profile
     // with a varying diffusivity is not steady, and is not part of the check).
     for (const amrex::MultiFab* mf : {&R.u, &R.v, &R.w, &R.p, &R.tke}) {
@@ -305,10 +305,10 @@ TEST(Residual, RestOverSteepTerrainIsBalanced)
     // slope: 0.5 % of the buoyancy (1.6e-3 m/s^2) measured on this mesh.
     co.in.theta_ref = constant_profile(300);
     const double gt = 9.81 / 300.0;
-    ablsteady::trtest::fill_loc(q.p, Loc::cell, c, [&] (double, double, double z) {
+    gust::trtest::fill_loc(q.p, Loc::cell, c, [&] (double, double, double z) {
         return gt * (-10 * z + 0.0015 * z * z);
     });
-    ablsteady::residual(q, co.in, c.mesh, c.geom, R);
+    gust::residual(q, co.in, c.mesh, c.geom, R);
     const double buoyancy = gt * 10;
     const int nz = c.geom.Domain().length(2);
     double rw_inner = 0;
@@ -336,11 +336,11 @@ TEST(Residual, RestOverSteepTerrainIsBalanced)
 TEST(Jvp, MatchesTheJacobianOnAColumn)
 {
     PCase c = make_mesh(4, 4, 32, 0);
-    ablsteady::State q, v;
+    gust::State q, v;
     define_state(q, c);
     define_state(v, c);
     auto column = [&] (amrex::MultiFab& mf, Loc loc, auto fn) {
-        ablsteady::trtest::fill_loc(mf, loc, c, [&] (double, double, double z) { return fn(z); });
+        gust::trtest::fill_loc(mf, loc, c, [&] (double, double, double z) { return fn(z); });
     };
     column(q.u, Loc::xface, [] (double z) { return 8 * (1 - std::exp(-(z + 30) / 120)); });
     column(q.v, Loc::yface, [] (double z) { return 2 * std::sin(z / 300); });
@@ -366,11 +366,11 @@ TEST(Jvp, MatchesTheJacobianOnAColumn)
     co.in.coriolis.geostrophic = true;
     co.in.coriolis.ug = 10;
 
-    ablsteady::ResidualFields Jv, R0, R1;
-    ablsteady::residual(q, co.in, c.mesh, c.geom, R0);
-    const amrex::Real eps = ablsteady::jvp(q, v, co.in, c.mesh, c.geom, Jv, &R0);
+    gust::ResidualFields Jv, R0, R1;
+    gust::residual(q, co.in, c.mesh, c.geom, R0);
+    const amrex::Real eps = gust::jvp(q, v, co.in, c.mesh, c.geom, Jv, &R0);
     EXPECT_GT(eps, 0);
-    ablsteady::State qv;
+    gust::State qv;
     define_state(qv, c);
     const amrex::Vector<amrex::MultiFab*> qf{&q.u, &q.v, &q.w, &q.p, &q.theta, &q.tke};
     const amrex::Vector<amrex::MultiFab*> vf{&v.u, &v.v, &v.w, &v.p, &v.theta, &v.tke};
@@ -378,7 +378,7 @@ TEST(Jvp, MatchesTheJacobianOnAColumn)
     for (int n = 0; n < static_cast<int>(qf.size()); ++n) {
         amrex::MultiFab::LinComb(*pf[n], 1, *qf[n], 0, 1, *vf[n], 0, 0, 1, qf[n]->nGrow());
     }
-    ablsteady::residual(qv, co.in, c.mesh, c.geom, R1);
+    gust::residual(qv, co.in, c.mesh, c.geom, R1);
     auto jf = Jv.fields();
     auto f1 = R1.fields();
     const auto f0 = std::as_const(R0).fields();
@@ -395,12 +395,12 @@ TEST(Jvp, MatchesTheJacobianOnAColumn)
 
     // v = 0 gives 0, and the step is returned as 0.
     for (auto* mf : vf) { mf->setVal(0.0); }
-    EXPECT_EQ(ablsteady::jvp(q, v, co.in, c.mesh, c.geom, Jv, &R0), 0);
+    EXPECT_EQ(gust::jvp(q, v, co.in, c.mesh, c.geom, Jv, &R0), 0);
     EXPECT_EQ(max_residual(Jv), 0.0);
 }
 
 // Max over every field of |a - b| and of |b|.
-std::pair<double, double> max_diff (const ablsteady::ResidualFields& a, const ablsteady::ResidualFields& b)
+std::pair<double, double> max_diff (const gust::ResidualFields& a, const gust::ResidualFields& b)
 {
     const auto fa = a.fields();
     const auto fb = b.fields();
@@ -416,7 +416,7 @@ std::pair<double, double> max_diff (const ablsteady::ResidualFields& a, const ab
 
 // Sum over every field of the L1 norms of a - b and of b (shared face points
 // weighted once, via the periodicity).
-std::pair<double, double> l1_diff (const ablsteady::ResidualFields& a, const ablsteady::ResidualFields& b,
+std::pair<double, double> l1_diff (const gust::ResidualFields& a, const gust::ResidualFields& b,
                                    const amrex::Periodicity& per)
 {
     const auto fa = a.fields();
@@ -432,10 +432,10 @@ std::pair<double, double> l1_diff (const ablsteady::ResidualFields& a, const abl
 }
 
 // (R(q + h v) - R(q + l v)) / (h - l), the state built on q's layout.
-void difference (const ablsteady::State& q, const ablsteady::State& v, double h, double l, const Coefficients& co,
-                 const PCase& c, ablsteady::ResidualFields& out)
+void difference (const gust::State& q, const gust::State& v, double h, double l, const Coefficients& co,
+                 const PCase& c, gust::ResidualFields& out)
 {
-    ablsteady::State a, b;
+    gust::State a, b;
     define_state(a, c);
     define_state(b, c);
     const amrex::Vector<const amrex::MultiFab*> qf{&q.u, &q.v, &q.w, &q.p, &q.theta, &q.tke};
@@ -447,9 +447,9 @@ void difference (const ablsteady::State& q, const ablsteady::State& v, double h,
         amrex::MultiFab::LinComb(*af[n], 1, *qf[n], 0, static_cast<amrex::Real>(h), *vf[n], 0, 0, 1, ng);
         amrex::MultiFab::LinComb(*bf[n], 1, *qf[n], 0, static_cast<amrex::Real>(l), *vf[n], 0, 0, 1, ng);
     }
-    ablsteady::ResidualFields Rb;
-    ablsteady::residual(a, co.in, c.mesh, c.geom, out);
-    ablsteady::residual(b, co.in, c.mesh, c.geom, Rb);
+    gust::ResidualFields Rb;
+    gust::residual(a, co.in, c.mesh, c.geom, out);
+    gust::residual(b, co.in, c.mesh, c.geom, Rb);
     auto fout = out.fields();
     const auto fr = std::as_const(Rb).fields();
     for (int n = 0; n < static_cast<int>(fout.size()); ++n) {
@@ -470,35 +470,35 @@ void difference (const ablsteady::State& q, const ablsteady::State& v, double h,
 TEST(Jvp, MatchesACentralDifferenceOnTheHill)
 {
     PCase c = make_mesh(32, 24, 16, 120);
-    const Flow fl = ablsteady::trtest::make_flow(c, 120);
-    ablsteady::State q, v;
+    const Flow fl = gust::trtest::make_flow(c, 120);
+    gust::State q, v;
     define_state(q, c);
     define_state(v, c);
     for (int d = 0; d < 3; ++d) {
-        ablsteady::trtest::fill_loc(field_of(q, static_cast<Equation>(d)), ablsteady::velocity_loc(d), c,
+        gust::trtest::fill_loc(field_of(q, static_cast<Equation>(d)), gust::velocity_loc(d), c,
                                     [&] (double x, double y, double z) { return fl.vel(d, x, y, z); });
-        ablsteady::trtest::fill_loc(field_of(v, static_cast<Equation>(d)), ablsteady::velocity_loc(d), c,
+        gust::trtest::fill_loc(field_of(v, static_cast<Equation>(d)), gust::velocity_loc(d), c,
                                     [&] (double x, double, double z) { return std::sin(x / 150 + d) * std::cos(z / 90); });
     }
-    ablsteady::trtest::fill_loc(q.theta, Loc::cell, c, [&] (double x, double y, double z) { return 295 + 2 * fl.q(x, y, z); });
-    ablsteady::trtest::fill_loc(q.tke, Loc::cell, c, [&] (double x, double y, double z) { return 0.2 + 0.1 * fl.q(x, y, z); });
-    ablsteady::trtest::fill_loc(q.p, Loc::cell, c, [&] (double x, double y, double z) { return 3 * fl.q(x, y, z); });
-    ablsteady::trtest::fill_loc(v.theta, Loc::cell, c, [&] (double x, double, double z) { return std::cos(x / 120 - z / 60); });
-    ablsteady::trtest::fill_loc(v.tke, Loc::cell, c, [&] (double x, double, double z) { return 0.05 * std::sin(x / 100 + z / 70); });
-    ablsteady::trtest::fill_loc(v.p, Loc::cell, c, [&] (double, double y, double z) { return 0.5 * std::sin(y / 80 + z / 50); });
+    gust::trtest::fill_loc(q.theta, Loc::cell, c, [&] (double x, double y, double z) { return 295 + 2 * fl.q(x, y, z); });
+    gust::trtest::fill_loc(q.tke, Loc::cell, c, [&] (double x, double y, double z) { return 0.2 + 0.1 * fl.q(x, y, z); });
+    gust::trtest::fill_loc(q.p, Loc::cell, c, [&] (double x, double y, double z) { return 3 * fl.q(x, y, z); });
+    gust::trtest::fill_loc(v.theta, Loc::cell, c, [&] (double x, double, double z) { return std::cos(x / 120 - z / 60); });
+    gust::trtest::fill_loc(v.tke, Loc::cell, c, [&] (double x, double, double z) { return 0.05 * std::sin(x / 100 + z / 70); });
+    gust::trtest::fill_loc(v.p, Loc::cell, c, [&] (double, double y, double z) { return 0.5 * std::sin(y / 80 + z / 50); });
     Coefficients co;
     co.make(c, 5, 9);
-    co.in.momentum.limiter = ablsteady::Limiter::van_albada;
+    co.in.momentum.limiter = gust::Limiter::van_albada;
     co.in.momentum.smooth_eps = 1e6;
     co.in.theta = co.in.momentum;
     co.in.theta_ref = linear_profile(295, 0.003);
     co.in.coriolis.enabled = true;
     co.in.coriolis.latitude = 45;
 
-    ablsteady::ResidualFields Jv, Jv0, R0, ref, big;
-    const double eps = ablsteady::jvp(q, v, co.in, c.mesh, c.geom, Jv);
-    ablsteady::residual(q, co.in, c.mesh, c.geom, R0);
-    ablsteady::jvp(q, v, co.in, c.mesh, c.geom, Jv0, &R0);
+    gust::ResidualFields Jv, Jv0, R0, ref, big;
+    const double eps = gust::jvp(q, v, co.in, c.mesh, c.geom, Jv);
+    gust::residual(q, co.in, c.mesh, c.geom, R0);
+    gust::jvp(q, v, co.in, c.mesh, c.geom, Jv0, &R0);
     EXPECT_EQ(max_diff(Jv, Jv0).first, 0.0);
     difference(q, v, eps / 10, -eps / 10, co, c, ref);
     const double mult = tol(1e5, 1e3);
@@ -525,23 +525,23 @@ TEST(Jvp, StepIsScaledAndIndependentOfTheLayout)
         cc.in = c0.in;
         cc.in.mesh.max_grid_size = {run == 1 ? 8 : 16, run == 1 ? 8 : 16};
         cc.make([&] (double x, double y) { return 120 * 0.25 * (1 - std::cos(2 * M_PI * x / 1000)) * (1 - std::cos(2 * M_PI * y / 800)); });
-        ablsteady::trtest::smooth_vertical_ghost_nodes(cc);
+        gust::trtest::smooth_vertical_ghost_nodes(cc);
         const PCase& c = cc;
-        const Flow fl = ablsteady::trtest::make_flow(c, 120);
-        ablsteady::State q, v;
+        const Flow fl = gust::trtest::make_flow(c, 120);
+        gust::State q, v;
         define_state(q, c);
         define_state(v, c);
         const double kmul = (run == 2) ? 100 : 1;
         for (int d = 0; d < 3; ++d) {
-            ablsteady::trtest::fill_loc(field_of(q, static_cast<Equation>(d)), ablsteady::velocity_loc(d), c,
+            gust::trtest::fill_loc(field_of(q, static_cast<Equation>(d)), gust::velocity_loc(d), c,
                                         [&] (double x, double y, double z) { return fl.vel(d, x, y, z); });
-            ablsteady::trtest::fill_loc(field_of(v, static_cast<Equation>(d)), ablsteady::velocity_loc(d), c,
+            gust::trtest::fill_loc(field_of(v, static_cast<Equation>(d)), gust::velocity_loc(d), c,
                                         [&] (double x, double, double z) { return std::sin(x / 150 + d) * std::cos(z / 90); });
         }
         const double tshift = (run == 3) ? 100 : 0;
-        ablsteady::trtest::fill_loc(q.theta, Loc::cell, c, [&] (double x, double y, double z) { return tshift + 295 + 2 * fl.q(x, y, z); });
-        ablsteady::trtest::fill_loc(q.tke, Loc::cell, c, [&] (double x, double y, double z) { return kmul * (0.2 + 0.1 * fl.q(x, y, z)); });
-        ablsteady::trtest::fill_loc(v.tke, Loc::cell, c, [&] (double x, double, double z) { return kmul * 0.05 * std::sin(x / 100 + z / 70); });
+        gust::trtest::fill_loc(q.theta, Loc::cell, c, [&] (double x, double y, double z) { return tshift + 295 + 2 * fl.q(x, y, z); });
+        gust::trtest::fill_loc(q.tke, Loc::cell, c, [&] (double x, double y, double z) { return kmul * (0.2 + 0.1 * fl.q(x, y, z)); });
+        gust::trtest::fill_loc(v.tke, Loc::cell, c, [&] (double x, double, double z) { return kmul * 0.05 * std::sin(x / 100 + z / 70); });
         q.p.setVal(1.0);
         v.p.setVal(0.0);
         v.theta.setVal(0.0);
@@ -549,8 +549,8 @@ TEST(Jvp, StepIsScaledAndIndependentOfTheLayout)
         co.make(c, 5, 9);
         co.in.theta_ref = linear_profile(295 + tshift, 0.003);
         co.in.jvp_scales.tke *= static_cast<amrex::Real>(kmul);
-        ablsteady::ResidualFields Jv;
-        eps[run] = static_cast<double>(ablsteady::jvp(q, v, co.in, c.mesh, c.geom, Jv));
+        gust::ResidualFields Jv;
+        eps[run] = static_cast<double>(gust::jvp(q, v, co.in, c.mesh, c.geom, Jv));
     }
     EXPECT_NEAR(eps[1], eps[0], tol(1e-12, 1e-5) * eps[0]) << "layout";
     EXPECT_NEAR(eps[2], eps[0], tol(1e-12, 1e-5) * eps[0]) << "k scale";
@@ -566,7 +566,7 @@ TEST(Jvp, StepIsScaledAndIndependentOfTheLayout)
 TEST(Residual, SourcesHaveTheirClosedForms)
 {
     PCase c = make_mesh(16, 12, 8, 0);
-    ablsteady::State q;
+    gust::State q;
     define_state(q, c);
     Coefficients co;
     co.make(c, 0, 2);
@@ -583,9 +583,9 @@ TEST(Residual, SourcesHaveTheirClosedForms)
     co.in.coriolis.vg = 1;
     const double fc = 4 * M_PI / 86400.0;
     const double f = fc * std::sin(M_PI / 6), fcos = fc * std::cos(M_PI / 6);
-    EXPECT_NEAR(static_cast<double>(ablsteady::coriolis_parameter(co.in.coriolis)), 7.27221e-5, 1e-9);
-    ablsteady::ResidualFields R;
-    ablsteady::residual(q, co.in, c.mesh, c.geom, R);
+    EXPECT_NEAR(static_cast<double>(gust::coriolis_parameter(co.in.coriolis)), 7.27221e-5, 1e-9);
+    gust::ResidualFields R;
+    gust::residual(q, co.in, c.mesh, c.geom, R);
     const double ru = -(f * (-2.0 - 1.0) - fcos * 0.5), rv = f * (7.0 - 5.0), rw = -9.81 * 2.0 / 300.0 - fcos * 7.0;
     EXPECT_NEAR(static_cast<double>(R.u.max(0)), ru, tol(1e-15, 1e-9));
     EXPECT_NEAR(static_cast<double>(R.u.min(0)), ru, tol(1e-15, 1e-9));
@@ -599,7 +599,7 @@ TEST(Residual, SourcesHaveTheirClosedForms)
     q.v.setVal(1.0);
     q.w.setVal(0.0);
     q.theta.setVal(300.0);
-    ablsteady::residual(q, co.in, c.mesh, c.geom, R);
+    gust::residual(q, co.in, c.mesh, c.geom, R);
     EXPECT_LE(max_residual(R), tol(1e-15, 1e-7));
 }
 
@@ -610,54 +610,54 @@ TEST(Residual, SourcesHaveTheirClosedForms)
 TEST(Residual, IsTheSumOfItsParts)
 {
     PCase c = make_mesh(32, 24, 16, 120);
-    const Flow fl = ablsteady::trtest::make_flow(c, 120);
-    ablsteady::State q;
+    const Flow fl = gust::trtest::make_flow(c, 120);
+    gust::State q;
     define_state(q, c);
     for (int d = 0; d < 3; ++d) {
-        ablsteady::trtest::fill_loc(field_of(q, static_cast<Equation>(d)), ablsteady::velocity_loc(d), c,
+        gust::trtest::fill_loc(field_of(q, static_cast<Equation>(d)), gust::velocity_loc(d), c,
                                     [&] (double x, double y, double z) { return fl.vel(d, x, y, z); });
     }
-    ablsteady::trtest::fill_loc(q.theta, Loc::cell, c, [&] (double x, double y, double z) { return 296 + 2 * fl.q(x, y, z); });
-    ablsteady::trtest::fill_loc(q.tke, Loc::cell, c, [&] (double x, double y, double z) { return 0.2 + 0.1 * fl.q(x, y, z); });
-    ablsteady::trtest::fill_loc(q.p, Loc::cell, c, [&] (double x, double y, double z) { return 4 * fl.q(x, y, z); });
+    gust::trtest::fill_loc(q.theta, Loc::cell, c, [&] (double x, double y, double z) { return 296 + 2 * fl.q(x, y, z); });
+    gust::trtest::fill_loc(q.tke, Loc::cell, c, [&] (double x, double y, double z) { return 0.2 + 0.1 * fl.q(x, y, z); });
+    gust::trtest::fill_loc(q.p, Loc::cell, c, [&] (double x, double y, double z) { return 4 * fl.q(x, y, z); });
     Coefficients co;
     co.make(c, 5, 13);
     co.in.theta_ref = linear_profile(295, 0.004);
     co.in.coriolis.enabled = true;
     co.in.coriolis.latitude = 30;
-    ablsteady::ResidualFields R;
-    ablsteady::residual(q, co.in, c.mesh, c.geom, R);
+    gust::ResidualFields R;
+    gust::residual(q, co.in, c.mesh, c.geom, R);
 
     amrex::Array<amrex::MultiFab, 3> F, C, D, G;
-    ablsteady::transport_fluxes(q.u, q.v, q.w, q.z_phys_nd, c.mesh, c.geom, F);
+    gust::transport_fluxes(q.u, q.v, q.w, q.z_phys_nd, c.mesh, c.geom, F);
     const amrex::Array<const amrex::MultiFab*, 3> Fp{&F[0], &F[1], &F[2]};
     for (int d = 0; d < 3; ++d) {
         for (auto* mf : {&C[d], &D[d], &G[d]}) { mf->define(field_of(q, static_cast<Equation>(d)).boxArray(), c.dm, 1, 0); }
-        ablsteady::convection(ablsteady::velocity_loc(d), field_of(q, static_cast<Equation>(d)), Fp, co.in.momentum,
+        gust::convection(gust::velocity_loc(d), field_of(q, static_cast<Equation>(d)), Fp, co.in.momentum,
                               c.mesh, c.geom, C[d]);
     }
-    ablsteady::momentum_diffusion({&q.u, &q.v, &q.w}, co.nu, c.z, c.mesh, c.geom, {&D[0], &D[1], &D[2]});
-    ablsteady::pressure_gradient(q.p, c.z, c.mesh, c.geom, {&G[0], &G[1], &G[2]});
+    gust::momentum_diffusion({&q.u, &q.v, &q.w}, co.nu, c.z, c.mesh, c.geom, {&D[0], &D[1], &D[2]});
+    gust::pressure_gradient(q.p, c.z, c.mesh, c.geom, {&G[0], &G[1], &G[2]});
     for (int d = 0; d < 3; ++d) {
         amrex::MultiFab::Subtract(C[d], D[d], 0, 0, 1, 0);
         amrex::MultiFab::Add(C[d], G[d], 0, 0, 1, 0);
     }
     amrex::MultiFab tref(c.ba, c.dm, 1, 1);
-    ablsteady::fill_theta_ref(co.in.theta_ref, c.z, tref);
-    ablsteady::subtract_buoyancy(q.theta, tref, co.in.buoyancy, c.mesh, C[2]);
-    ablsteady::subtract_coriolis(q.u, q.v, q.w, co.in.coriolis, c.mesh, C[0], C[1], C[2]);
+    gust::fill_theta_ref(co.in.theta_ref, c.z, tref);
+    gust::subtract_buoyancy(q.theta, tref, co.in.buoyancy, c.mesh, C[2]);
+    gust::subtract_coriolis(q.u, q.v, q.w, co.in.coriolis, c.mesh, C[0], C[1], C[2]);
     for (int d = 0; d < 3; ++d) { C[d].OverrideSync(c.geom.periodicity()); }
     amrex::MultiFab div(c.ba, c.dm, 1, 0), ct(c.ba, c.dm, 1, 0), dt(c.ba, c.dm, 1, 0), ck(c.ba, c.dm, 1, 0),
         dk(c.ba, c.dm, 1, 0);
-    ablsteady::velocity_divergence(q.u, q.v, q.w, c.z, c.mesh, c.geom, div);
-    ablsteady::convection(Loc::cell, q.theta, Fp, co.in.theta, c.mesh, c.geom, ct);
-    ablsteady::scalar_diffusion(q.theta, co.gt, c.z, c.mesh, c.geom, dt);
+    gust::velocity_divergence(q.u, q.v, q.w, c.z, c.mesh, c.geom, div);
+    gust::convection(Loc::cell, q.theta, Fp, co.in.theta, c.mesh, c.geom, ct);
+    gust::scalar_diffusion(q.theta, co.gt, c.z, c.mesh, c.geom, dt);
     amrex::MultiFab::Subtract(ct, dt, 0, 0, 1, 0);
-    ablsteady::ConvectionOptions kopt;
-    kopt.limiter = ablsteady::Limiter::upwind;
+    gust::ConvectionOptions kopt;
+    kopt.limiter = gust::Limiter::upwind;
     kopt.bounded = true;
-    ablsteady::convection(Loc::cell, q.tke, Fp, kopt, c.mesh, c.geom, ck);
-    ablsteady::scalar_diffusion(q.tke, co.gk, c.z, c.mesh, c.geom, dk);
+    gust::convection(Loc::cell, q.tke, Fp, kopt, c.mesh, c.geom, ck);
+    gust::scalar_diffusion(q.tke, co.gk, c.z, c.mesh, c.geom, dk);
     amrex::MultiFab::Subtract(ck, dk, 0, 0, 1, 0);
 
     const amrex::MultiFab* expect[6] = {&C[0], &C[1], &C[2], &div, &ct, &ck};
@@ -675,57 +675,57 @@ TEST(Residual, IsTheSumOfItsParts)
 // Option and input checks name what is wrong, and the residual stops on them.
 TEST(Residual, InvalidInputsAreRefused)
 {
-    ablsteady::CoriolisOptions co;
-    EXPECT_TRUE(ablsteady::check_coriolis_options(co).empty());
+    gust::CoriolisOptions co;
+    EXPECT_TRUE(gust::check_coriolis_options(co).empty());
     co.latitude = 91;
-    EXPECT_NE(ablsteady::check_coriolis_options(co).at(0).find("latitude"), std::string::npos);
+    EXPECT_NE(gust::check_coriolis_options(co).at(0).find("latitude"), std::string::npos);
     co.latitude = std::numeric_limits<amrex::Real>::quiet_NaN();
-    EXPECT_NE(ablsteady::check_coriolis_options(co).at(0).find("latitude"), std::string::npos);
+    EXPECT_NE(gust::check_coriolis_options(co).at(0).find("latitude"), std::string::npos);
     co.latitude = 0;
     co.rotation_period = 0;
-    EXPECT_NE(ablsteady::check_coriolis_options(co).at(0).find("rotation_period"), std::string::npos);
+    EXPECT_NE(gust::check_coriolis_options(co).at(0).find("rotation_period"), std::string::npos);
     co.rotation_period = 86164;
     co.geostrophic = true;
-    EXPECT_NE(ablsteady::check_coriolis_options(co).at(0).find("geostrophic"), std::string::npos);
+    EXPECT_NE(gust::check_coriolis_options(co).at(0).find("geostrophic"), std::string::npos);
     co.enabled = true;   // latitude 0: f = 0
-    EXPECT_NE(ablsteady::check_coriolis_options(co).at(0).find("latitude 0"), std::string::npos);
+    EXPECT_NE(gust::check_coriolis_options(co).at(0).find("latitude 0"), std::string::npos);
     co.geostrophic = false;
     co.ug = 3;           // set but unused
-    EXPECT_NE(ablsteady::check_coriolis_options(co).at(0).find("ignored"), std::string::npos);
+    EXPECT_NE(gust::check_coriolis_options(co).at(0).find("ignored"), std::string::npos);
     co.ug = 0;
-    EXPECT_TRUE(ablsteady::check_coriolis_options(co).empty());
-    ablsteady::ReferenceProfile prof = linear_profile(300, 0.003);
-    EXPECT_TRUE(ablsteady::check_reference_profile(prof).empty());
+    EXPECT_TRUE(gust::check_coriolis_options(co).empty());
+    gust::ReferenceProfile prof = linear_profile(300, 0.003);
+    EXPECT_TRUE(gust::check_reference_profile(prof).empty());
     prof.z[1] = prof.z[0];
-    EXPECT_NE(ablsteady::check_reference_profile(prof).at(0).find("increase"), std::string::npos);
+    EXPECT_NE(gust::check_reference_profile(prof).at(0).find("increase"), std::string::npos);
     prof.z.clear();
-    EXPECT_FALSE(ablsteady::check_reference_profile(prof).empty());
-    ablsteady::BuoyancyOptions bo;
-    EXPECT_TRUE(ablsteady::check_buoyancy_options(bo).empty());
+    EXPECT_FALSE(gust::check_reference_profile(prof).empty());
+    gust::BuoyancyOptions bo;
+    EXPECT_TRUE(gust::check_buoyancy_options(bo).empty());
     bo.theta0 = 0;
-    EXPECT_NE(ablsteady::check_buoyancy_options(bo).at(0).find("theta0"), std::string::npos);
+    EXPECT_NE(gust::check_buoyancy_options(bo).at(0).find("theta0"), std::string::npos);
     bo.theta0 = 300;
     bo.gravity = -1;
-    EXPECT_NE(ablsteady::check_buoyancy_options(bo).at(0).find("gravity"), std::string::npos);
+    EXPECT_NE(gust::check_buoyancy_options(bo).at(0).find("gravity"), std::string::npos);
 
     PCase c = make_mesh(16, 12, 8, 0);
-    ablsteady::State q;
+    gust::State q;
     define_state(q, c);
     for (auto* mf : {&q.u, &q.v, &q.w, &q.p, &q.theta, &q.tke}) { mf->setVal(1.0); }
     Coefficients cf;
     cf.make(c, 1, 4);
-    ablsteady::ResidualFields R;
+    gust::ResidualFields R;
     auto in = cf.in;
-    in.theta_ref = ablsteady::ReferenceProfile{};
-    EXPECT_THROW(ablsteady::residual(q, in, c.mesh, c.geom, R), std::runtime_error);
+    in.theta_ref = gust::ReferenceProfile{};
+    EXPECT_THROW(gust::residual(q, in, c.mesh, c.geom, R), std::runtime_error);
     in = cf.in;
     in.coriolis.latitude = 100;
-    EXPECT_THROW(ablsteady::residual(q, in, c.mesh, c.geom, R), std::runtime_error);
+    EXPECT_THROW(gust::residual(q, in, c.mesh, c.geom, R), std::runtime_error);
     in = cf.in;
     in.momentum.smooth_eps = 0;
-    EXPECT_THROW(ablsteady::residual(q, in, c.mesh, c.geom, R), std::runtime_error);
+    EXPECT_THROW(gust::residual(q, in, c.mesh, c.geom, R), std::runtime_error);
     amrex::MultiFab tri;
-    EXPECT_THROW(ablsteady::line_jacobian(q, cf.in, Equation::u, 3, c.mesh, c.geom, tri), std::runtime_error);
+    EXPECT_THROW(gust::line_jacobian(q, cf.in, Equation::u, 3, c.mesh, c.geom, tri), std::runtime_error);
 }
 
 } // namespace
