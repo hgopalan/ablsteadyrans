@@ -154,7 +154,7 @@ on two ranks (four for the 3-D hill).
      - 2840
      - :math:`u_*` = 0.377 m/s; ERF's ``check_neutral.py --physics`` passes
    * - 2-D hill
-     - 4590 (Jacobi); 3077 (LU-SGS)
+     - 4576 (Jacobi); 3048 (LU-SGS)
      - crest speed-up 0.59 / 0.50 / 0.43; ERF's ``check_hill.py --physics`` passes
    * - 3-D hill
      - 2092 (Jacobi); 823 (LU-SGS)
@@ -163,18 +163,19 @@ on two ranks (four for the 3-D hill).
      - 8635
      - within 0.37 m/s of ERF's 24 h run in :math:`u`
    * - Askervein, coarse mesh
-     - 156
+     - 175
      - convergence only (below)
 
-The column, flat, 2-D hill (LU-SGS) and Askervein counts were re-measured on ``main`` at commit ``7bf696c``
-(October 2026). The other numbers on this page were measured when each feature was added; later changes to the
+The column, flat, 2-D hill and Askervein counts were re-measured with the closure's inflow length
+(``bc.inflow_tke_length = closure``, October 2026); the column and the flat case do not change. The other numbers on this page were measured when each feature was added; later changes to the
 code shift iteration counts by up to about 1 % (for example 3062 → 3077 on the 2-D hill).
 
 The crest speed-ups are those of the z-line Jacobi runs (16 sweeps, CFL cap 4). The LU-SGS runs reach the same
 steady state to the convergence tolerance, and ERF's checks pass for both (`Line LU-SGS`_).
 
 **Askervein.** The coarse mesh (30 × 30 × 18) with a log-law inflow, outflow and slip sides and no Coriolis reaches
-the verdict after 156 iterations (2 s on two ranks). The residual is largest in the two columns next to the outflow,
+the verdict after 175 iterations (2 s on two ranks; 156 with the inflow length of before,
+``bc.inflow_tke_length = unbounded``). The residual is largest in the two columns next to the outflow,
 but keeps falling there with a tighter tolerance (1e-9 after 706 iterations), so the outflow needs no sponge. The
 comparison with ERF's unsteady RANS on lines A and AA uses ERF's own setup on the full mesh (:ref:`phase2-checkpoint`).
 
@@ -614,7 +615,9 @@ Grid sequencing
 ^^^^^^^^^^^^^^^
 
 *Setup.* ``steady.sequencing = 1`` (:doc:`solution_algorithm`). Level-0 iterations to the normal convergence criteria,
-with the coarse-level iterations in brackets (coarsest first). Default settings unless noted.
+with the coarse-level iterations in brackets (coarsest first). Default settings unless noted, measured with the
+inflow length of before (``bc.inflow_tke_length = unbounded``); with the closure's length ``Neutral_Hill_3D`` on
+three levels needs 742 (371, 52).
 
 .. list-table::
    :header-rows: 1
@@ -697,6 +700,8 @@ Phase 2 checkpoint
 
 *Setup.* Askervein on ERF's mesh (300 × 300 × 18 cells, 20 m, a 20 m first layer stretched by 1.08), the neutral
 deck of RT-1.16.3 (``inputs_steady_askervein``, wind along x) unless noted, 8 ranks, 25 boxes of 64 × 64 columns.
+The tables were measured with the inflow length of before (``bc.inflow_tke_length = unbounded``); the comparison
+with ERF below gives both.
 Iterations to the steady verdict, measured on one CPU (Apple M2 Pro) with other jobs running; wall times and
 allocation units are left for Kestrel. "Not steady" means no verdict within the iteration limit (1000 or 2000).
 
@@ -936,17 +941,24 @@ ablsteady runs the same setup (``Tests/Real_Terrain/Askervein_210``):
      - +3.0 % / +1.5 %
      - +0.9 to +1.5 %
      - −4.9 to −7.5 %
-   * - **Phase 2 (lusgs and its default cap 8, the default K = 5, with steady.sequencing = 1 on 2 levels)**
-     - **96 (42)**
+   * - Phase 2 (``lusgs`` and its default cap 8, the default :math:`K` = 5, ``steady.sequencing = 1`` on 2 levels),
+       ``bc.inflow_tke_length = unbounded``
+     - 96 (42)
      - +3.0 % / +1.5 %
      - +0.9 to +1.5 %
      - −4.9 to −7.5 %
+   * - **The same with the closure's inflow length (the default)**
+     - **95 (34)**
+     - +1.9 % / +0.4 %
+     - −0.4 to −0.6 %
+     - −6.6 to −9.2 %
 
 *Findings.*
 
 - The two configurations reach the same lines (to 1e-4 %); the Phase 2 configuration needs 5.6 times fewer
   level-0 iterations.
-- Up to 300 m past the hilltop every mast is within 4.5 % of ERF; the four lee masts beyond are 4.9–7.5 % slower.
+- Up to 300 m past the hilltop every mast is within 4.5 % of ERF (4.0 % with the closure's inflow length); the four
+  lee masts beyond are 4.9–7.5 % slower (6.6–9.2 %).
   ablsteady's second-order advection (MUSCL with van Leer) against ERF's fifth order sets the wake there; the
   same trend (second-order upwind gives lower lee speeds than a higher-order scheme) is reported for WindNinja by
   Wagenbrenner et al. (2019).
@@ -954,11 +966,11 @@ ablsteady runs the same setup (``Tests/Real_Terrain/Askervein_210``):
 - The speeds are sampled 10 m above the ground, linear in :math:`\ln(z + z_0)` between the two cell centres
   around 10 m (``tools/askervein_lines.py``), the same way for both codes; the ground under a column is ERF's
   terrain file, within 1.4 m of the mesh's own ground at the mast columns.
-- The upwind and hilltop excess comes from the inflow :math:`k`. ablsteady's inflow :math:`k` is the log-law
-  equilibrium with the unbounded length :math:`\kappa(z + z_0)`, which grows with height on ERF's power-law
-  profile (about 9 m²/s² at 316 m, against 0.31 in ERF). With the closure's capped length
-  (``turb.max_geom_lscale``) in the inflow table the upwind masts agree within 0.6 % and the hilltops within 2 %;
-  the lee masts move further (to −9.2 %). That change is not in this version.
+- The upwind and hilltop excess came from the inflow :math:`k`: with the unbounded length :math:`\kappa(z + z_0)`
+  it grew with height on ERF's power-law profile (about 9 m²/s² at 316 m, against 0.31 in ERF). The closure's
+  capped length (``bc.inflow_tke_length = closure``, the default) gives 0.31; the upwind masts then agree within
+  0.6 % and the hilltops within 2 %. With less turbulence coming in, the wake mixes less and the lee masts move
+  further (to −9.2 %).
 
 Newton–Krylov (in development)
 ------------------------------

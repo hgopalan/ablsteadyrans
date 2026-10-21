@@ -587,11 +587,11 @@ Current tests
        the ridge, finite fields, k ≥ 0, the length-scale bound, the wall cell's k balance, the crest speed-up in the
        three lowest cells within 0.2–0.8 (Jackson and Hunt's 0.4), the speed-up positive in the lowest ten, the
        upstream u* within 0.25–0.55 m/s, the upstream log law in the lowest three cells within 15 %. Measured: the
-       verdict after 4590 iterations (49 s on two ranks), speed-up 0.59/0.50/0.43, u* = 0.354 m/s, every check
+       verdict after 4576 iterations (49 s on two ranks), speed-up 0.59/0.50/0.43, u* = 0.354 m/s, every check
        passing (:doc:`solution_algorithm`). Label ``regression``; double only.
    * - ``rt_steady_hill2d_lusgs``
      - RT-2.1.1: the 2-D hill with the line LU-SGS sweeps (``inputs_steady_hill2d_lusgs``: two symmetric sweeps,
-       CFL cap 16) to the verdict with a two-order drop and ERF's ``check_hill.py --physics``. Measured: 3062
+       CFL cap 16) to the verdict with a two-order drop and ERF's ``check_hill.py --physics``. Measured: 3048
        iterations (23 s on two ranks), every check passing, the steady state within the convergence tolerance of
        the Jacobi deck's (:doc:`results`). Label ``regression``; double only; since 2.1b it runs in the column
        test's directory (``run/rt_steady_hill2d_column``) so the spin-up check can read both histories.
@@ -643,7 +643,7 @@ Current tests
    * - ``rt_steady_askervein``
      - RT-1.16.3, the convergence half: Askervein on the ERF grid of RT-1.12.1 (``inputs_steady_askervein``: 30 × 30
        × 18, the log-law inflow, outflow, slip sides, no Coriolis, four sweeps, cap 2) to the steady verdict.
-       Measured: 156 iterations, unchanged by the ``gmres_mlmg`` default. ``init.alpha_v = 0.5``, so the log
+       Measured: 175 iterations (156 with ``bc.inflow_tke_length = unbounded``). ``init.alpha_v = 0.5``, so the log
        must show the projection on ``gmres_fft`` and the stage on ``gmres_mlmg``. The 5 % comparison with ERF's URANS
        on lines A and AA is not in this version (Kestrel). Labels ``regression;smoke``; double only.
    * - ``rt_precursor_askervein_cnbl``, ``rt_precursor_askervein_cnbl_fixed``, ``rt_precursor_askervein_cnbl_table``
@@ -664,7 +664,7 @@ Current tests
    * - ``rt_steady_askervein_cnbl``
      - Beyond the plan: Askervein in a conventionally neutral boundary layer (``inputs_steady_askervein_cnbl``: 30 ×
        30 × 26 to 1599 m, the precursor's table as inflow on xlo and yhi, outflow on xhi and ylo, Rayleigh damping
-       of w and θ above 1200 m, four sweeps, cap 2) to the steady verdict. Measured: 220 iterations (156 for
+       of w and θ above 1200 m, four sweeps, cap 2) to the steady verdict. Measured: 220 iterations (175 for
        ``rt_steady_askervein``); u residual down four orders. Label ``regression``; double only.
    * - ``rt_askervein_210_inflow_table``
      - ``Tests/Real_Terrain/Askervein_210/askervein_210_inflow.txt`` is the table ``tools/erf_inflow_table.py`` makes
@@ -674,12 +674,16 @@ Current tests
      - RT-2.6.1 and RT-2.6.2 (sub-phase 2.6): Askervein with ERF's setup (``inputs_steady_askervein_210``: 300 × 300 ×
        18, the 210° inflow through xlo and ylo, outflow through xhi and yhi, Rayleigh damping of w in the top 250 m)
        with the Phase 2 configuration (``steady.sweep = lusgs`` with its default CFL cap, the default reference window,
-       grid sequencing over two levels, the last three on the command line) to the steady verdict; measured: 96 level-0 iterations and 42 on level 1 (four
+       grid sequencing over two levels, the last three on the command line) to the steady verdict; measured: 95 level-0 iterations and 34 on level 1 (four
        ranks). The 10 m speeds on lines A and AA (``tools/askervein_lines.py check``) must be within 5 % of ERF's
        URANS average (``Gold/erf_urans_lines_10m.csv``) up to 300 m past the hilltop, and within 10 % at the four
-       lee masts beyond (measured: 4.48 % and 7.51 %). The level history (cells, stop reasons, iterations within
+       lee masts beyond (measured: 4.00 % and 9.21 %). The level history (cells, stop reasons, iterations within
        10 %) and the stage switches must match ``Gold/askervein_210_level_history.json``. Label ``nightly``; double
        only.
+   * - ``rt_steady_askervein_210_unbounded``, ``rt_askervein_210_unbounded_matches``
+     - Old against new for ``bc.inflow_tke_length``: the Phase 2 run of ``rt_steady_askervein_210`` with the inflow
+       length of before (``unbounded``) reaches that run's lines (``Gold/askervein_210_lines_unbounded.csv``) to 1e-4
+       (measured: identical to the six digits written, on the same machine). Label ``nightly``; double only.
    * - ``rt_steady_askervein_210_phase1``, ``rt_askervein_210_phase1_matches``
      - Old against new: the same deck with the Phase 1 configuration of RT-1.16.3 (``zjacobi``, four sweeps, cap 2, a
        100-iteration reference, one level; measured: 538 iterations) reaches the Phase 2 lines to 0.1 % (measured:

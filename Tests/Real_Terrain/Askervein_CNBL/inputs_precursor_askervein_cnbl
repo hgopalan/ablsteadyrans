@@ -31,6 +31,12 @@ bc.zhi_theta_grad  = 0.03
 bc.inflow_profile   = log_law
 bc.inflow_ustar     = 0.6
 bc.inflow_z0        = 0.03
+# The first guess's k with the wall-law length (the form before bc.inflow_tke_length):
+# with the closure's capped length the start-up transient is smaller, so the
+# reference residuals are, and the entrainment floor of theta and w at the
+# inversion (see above) no longer sits two orders below them; the run is then
+# steady in its monitors but not by the drop criterion.
+bc.inflow_tke_length = unbounded
 bc.inflow_direction = 0.
 
 # Back end A, as the committed table askervein_cnbl_inflow.txt was written: the
