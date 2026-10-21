@@ -1721,3 +1721,10 @@ GoogleTest suite
        difference is not found: the preconditioner's setup and apply give the same bits on the same input). That test
        found that the continuation's diffusivity must be the stage's own (the SIMPLEC stage's is not restored by a
        restart inside the Newton stage), and the fallback test that a failed first step must not count as converged.
+   * - RT-3.5 (a)
+     - *Beyond the plan.* CTest ``rt_steady_hill2d_newton`` (smoke, two ranks, about 10 s): the 2-D hill at 32 × 1 × 16
+       without Coriolis (``inputs_steady_hill2d_newton``: a pressure gradient, van Albada, GMRES(200), the switch at
+       1e-3) switches to Newton once, never falls back, and ends steady in the Newton stage within 4500 iterations
+       (3920 measured; SIMPLEC alone takes 5381, but the Newton path takes about 1.5 times the wall time there: each
+       Newton step costs about 150 GMRES iterations). CTest ``abort_newton_keys_no_newton_stage``: a Newton key and a
+       switch key with ``steady.stage = simplec`` abort, naming the key.

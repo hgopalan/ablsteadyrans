@@ -310,6 +310,26 @@ ablsteady_add_test(NAME abort_ri_gate_range NP 1 LABELS "regression;smoke"
                    PREFIX ${EXPECT_ABORT} "turb\\.ri_gate = 2\\.0+: must be 0 \\(off\\) or finite, >= 1e-6 and <= 1" --
                    COMMAND $<TARGET_FILE:ablsteady> ${HILL3D_NEUTRAL_CASE}/inputs_steady_hill3d_neutral
                            turb.ri_gate=2 ${ABLSTEADY_TEST_AMREX_FLAGS})
+# Sub-phase 3.5: the Newton stage's keys and the switch rules have no effect
+# with steady.stage = simplec (one stage), so they abort there.
+ablsteady_add_test(NAME abort_newton_keys_no_newton_stage NP 1 LABELS "regression;smoke"
+                   PREFIX ${EXPECT_ABORT} "steady\\.newton_gmres_restart has no effect without steady\\.stage = simplec_newton"
+                          "steady\\.switch_residual has no effect without steady\\.stage = simplec_newton" --
+                   COMMAND $<TARGET_FILE:ablsteady> ${HILL3D_NEUTRAL_CASE}/inputs_steady_hill3d_neutral
+                           steady.newton_gmres_restart=50 steady.switch_residual=1e-3 ${ABLSTEADY_TEST_AMREX_FLAGS})
+# Sub-phase 3.5: the 2-D hill (32 x 1 x 16, no Coriolis, van Albada) with
+# steady.stage = simplec_newton switches to Newton once (at r <= 1e-3, about
+# iteration 3860), never falls back, and ends steady in the Newton stage in
+# at most 4500 iterations (3920 measured; SIMPLEC alone takes 5381). About
+# 10 s on two ranks.
+set(HILL2D_NEWTON_DIR ${CMAKE_CURRENT_BINARY_DIR}/run/rt_steady_hill2d_newton)
+ablsteady_add_test(NAME rt_steady_hill2d_newton NP 2 LABELS "regression;smoke" RUN_DIR ${HILL2D_NEWTON_DIR}
+                   PREFIX ${EXPECT_ABORT} --success
+                          "switching from stage simplec to newton: relative residual"
+                          "!switching from stage newton to simplec"
+                          "ablsteady: steady after (3[0-9][0-9][0-9]|4[0-4][0-9][0-9]) iterations"
+                          "ablsteady: it [0-9]+ newton r" --
+                   COMMAND $<TARGET_FILE:ablsteady> ${HILL2D_CASE}/inputs_steady_hill2d_newton ${ABLSTEADY_TEST_AMREX_FLAGS})
 # The LU-SGS overlap against the coarse levels' boxes: overlap 3 fits level 0's
 # 16-wide boxes but not level 3's, 2 wide.
 ablsteady_add_test(NAME abort_sequencing_overlap NP 1 LABELS "regression;smoke"

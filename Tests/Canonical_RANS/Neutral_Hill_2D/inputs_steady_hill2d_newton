@@ -3,11 +3,11 @@
 # steady state as inputs_steady_hill2d (16 z-line Jacobi sweeps at a cap of
 # 4) in fewer iterations and less time; ERF's check_hill.py --physics on the
 # turbulence plotfile as for the Jacobi deck. See docs/solver.rst and docs/results.rst.
-mesh.n_cell        = 128 1 64
+mesh.n_cell        = 32 1 16   # coarse: a regression test of the switch, not of the answer
 mesh.prob_lo       = -2560. 0. 0.
 mesh.prob_hi       =  2560. 40. 1000.
 mesh.is_periodic   = 1 1 0
-mesh.max_grid_size = 64 1
+mesh.max_grid_size = 16 1
 
 terrain.type            = agnesi
 terrain.hill_shape      = ridge_x
@@ -57,3 +57,4 @@ steady.switch_residual         = 1.e-3
 # Ekman balance of rotation and vertical diffusion (docs/solution_algorithm.rst),
 # so this deck drives the flow by a pressure gradient, u*^2 / H with u* 0.35 m/s.
 forcing.pressure_gradient      = -1.225e-4 0. 0.
+steady.newton_gmres_restart    = 200
