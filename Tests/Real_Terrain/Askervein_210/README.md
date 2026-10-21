@@ -29,9 +29,9 @@ repository (100 MB).
 double precision only).
 
 ## Expected Results
-- Phase 2 configuration (`lusgs` and its default cap 8, the default reference window, two levels): steady after 96
-  level-0 iterations (34 on level 1; 96 and 42 with `bc.inflow_tke_length = unbounded`). Phase 1 configuration (`zjacobi`, four sweeps, cap 2, a 100-iteration
-  reference): 512 (538 with `unbounded`). The two agree on the lines to 1e-4 %.
+- Phase 2 configuration (`lusgs` and its default cap 8, the default reference window, two levels): steady after 95
+  level-0 iterations (34 on level 1; 97 and 42 with `bc.inflow_tke_length = unbounded`). Phase 1 configuration (`zjacobi`, four sweeps, cap 2, a 100-iteration
+  reference): 533 (565 with `unbounded`). The two agree on the lines to 1e-4 %.
 - Against ERF: within 4.00 % up to 300 m past the hilltop; the lee masts beyond are 6.6–9.2 % slower (second-order
   against ERF's fifth-order advection, and less inflow turbulence mixing into the wake than with the unbounded
   inflow length, which gave 4.48 % and 4.9–7.5 %). See `docs/results.rst`, "Phase 2 checkpoint".

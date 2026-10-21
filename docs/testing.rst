@@ -567,15 +567,16 @@ Current tests
        ``simplec.w_vnn_cap`` 0 and 16 to the verdict: both reach it, the banner names the cap, the capped run needs
        at most a fifth of the iterations, and u, v, w of the two steady states agree to 2e-4 m/s; then a capped run of
        40 iterations continued to 80 from its checkpoint equals 80 straight in every field, bit for bit. Measured:
-       6519 and 224 iterations (29 times fewer), u and w within 8.5e-9 and 5.8e-9 m/s (since the Rayleigh layer ends
-       at the mesh's top level; before, 6487 and 687 iterations and 5.6e-5 m/s). About 50 s on two ranks; label
+       7038 and 322 iterations (22 times fewer; 7038 and 299 before the residual scales used the depth of the layers),
+       u and w within 8.5e-9 and 5.8e-9 m/s (since the Rayleigh layer ends at the mesh's top level; before, 6487 and
+       687 iterations and 5.6e-5 m/s). About 50 s on two ranks; label
        ``regression``; double only.
    * - ``rt_steep_ridge_w_vnn_cap``, ``rt_steep_ridge_w_vnn_cap_margin_off``
      - *Beyond the plan.* The slope margin of the cap on a steep ridge with a 0.4 m first cell
        (``Tests/Canonical_RANS/Steep_Ridge_Thin_Cell/inputs_steep_ridge_thin_cell``: 48 × 2 × 40, an Agnesi ridge
        150 m high with a 150 m half-width, max slope 32.5°, max aspect ratio 372, the verdict at 3 orders), 3500
-       iterations at most. With ``simplec.w_vnn_cap = 16`` and the default margin the run is steady (1895
-       iterations); with the margin off (the cap of #32) the pressure correction stalls and it is not. The run
+       iterations at most. With ``simplec.w_vnn_cap = 16`` and the default margin the run is steady (1765
+       iterations; 1652 before the residual scales used the depth of the layers, 1895 before #44); with the margin off (the cap of #32) the pressure correction stalls and it is not. The run
        without the cap takes 2881 iterations (3983 before the Rayleigh layer ended at the mesh's top level, when it
        was not steady at 3500 either). Measured to 6 orders before that change: cap off 14154, margin 2 4142, and the
        steady states agree to 3e-8 m/s.
@@ -690,7 +691,7 @@ Current tests
        (measured: identical to the six digits written, on the same machine). Label ``nightly``; double only.
    * - ``rt_steady_askervein_210_phase1``, ``rt_askervein_210_phase1_matches``
      - Old against new: the same deck with the Phase 1 configuration of RT-1.16.3 (``zjacobi``, four sweeps, cap 2, a
-       100-iteration reference, one level; measured: 512 iterations, 538 with ``bc.inflow_tke_length = unbounded``) reaches the Phase 2 lines to 0.1 % (measured:
+       100-iteration reference, one level; measured: 533 iterations, 565 with ``bc.inflow_tke_length = unbounded``) reaches the Phase 2 lines to 0.1 % (measured:
        1e-4 %). Label ``nightly``; double only.
    * - ``drift_check_selftest``
      - The ``extern_erf`` drift check on a throw-away ERF repository (:doc:`extraction`).
