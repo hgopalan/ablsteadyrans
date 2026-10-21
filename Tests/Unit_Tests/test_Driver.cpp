@@ -1011,7 +1011,7 @@ TEST (Driver, DivergenceStopsAndTheChecksNameTheirInput)
         EXPECT_EQ(d.switch_residual, amrex::Real(1e-4));
         EXPECT_EQ(d.switch_monitor_tol, amrex::Real(1e-2));
         EXPECT_EQ(d.newton_fallback_failures, 2);
-        EXPECT_EQ(d.newton_cfl_max, amrex::Real(1000));
+        EXPECT_EQ(d.newton_cfl_max, amrex::Real(128));
         EXPECT_EQ(d.switch_window, 20);
         // The application defaults of sub-phase 2.6: the build's sweep and
         // that sweep's CFL cap (lusgs and 8 on a CPU build).

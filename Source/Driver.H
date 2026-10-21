@@ -76,12 +76,12 @@ struct SteadyOptions
     //! steps (Continuation::step returned failed, every retry used) after
     //! which the Newton stage asks to go back to SIMPLEC (plan 3.5: 2).
     int newton_fallback_failures{2};
-    //! steady.newton_cfl_max (finite, >= steady.cfl_max; 1e3): the Newton
+    //! steady.newton_cfl_max (finite, >= steady.cfl_max; 128): the Newton
     //! stage's CFL cap. Its continuation ramps from steady.cfl_max to it by
     //! the SER law, and its preconditioner uses it for an infinite dtau
     //! (NewtonStage.H). With steady.newton_dtau_inf_at_cap = 1 dtau becomes
     //! infinite once the CFL reaches it.
-    amrex::Real newton_cfl_max{amrex::Real(1.0e3)};
+    amrex::Real newton_cfl_max{amrex::Real(128)};
     int zline_sweeps{2};                 //!< steady.zline_sweeps (zjacobi 2..100, lusgs 1..100): line sweeps per predictor step, for the SIMPLEC stage of 1.15 (Predictor.H)
     SweepKind sweep{SweepKind::zjacobi}; //!< steady.sweep (zjacobi | lusgs): the line solver of the sweeps (sub-phase 2.1, Predictor.H)
     //! steady.newton_preconditioner (identity | simplec): the Newton step's

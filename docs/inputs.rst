@@ -312,7 +312,7 @@ Quick reference
      - ``1e-2``, ``2``
      - Monitors settled before the switch to Newton; failed Newton steps before the fallback
    * - ``steady.newton_cfl_max``
-     - ``1000``
+     - ``128``
      - The Newton stage's CFL cap
    * - ``steady.sweep``
      - ``lusgs`` (CPU build), ``zjacobi`` (GPU build)
@@ -842,7 +842,7 @@ writes them and stops; the other ``steady.*`` keys are then refused.
      - Integer, ≥ 1. Consecutive failed Newton steps (every retry used) after which the run goes back to SIMPLEC.
        After three such fallbacks the run stays in SIMPLEC.
    * - ``steady.newton_cfl_max``
-     - ``1000``
+     - ``128``
      - Finite, ≥ ``steady.cfl_max`` (with ``simplec_newton``). The Newton stage's CFL cap: from ``steady.cfl_max`` the
        CFL is multiplied by ``steady.ser_max_growth`` per accepted step up to this cap, then (with
        ``steady.newton_dtau_inf_at_cap = 1``) :math:`\Delta\tau` is infinite. The preconditioner of an infinite

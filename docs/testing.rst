@@ -229,7 +229,9 @@ signal in that test (SIGILL on macOS arm64), so the tests after it did not run.
 
 The one-line mutants of sub-phase 3.5 (``Source/NewtonStage.cpp`` and the switch rules in ``Source/Driver.cpp``),
 each run against ``Driver.*`` and ``NewtonStage.*`` on two ranks with the unit-test flags by
-``tools/newton_stage_mutants.py`` (macOS arm64, AppleClang). All 11 are killed.
+``tools/newton_stage_mutants.py`` (macOS arm64, AppleClang). 13 of 15 are killed. N14 and N15 survive: they matter only
+where the SIMPLEC preconditioner loses GMRES at a large CFL (the full-size 2-D hill), which no unit test reaches in
+seconds; the Askervein study that replaces the Phase 3 checkpoint measures them.
 
 .. list-table::
    :header-rows: 1
@@ -266,11 +268,23 @@ each run against ``Driver.*`` and ``NewtonStage.*`` on two ranks with the unit-t
      - No hand-back for the final pass
      - ``HandsBackForTheFinalPassAfterTheSwap``
    * - N10
-     - The continuation's SER law from ``steady.cfl0``, not the cap
-     - ``HandsBackForTheFinalPassAfterTheSwap``, ``SwitchesOnceAndConvergesInNewton``
+     - The continuation's start CFL not reset on entry
+     - every ``NewtonStage`` test
    * - N11
      - The continuation state not restored on restart
      - ``RestartInsideTheStage``
+   * - N12
+     - No limit on failed visits
+     - ``FallsBackAfterFailedSteps``
+   * - N13
+     - No idle hand-back
+     - ``HandsBackWhenConvergedWithoutAVerdict``
+   * - N14
+     - The Newton cap not used (the SIMPLEC cap, plain Newton after one step)
+     - survives (above)
+   * - N15
+     - The preconditioner of an infinite :math:`\Delta\tau` at the SIMPLEC cap
+     - survives (above)
 
 The one-line mutants of sub-phase 3.4 (``Source/Smoothness.cpp`` and the floor freeze and stratification gate in
 ``Source/Closure.cpp``), each run against ``Smoothness.*`` and ``Closure.*`` on two ranks with the unit-test flags by

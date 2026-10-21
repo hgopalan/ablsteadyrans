@@ -36,7 +36,7 @@ M = [
   "    if (before.steps > 0 && before.r0 > 0 && before.r_last <= drop * before.r0) {",
   "    if (before.r0 > 0 && before.r_last <= drop * before.r0) {"),
  ("N9", "no hand-back for the final pass", N,
-  "        m_handed_back = true;", ""),
+  "        m_handed_back = true;\n        char b[64];", "        char b[64];"),
  ("N10", "the continuation's start CFL not reset on entry", N,
   "        st.cfl = m_sopt.cfl_max;", ""),
  ("N11", "the continuation state not restored on restart", N,

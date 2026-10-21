@@ -101,7 +101,7 @@ public:
 // With van Albada as the run's limiter (no swap: the Newton stage solves the
 // run's own equations) the run switches once, at r <= 1e-4 (2768 SIMPLEC
 // iterations measured), converges in the Newton stage within 16 accepted
-// steps (11 measured: the CFL doubles from 8 to the cap 1000, then dtau is
+// steps (8 measured: the CFL doubles from 8 to the cap 128, then dtau is
 // infinite) and ends steady there, with at most 60 % of the SIMPLEC
 // iterations of a SIMPLEC run (5417 measured) and the same solution to 1e-4
 // of the largest u and k (both runs stop at 6 orders).
@@ -311,5 +311,6 @@ TEST(NewtonStage, RestartInsideTheStage)
         if (amrex::ParallelDescriptor::IOProcessor()) { amrex::FileSystem::RemoveAll(dir); }
     }
 }
+
 
 

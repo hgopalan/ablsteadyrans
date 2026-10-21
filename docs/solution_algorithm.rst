@@ -327,13 +327,40 @@ Switching and fallback
   ``steady.switch_monitor_tol`` (1 %) of max(\|value\|, scale) over the window.
 - **Entry.** The smoothness handling below enters (the k floor frozen, the smooth limiter in the Newton residual),
   and the pseudo-transient continuation starts afresh at ``steady.cfl_max``. Its CFL doubles (``steady.ser_max_growth``)
-  with every accepted step up to ``steady.newton_cfl_max`` (1000); with ``steady.newton_dtau_inf_at_cap = 1``
+  with every accepted step up to ``steady.newton_cfl_max`` (128); with ``steady.newton_dtau_inf_at_cap = 1``
   :math:`\Delta\tau` is then infinite. At every finite step the preconditioner uses the step's own
   :math:`\Delta\tau`, and at infinite :math:`\Delta\tau` the Newton cap's. A residual-driven ramp (the SER law
   of the SIMPLEC stage) settles near CFL 13 on the hill, where :math:`|R|` falls slowly; jumping to infinite
   :math:`\Delta\tau` after one step leaves the slow modes unpreconditioned (GMRES(30) and GMRES(200) stall at the
-  2000-iteration limit on ERF's 2-D hill). On the 8 × 2 × 8 hill the cap 1000 then infinite takes 11 Newton steps
-  and 718 GMRES iterations; the cap 1e4, 13 and 882; the cap 1000 held, 28 and 2058.
+  2000-iteration limit on ERF's 2-D hill). On the 8 × 2 × 8 hill, from the switch to steady:
+
+  .. list-table::
+     :header-rows: 1
+
+     * - Newton CFL cap
+       - After the cap
+       - Newton steps
+       - GMRES iterations
+     * - **128 (default)**
+       - **infinite**
+       - **8**
+       - **480**
+     * - 1000
+       - infinite
+       - 11
+       - 718
+     * - 1e4
+       - infinite
+       - 13
+       - 882
+     * - 1000
+       - held
+       - 28
+       - 2058
+     * - 128
+       - held
+       - 102
+       - 5338
 - **Each iteration** is one continuation step. The residual norms and monitors the driver records are those of the
   run's own equations at the new state (the run's limiter, the closure's live decisions), so the steady criterion
   and the relative residual mean what they mean for SIMPLEC. That costs one more residual evaluation per step.
@@ -367,8 +394,8 @@ Switching and fallback
   and 323 iterations at CFL 16, 32 and 64, and reaches the 2000-iteration limit from CFL 128 on (Krylov residual
   0.08 at 128, 0.75 at 256, 0.97–0.99 at infinite :math:`\Delta\tau`); those steps are still accepted, and
   :math:`|R|` falls from 1.8e-4 to 7.8e-5 over 11 steps. The SIMPLEC preconditioner holds GMRES(30) to about CFL 64
-  on that grid. The cap, the restart length and the switch residual are chosen from the Askervein study that
-  replaces the Phase 3 checkpoint (PR-28).
+  on that grid (the measurement used a cap of 1000; the default is now 128). The cap, the restart length and the
+  switch residual are chosen from the Askervein study that replaces the Phase 3 checkpoint (PR-28).
 - The stage's continuation takes its momentum diffusivity from the closure at its own state, not from the SIMPLEC
   stage (whose is not restored by a restart inside the Newton stage).
 
