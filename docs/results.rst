@@ -176,8 +176,7 @@ steady state to the convergence tolerance, and ERF's checks pass for both (`Line
 **Askervein.** The coarse mesh (30 × 30 × 18) with a log-law inflow, outflow and slip sides and no Coriolis reaches
 the verdict after 156 iterations (2 s on two ranks). The residual is largest in the two columns next to the outflow,
 but keeps falling there with a tighter tolerance (1e-9 after 706 iterations), so the outflow needs no sponge. The
-comparison with ERF's unsteady RANS on lines A and AA needs the full mesh and ERF's reference run on Kestrel and is
-not yet available.
+comparison with ERF's unsteady RANS on lines A and AA uses ERF's own setup on the full mesh (:ref:`phase2-checkpoint`).
 
 Cost compared with ERF
 ^^^^^^^^^^^^^^^^^^^^^^
@@ -543,12 +542,16 @@ and 0.7 and the run was stopped.
      - **225**
      - 225
    * - Steep ridge, 0.4 m first cell
-     - 3983
+     - 2881
      - not steady at 3500
      - stalled
-     - 2714
-     - **2568**
-     - 3111
+     - 2035
+     - **1895**
+     - 1940
+
+The steep-ridge row was re-measured after the Rayleigh layer was made to end at the mesh's top level (the ridge's
+stretched layers end at 2.9 km, above ``mesh.prob_hi`` z); before, it read 3983, not steady, stalled, 2714, 2568
+and 3111.
 
 *Findings.*
 
@@ -686,6 +689,276 @@ hold on every level (``steady.sequencing_hold = 1``), 54 s with the default.
 - The converged state matches the run without sequencing to 1e-8 (``rt_steady_hill3d_neutral_sequencing``).
 - Equal verdicts do not mean equal end states: each run stops at the first iteration that meets the criteria, so
   final residuals can differ by up to an order of magnitude within the same criteria.
+
+.. _phase2-checkpoint:
+
+Phase 2 checkpoint
+^^^^^^^^^^^^^^^^^^
+
+*Setup.* Askervein on ERF's mesh (300 × 300 × 18 cells, 20 m, a 20 m first layer stretched by 1.08), the neutral
+deck of RT-1.16.3 (``inputs_steady_askervein``, wind along x) unless noted, 8 ranks, 25 boxes of 64 × 64 columns.
+Iterations to the steady verdict, measured on one CPU (Apple M2 Pro) with other jobs running; wall times and
+allocation units are left for Kestrel. "Not steady" means no verdict within the iteration limit (1000 or 2000).
+
+.. list-table:: Sweep and CFL cap (PT-2.6.1; the deck's 100-iteration reference)
+   :header-rows: 1
+   :widths: 30 10 10 10 10 10 10
+
+   * - Sweep
+     - Cap 2
+     - Cap 4
+     - Cap 8
+     - Cap 16
+     - Cap 32
+     - Cap 64
+   * - ``zjacobi``, 2 sweeps
+     - —
+     - not steady
+     - —
+     - —
+     - —
+     - —
+   * - ``zjacobi``, 4 sweeps
+     - 332
+     - 260
+     - 246
+     - 426
+     - not steady
+     - —
+   * - ``zjacobi``, 8 sweeps
+     - —
+     - —
+     - 205
+     - —
+     - —
+     - —
+   * - ``zjacobi``, 16 sweeps
+     - —
+     - 210
+     - 190
+     - 271
+     - 649
+     - —
+   * - ``lusgs``, 1 sweep
+     - —
+     - —
+     - 201
+     - 265
+     - —
+     - —
+   * - **lusgs, 2 sweeps**
+     - 294
+     - 211
+     - **190**
+     - 254
+     - 377
+     - 611
+   * - ``lusgs``, 4 sweeps
+     - —
+     - —
+     - 189
+     - 253
+     - —
+     - —
+
+``steady.line_order = diagonal`` and ``steady.line_alternate = 1`` give 190 iterations at a cap of 8, as the
+sequential order. On the conventionally neutral deck on its own mesh (30 × 30 × 26, two ranks) the counts are
+close: ``zjacobi`` with 4 sweeps 220 (cap 2) and 209 (cap 8), with 16 sweeps 208, ``lusgs`` 209 (cap 8) and 221
+(cap 16).
+
+*Findings.*
+
+- ``lusgs`` with two sweeps at a cap of 8 needs the fewest iterations of the configurations with two sweeps or
+  fewer per iteration. ``zjacobi`` matches it only with 16 sweeps per iteration.
+- Each sweep has a cap with the fewest iterations; above it the count rises, and ``zjacobi`` stops reaching a
+  verdict within the limit (which does not by itself show an instability). ``lusgs`` still reaches steady at a cap
+  of 64 (611 iterations), so no limit was found for it. The plan's measure, the highest CFL that still reaches
+  steady, would choose a slower setting.
+- The best ``lusgs`` cap lies between 4 and 16; 8 is the only cap measured in between.
+- ``zjacobi`` with its default two sweeps does not reach steady on Askervein at a cap of 4. A GPU build keeps
+  that default (``zjacobi``, two sweeps, cap 10) until the sweeps are measured on H100; give
+  ``steady.zline_sweeps`` and ``steady.cfl_max`` there. The ``zjacobi`` cap of 10 is Phase 1's, not a PT-2.6.1
+  result.
+
+.. list-table:: Reference window :math:`K` (``steady.residual_ref_iterations``; cap 8; iterations in the hold,
+   the CFL ramp and at the cap)
+   :header-rows: 1
+   :widths: 26 14 12 12 12 24
+
+   * - Run
+     - Iterations
+     - Hold
+     - Ramp
+     - Cap
+     - :math:`\sum` CFL to :math:`r < 10^{-2}`
+   * - ``lusgs``, :math:`K` = 100
+     - 190
+     - 100
+     - 13
+     - 77
+     - 357
+   * - ``lusgs``, :math:`K` = 50
+     - 156
+     - 50
+     - 26
+     - 80
+     - 358
+   * - ``lusgs``, :math:`K` = 20
+     - 141
+     - 20
+     - 41
+     - 80
+     - 356
+   * - **lusgs, K = 5 (default)**
+     - **137**
+     - 5
+     - 52
+     - 80
+     - 356
+   * - ``zjacobi``, 4 sweeps, :math:`K` = 100
+     - 246
+     - 100
+     - 49
+     - 97
+     - 725
+   * - ``zjacobi``, 4 sweeps, :math:`K` = 5
+     - 204
+     - 5
+     - 102
+     - 97
+     - 754
+
+*Findings.*
+
+- The residual falls mainly with the accumulated pseudo-time :math:`\sum_n \mathrm{CFL}_n`, not with the
+  iteration count: with ``cfl0 = 1``, for every :math:`K` the relative residual reaches :math:`10^{-2}` at the same
+  :math:`\sum` CFL within 2 % (``lusgs``) and 4 % (``zjacobi``). The hold runs at ``steady.cfl0`` and adds
+  pseudo-time slowly. A model with :math:`r = e^{-a \sum \mathrm{CFL}}` and the SER ramp gives the trend in
+  :math:`K` (160, 150 and 149 against the measured 156, 141 and 137) but overestimates the ramp at small
+  :math:`K`; a part of the decay that does not scale with the CFL (about a quarter of the decay at CFL 1) fits
+  all six counts to 3–4 iterations.
+- A shorter hold leaves a larger residual at its end, so the ramp (:math:`\mathrm{CFL} = \mathrm{cfl0}\,r^{-p}`)
+  takes longer; the iterations at the cap do not change. From 100 to 50 the run saves 34 iterations, not 50.
+- ``steady.cfl0`` scales the whole ramp: with :math:`K` = 5, ``lusgs`` needs 118 iterations with ``cfl0 = 2``
+  and 192 with ``cfl0 = 0.5``. The residual reaches :math:`10^{-2}` at :math:`\sum` CFL = 369 and 349 there, against
+  356 with ``cfl0 = 1``: within 4 % over a factor of four in the starting CFL.
+- ``zjacobi`` needs twice the pseudo-time of ``lusgs`` to reach the same residual.
+
+.. list-table:: Grid sequencing (cap 8; level-0 iterations, the coarse levels in brackets)
+   :header-rows: 1
+   :widths: 40 20 20 20
+
+   * - Sweep
+     - 1 level
+     - 2 levels
+     - 3 levels
+   * - ``zjacobi``, 4 sweeps
+     - 246
+     - 211 (127)
+     - 213 (100, 68)
+   * - ``zjacobi``, 16 sweeps
+     - 190
+     - 111 (111)
+     - 112 (100, 42)
+   * - ``lusgs``, 2 sweeps
+     - 190
+     - 110 (111)
+     - 112 (100, 42)
+   * - **lusgs, 2 sweeps, K = 5**
+     - **137**
+     - **110 (44)**
+     - —
+
+On ``Neutral_Hill_3D`` (its deck's 100-iteration reference, four ranks) ``lusgs`` with two sweeps at a cap of 8
+needs 1087 iterations on one level and 299 (306, 37) on three, against 2091 and 706 (383, 51) for the deck's
+``zjacobi`` with 16 sweeps at a cap of 4.
+
+*Findings.*
+
+- Two levels cut the level-0 iterations of ``lusgs`` by 42 %; each coarse iteration costs about a quarter of a
+  fine one. A third level adds nothing on level 0.
+- With :math:`K` = 5 the coarse level needs 44 iterations instead of 111; the level-0 count is the same.
+
+.. list-table:: Box count (PT-2.6.3; ``lusgs``, two sweeps, cap 8; iterations)
+   :header-rows: 1
+   :widths: 20 20 20 20 20
+
+   * - Boxes
+     - ``lagged``
+     - ``zero``, overlap 0
+     - ``zero``, overlap 2
+     - ``zero``, overlap 4
+   * - 1
+     - 189
+     - 189
+     - —
+     - —
+   * - 4
+     - 190
+     - 191
+     - 190
+     - 190
+   * - 16
+     - 190
+     - 196
+     - 193
+     - 191
+   * - 64
+     - 191
+     - 204
+     - 199
+     - 195
+
+*Findings.*
+
+- With the lagged ghosts (the default) the box count changes the iterations by at most 1 %.
+- Without communication (``zero``) 64 boxes cost 8 % more iterations; an overlap of 4 columns recovers half of it.
+  The overlap default stays 0 with lagged ghosts; on a GPU the choice depends on the cost of the exchange (PR-32).
+
+**Comparison with ERF (RT-2.6.1).** ERF's Askervein deck at the pinned commit (``inputs_anel``: anelastic URANS,
+the k-equation closure, fifth-order horizontal and third-order vertical upwind advection, the power-law inflow from
+210° through the west and south faces) ran to 4800 s on the same mesh (10 378 steps, 8 ranks) and was averaged over
+2400–4800 s (``ablsteady_refavg``; the two half-window averages differ by at most 7.6e-4 m/s). The 10 m speeds on
+lines A and AA then changed by less than 1e-3 of their final values after about 1500 steps and 3e-4 after 1730.
+ablsteady runs the same setup (``Tests/Real_Terrain/Askervein_210``):
+
+.. list-table:: Askervein, wind from 210°, 10 m speeds against ERF's URANS average
+   :header-rows: 1
+   :widths: 40 15 15 15 15
+
+   * - Configuration
+     - Iterations
+     - Hilltop A / AA
+     - Upwind masts (d ≤ −480 m)
+     - Lee masts (d > 300 m)
+   * - Phase 1 (``zjacobi``, 4 sweeps, cap 2, :math:`K` = 100)
+     - 538
+     - +3.0 % / +1.5 %
+     - +0.9 to +1.5 %
+     - −4.9 to −7.5 %
+   * - **Phase 2 (lusgs and its default cap 8, the default K = 5, with steady.sequencing = 1 on 2 levels)**
+     - **96 (42)**
+     - +3.0 % / +1.5 %
+     - +0.9 to +1.5 %
+     - −4.9 to −7.5 %
+
+*Findings.*
+
+- The two configurations reach the same lines (to 1e-4 %); the Phase 2 configuration needs 5.6 times fewer
+  level-0 iterations.
+- Up to 300 m past the hilltop every mast is within 4.5 % of ERF; the four lee masts beyond are 4.9–7.5 % slower.
+  ablsteady's second-order advection (MUSCL with van Leer) against ERF's fifth order sets the wake there; the
+  same trend (second-order upwind gives lower lee speeds than a higher-order scheme) is reported for WindNinja by
+  Wagenbrenner et al. (2019).
+- A tighter verdict (six orders instead of four, 270 iterations) changes no line speed by more than 1e-4 %.
+- The speeds are sampled 10 m above the ground, linear in :math:`\ln(z + z_0)` between the two cell centres
+  around 10 m (``tools/askervein_lines.py``), the same way for both codes; the ground under a column is ERF's
+  terrain file, within 1.4 m of the mesh's own ground at the mast columns.
+- The upwind and hilltop excess comes from the inflow :math:`k`. ablsteady's inflow :math:`k` is the log-law
+  equilibrium with the unbounded length :math:`\kappa(z + z_0)`, which grows with height on ERF's power-law
+  profile (about 9 m²/s² at 316 m, against 0.31 in ERF). With the closure's capped length
+  (``turb.max_geom_lscale``) in the inflow table the upwind masts agree within 0.6 % and the hilltops within 2 %;
+  the lee masts move further (to −9.2 %). That change is not in this version.
 
 Newton–Krylov (in development)
 ------------------------------

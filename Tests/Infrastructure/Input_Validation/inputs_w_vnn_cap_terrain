@@ -32,4 +32,5 @@ bc.theta_profile    = 300.
 init.first_guess = profile
 forcing.gravity  = 0.
 steady.stage     = simplec
+steady.sweep     = zjacobi   # Phase 1 sweep (the CPU default is lusgs since sub-phase 2.6)
 steady.max_iterations = 1

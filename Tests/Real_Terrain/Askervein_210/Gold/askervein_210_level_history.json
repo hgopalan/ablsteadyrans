@@ -1,0 +1,24 @@
+{
+ "levels": [
+  {
+   "level": 1,
+   "cells": [
+    150,
+    150
+   ],
+   "iterations": 42,
+   "stop": "every residual 2.000e+00 orders below its reference"
+  },
+  {
+   "level": 0,
+   "cells": [
+    300,
+    300
+   ],
+   "iterations": 96,
+   "stop": "strict: steady"
+  }
+ ],
+ "switches": [],
+ "verdict": "steady"
+}

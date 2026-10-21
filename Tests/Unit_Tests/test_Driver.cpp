@@ -830,10 +830,12 @@ TEST (Driver, DivergenceStopsAndTheChecksNameTheirInput)
         clear();
         const SteadyOptions d = ablsteady::read_steady_options();
         EXPECT_EQ(d.cfl0, 1);
-        EXPECT_EQ(d.cfl_max, 10);
+        // The application defaults of sub-phase 2.6: the build's sweep and
+        // that sweep's CFL cap (lusgs and 8 on a CPU build).
+        EXPECT_EQ(d.sweep, ablsteady::default_sweep());
+        EXPECT_EQ(d.cfl_max, ablsteady::default_cfl_max(d.sweep));
         EXPECT_EQ(d.machine, ablsteady::Machine::Local);
         EXPECT_EQ(d.zline_sweeps, 2);
-        EXPECT_EQ(d.sweep, ablsteady::SweepKind::zjacobi);
         EXPECT_EQ(d.line_ghosts, ablsteady::LineGhosts::lagged);
         EXPECT_EQ(d.line_overlap, 0);
         EXPECT_EQ(d.line_order, ablsteady::LineOrder::sequential);
@@ -859,10 +861,12 @@ TEST (Driver, DivergenceStopsAndTheChecksNameTheirInput)
         pp.add("line_overlap", 1);   // repeated key
         EXPECT_THROW(ablsteady::read_steady_options(), std::runtime_error);
         clear();
-        pp.add("line_order", std::string("sequential"));   // zjacobi
+        pp.add("sweep", std::string("zjacobi"));
+        pp.add("line_order", std::string("sequential"));
         EXPECT_THROW(ablsteady::read_steady_options(), std::runtime_error);
         clear();
-        pp.add("line_alternate", 1);   // zjacobi
+        pp.add("sweep", std::string("zjacobi"));
+        pp.add("line_alternate", 1);
         EXPECT_THROW(ablsteady::read_steady_options(), std::runtime_error);
         clear();
         pp.add("sweep", std::string("lusgs"));
@@ -874,8 +878,42 @@ TEST (Driver, DivergenceStopsAndTheChecksNameTheirInput)
         clear();
         pp.add("sweep", std::string("zjacobi"));
         EXPECT_EQ(ablsteady::read_steady_options().sweep, ablsteady::SweepKind::zjacobi);
+        EXPECT_EQ(ablsteady::read_steady_options().cfl_max, 10);   // zjacobi keeps Phase 1's cap
         pp.add("sweep", std::string("lusgs"));   // repeated key
         EXPECT_THROW(ablsteady::read_steady_options(), std::runtime_error);
+        // The Phase 2 defaults (PT-2.6.1): lusgs at a cap of 8 on a CPU build,
+        // zjacobi on a GPU build until PR-32; a given cap is kept with either.
+#ifdef AMREX_USE_GPU
+        EXPECT_EQ(ablsteady::default_sweep(), ablsteady::SweepKind::zjacobi);
+#else
+        EXPECT_EQ(ablsteady::default_sweep(), ablsteady::SweepKind::lusgs);
+#endif
+        EXPECT_EQ(ablsteady::default_cfl_max(ablsteady::SweepKind::lusgs), 8);
+        EXPECT_EQ(ablsteady::default_cfl_max(ablsteady::SweepKind::zjacobi), 10);
+        clear();
+        pp.add("sweep", std::string("lusgs"));
+        EXPECT_EQ(ablsteady::read_steady_options().cfl_max, 8);
+        pp.add("cfl_max", amrex::Real(16));
+        EXPECT_EQ(ablsteady::read_steady_options().cfl_max, 16);
+        clear();
+        pp.add("cfl_max", amrex::Real(3));
+        EXPECT_EQ(ablsteady::read_steady_options().cfl_max, 3);
+        // steady.cfl0 above a default cap: the message says the cap is the sweep's default.
+        {
+            SteadyOptions o;
+            o.sweep = ablsteady::SweepKind::lusgs;
+            o.cfl_max = ablsteady::default_cfl_max(o.sweep);
+            o.cfl0 = 9;
+            o.given = {"cfl0", "sweep"};
+            const auto e = ablsteady::check_steady_options(o);
+            ASSERT_EQ(e.size(), 1u);
+            EXPECT_NE(e[0].find("steady.cfl_max = 8"), std::string::npos) << e[0];
+            EXPECT_NE(e[0].find("(the default with steady.sweep = lusgs; give steady.cfl_max)"), std::string::npos) << e[0];
+            o.given.emplace_back("cfl_max");
+            const auto g = ablsteady::check_steady_options(o);
+            ASSERT_EQ(g.size(), 1u);
+            EXPECT_EQ(g[0].find("the default with"), std::string::npos) << g[0];
+        }
         clear();
         pp.add("cfl0", amrex::Real(1));
         pp.add("cfl0", amrex::Real(2));

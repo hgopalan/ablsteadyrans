@@ -143,13 +143,16 @@ removes the slow inertial adjustment and typically halves the iterations.
 Converge faster
 ---------------
 
-Start from these settings, measured on the hill cases (:doc:`results`):
+On a CPU build the defaults are line LU-SGS with two sweeps and a CFL cap of 8, the setting with the fewest
+iterations on Askervein (:ref:`Phase 2 checkpoint <phase2-checkpoint>`). A GPU build keeps z-line
+Jacobi; give the same settings there explicitly. The hill cases were measured at a cap of 16:
 
 .. code-block:: text
 
-   steady.sweep        = lusgs
-   steady.zline_sweeps = 2
-   steady.cfl_max      = 16.
+   steady.sweep        = lusgs        # the CPU default
+   steady.zline_sweeps = 2            # the default
+   steady.cfl_max      = 8.           # the default with lusgs; 16 on the hill cases
+   steady.residual_ref_iterations = 5 # the default; a longer reference window holds the CFL at cfl0
    init.first_guess    = column       # with Coriolis forcing; otherwise profile
 
 Then, depending on the case:

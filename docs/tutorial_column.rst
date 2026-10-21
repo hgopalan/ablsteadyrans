@@ -62,6 +62,7 @@ Open ``Tests/Canonical_RANS/Neutral_Column/inputs_steady_column``. Without its c
 
    # Solver and convergence criteria
    steady.stage                = simplec
+   steady.sweep                = zjacobi
    steady.cfl0                 = 1.
    steady.cfl_max              = 50.
    steady.max_iterations       = 20000
@@ -76,9 +77,11 @@ Open ``Tests/Canonical_RANS/Neutral_Column/inputs_steady_column``. Without its c
 Every input is ``namespace.key = value``. The namespaces group the inputs by topic: ``mesh``, ``bc`` (boundary
 conditions), ``init`` (initial conditions), ``steady`` (solver), and so on. :doc:`inputs` lists them all.
 
-Two settings are worth noting:
+Three settings are worth noting:
 
 - The initial profile uses :math:`u_* = 0.25` m/s, not 0.35 m/s. The solver has to find the right answer itself.
+- ``steady.sweep = zjacobi`` keeps the z-line Jacobi sweeps of the iteration counts below. Without it a CPU build
+  uses line LU-SGS (the default since the Phase 2 checkpoint, :doc:`results`).
 - ``steady.cfl_max = 50`` is large. It works here because every column is identical; 3-D cases need smaller values
   (:doc:`howto`).
 

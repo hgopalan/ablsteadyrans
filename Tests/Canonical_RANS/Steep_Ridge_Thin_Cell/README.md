@@ -27,11 +27,13 @@ cap on sloping ground just enough to keep the operator definite.
 Both have the label `regression`.
 
 ## Expected Results
-- With the margin: steady in 2568 iterations (the tests stop at 3500) (margin 2: 2714; 8: 3111; cap off: 3983).
+- With the margin: steady in 1895 iterations (the tests stop at 3500) (margin 2: 2035; 8: 1940; cap off: 2881).
+  Before the Rayleigh layer ended at the mesh's top level (the layers end at 2.9 km, above `mesh.prob_hi` z): 2568
+  (margin 2: 2714; 8: 3111; cap off: 3983).
 - Without it: the residual ratio stays between 0.1 and 0.7 after the transient and the CFL keeps being cut.
-- The first 2300 iterations are the same transient in every configuration (the lee separation forms while the
+- Measured before the Rayleigh change (not re-measured): the first 2300 iterations are the same transient in every configuration (the lee separation forms while the
   residual rises to about 11 times its reference and the SER law lowers the CFL to about 0.08).
-- To the 6-order verdict (not run here): 14154 iterations with the cap off, 4142 with V = 16 and margin 2, 3169
+- To the 6-order verdict (not run here; before the Rayleigh change): 14154 iterations with the cap off, 4142 with V = 16 and margin 2, 3169
   with V = 64 without a margin; the three steady states agree to 3e-8 m/s. Margin 1 (the bound itself) stalls.
 - About 55 s per run on two ranks.
 

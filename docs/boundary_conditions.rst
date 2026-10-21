@@ -139,7 +139,8 @@ residual:
    \qquad
    \text{sponge (sides):}\quad R \mathrel{+}= c_s\left(1 - \frac{s}{w_s}\right)^2 (q - q_\mathrm{ref}) .
 
-- :math:`z_d`: start height of the Rayleigh layer (``bc.rayleigh_zdamp``).
+- :math:`z_d`: start height of the Rayleigh layer (``bc.rayleigh_zdamp``); :math:`z_\mathrm{top}`: the top level of the
+  mesh, which is not ``mesh.prob_hi`` z on a stretched grid (:doc:`terrain_coordinates`).
 - :math:`c_r`: Rayleigh coefficient (``bc.rayleigh_dampcoef``); ``bc.rayleigh_fields`` selects the fields.
 - :math:`s`: distance to an inflow or outflow face; :math:`w_s` is the sponge width (``bc.sponge_width``) and
   :math:`c_s` its strength (``bc.sponge_strength``).

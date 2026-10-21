@@ -38,6 +38,7 @@ turb.face_mean       = logarithmic
 forcing.pressure_gradient = 1.225e-4 0. 0.
 
 steady.stage                = simplec
+steady.sweep                = zjacobi   # Phase 1 sweep (the CPU default is lusgs since sub-phase 2.6)
 steady.cfl0                 = 1.
 steady.cfl_max              = 50.
 steady.residual_drop_orders = 6

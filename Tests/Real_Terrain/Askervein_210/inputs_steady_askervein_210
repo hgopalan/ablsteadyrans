@@ -1,0 +1,59 @@
+# RT-2.6.1: Askervein with ERF's own setup (Exec/CanonicalTests/Real_Terrain/
+# Askervein/inputs_anel at the pinned ERF commit), to steady with the SIMPLEC
+# stage, for the comparison with ERF's URANS average on lines A and AA.
+#   * Mesh: ERF's, 300 x 300 x 18 cells over 6 km x 6 km (20 m), a 20 m first
+#     layer stretched by 1.08 to 749 m; the terrain of extern_erf/askervein.txt
+#     (command line, terrain.file).
+#   * Inflow: ERF's power-law profile, wind from 210 degrees (21.7 m/s at
+#     732 m), through xlo and ylo; Tests/Real_Terrain/Askervein_210/
+#     askervein_210_inflow.txt (command line, bc.inflow_file), made from
+#     extern_erf/inflow_powerlaw.txt by tools/erf_inflow_table.py. Outflow
+#     through xhi and yhi, as ERF.
+#   * The surface layer with z0 = 0.03 m, a slip top, neutral (300 K), no
+#     Coriolis, ERF's closure defaults (max_geom_lscale 30 m, sigma_k 1).
+#   * Rayleigh damping of w in ERF's top 250 m (from 499 m, 0.2 1/s; ERF's
+#     sin^2 profile over the flat levels, here over the physical height).
+#   * First guess: the inflow profile with the mass-consistent projection of
+#     RT-1.16.3.
+# The sweep, the sweep count and the CFL cap are the defaults of the build.
+mesh.n_cell        = 300 300 18
+mesh.prob_lo       = -3000. -3000. 0.
+mesh.prob_hi       =  3000.  3000. 440.   # z: the computational spacing; the stretched layers end at 749 m
+mesh.max_grid_size = 64
+mesh.dz0           = 20.
+mesh.stretch_ratio = 1.08
+
+terrain.type      = erf_grid
+terrain.smoothing = 0
+
+bc.xlo = inflow
+bc.ylo = inflow
+bc.xhi = outflow
+bc.yhi = outflow
+bc.zlo = surface_layer
+bc.zhi = slip_wall
+bc.surface_z0      = 0.03
+bc.inflow_profile  = file
+bc.theta_profile_z = 0.
+bc.theta_profile   = 300.
+bc.rayleigh_zdamp    = 499.0048747962329
+bc.rayleigh_dampcoef = 0.2
+bc.rayleigh_fields   = w
+
+init.first_guess = profile
+init.alpha_h     = 1.0
+init.alpha_v     = 0.5
+
+solver.poisson_reltol   = 1.e-10
+solver.poisson_max_iter = 200
+
+forcing.gravity = 0.
+
+turb.tke_floor = 1.e-6
+
+steady.stage                   = simplec
+steady.max_iterations          = 20000
+
+io.plot_file      = steady_askervein_210_plt
+io.turb_plot_file = steady_askervein_210_turb
+io.chk_file       = steady_askervein_210_chk

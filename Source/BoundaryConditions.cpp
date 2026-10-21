@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <limits>
 #include <string>
 
@@ -224,6 +225,12 @@ BoundaryInputs read_boundary_inputs ()
 std::vector<std::string> check_boundary_inputs (const BoundaryInputs& in, const amrex::Geometry& geom,
                                                 const CoriolisOptions& coriolis)
 {
+    return check_boundary_inputs(in, geom, coriolis, geom.ProbHi(2));
+}
+
+std::vector<std::string> check_boundary_inputs (const BoundaryInputs& in, const amrex::Geometry& geom,
+                                                const CoriolisOptions& coriolis, amrex::Real ztop)
+{
     std::vector<std::string> err;
     bool any_inflow = false, any_outflow = false;
     for (int o = 0; o < 6; ++o) {
@@ -305,9 +312,11 @@ std::vector<std::string> check_boundary_inputs (const BoundaryInputs& in, const 
     } else if (given("zhi_theta_grad") && in.face[5] == FaceType::no_slip_wall) {
         err.emplace_back("bc.zhi_theta_grad has no effect with bc.zhi = no_slip_wall");
     }
-    const amrex::Real ztop = geom.ProbHi(2);
     if (std::isnan(in.rayleigh_zdamp) || !(in.rayleigh_zdamp >= 0 && in.rayleigh_zdamp < ztop)) {
-        err.emplace_back("bc.rayleigh_zdamp = " + std::to_string(in.rayleigh_zdamp) + ": must be in [0, mesh.prob_hi z) (0: off)");
+        char top[64];
+        std::snprintf(top, sizeof(top), "%.1f", static_cast<double>(ztop));
+        err.emplace_back("bc.rayleigh_zdamp = " + std::to_string(in.rayleigh_zdamp) + ": must be in [0, the top level "
+                         + top + " m) (0: off)");
     }
     if (std::isnan(in.rayleigh_dampcoef) || !(in.rayleigh_dampcoef >= 0 && std::isfinite(in.rayleigh_dampcoef))) {
         err.emplace_back("bc.rayleigh_dampcoef = " + std::to_string(in.rayleigh_dampcoef) + ": must be finite and >= 0 (1/s)");
@@ -355,9 +364,11 @@ namespace {
 
 //! The inputs, after the checks (every message, each naming its key); the
 //! inflow profile is built only from checked inputs.
-const BoundaryInputs& checked (const BoundaryInputs& in, const amrex::Geometry& geom, const CoriolisOptions& coriolis)
+const BoundaryInputs& checked (const BoundaryInputs& in, const amrex::Geometry& geom, const Mesh& mesh,
+                               const CoriolisOptions& coriolis)
 {
-    const auto err = check_boundary_inputs(in, geom, coriolis);
+    if (mesh.zlevels().empty()) { amrex::Abort("ablsteady: BoundaryConditions: the mesh has no levels (not built)"); }
+    const auto err = check_boundary_inputs(in, geom, coriolis, mesh.zlevels().back());
     if (!err.empty()) {
         std::string all = "ablsteady: invalid boundary conditions:";
         for (const auto& e : err) { all += "\n  " + e; }
@@ -370,7 +381,7 @@ const BoundaryInputs& checked (const BoundaryInputs& in, const amrex::Geometry& 
 
 BoundaryConditions::BoundaryConditions (const BoundaryInputs& in, const amrex::Geometry& geom, const Mesh& mesh,
                                         const CoriolisOptions& coriolis)
-    : m_in(checked(in, geom, coriolis)), m_geom(geom), m_mesh(mesh), m_coriolis(coriolis), m_profile(m_in.inflow, m_in.theta_ref)
+    : m_in(checked(in, geom, mesh, coriolis)), m_geom(geom), m_mesh(mesh), m_coriolis(coriolis), m_profile(m_in.inflow, m_in.theta_ref)
 {
 }
 
@@ -860,12 +871,13 @@ struct DampingCoef
     }
 };
 
-DampingCoef damping_coef (const BoundaryInputs& in, const amrex::Geometry& geom)
+//! ztop: the mesh's top level, where the Rayleigh ramp ends.
+DampingCoef damping_coef (const BoundaryInputs& in, const amrex::Geometry& geom, amrex::Real ztop)
 {
     DampingCoef d{};
     d.zd = in.rayleigh_zdamp;
     d.rc = in.rayleigh_dampcoef;
-    d.ztop = geom.ProbHi(2);
+    d.ztop = ztop;
     d.sw = in.sponge_width;
     d.ss = in.sponge_strength;
     d.rayleigh = d.zd > 0;
@@ -899,7 +911,7 @@ void BoundaryConditions::add_damping (const State& q, ResidualFields& R) const
     if (!damping_on()) { return; }
     const int klo = m_geom.Domain().smallEnd(2);
     const InflowProfile::View prof = m_profile.view();
-    const DampingCoef coef = damping_coef(m_in, m_geom);
+    const DampingCoef coef = damping_coef(m_in, m_geom, m_mesh.zlevels().back());
     const auto plo = m_geom.ProbLoArray();
     const auto dx = m_geom.CellSizeArray();
     const amrex::MultiFab* qf[5] = {&q.u, &q.v, &q.w, &q.theta, &q.tke};
@@ -949,7 +961,7 @@ void BoundaryConditions::add_damping_to_implicit (Equation eq, Loc loc, const am
 {
     if (!damping_on()) { return; }
     const int klo = m_geom.Domain().smallEnd(2);
-    const DampingCoef coef = damping_coef(m_in, m_geom);
+    const DampingCoef coef = damping_coef(m_in, m_geom, m_mesh.zlevels().back());
     const int n = (eq == Equation::u) ? 0 : (eq == Equation::v) ? 1 : (eq == Equation::w) ? 2 : (eq == Equation::theta) ? 3 : 4;
     const bool with_rayleigh = m_in.rayleigh_fields[static_cast<std::size_t>(n)];
     const bool above_ground = m_in.rayleigh_above_ground;

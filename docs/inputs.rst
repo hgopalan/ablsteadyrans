@@ -294,7 +294,7 @@ Quick reference
      - ``1e-3``, ``50``
      - Monitor tolerance and window
    * - ``steady.cfl0``, ``steady.cfl_max``
-     - ``1``, ``10``
+     - ``1``, ``8`` (``lusgs``) or ``10`` (``zjacobi``)
      - Initial and largest CFL number
    * - ``steady.ser_exponent``, ``steady.ser_max_growth``
      - ``1``, ``2``
@@ -303,7 +303,7 @@ Quick reference
      - ``20``, ``1e-2``, ``10``
      - Stage-switching rules
    * - ``steady.sweep``
-     - ``zjacobi``
+     - ``lusgs`` (CPU build), ``zjacobi`` (GPU build)
      - Line solver: ``zjacobi`` or ``lusgs``
    * - ``steady.zline_sweeps``
      - ``2``
@@ -588,7 +588,8 @@ types, the inflow profile and the sounding; the other keys act in the SIMPLEC st
      - Finite (K/m): θ gradient through a ``slip_wall`` or ``geostrophic`` top.
    * - ``bc.rayleigh_zdamp``
      - ``0`` (off)
-     - In [0, ``mesh.prob_hi`` z): start height of the Rayleigh layer (m); > 0 needs ``bc.rayleigh_dampcoef`` > 0.
+     - In [0, top level): start height of the Rayleigh layer (m); > 0 needs ``bc.rayleigh_dampcoef`` > 0. The top
+       level is ``mesh.prob_hi`` z, or where the layers end with ``mesh.stretch_ratio`` or ``mesh.zlevels_file``.
    * - ``bc.rayleigh_dampcoef``
      - ``0``
      - Finite, ≥ 0 (1/s); needs ``bc.rayleigh_zdamp`` > 0.
@@ -784,8 +785,9 @@ writes them and stops; the other ``steady.*`` keys are then refused.
      - ``1``
      - Finite, > 0. CFL number of the first iterations.
    * - ``steady.cfl_max``
-     - ``10``
-     - Finite, ≥ ``steady.cfl0``. Largest CFL number.
+     - ``8`` with ``lusgs``, ``10`` with ``zjacobi``
+     - Finite, ≥ ``steady.cfl0``. Largest CFL number. The default depends on ``steady.sweep`` (the Phase 2
+       checkpoint, :doc:`results`); a given value is used with either sweep.
    * - ``steady.ser_exponent``
      - ``1``
      - Finite, ≥ 0. Exponent :math:`p` of the CFL ramp; 0 holds the CFL at ``cfl0``.
@@ -802,8 +804,12 @@ writes them and stops; the other ``steady.*`` keys are then refused.
      - ``10``
      - Finite, > 1. Residual growth over a window that returns the run to the previous stage.
    * - ``steady.sweep``
-     - ``zjacobi``
-     - ``zjacobi`` (z-line Jacobi) or ``lusgs`` (line LU-SGS).
+     - ``lusgs`` (CPU build), ``zjacobi`` (GPU build)
+     - ``zjacobi`` (z-line Jacobi) or ``lusgs`` (line LU-SGS). The default depends on the build (the Phase 2
+       checkpoint, :doc:`results`): a GPU build keeps ``zjacobi`` until the sweeps are measured on H100.
+       ``zjacobi`` reproduces the solver of Phase 1. A restart takes the current default, not the sweep of the run
+       that wrote the checkpoint: give ``steady.sweep = zjacobi`` to continue a run that used the old default. The
+       ``steady.line_*`` keys need ``lusgs``, so a deck that gives them should also give ``steady.sweep``.
    * - ``steady.zline_sweeps``
      - ``2``
      - Sweeps per iteration: 2 to 100 with ``zjacobi``, 1 to 100 with ``lusgs``. With ``zjacobi`` the stable CFL

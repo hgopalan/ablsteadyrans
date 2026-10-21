@@ -7,5 +7,6 @@ mesh.is_periodic   = 1 1 0
 bc.zlo = surface_layer
 bc.zhi = slip_wall
 steady.stage = simplec
+steady.sweep = zjacobi   # Phase 1 sweep (the CPU default is lusgs since sub-phase 2.6)
 io.write_plotfile   = 0
 io.write_checkpoint = 0

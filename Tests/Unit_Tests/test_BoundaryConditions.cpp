@@ -846,6 +846,69 @@ TEST(BoundaryDamping, RayleighAndSpongeHaveTheirShapes)
     for (auto& f : R.fields()) { EXPECT_EQ(static_cast<double>(f.mf->norm0()), 0.0); }
 }
 
+// With mesh.stretch_ratio the top is where the layers end, not prob_hi z
+// (which then sets only the computational spacing): 16 layers of 20 m
+// stretched by 1.08 end at 606.5 m over a prob_hi z of 500 m. The Rayleigh
+// ramp ends at the top level, and a start height between the two is accepted.
+TEST(BoundaryDamping, RayleighEndsAtTheTopLevelOfAStretchedMesh)
+{
+    PCase c;
+    c.in.mesh.n_cell = amrex::IntVect(16, 12, 16);
+    c.in.mesh.prob_hi = {1000, 800, 500};
+    c.in.mesh.is_periodic = {1, 1, 0};
+    c.in.mesh.max_grid_size = {8, 8};
+    c.in.mesh.dz0 = 20;
+    c.in.mesh.stretch_ratio = amrex::Real(1.08);
+    c.in.mesh.stretch_ratio_given = true;
+    c.in.terrain.smoothing = 0;
+    c.make(flat);
+    const double ztop = 20 * (std::pow(1.08, 16) - 1) / 0.08;
+    ASSERT_NEAR(static_cast<double>(c.mesh.zlevels().back()), ztop, tol(1e-9, 1e-3) * ztop);
+    ablsteady::State q;
+    define_state(q, c);
+    BoundaryInputs in = lateral_inputs(FaceType::periodic, FaceType::periodic, FaceType::periodic, FaceType::periodic);
+    in.rayleigh_zdamp = 520;   // above prob_hi z, below the top level
+    in.rayleigh_dampcoef = amrex::Real(0.2);
+    in.rayleigh_fields = {false, false, true, true, false};
+    EXPECT_TRUE(ablsteady::check_boundary_inputs(in, c.geom, kNoCoriolis, c.mesh.zlevels().back()).empty());
+    BoundaryConditions bc(in, c.geom, c.mesh, kNoCoriolis);
+    const double delta = 0.3, th0 = 300;
+    q.theta.setVal(th0 + delta);
+    q.w.setVal(delta);
+    ablsteady::ResidualFields R;
+    R.define(c.ba, c.dm);
+    for (auto& f : R.fields()) { f.mf->setVal(0.0); }
+    bc.add_damping(q, R);
+    int at_top = 0;
+    for (amrex::MFIter mfi(q.p, false); mfi.isValid(); ++mfi) {
+        const auto z = host_copy(q.z_phys_nd, mfi);
+        const auto rt = host_copy(R.theta, mfi), rw = host_copy(R.w, mfi);
+        const amrex::Box zb = amrex::surroundingNodes(mfi.validbox(), 2);
+        amrex::LoopOnCpu(zb, [&] (int i, int j, int k) {
+            const double zw = node_mean(z, 4, i, j, k);
+            const double cw = (zw > 520) ? 0.2 * std::pow(std::sin(0.5 * M_PI * (zw - 520) / (ztop - 520)), 2) : 0.0;
+            EXPECT_NEAR(rw(amrex::IntVect(i, j, k)), cw * delta, tol(1e-12, 1e-5)) << i << " " << j << " " << k;
+            if (k == 16) {
+                EXPECT_NEAR(rw(amrex::IntVect(i, j, k)), 0.2 * delta, tol(1e-12, 1e-5));   // the full coefficient at the top
+                ++at_top;
+            }
+            if (k < 16) {
+                const double zc = node_mean(z, 0, i, j, k);
+                const double cc = (zc > 520) ? 0.2 * std::pow(std::sin(0.5 * M_PI * (zc - 520) / (ztop - 520)), 2) : 0.0;
+                EXPECT_NEAR(rt(amrex::IntVect(i, j, k)), cc * delta, tol(1e-12, 1e-5)) << i << " " << j << " " << k;
+            }
+        });
+    }
+    amrex::ParallelDescriptor::ReduceIntSum(at_top);
+    EXPECT_EQ(at_top, 16 * 12);
+    // A start at or above the top level is refused, naming the top.
+    in.rayleigh_zdamp = 610;
+    const auto err = ablsteady::check_boundary_inputs(in, c.geom, kNoCoriolis, c.mesh.zlevels().back());
+    ASSERT_EQ(err.size(), 1u);
+    EXPECT_NE(err[0].find("bc.rayleigh_zdamp = 610"), std::string::npos) << err[0];
+    EXPECT_NE(err[0].find("the top level 606.5"), std::string::npos) << err[0];
+}
+
 // ---------------------------------------------------------------------------
 // Inputs: the bc.* keys are read, and every invalid combination is refused
 // with its key named.

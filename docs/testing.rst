@@ -567,17 +567,18 @@ Current tests
        ``simplec.w_vnn_cap`` 0 and 16 to the verdict: both reach it, the banner names the cap, the capped run needs
        at most a fifth of the iterations, and u, v, w of the two steady states agree to 2e-4 m/s; then a capped run of
        40 iterations continued to 80 from its checkpoint equals 80 straight in every field, bit for bit. Measured:
-       6487 and 687 iterations (9.4 times fewer), u and w within 5.6e-5 and 3.8e-5 m/s. That difference is the
-       convergence error of the uncapped run at its verdict: the capped run at 687 iterations is within 5e-11 m/s of
-       a 10000-iteration capped run. About 50 s on two ranks; label ``regression``; double only.
+       6519 and 224 iterations (29 times fewer), u and w within 8.5e-9 and 5.8e-9 m/s (since the Rayleigh layer ends
+       at the mesh's top level; before, 6487 and 687 iterations and 5.6e-5 m/s). About 50 s on two ranks; label
+       ``regression``; double only.
    * - ``rt_steep_ridge_w_vnn_cap``, ``rt_steep_ridge_w_vnn_cap_margin_off``
      - *Beyond the plan.* The slope margin of the cap on a steep ridge with a 0.4 m first cell
        (``Tests/Canonical_RANS/Steep_Ridge_Thin_Cell/inputs_steep_ridge_thin_cell``: 48 × 2 × 40, an Agnesi ridge
        150 m high with a 150 m half-width, max slope 32.5°, max aspect ratio 372, the verdict at 3 orders), 3500
-       iterations at most. With ``simplec.w_vnn_cap = 16`` and the default margin the run is steady (2568
-       iterations); with the margin off (the cap of #32) the pressure correction stalls and it is not (the test
-       checks the verdict only: the run without the cap, 3983 iterations, is not steady at 3500 either). Measured to
-       6 orders: cap off 14154, margin 2 4142, and the steady states agree to 3e-8 m/s.
+       iterations at most. With ``simplec.w_vnn_cap = 16`` and the default margin the run is steady (1895
+       iterations); with the margin off (the cap of #32) the pressure correction stalls and it is not. The run
+       without the cap takes 2881 iterations (3983 before the Rayleigh layer ended at the mesh's top level, when it
+       was not steady at 3500 either). Measured to 6 orders before that change: cap off 14154, margin 2 4142, and the
+       steady states agree to 3e-8 m/s.
    * - ``rt_steady_hill2d``
      - RT-1.16.1: ERF's Neutral_Hill_2D (``Tests/Canonical_RANS/Neutral_Hill_2D/inputs_steady_hill2d``: 128 × 1 × 64, the Witch of Agnesi of
        100 m and 500 m, the flat deck's sounding and forcing, Rayleigh damping of w and θ from 700 m, 16 sweeps, CFL
@@ -665,6 +666,24 @@ Current tests
        30 × 26 to 1599 m, the precursor's table as inflow on xlo and yhi, outflow on xhi and ylo, Rayleigh damping
        of w and θ above 1200 m, four sweeps, cap 2) to the steady verdict. Measured: 220 iterations (156 for
        ``rt_steady_askervein``); u residual down four orders. Label ``regression``; double only.
+   * - ``rt_askervein_210_inflow_table``
+     - ``Tests/Real_Terrain/Askervein_210/askervein_210_inflow.txt`` is the table ``tools/erf_inflow_table.py`` makes
+       from ERF's Askervein inflow (``extern_erf/inflow_powerlaw.txt``, wind from 210°; w dropped, θ = 300 K, a z = 0
+       row added), to 1e-9. Label ``regression;smoke``.
+   * - ``rt_steady_askervein_210``, ``rt_askervein_210_erf_lines``, ``rt_askervein_210_level_history``
+     - RT-2.6.1 and RT-2.6.2 (sub-phase 2.6): Askervein with ERF's setup (``inputs_steady_askervein_210``: 300 × 300 ×
+       18, the 210° inflow through xlo and ylo, outflow through xhi and yhi, Rayleigh damping of w in the top 250 m)
+       with the Phase 2 configuration (``steady.sweep = lusgs`` with its default CFL cap, the default reference window,
+       grid sequencing over two levels, the last three on the command line) to the steady verdict; measured: 96 level-0 iterations and 42 on level 1 (four
+       ranks). The 10 m speeds on lines A and AA (``tools/askervein_lines.py check``) must be within 5 % of ERF's
+       URANS average (``Gold/erf_urans_lines_10m.csv``) up to 300 m past the hilltop, and within 10 % at the four
+       lee masts beyond (measured: 4.48 % and 7.51 %). The level history (cells, stop reasons, iterations within
+       10 %) and the stage switches must match ``Gold/askervein_210_level_history.json``. Label ``nightly``; double
+       only.
+   * - ``rt_steady_askervein_210_phase1``, ``rt_askervein_210_phase1_matches``
+     - Old against new: the same deck with the Phase 1 configuration of RT-1.16.3 (``zjacobi``, four sweeps, cap 2, a
+       100-iteration reference, one level; measured: 538 iterations) reaches the Phase 2 lines to 0.1 % (measured:
+       1e-4 %). Label ``nightly``; double only.
    * - ``drift_check_selftest``
      - The ``extern_erf`` drift check on a throw-away ERF repository (:doc:`extraction`).
    * - ``refavg_snapshots``, ``refavg_build``, ``refavg_verify``, ``refavg_matches``
