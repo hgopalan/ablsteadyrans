@@ -12,8 +12,8 @@ Askervein_210/askervein_lines.csv). PLOTFILE is an ablsteady plotfile (u, v,
 z) or an ERF one, or an ERF reference archive's average (x_velocity,
 y_velocity, z_phys); a directory with an "average" plotfile inside is taken
 as an archive. Both are sampled the same way: in each of the four cell
-columns around the mast, linear in the height above the ground between the
-two cell centres that bracket H, or below the first centre by the wall law
+columns around the mast, linear in ln(z + z0) of the height above the ground z
+between the two cell centres that bracket H, or below the first centre by the wall law
 S ~ ln((z + z0)/z0) (--z0, default 0.03 m, the Askervein roughness of both
 codes); the ground under a column is TERRAIN, ERF's structured terrain file,
 bilinear at the column centre (within 1.4 m of the mesh's own ground on the
@@ -35,6 +35,7 @@ import argparse
 import csv
 import math
 import os
+import re
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -112,8 +113,23 @@ class Columns:
                 sys.exit(f"{plotfile}: no field {n} (have {', '.join(names)})")
         self.comps = [names.index(n) for n in NAMES[kind]]
         self.kind = kind
+        if self.hdr["finest"] != 0:
+            sys.exit(f"{plotfile}: {self.hdr['finest'] + 1} levels; only single-level plotfiles are read")
         self.level_dir = os.path.join(plotfile, "Level_0")
         self.ncomp, _, self.boxes, self.fabs = erf_plotfile._read_cell_h(self.level_dir)
+        lo, hi = self.hdr["lo"], self.hdr["hi"]
+        for blo, bhi in self.boxes:
+            if blo[2] != lo[2] or bhi[2] != hi[2]:
+                sys.exit(f"{plotfile}: a box spans z {blo[2]}..{bhi[2]} of {lo[2]}..{hi[2]}; columns split in z are not read")
+        # erf_plotfile.py reads 8-byte reals only (it takes the format's field
+        # count as the size and "8 ..." as little endian): refuse float data,
+        # whose byte order has 4 entries, "FAB ((8, (32 8 23 ...)),(4, (4 3 2 1)))".
+        with open(os.path.join(self.level_dir, self.fabs[0][0]), "rb") as fh:
+            fh.seek(self.fabs[0][1])
+            head = fh.readline().decode(errors="replace")
+        order = re.search(r"\),\((\d+), \(([\d ]+)\)\)\)", head)
+        if order is None or int(order.group(1)) != 8:
+            sys.exit(f"{plotfile}: not double precision; extern_erf/erf_plotfile.py reads only doubles correctly")
         self.cache = {}
 
     def column(self, i, j):
@@ -155,7 +171,11 @@ def speed_at(cols, terrain, x, y, height, z0):
             s0 = math.hypot(u[0], v[0])
             total += w * s0 * math.log((height + z0) / z0) / math.log((agl[0] + z0) / z0)
             continue
-        k, t = bracket(agl, height)
+        k, _ = bracket(agl, height)
+        # Linear in ln(z + z0) between the two centres: exact for a log profile
+        # (linear in z reads up to 1.6 % low at 10 m between centres near 9 and 23 m).
+        lz = [math.log(agl[k] + z0), math.log(agl[k + 1] + z0)]
+        t = (math.log(height + z0) - lz[0]) / (lz[1] - lz[0])
         s0, s1 = math.hypot(u[k], v[k]), math.hypot(u[k + 1], v[k + 1])
         total += w * ((1 - t) * s0 + t * s1)
     return total

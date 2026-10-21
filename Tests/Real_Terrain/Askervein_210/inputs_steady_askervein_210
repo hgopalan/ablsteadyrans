@@ -18,7 +18,7 @@
 # The sweep, the sweep count and the CFL cap are the defaults of the build.
 mesh.n_cell        = 300 300 18
 mesh.prob_lo       = -3000. -3000. 0.
-mesh.prob_hi       =  3000.  3000. 440.
+mesh.prob_hi       =  3000.  3000. 440.   # z: the computational spacing; the stretched layers end at 749 m
 mesh.max_grid_size = 64
 mesh.dz0           = 20.
 mesh.stretch_ratio = 1.08

@@ -83,7 +83,7 @@ def main():
             f.write(f"# z u v theta: {a.erf_file.split('/')[-1]} (ERF, z u v w) with w dropped, "
                     f"theta = {a.theta:g} K, a z = 0 row added (tools/erf_inflow_table.py)\n")
             for r in t:
-                f.write(f"{r[0]:.6f} {r[1]:.6f} {r[2]:.6f} {r[3]:.6f}\n")
+                f.write(" ".join(repr(x) for x in r) + "\n")   # round-trip exact
     return 0
 
 

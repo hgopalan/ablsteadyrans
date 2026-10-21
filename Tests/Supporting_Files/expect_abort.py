@@ -31,7 +31,7 @@ def main(argv):
             log, argv = argv[1], argv[2:]
         else:
             timeout, argv = float(argv[1]), argv[2:]
-    if "--" not in argv or not timeout > 0:
+    if "--" not in argv or not (0 < timeout < float("inf")):
         print(__doc__)
         return 2
     sep = argv.index("--")
@@ -40,8 +40,18 @@ def main(argv):
         print(__doc__)
         return 2
 
-    proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                          text=True, timeout=timeout)
+    try:
+        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                              text=True, timeout=timeout)
+    except subprocess.TimeoutExpired as e:
+        out = e.stdout.decode(errors="replace") if isinstance(e.stdout, bytes) else (e.stdout or "")
+        if log:
+            with open(log, "w") as fh:
+                fh.write(out)
+        print(f"FAIL: the command did not finish within {timeout:g} s")
+        print("---- output ----")
+        print(out)
+        return 1
     out = proc.stdout
     if log:
         with open(log, "w") as fh:

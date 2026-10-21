@@ -47,6 +47,7 @@ The input file
    bc.inflow_ustar     = 0.35
 
    # Solver: four z-line sweeps, CFL cap 2
+   steady.sweep                   = zjacobi
    steady.cfl_max                 = 2.
    steady.zline_sweeps            = 4
    steady.residual_ref_iterations = 100

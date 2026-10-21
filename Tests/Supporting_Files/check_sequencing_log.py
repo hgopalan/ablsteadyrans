@@ -12,9 +12,10 @@ GOLD.json holds the expected history:
 
 Passes (exit code 0) when the levels appear in the gold order with the same
 cells and the same stop reason (exact text), every level's iterations within
---iter_rel_tol (relative) of the gold count, the stage switch lines
-("ablsteady: switch ...") are the gold list, in order, and the run ends with
-the gold verdict. Iteration counts move with the compiler's rounding
+--iter_rel_tol (relative) of the gold count, the stage switches are the gold list, in order, and the run ends with
+the gold verdict. A switch is recorded as "<from> to <to>: <reason>" from the
+driver's "ablsteady: iteration N: switching from stage ..." line (the
+iteration and the residuals are left out: they move with rounding). Iteration counts move with the compiler's rounding
 (gcc contracts multiply-adds), so they get a tolerance; the sequence does not.
 With --write, writes GOLD.json from LOG instead (for a reviewed gold change).
 """
@@ -39,9 +40,10 @@ def parse(log):
             if line.startswith("  level") or line.startswith("         prolonged"):
                 continue
             inside = False
-        m = re.match(r"ablsteady: (switch .*)$", line)
+        m = re.match(r"ablsteady: (?:level \d+: )?iteration \d+: switching from stage (\S+) to (\S+): (.*?)"
+                     r"(?: \(scaled residuals:.*)?$", line)
         if m:
-            switches.append(re.sub(r"\s+", " ", m.group(1)).strip())
+            switches.append(f"{m.group(1)} to {m.group(2)}: {m.group(3)}")
         m = re.match(r"ablsteady: (steady|not steady) after \d+ iterations", line)
         if m:
             verdict = m.group(1)

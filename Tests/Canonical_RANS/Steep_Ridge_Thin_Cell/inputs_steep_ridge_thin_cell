@@ -7,7 +7,7 @@
 # xhi, the surface layer (z0 = 0.03 m), a slip top, Rayleigh damping of w
 # above 250 m, no gravity. Line LU-SGS with two sweeps at a CFL cap of 16 and
 # a 3-order verdict. With simplec.w_vnn_cap = 16 and the default margin the
-# run is steady in 2568 iterations; with the margin off (#32's cap)
+# run is steady in 1895 iterations; with the margin off (#32's cap)
 # the pressure correction stalls (r 0.1-0.7) and the run is not steady after
 # 3500. The tests give the cap, the margin and steady.max_iterations on the
 # command line; the iteration counts are from the profile first guess below.

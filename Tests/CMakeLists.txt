@@ -927,19 +927,25 @@ if(ABLSTEADY_PRECISION STREQUAL "DOUBLE")
                      --check ${ASKERVEIN_210_CASE}/askervein_210_inflow.txt)
     set_tests_properties(rt_askervein_210_inflow_table PROPERTIES LABELS "regression;smoke"
                          ENVIRONMENT PYTHONDONTWRITEBYTECODE=1)
-    # The Phase 2 default configuration: the build's default sweep and CFL
-    # cap, the default reference window, grid sequencing over two levels
-    # (about 140 iterations, 2-3 min on four ranks). Its log is kept for
-    # RT-2.6.2.
+    # The Phase 2 configuration: the CPU default sweep (lusgs, given here so
+    # the gold holds on a GPU build too) with its default CFL cap, the default
+    # reference window, grid sequencing over two levels (about 140
+    # iterations, 2-3 min on four ranks). Its log is kept for RT-2.6.2. The
+    # run directories are emptied first, so no check reads an earlier run's
+    # plotfile or lines.
     set(ASK210_DIR ${CMAKE_CURRENT_BINARY_DIR}/run/rt_askervein_210)
+    add_test(NAME rt_askervein_210_clean
+             COMMAND ${Python3_EXECUTABLE} -c "import os, shutil, sys; [ (shutil.rmtree(d, ignore_errors=True), os.makedirs(d)) for d in sys.argv[1:] ]"
+                     ${ASK210_DIR}/phase2 ${ASK210_DIR}/phase1)
+    set_tests_properties(rt_askervein_210_clean PROPERTIES LABELS "nightly" FIXTURES_SETUP askervein_210_clean)
     ablsteady_add_test(NAME rt_steady_askervein_210 NP 4 LABELS "nightly" RUN_DIR ${ASK210_DIR}/phase2
-                       FIXTURES_SETUP askervein_210_phase2
+                       FIXTURES_SETUP askervein_210_phase2 FIXTURES_REQUIRED askervein_210_clean
                        PREFIX ${EXPECT_ABORT} --success --log ${ASK210_DIR}/phase2/run.log --timeout 3600
                               "ablsteady: steady after" "grid sequencing summary" --
                        COMMAND $<TARGET_FILE:ablsteady> ${ASKERVEIN_210_CASE}/inputs_steady_askervein_210
                                terrain.file=${PROJECT_SOURCE_DIR}/extern_erf/askervein.txt
                                bc.inflow_file=${ASKERVEIN_210_CASE}/askervein_210_inflow.txt
-                               steady.sequencing=1 mesh.hierarchy_levels=2 ${ABLSTEADY_TEST_AMREX_FLAGS})
+                               steady.sweep=lusgs steady.sequencing=1 mesh.hierarchy_levels=2 ${ABLSTEADY_TEST_AMREX_FLAGS})
     # RT-2.6.1: 10 m wind speeds on lines A and AA within 5 % of ERF's URANS
     # average (2400-4800 s, Gold/erf_urans_lines_10m.csv), 10 % at the lee
     # masts more than 300 m past the hilltop (ablsteady's second-order
@@ -951,7 +957,8 @@ if(ABLSTEADY_PRECISION STREQUAL "DOUBLE")
                      --lines ${ASKERVEIN_210_CASE}/askervein_lines.csv --out lines.csv --lee_d 300 --lee_rel_tol 0.10
              WORKING_DIRECTORY ${ASK210_DIR}/phase2)
     set_tests_properties(rt_askervein_210_erf_lines PROPERTIES LABELS "nightly"
-                         FIXTURES_REQUIRED askervein_210_phase2 ENVIRONMENT PYTHONDONTWRITEBYTECODE=1)
+                         FIXTURES_REQUIRED askervein_210_phase2 FIXTURES_SETUP askervein_210_lines
+                         ENVIRONMENT PYTHONDONTWRITEBYTECODE=1)
     # RT-2.6.2: the level history (cells, stop reasons, iterations within
     # 10 %) and the stage switches against the gold sequence.
     add_test(NAME rt_askervein_210_level_history
@@ -963,7 +970,7 @@ if(ABLSTEADY_PRECISION STREQUAL "DOUBLE")
     # sweeps, CFL cap 2, a 100-iteration reference, one level; about 540
     # iterations) reaches the same lines as the Phase 2 default to 0.1 %.
     ablsteady_add_test(NAME rt_steady_askervein_210_phase1 NP 4 LABELS "nightly" RUN_DIR ${ASK210_DIR}/phase1
-                       FIXTURES_SETUP askervein_210_phase1
+                       FIXTURES_SETUP askervein_210_phase1 FIXTURES_REQUIRED askervein_210_clean
                        PREFIX ${EXPECT_ABORT} --success --timeout 3600 "ablsteady: steady after"
                               "4 zjacobi sweeps" --
                        COMMAND $<TARGET_FILE:ablsteady> ${ASKERVEIN_210_CASE}/inputs_steady_askervein_210
@@ -978,8 +985,8 @@ if(ABLSTEADY_PRECISION STREQUAL "DOUBLE")
                      --lines ${ASKERVEIN_210_CASE}/askervein_lines.csv --out lines.csv --rel_tol 1e-3
              WORKING_DIRECTORY ${ASK210_DIR}/phase1)
     set_tests_properties(rt_askervein_210_phase1_matches PROPERTIES LABELS "nightly"
-                         FIXTURES_REQUIRED "askervein_210_phase1;askervein_210_phase2"
-                         DEPENDS rt_askervein_210_erf_lines ENVIRONMENT PYTHONDONTWRITEBYTECODE=1)
+                         FIXTURES_REQUIRED "askervein_210_phase1;askervein_210_lines"
+                         ENVIRONMENT PYTHONDONTWRITEBYTECODE=1)
 endif()
 
 # --- Reference archives (sub-phase 1.1): ablsteady_refavg end to end --------

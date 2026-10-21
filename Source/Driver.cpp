@@ -63,6 +63,12 @@ std::vector<std::string> check_steady_options (const SteadyOptions& opt)
     bad(opt.cfl0, "cfl0", "finite and > 0", [&] { return std::isfinite(opt.cfl0) && opt.cfl0 > 0; });
     bad(opt.cfl_max, "cfl_max", "finite and >= steady.cfl0",
         [&] { return std::isfinite(opt.cfl_max) && !std::isnan(opt.cfl0) && opt.cfl_max >= opt.cfl0; });
+    // Not given: the default of the sweep (default_cfl_max); say so, since the
+    // message names a key the deck does not have.
+    if (!err.empty() && err.back().rfind("steady.cfl_max = ", 0) == 0
+        && std::find(opt.given.begin(), opt.given.end(), "cfl_max") == opt.given.end()) {
+        err.back() += std::string(" (the default with steady.sweep = ") + sweep_name(opt.sweep) + "; give steady.cfl_max)";
+    }
     bad(opt.ser_exponent, "ser_exponent", "finite and >= 0", [&] { return std::isfinite(opt.ser_exponent) && opt.ser_exponent >= 0; });
     bad(opt.ser_max_growth, "ser_max_growth", "finite and >= 1",
         [&] { return std::isfinite(opt.ser_max_growth) && opt.ser_max_growth >= 1; });

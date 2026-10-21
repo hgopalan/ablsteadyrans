@@ -176,7 +176,7 @@ steady state to the convergence tolerance, and ERF's checks pass for both (`Line
 **Askervein.** The coarse mesh (30 × 30 × 18) with a log-law inflow, outflow and slip sides and no Coriolis reaches
 the verdict after 156 iterations (2 s on two ranks). The residual is largest in the two columns next to the outflow,
 but keeps falling there with a tighter tolerance (1e-9 after 706 iterations), so the outflow needs no sponge. The
-comparison with ERF's unsteady RANS on lines A and AA uses ERF's own setup on the full mesh (`Phase 2 checkpoint`_).
+comparison with ERF's unsteady RANS on lines A and AA uses ERF's own setup on the full mesh (:ref:`phase2-checkpoint`).
 
 Cost compared with ERF
 ^^^^^^^^^^^^^^^^^^^^^^
@@ -542,12 +542,16 @@ and 0.7 and the run was stopped.
      - **225**
      - 225
    * - Steep ridge, 0.4 m first cell
-     - 3983
+     - 2881
      - not steady at 3500
      - stalled
-     - 2714
-     - **2568**
-     - 3111
+     - 2035
+     - **1895**
+     - 1940
+
+The steep-ridge row was re-measured after the Rayleigh layer was made to end at the mesh's top level (the ridge's
+stretched layers end at 2.9 km, above ``mesh.prob_hi`` z); before, it read 3983, not steady, stalled, 2714, 2568
+and 3111.
 
 *Findings.*
 
@@ -686,6 +690,8 @@ hold on every level (``steady.sequencing_hold = 1``), 54 s with the default.
 - Equal verdicts do not mean equal end states: each run stops at the first iteration that meets the criteria, so
   final residuals can differ by up to an order of magnitude within the same criteria.
 
+.. _phase2-checkpoint:
+
 Phase 2 checkpoint
 ^^^^^^^^^^^^^^^^^^
 
@@ -764,9 +770,15 @@ close: ``zjacobi`` with 4 sweeps 220 (cap 2) and 209 (cap 8), with 16 sweeps 208
 
 - ``lusgs`` with two sweeps at a cap of 8 needs the fewest iterations of the configurations with two sweeps or
   fewer per iteration. ``zjacobi`` matches it only with 16 sweeps per iteration.
-- Every sweep has a cap above which iterations rise before the run becomes unstable: the best cap is below the
-  stability limit. The plan's measure, the highest stable CFL, would choose a slower setting.
-- ``zjacobi`` with its default two sweeps does not reach steady on Askervein at a cap of 4.
+- Each sweep has a cap with the fewest iterations; above it the count rises, and ``zjacobi`` stops reaching a
+  verdict within the limit (which does not by itself show an instability). ``lusgs`` still reaches steady at a cap
+  of 64 (611 iterations), so no limit was found for it. The plan's measure, the highest CFL that still reaches
+  steady, would choose a slower setting.
+- The best ``lusgs`` cap lies between 4 and 16; 8 is the only cap measured in between.
+- ``zjacobi`` with its default two sweeps does not reach steady on Askervein at a cap of 4. A GPU build keeps
+  that default (``zjacobi``, two sweeps, cap 10) until the sweeps are measured on H100; give
+  ``steady.zline_sweeps`` and ``steady.cfl_max`` there. The ``zjacobi`` cap of 10 is Phase 1's, not a PT-2.6.1
+  result.
 
 .. list-table:: Reference window :math:`K` (``steady.residual_ref_iterations``; cap 8; iterations in the hold,
    the CFL ramp and at the cap)
@@ -818,13 +830,18 @@ close: ``zjacobi`` with 4 sweeps 220 (cap 2) and 209 (cap 8), with 16 sweeps 208
 
 *Findings.*
 
-- The residual falls with the accumulated pseudo-time :math:`\sum_n \mathrm{CFL}_n`, not with the iteration count:
-  for every :math:`K` the relative residual reaches :math:`10^{-2}` at the same :math:`\sum` CFL within 2 %
-  (``lusgs``) and 4 % (``zjacobi``). The hold runs at ``steady.cfl0`` and adds pseudo-time slowly.
+- The residual falls mainly with the accumulated pseudo-time :math:`\sum_n \mathrm{CFL}_n`, not with the
+  iteration count: with ``cfl0 = 1``, for every :math:`K` the relative residual reaches :math:`10^{-2}` at the same
+  :math:`\sum` CFL within 2 % (``lusgs``) and 4 % (``zjacobi``). The hold runs at ``steady.cfl0`` and adds
+  pseudo-time slowly. A model with :math:`r = e^{-a \sum \mathrm{CFL}}` and the SER ramp gives the trend in
+  :math:`K` (160, 150 and 149 against the measured 156, 141 and 137) but overestimates the ramp at small
+  :math:`K`; a part of the decay that does not scale with the CFL (about a quarter of the decay at CFL 1) fits
+  all six counts to 3–4 iterations.
 - A shorter hold leaves a larger residual at its end, so the ramp (:math:`\mathrm{CFL} = \mathrm{cfl0}\,r^{-p}`)
   takes longer; the iterations at the cap do not change. From 100 to 50 the run saves 34 iterations, not 50.
 - ``steady.cfl0`` scales the whole ramp: with :math:`K` = 5, ``lusgs`` needs 118 iterations with ``cfl0 = 2``
-  and 192 with ``cfl0 = 0.5``.
+  and 192 with ``cfl0 = 0.5``. The residual reaches :math:`10^{-2}` at :math:`\sum` CFL = 369 and 349 there, against
+  356 with ``cfl0 = 1``: within 4 % over a factor of four in the starting CFL.
 - ``zjacobi`` needs twice the pseudo-time of ``lusgs`` to reach the same residual.
 
 .. list-table:: Grid sequencing (cap 8; level-0 iterations, the coarse levels in brackets)
@@ -851,6 +868,10 @@ close: ``zjacobi`` with 4 sweeps 220 (cap 2) and 209 (cap 8), with 16 sweeps 208
      - **137**
      - **110 (44)**
      - —
+
+On ``Neutral_Hill_3D`` (its deck's 100-iteration reference, four ranks) ``lusgs`` with two sweeps at a cap of 8
+needs 1087 iterations on one level and 299 (306, 37) on three, against 2091 and 706 (383, 51) for the deck's
+``zjacobi`` with 16 sweeps at a cap of 4.
 
 *Findings.*
 
@@ -908,33 +929,36 @@ ablsteady runs the same setup (``Tests/Real_Terrain/Askervein_210``):
    * - Configuration
      - Iterations
      - Hilltop A / AA
-     - Upwind masts
+     - Upwind masts (d ≤ −480 m)
      - Lee masts (d > 300 m)
    * - Phase 1 (``zjacobi``, 4 sweeps, cap 2, :math:`K` = 100)
      - 538
      - +3.0 % / +1.5 %
      - +0.9 to +1.5 %
-     - −5.0 to −7.7 %
-   * - **Phase 2 default (lusgs, cap 8, K = 5, 2 levels)**
+     - −4.9 to −7.5 %
+   * - **Phase 2 (lusgs and its default cap 8, the default K = 5, with steady.sequencing = 1 on 2 levels)**
      - **96 (42)**
      - +3.0 % / +1.5 %
      - +0.9 to +1.5 %
-     - −5.0 to −7.7 %
+     - −4.9 to −7.5 %
 
 *Findings.*
 
-- The two configurations reach the same lines (to 0.005 %); the Phase 2 default needs 5.6 times fewer level-0
-  iterations.
-- Up to 300 m past the hilltop every mast is within 4.5 % of ERF; the four lee masts beyond are 5.0–7.7 % slower.
+- The two configurations reach the same lines (to 1e-4 %); the Phase 2 configuration needs 5.6 times fewer
+  level-0 iterations.
+- Up to 300 m past the hilltop every mast is within 4.5 % of ERF; the four lee masts beyond are 4.9–7.5 % slower.
   ablsteady's second-order advection (MUSCL with van Leer) against ERF's fifth order sets the wake there; the
   same trend (second-order upwind gives lower lee speeds than a higher-order scheme) is reported for WindNinja by
   Wagenbrenner et al. (2019).
-- A tighter verdict (six orders instead of four, 270 iterations) changes no line speed by more than 0.001 %.
+- A tighter verdict (six orders instead of four, 270 iterations) changes no line speed by more than 1e-4 %.
+- The speeds are sampled 10 m above the ground, linear in :math:`\ln(z + z_0)` between the two cell centres
+  around 10 m (``tools/askervein_lines.py``), the same way for both codes; the ground under a column is ERF's
+  terrain file, within 1.4 m of the mesh's own ground at the mast columns.
 - The upwind and hilltop excess comes from the inflow :math:`k`. ablsteady's inflow :math:`k` is the log-law
   equilibrium with the unbounded length :math:`\kappa(z + z_0)`, which grows with height on ERF's power-law
-  profile (8 m²/s² at 316 m, against 0.31 in ERF). With the closure's capped length (``turb.max_geom_lscale``)
-  in the inflow table the upwind masts agree within 0.6 % and the hilltops within 2 %; the lee masts move further
-  (to −9.4 %). That change is not in this version.
+  profile (about 9 m²/s² at 316 m, against 0.31 in ERF). With the closure's capped length
+  (``turb.max_geom_lscale``) in the inflow table the upwind masts agree within 0.6 % and the hilltops within 2 %;
+  the lee masts move further (to −9.2 %). That change is not in this version.
 
 Newton–Krylov (in development)
 ------------------------------

@@ -898,6 +898,22 @@ TEST (Driver, DivergenceStopsAndTheChecksNameTheirInput)
         clear();
         pp.add("cfl_max", amrex::Real(3));
         EXPECT_EQ(ablsteady::read_steady_options().cfl_max, 3);
+        // steady.cfl0 above a default cap: the message says the cap is the sweep's default.
+        {
+            SteadyOptions o;
+            o.sweep = ablsteady::SweepKind::lusgs;
+            o.cfl_max = ablsteady::default_cfl_max(o.sweep);
+            o.cfl0 = 9;
+            o.given = {"cfl0", "sweep"};
+            const auto e = ablsteady::check_steady_options(o);
+            ASSERT_EQ(e.size(), 1u);
+            EXPECT_NE(e[0].find("steady.cfl_max = 8"), std::string::npos) << e[0];
+            EXPECT_NE(e[0].find("(the default with steady.sweep = lusgs; give steady.cfl_max)"), std::string::npos) << e[0];
+            o.given.emplace_back("cfl_max");
+            const auto g = ablsteady::check_steady_options(o);
+            ASSERT_EQ(g.size(), 1u);
+            EXPECT_EQ(g[0].find("the default with"), std::string::npos) << g[0];
+        }
         clear();
         pp.add("cfl0", amrex::Real(1));
         pp.add("cfl0", amrex::Real(2));

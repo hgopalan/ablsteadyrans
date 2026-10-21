@@ -807,7 +807,9 @@ writes them and stops; the other ``steady.*`` keys are then refused.
      - ``lusgs`` (CPU build), ``zjacobi`` (GPU build)
      - ``zjacobi`` (z-line Jacobi) or ``lusgs`` (line LU-SGS). The default depends on the build (the Phase 2
        checkpoint, :doc:`results`): a GPU build keeps ``zjacobi`` until the sweeps are measured on H100.
-       ``zjacobi`` reproduces the solver of Phase 1.
+       ``zjacobi`` reproduces the solver of Phase 1. A restart takes the current default, not the sweep of the run
+       that wrote the checkpoint: give ``steady.sweep = zjacobi`` to continue a run that used the old default. The
+       ``steady.line_*`` keys need ``lusgs``, so a deck that gives them should also give ``steady.sweep``.
    * - ``steady.zline_sweeps``
      - ``2``
      - Sweeps per iteration: 2 to 100 with ``zjacobi``, 1 to 100 with ``lusgs``. With ``zjacobi`` the stable CFL
