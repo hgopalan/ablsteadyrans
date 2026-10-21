@@ -311,6 +311,3 @@ TEST(NewtonStage, RestartInsideTheStage)
         if (amrex::ParallelDescriptor::IOProcessor()) { amrex::FileSystem::RemoveAll(dir); }
     }
 }
-
-
-
