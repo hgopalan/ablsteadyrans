@@ -517,6 +517,8 @@ TEST(Initializer, FirstGuessByHeightAboveGround)
     PCase c = square_hill(12, 8, 150, false);
     BoundaryInputs bin = open_along(c, 0, true);
     bin.inflow.direction = 30;
+    // The wall-law length: the log law's k is then u*^2/Cmu0^2 at every height (checked last).
+    bin.inflow.length = ablsteady::InflowProfileOptions::Length::unbounded;
     bin.theta_ref.z = {0, 300, 500};
     bin.theta_ref.theta = {300, 300, 306};
     const ablsteady::CoriolisOptions cor;

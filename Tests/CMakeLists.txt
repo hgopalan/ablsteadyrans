@@ -259,6 +259,11 @@ ablsteady_add_test(NAME abort_sequencing_unused NP 1 LABELS "regression;smoke"
                    COMMAND $<TARGET_FILE:ablsteady> ${HILL3D_NEUTRAL_CASE}/inputs_steady_hill3d_neutral
                            steady.sequencing_drop_orders=1 steady.sequencing_hold=0 steady.sequencing_cfl_start=cfl0
                            ${ABLSTEADY_TEST_AMREX_FLAGS})
+# bc.inflow_tke_length takes closure or unbounded only.
+ablsteady_add_test(NAME abort_inflow_tke_length_value NP 1 LABELS "regression;smoke"
+                   PREFIX ${EXPECT_ABORT} "bc\\.inflow_tke_length = capped: must be closure or unbounded" --
+                   COMMAND $<TARGET_FILE:ablsteady> ${HILL3D_NEUTRAL_CASE}/inputs_steady_hill3d_neutral
+                           bc.inflow_tke_length=capped ${ABLSTEADY_TEST_AMREX_FLAGS})
 ablsteady_add_test(NAME abort_sequencing_value NP 1 LABELS "regression;smoke"
                    PREFIX ${EXPECT_ABORT} "steady\\.sequencing = 2: must be 0 or 1" --
                    COMMAND $<TARGET_FILE:ablsteady> ${HILL3D_NEUTRAL_CASE}/inputs_steady_hill3d_neutral
@@ -425,8 +430,7 @@ ablsteady_add_test(NAME abort_restart_overwrite NP 1 LABELS "regression;smoke" R
 set(CHECK_MESH ${Python3_EXECUTABLE} ${SUPPORT}/check_mesh.py)
 # The mesh golds are double-precision values: a single-precision build
 # compares the plotfile at a single-precision tolerance and skips the
-# statistics checks, whose reader (ERF's extern_erf/erf_plotfile.py) handles
-# double-precision plotfiles only.
+# statistics checks, whose golds and tolerances are double-precision ones.
 if(ABLSTEADY_PRECISION STREQUAL "SINGLE")
     set(FCOMPARE_RTOL 1e-5)
 else()
@@ -600,8 +604,8 @@ if(ABLSTEADY_PRECISION STREQUAL "DOUBLE")
                                terrain.file=${BUMP_CASE}/terrain_bump_fwt.txt ${ABLSTEADY_TEST_AMREX_FLAGS})
     # RT-1.11.2: the Tucker wall distance on ERF's Neutral_Hill_2D mesh: ERF's
     # wall-distance checks (Tests/Discretization/Wall_Distance/check_walldist.py), and the field against
-    # Gold/walldist_hill2d_plt00000. ERF's reader takes double-precision
-    # plotfiles only.
+    # Gold/walldist_hill2d_plt00000, at double-precision tolerances (double
+    # builds only).
     set(WALLDIST_DIR ${CMAKE_CURRENT_BINARY_DIR}/run/rt_walldist_hill2d)
     ablsteady_add_test(NAME rt_walldist_hill2d NP 2 LABELS "regression;smoke" RUN_DIR ${WALLDIST_DIR}
                        FIXTURES_SETUP walldist_hill2d
@@ -952,7 +956,7 @@ if(ABLSTEADY_PRECISION STREQUAL "DOUBLE")
     set(ASK210_DIR ${CMAKE_CURRENT_BINARY_DIR}/run/rt_askervein_210)
     add_test(NAME rt_askervein_210_clean
              COMMAND ${Python3_EXECUTABLE} -c "import os, shutil, sys; [ (shutil.rmtree(d, ignore_errors=True), os.makedirs(d)) for d in sys.argv[1:] ]"
-                     ${ASK210_DIR}/phase2 ${ASK210_DIR}/phase1)
+                     ${ASK210_DIR}/phase2 ${ASK210_DIR}/phase1 ${ASK210_DIR}/unbounded)
     set_tests_properties(rt_askervein_210_clean PROPERTIES LABELS "nightly" FIXTURES_SETUP askervein_210_clean)
     ablsteady_add_test(NAME rt_steady_askervein_210 NP 4 LABELS "nightly" RUN_DIR ${ASK210_DIR}/phase2
                        FIXTURES_SETUP askervein_210_phase2 FIXTURES_REQUIRED askervein_210_clean
@@ -975,6 +979,14 @@ if(ABLSTEADY_PRECISION STREQUAL "DOUBLE")
     set_tests_properties(rt_askervein_210_erf_lines PROPERTIES LABELS "nightly"
                          FIXTURES_REQUIRED askervein_210_phase2 FIXTURES_SETUP askervein_210_lines
                          ENVIRONMENT PYTHONDONTWRITEBYTECODE=1)
+    # The same lines against their own gold to 1e-4 (Gold/askervein_210_lines.csv):
+    # the ERF tolerances alone would pass the run with the inflow k of before.
+    add_test(NAME rt_askervein_210_lines_gold
+             COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/askervein_lines.py compare lines.csv
+                     ${ASKERVEIN_210_CASE}/Gold/askervein_210_lines.csv --rel_tol 1e-4
+             WORKING_DIRECTORY ${ASK210_DIR}/phase2)
+    set_tests_properties(rt_askervein_210_lines_gold PROPERTIES LABELS "nightly"
+                         FIXTURES_REQUIRED askervein_210_lines ENVIRONMENT PYTHONDONTWRITEBYTECODE=1)
     # RT-2.6.2: the level history (cells, stop reasons, iterations within
     # 10 %) and the stage switches against the gold sequence.
     add_test(NAME rt_askervein_210_level_history
@@ -1003,6 +1015,25 @@ if(ABLSTEADY_PRECISION STREQUAL "DOUBLE")
     set_tests_properties(rt_askervein_210_phase1_matches PROPERTIES LABELS "nightly"
                          FIXTURES_REQUIRED "askervein_210_phase1;askervein_210_lines"
                          ENVIRONMENT PYTHONDONTWRITEBYTECODE=1)
+    # Old against new for bc.inflow_tke_length: the Phase 2 run with the
+    # inflow k of before (unbounded length) reaches the lines of that run
+    # (Gold/askervein_210_lines_unbounded.csv, #43) to 1e-4.
+    ablsteady_add_test(NAME rt_steady_askervein_210_unbounded NP 4 LABELS "nightly" RUN_DIR ${ASK210_DIR}/unbounded
+                       FIXTURES_SETUP askervein_210_unbounded FIXTURES_REQUIRED askervein_210_clean
+                       PREFIX ${EXPECT_ABORT} --success --timeout 3600 "ablsteady: steady after" --
+                       COMMAND $<TARGET_FILE:ablsteady> ${ASKERVEIN_210_CASE}/inputs_steady_askervein_210
+                               terrain.file=${PROJECT_SOURCE_DIR}/extern_erf/askervein.txt
+                               bc.inflow_file=${ASKERVEIN_210_CASE}/askervein_210_inflow.txt
+                               bc.inflow_tke_length=unbounded
+                               steady.sweep=lusgs steady.sequencing=1 mesh.hierarchy_levels=2 ${ABLSTEADY_TEST_AMREX_FLAGS})
+    add_test(NAME rt_askervein_210_unbounded_matches
+             COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/askervein_lines.py check
+                     steady_askervein_210_plt ${ASKERVEIN_210_CASE}/Gold/askervein_210_lines_unbounded.csv
+                     --terrain ${PROJECT_SOURCE_DIR}/extern_erf/askervein.txt
+                     --lines ${ASKERVEIN_210_CASE}/askervein_lines.csv --out lines.csv --rel_tol 1e-4
+             WORKING_DIRECTORY ${ASK210_DIR}/unbounded)
+    set_tests_properties(rt_askervein_210_unbounded_matches PROPERTIES LABELS "nightly"
+                         FIXTURES_REQUIRED askervein_210_unbounded ENVIRONMENT PYTHONDONTWRITEBYTECODE=1)
 endif()
 
 # --- Reference archives (sub-phase 1.1): ablsteady_refavg end to end --------
@@ -1091,6 +1122,14 @@ if(NOT WIN32)
                      ${CMAKE_CURRENT_BINARY_DIR}/run/kestrel_dryrun)
     set_tests_properties(kestrel_dryrun PROPERTIES LABELS "regression;smoke" FIXTURES_REQUIRED smoke)
 endif()
+
+# The plotfile reader of the check scripts (extern_erf/erf_plotfile.py, a
+# local change): hand-made one-box plotfiles in float and double, little- and
+# big-endian, read back exactly.
+add_test(NAME erf_plotfile_selftest
+         COMMAND ${Python3_EXECUTABLE} -m unittest -v test_erf_plotfile
+         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/tools)
+set_tests_properties(erf_plotfile_selftest PROPERTIES LABELS unit ENVIRONMENT PYTHONDONTWRITEBYTECODE=1)
 
 # --- RT-1.3.1 helper: the extern_erf drift check's own tests -----------------
 add_test(NAME drift_check_selftest

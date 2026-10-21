@@ -15,12 +15,18 @@
 // theta(z) is the hydrostatic reference profile (ReferenceProfile) for the
 // analytic kinds.
 //
-// Turbulence in equilibrium with the wind: with nu_t = kappa u*_l (z + z0)
-// and the local friction velocity u*_l = kappa (z + z0) dS/dz (shear
-// production equals dissipation in the wall law),
-//   k = u*_l^2 / Cmu0^2,   nu_t = kappa u*_l (z + z0).
-// For the log law u*_l = u* at every height, so k = u*^2/Cmu0^2, the wall
-// value. A file with a k column uses it as given.
+// Turbulence in equilibrium with the wind (shear production equals
+// dissipation of the k-L closure, Closure_K.H, neutral): with the length l and
+// the local friction velocity u*_l = l dS/dz,
+//   k = u*_l^2 / Cmu0^2,   nu_t = l u*_l.
+// bc.inflow_tke_length = closure (the default) takes the closure's own
+// geometric length, kappa (z + z0) capped by turb.max_geom_lscale:
+//   1/l = 1/(kappa (z + z0)) + 1/l_max   (Closure_K.H geom_length);
+// unbounded takes l = kappa (z + z0), the wall-law length (the form before
+// it), for which the log law gives u*_l = u* and k = u*^2/Cmu0^2 at every
+// height. A file with a k column uses its k as given (bc.inflow_tke_length is
+// then refused: the fill, the damping and the first guess use k, not the
+// profile's nu_t, which eval reports for tests and tools).
 
 #include "Forcing.H"
 
@@ -51,6 +57,11 @@ struct InflowProfileOptions
     //! For k and nu_t: Cmu0 and kappa (> 0; the closure's values).
     amrex::Real Cmu0{amrex::Real(0.5562)};
     amrex::Real kappa{amrex::Real(0.41)};
+    //! bc.inflow_tke_length: the length of the equilibrium k and nu_t; closure
+    //! caps kappa (z + z0) at l_max (turb.max_geom_lscale, > 0), unbounded does not.
+    enum class Length { closure, unbounded };
+    Length length{Length::closure};
+    amrex::Real l_max{30};
 };
 
 //! Problems with the options, naming each (the file is not read here).
@@ -78,6 +89,7 @@ public:
     {
         int kind;                  //!< 0 log_law, 1 power_law, 2 file
         amrex::Real ustar, z0, speed_ref, z_ref, alpha, cosd, sind, Cmu0, kappa;
+        amrex::Real inv_lmax;      //!< 1/l_max, or 0 for bc.inflow_tke_length = unbounded
         const amrex::Real* tz;     //!< file table: heights (n)
         const amrex::Real* tu;     //!< file table: u, v, theta, k, each n long (k: NaN if absent)
         const amrex::Real* tv;
@@ -89,6 +101,15 @@ public:
         const amrex::Real* rt;
         int rn;
 
+        //! The cap's factor at height z, l / l_raw = 1 / (1 + l_raw / l_max)
+        //! with l_raw = kappa (z + z0) (geom_length of Closure_K.H), written
+        //! without a select: exactly 1 for unbounded (inv_lmax = 0), so the
+        //! old expressions times this factor are the old values bit for bit.
+        AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+        amrex::Real cap_factor (amrex::Real z) const noexcept
+        {
+            return amrex::Real(1) / (amrex::Real(1) + kappa * (z + z0) * inv_lmax);
+        }
         //! The values at height z (>= 0) above the ground.
         AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
         void eval (amrex::Real z, amrex::Real& u, amrex::Real& v, amrex::Real& theta, amrex::Real& k,
@@ -143,20 +164,23 @@ void InflowProfile::View::eval (amrex::Real z, amrex::Real& u, amrex::Real& v, a
         const amrex::Real s0 = std::sqrt(tu[m - 1] * tu[m - 1] + tv[m - 1] * tv[m - 1]);
         const amrex::Real s1 = std::sqrt(tu[m] * tu[m] + tv[m] * tv[m]);
         const amrex::Real dsdz = (n > 1) ? (s1 - s0) / (tz[m] - tz[m - 1]) : amrex::Real(0);
-        ustar_l = kappa * (z + z0) * amrex::max(dsdz, amrex::Real(0));
+        const amrex::Real c = cap_factor(z);
+        ustar_l = kappa * (z + z0) * amrex::max(dsdz, amrex::Real(0)) * c;
         if (has_k) {
             k = table_interp(tz, tk, n, z);
             ustar_l = Cmu0 * std::sqrt(amrex::max(k, amrex::Real(0)));
         } else {
             k = ustar_l * ustar_l / (Cmu0 * Cmu0);
         }
-        nut = kappa * ustar_l * (z + z0);
+        nut = kappa * ustar_l * (z + z0) * c;   // l u*_l (diagnostic: the fill and the first guess take k)
         return;
     }
     amrex::Real S;
+    const amrex::Real c = cap_factor(z);
     if (kind == 0) {
         S = ustar / kappa * std::log((z + z0) / z0);
-        ustar_l = ustar;
+        // dS/dz = u* / (kappa (z + z0)): u*_l = l dS/dz = u* l / l_raw.
+        ustar_l = ustar * c;
     } else {
         S = speed_ref * std::pow(z / z_ref, alpha);
         // dS/dz = alpha S / z diverges at the ground: below z0 the slope at
@@ -164,13 +188,13 @@ void InflowProfile::View::eval (amrex::Real z, amrex::Real& u, amrex::Real& v, a
         // max(z, z0) in arithmetic: a select would let the compiler evaluate
         // S/z at z = 0 (0/0, the invalid trap) although unused.
         const amrex::Real dsdz = alpha * S / (amrex::Real(0.5) * (z + z0 + std::abs(z - z0)));
-        ustar_l = kappa * (z + z0) * dsdz;
+        ustar_l = kappa * (z + z0) * dsdz * c;
     }
     u = S * cosd;
     v = S * sind;
     theta = table_interp(rz, rt, rn, z);
     k = ustar_l * ustar_l / (Cmu0 * Cmu0);
-    nut = kappa * ustar_l * (z + z0);
+    nut = kappa * ustar_l * (z + z0) * c;   // l u*_l (diagnostic: the fill and the first guess take k)
 }
 
 } // namespace ablsteady

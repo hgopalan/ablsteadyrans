@@ -461,8 +461,7 @@ Current tests
    * - ``rt_askervein_mesh``
      - RT-1.4.1 and RT-1.4.2: ERF's Askervein mesh coarsened to 60 × 60 × 18 (20 m × 1.08 layers, BTF, ERF's terrain
        file): statistics of ``z`` and ``detJ`` and the quality report against ``Tests/Discretization/Terrain_Mesh/Gold/askervein_mesh.json``.
-       Double-precision builds only: the statistics use ERF's plotfile reader, which reads double-precision
-       plotfiles.
+       Double-precision builds only: the statistics are compared at double-precision tolerances.
    * - ``rt_steep_ridge_quality``
      - RT-1.4.2: a 600 m ridge under STF: the report against its gold, including both warnings (STF capped, top
        not flat). Double-precision builds only.
@@ -640,11 +639,11 @@ Current tests
        the ridge, finite fields, k ≥ 0, the length-scale bound, the wall cell's k balance, the crest speed-up in the
        three lowest cells within 0.2–0.8 (Jackson and Hunt's 0.4), the speed-up positive in the lowest ten, the
        upstream u* within 0.25–0.55 m/s, the upstream log law in the lowest three cells within 15 %. Measured: the
-       verdict after 4590 iterations (49 s on two ranks), speed-up 0.59/0.50/0.43, u* = 0.354 m/s, every check
+       verdict after 4576 iterations (49 s on two ranks), speed-up 0.59/0.50/0.43, u* = 0.354 m/s, every check
        passing (:doc:`solution_algorithm`). Label ``regression``; double only.
    * - ``rt_steady_hill2d_lusgs``
      - RT-2.1.1: the 2-D hill with the line LU-SGS sweeps (``inputs_steady_hill2d_lusgs``: two symmetric sweeps,
-       CFL cap 16) to the verdict with a two-order drop and ERF's ``check_hill.py --physics``. Measured: 3062
+       CFL cap 16) to the verdict with a two-order drop and ERF's ``check_hill.py --physics``. Measured: 3048
        iterations (23 s on two ranks), every check passing, the steady state within the convergence tolerance of
        the Jacobi deck's (:doc:`results`). Label ``regression``; double only; since 2.1b it runs in the column
        test's directory (``run/rt_steady_hill2d_column``) so the spin-up check can read both histories.
@@ -653,7 +652,7 @@ Current tests
        the verdict with a two-order drop and ERF's ``check_hill.py --physics``; then ``Tests/Canonical_RANS/Neutral_Hill_2D/check_column_guess.py``
        on the Driver histories of the profile run (``rt_steady_hill2d_lusgs``, now in the same run directory) and
        the column run: at iteration 300 the column run's u and v residuals at most half the profile run's, and
-       fewer iterations to the verdict. Measured: 1237 iterations (60 under ctest, machine shared s on two ranks) against 3062, residual
+       fewer iterations to the verdict. Measured: 1237 iterations (60 under ctest, machine shared s on two ranks) against 3048 (1231 under ctest), residual
        ratios at iteration 300 of 0.084 (u) and 0.060 (v), every ERF check passing. Label ``regression``;
        double only.
    * - ``rt_steady_hill3d``
@@ -696,7 +695,7 @@ Current tests
    * - ``rt_steady_askervein``
      - RT-1.16.3, the convergence half: Askervein on the ERF grid of RT-1.12.1 (``inputs_steady_askervein``: 30 × 30
        × 18, the log-law inflow, outflow, slip sides, no Coriolis, four sweeps, cap 2) to the steady verdict.
-       Measured: 156 iterations, unchanged by the ``gmres_mlmg`` default. ``init.alpha_v = 0.5``, so the log
+       Measured: 175 iterations (156 with ``bc.inflow_tke_length = unbounded``). ``init.alpha_v = 0.5``, so the log
        must show the projection on ``gmres_fft`` and the stage on ``gmres_mlmg``. The 5 % comparison with ERF's URANS
        on lines A and AA is not in this version (Kestrel). Labels ``regression;smoke``; double only.
    * - ``rt_precursor_askervein_cnbl``, ``rt_precursor_askervein_cnbl_fixed``, ``rt_precursor_askervein_cnbl_table``
@@ -717,28 +716,40 @@ Current tests
    * - ``rt_steady_askervein_cnbl``
      - Beyond the plan: Askervein in a conventionally neutral boundary layer (``inputs_steady_askervein_cnbl``: 30 ×
        30 × 26 to 1599 m, the precursor's table as inflow on xlo and yhi, outflow on xhi and ylo, Rayleigh damping
-       of w and θ above 1200 m, four sweeps, cap 2) to the steady verdict. Measured: 220 iterations (156 for
+       of w and θ above 1200 m, four sweeps, cap 2) to the steady verdict. Measured: 220 iterations (175 for
        ``rt_steady_askervein``); u residual down four orders. Label ``regression``; double only.
    * - ``rt_askervein_210_inflow_table``
      - ``Tests/Real_Terrain/Askervein_210/askervein_210_inflow.txt`` is the table ``tools/erf_inflow_table.py`` makes
        from ERF's Askervein inflow (``extern_erf/inflow_powerlaw.txt``, wind from 210°; w dropped, θ = 300 K, a z = 0
        row added), to 1e-9. Label ``regression;smoke``.
-   * - ``rt_steady_askervein_210``, ``rt_askervein_210_erf_lines``, ``rt_askervein_210_level_history``
+   * - ``rt_steady_askervein_210``, ``rt_askervein_210_erf_lines``, ``rt_askervein_210_lines_gold``,
+       ``rt_askervein_210_level_history``
      - RT-2.6.1 and RT-2.6.2 (sub-phase 2.6): Askervein with ERF's setup (``inputs_steady_askervein_210``: 300 × 300 ×
        18, the 210° inflow through xlo and ylo, outflow through xhi and yhi, Rayleigh damping of w in the top 250 m)
        with the Phase 2 configuration (``steady.sweep = lusgs`` with its default CFL cap, the default reference window,
-       grid sequencing over two levels, the last three on the command line) to the steady verdict; measured: 96 level-0 iterations and 42 on level 1 (four
+       grid sequencing over two levels, the last three on the command line) to the steady verdict; measured: 95 level-0 iterations and 34 on level 1 (four
        ranks). The 10 m speeds on lines A and AA (``tools/askervein_lines.py check``) must be within 5 % of ERF's
        URANS average (``Gold/erf_urans_lines_10m.csv``) up to 300 m past the hilltop, and within 10 % at the four
-       lee masts beyond (measured: 4.48 % and 7.51 %). The level history (cells, stop reasons, iterations within
+       lee masts beyond (measured: 4.00 % and 9.21 %; the lee margin is 0.8 points, so a change of the closure or
+       the advection that crosses it needs a review, not a wider tolerance). ``rt_askervein_210_lines_gold`` checks
+       the same lines against ``Gold/askervein_210_lines.csv`` to 1e-4 (the ERF tolerances alone would pass the run
+       with the inflow k of ``bc.inflow_tke_length = unbounded``). The level history (cells, stop reasons, iterations within
        10 %) and the stage switches must match ``Gold/askervein_210_level_history.json``. Label ``nightly``; double
        only.
+   * - ``rt_steady_askervein_210_unbounded``, ``rt_askervein_210_unbounded_matches``
+     - Old against new for ``bc.inflow_tke_length``: the Phase 2 run of ``rt_steady_askervein_210`` with the inflow
+       length of before (``unbounded``) reaches that run's lines (``Gold/askervein_210_lines_unbounded.csv``) to 1e-4
+       (measured: identical to the six digits written, on the same machine). Label ``nightly``; double only.
    * - ``rt_steady_askervein_210_phase1``, ``rt_askervein_210_phase1_matches``
      - Old against new: the same deck with the Phase 1 configuration of RT-1.16.3 (``zjacobi``, four sweeps, cap 2, a
-       100-iteration reference, one level; measured: 538 iterations) reaches the Phase 2 lines to 0.1 % (measured:
+       100-iteration reference, one level; measured: 512 iterations, 538 with ``bc.inflow_tke_length = unbounded``) reaches the Phase 2 lines to 0.1 % (measured:
        1e-4 %). Label ``nightly``; double only.
    * - ``drift_check_selftest``
      - The ``extern_erf`` drift check on a throw-away ERF repository (:doc:`extraction`).
+   * - ``erf_plotfile_selftest``
+     - ``extern_erf/erf_plotfile.py`` (a local change, :doc:`extraction`) on hand-made one-box plotfiles in double
+       and float, little- and big-endian: every value read back exactly. The upstream reader fails the two float
+       cases. Label ``unit``.
    * - ``refavg_snapshots``, ``refavg_build``, ``refavg_verify``, ``refavg_matches``
      - ``ablsteady_refavg`` end to end: three copies of the smoke plotfile at 0, 5 and 10 s are archived on 2
        ranks with two inputs files; the archive verifies on 3 ranks with the expected metadata, AU and a zero

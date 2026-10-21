@@ -129,12 +129,14 @@ FaceType face_type_from_name (const std::string& name, const std::string& key)
 const char* const kSurfaceKeys[] = {"surface_z0", "surface_zref", "surface_stability", "surface_heat_flux", "surface_wall_k",
                                     "surface_denominator_floor"};
 
-void use_closure_constants (BoundaryInputs& bin, SurfaceLayerOptions& surf, amrex::Real Cmu0, amrex::Real kappa)
+void use_closure_constants (BoundaryInputs& bin, SurfaceLayerOptions& surf, amrex::Real Cmu0, amrex::Real kappa,
+                            amrex::Real max_geom_lscale)
 {
     surf.Cmu0 = Cmu0;
     surf.kappa = kappa;
     bin.inflow.Cmu0 = Cmu0;
     bin.inflow.kappa = kappa;
+    bin.inflow.l_max = max_geom_lscale;
 }
 
 BoundaryInputs read_boundary_inputs ()
@@ -142,7 +144,7 @@ BoundaryInputs read_boundary_inputs ()
     BoundaryInputs in;
     amrex::ParmParse pp("bc");
     const char* keys[] = {"xlo", "xhi", "ylo", "yhi", "zlo", "zhi", "inflow_profile", "inflow_ustar", "inflow_z0",
-                          "inflow_speed", "inflow_zref", "inflow_alpha", "inflow_direction", "inflow_file",
+                          "inflow_speed", "inflow_zref", "inflow_alpha", "inflow_direction", "inflow_file", "inflow_tke_length",
                           "theta_profile_z", "theta_profile", "zhi_theta_grad", "rayleigh_zdamp",
                           "rayleigh_dampcoef", "rayleigh_fields", "rayleigh_height", "sponge_width", "sponge_strength",
                           "xlo_wall_velocity", "xhi_wall_velocity", "ylo_wall_velocity", "yhi_wall_velocity",
@@ -184,6 +186,12 @@ BoundaryInputs read_boundary_inputs ()
     pp.query("inflow_alpha", in.inflow.alpha);
     pp.query("inflow_direction", in.inflow.direction);
     pp.query("inflow_file", in.inflow.file);
+    std::string length;
+    if (pp.query("inflow_tke_length", length)) {
+        if (length == "closure") { in.inflow.length = InflowProfileOptions::Length::closure; }
+        else if (length == "unbounded") { in.inflow.length = InflowProfileOptions::Length::unbounded; }
+        else { amrex::Abort("ablsteady: bc.inflow_tke_length = " + length + ": must be closure or unbounded"); }
+    }
     amrex::Vector<amrex::Real> tz, tt;
     pp.queryarr("theta_profile_z", tz);
     pp.queryarr("theta_profile", tt);
@@ -291,7 +299,7 @@ std::vector<std::string> check_boundary_inputs (const BoundaryInputs& in, const 
         only_for("inflow_file", K::file);
     } else {
         for (const char* k : {"inflow_profile", "inflow_ustar", "inflow_z0", "inflow_speed", "inflow_zref",
-                              "inflow_alpha", "inflow_direction", "inflow_file"}) {
+                              "inflow_alpha", "inflow_direction", "inflow_file", "inflow_tke_length"}) {
             if (given(k)) {
                 err.emplace_back(std::string("bc.") + k
                                  + " has no effect without an inflow face, a damping layer or init.first_guess = profile or column");
@@ -383,6 +391,13 @@ BoundaryConditions::BoundaryConditions (const BoundaryInputs& in, const amrex::G
                                         const CoriolisOptions& coriolis)
     : m_in(checked(in, geom, mesh, coriolis)), m_geom(geom), m_mesh(mesh), m_coriolis(coriolis), m_profile(m_in.inflow, m_in.theta_ref)
 {
+    // Known only once the table is read: with its own k column the length
+    // changes nothing (the fill, the damping and the first guess take k, not
+    // the profile's nu_t), so the key would be read and ignored.
+    if (m_profile.has_k() && std::find(m_in.given.begin(), m_in.given.end(), "inflow_tke_length") != m_in.given.end()) {
+        amrex::Abort("ablsteady: invalid boundary conditions:\n  bc.inflow_tke_length has no effect with a k column in "
+                     "bc.inflow_file = " + m_in.inflow.file);
+    }
 }
 
 bool BoundaryConditions::has_inflow () const
