@@ -164,6 +164,29 @@ TEST(NewtonStage, HandsBackForTheFinalPassAfterTheSwap)
 }
 
 // ---------------------------------------------------------------------------
+// Beyond the plan (Pressel review). With a steady.residual_tol no run can
+// reach (1e-30), the Newton stage converges on its equations, idles for
+// steady.monitor_window iterations without a steady verdict, then hands the
+// run back to SIMPLEC (the reason names steady.monitor_window) and refuses
+// later switches, instead of idling to steady.max_iterations.
+TEST(NewtonStage, HandsBackWhenConvergedWithoutAVerdict)
+{
+    if constexpr (!kDouble) { GTEST_SKIP() << "the 6-order drop is near single precision"; }
+    auto hr = std::make_unique<HillRun>(0.01, 8, 8, 4, 0, Limiter::van_albada, StageKind::simplec_newton);
+    hr->s.sopt.criterion.residual_tol = amrex::Real(1e-30);
+    hr->s.sopt.criterion.residual_drop_orders = 6;
+    hr->ls = std::make_unique<ablsteady::LevelSolver>(hr->s, hr->c.mesh, hr->c.geom, hr->c.z, hr->c.ba, hr->c.dm, "", true);
+    auto& d = hr->ls->driver();
+    for (int it = 0; it < 20000 && d.history().switches.size() < 2; ++it) { d.step(hr->q); }
+    const auto& sw = d.history().switches;
+    ASSERT_EQ(sw.size(), 2u);
+    EXPECT_EQ(sw[1].to, 0);
+    EXPECT_NE(sw[1].reason.find("steady.monitor_window"), std::string::npos) << sw[1].reason;
+    EXPECT_GE(sw[1].iteration - sw[0].iteration, hr->s.sopt.criterion.monitor_window);
+    EXPECT_FALSE(hr->ls->newton_stage()->accepts_switch());
+}
+
+// ---------------------------------------------------------------------------
 // UT-3.5.2 on the stage itself: with a preconditioner that returns zero every
 // continuation step fails (every retry rejected); the stage asks to go back
 // after steady.newton_fallback_failures (2) failed steps, not after one, and

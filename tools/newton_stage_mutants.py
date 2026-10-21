@@ -37,10 +37,18 @@ M = [
   "    if (before.r0 > 0 && before.r_last <= drop * before.r0) {"),
  ("N9", "no hand-back for the final pass", N,
   "        m_handed_back = true;", ""),
- ("N10", "the continuation's dtau from the SER start, not the cap", N,
-  "    o.cfl0 = o.cfl_max;", ""),
+ ("N10", "the continuation's start CFL not reset on entry", N,
+  "        st.cfl = m_sopt.cfl_max;", ""),
  ("N11", "the continuation state not restored on restart", N,
   "        m_cont.restore(read_continuation_state(dir));", ""),
+ ("N12", "no limit on failed visits", N,
+  "        if (m_failed_visits >= kMaxFailedVisits) {", "        if (false) {"),
+ ("N13", "no idle hand-back", N,
+  "        if (++m_idle > m_sopt.criterion.monitor_window) {", "        if (false) {"),
+ ("N14", "the Newton cap not used (the SIMPLEC cap, plain Newton after one step)", N,
+  "    o.cfl0 = sopt.newton_cfl_max;\n    o.cfl_max = sopt.newton_cfl_max;", "    o.cfl0 = sopt.cfl_max;\n    o.cfl_max = sopt.cfl_max;"),
+ ("N15", "the preconditioner of an infinite dtau at the SIMPLEC cap", N,
+  "z_nd, sopt.newton_cfl_max, ba, dm, line_sweep_options(sopt));", "z_nd, sopt.cfl_max, ba, dm, line_sweep_options(sopt));"),
 ]
 
 if __name__ == "__main__":
