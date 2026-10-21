@@ -6,7 +6,7 @@
     150,
     150
    ],
-   "iterations": 42,
+   "iterations": 34,
    "stop": "every residual 2.000e+00 orders below its reference"
   },
   {
@@ -15,7 +15,7 @@
     300,
     300
    ],
-   "iterations": 96,
+   "iterations": 95,
    "stop": "strict: steady"
   }
  ],
