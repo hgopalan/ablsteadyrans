@@ -1083,3 +1083,94 @@ TEST (Driver, ReleasedHoldRampsFromTheFirstIteration)
 }
 
 } // namespace
+
+// The history records the height H of the residual scales (format 3). On a
+// stretched mesh whose 8 layers (50 m, ratio 1.1) end at 571.79 m above
+// prob_hi z = 500 m, H is the depth of the layers; on a uniform mesh it is
+// prob_hi z exactly, also where the top level differs from it by round-off. A history without H (formats 1 and 2, whose residuals
+// were scaled with prob_hi z) is rescaled by H / prob_hi z on restore: the
+// reference, the last residuals and the records; r_n is kept. A recorded H
+// survives a write and a read bit for bit; a bad one is refused.
+TEST (Driver, HistoryRecordsTheResidualScaleHeight)
+{
+    {
+        // 30 uniform layers: 30 (500 / 30) is 500 + 5.7e-14 in double.
+        ablsteady::ptest::Manufactured ms;
+        ms.Lx = 1000;
+        ms.Ly = 800;
+        ms.H0 = 0;
+        PCase u = ablsteady::ptest::make_case(16, 8, 30, ablsteady::PoissonFace::periodic, ablsteady::PoissonFace::periodic,
+                                              ms, 0, false);
+        ablsteady::Driver d(base_options(), one_stage<DecayStage>("decay", amrex::Real(0.25)), u.mesh, u.geom, nullptr);
+        EXPECT_EQ(d.history().scale_height, amrex::Real(500));
+    }
+    PCase c;
+    c.in.mesh.n_cell = amrex::IntVect(16, 8, 8);
+    c.in.mesh.prob_hi = {1000, 800, 500};
+    c.in.mesh.is_periodic = {1, 1, 0};
+    c.in.mesh.max_grid_size = {16, 16};
+    c.in.mesh.dz0 = amrex::Real(50);
+    c.in.mesh.stretch_ratio = amrex::Real(1.1);
+    c.in.mesh.stretch_ratio_given = true;
+    c.make([] (double, double) { return 0.0; });
+    ablsteady::trtest::smooth_vertical_ghost_nodes(c);
+    const double H = 50 * (std::pow(1.1, 8) - 1) / 0.1;   // 571.79 m
+    SteadyOptions o = base_options();
+    o.criterion.monitor_window = 1000;   // never steady
+    ablsteady::State q;
+    define_state(q, c);
+    q.u.setVal(1.0);
+    ablsteady::Driver a(o, one_stage<DecayStage>("decay", amrex::Real(0.5)), c.mesh, c.geom, nullptr);
+    EXPECT_NEAR(double(a.history().scale_height), H, tol(1e-12, 1e-4) * H);
+    for (int i = 0; i < 4; ++i) { a.step(q); }
+    const DriverHistory h = a.history();
+    ASSERT_EQ(h.records.size(), 4u);
+
+    // Format 3 round trip.
+    const std::string dir = "ut_driver_scale_height";
+    if (amrex::ParallelDescriptor::IOProcessor()) {
+        amrex::FileSystem::RemoveAll(dir);
+        amrex::UtilCreateDirectory(dir, 0755);
+    }
+    amrex::ParallelDescriptor::Barrier();
+    ablsteady::write_driver_history(dir, h);
+    const DriverHistory r = ablsteady::read_driver_history(dir);
+    EXPECT_EQ(r.scale_height, h.scale_height);
+    ablsteady::Driver b(o, one_stage<DecayStage>("decay", amrex::Real(0.5)), c.mesh, c.geom, nullptr);
+    b.restore(r, q);
+    EXPECT_EQ(b.history().criterion.res_ref, h.criterion.res_ref);   // the same H: unchanged
+
+    // A history without H (as read from format 2): rescaled by H / 500.
+    DriverHistory old = h;
+    old.scale_height = 0;
+    ablsteady::Driver d(o, one_stage<DecayStage>("decay", amrex::Real(0.5)), c.mesh, c.geom, nullptr);
+    d.restore(old, q);
+    const DriverHistory& g = d.history();
+    const amrex::Real f = h.scale_height / amrex::Real(500);
+    EXPECT_EQ(g.scale_height, h.scale_height);
+    ASSERT_EQ(g.criterion.res_ref.size(), 1u);
+    EXPECT_EQ(g.criterion.res_ref[0], h.criterion.res_ref[0] * f);
+    EXPECT_EQ(g.criterion.res_last[0], h.criterion.res_last[0] * f);
+    for (std::size_t i = 0; i < h.records.size(); ++i) {
+        EXPECT_EQ(g.records[i].residuals[0], h.records[i].residuals[0] * f) << i;
+        EXPECT_EQ(g.records[i].relative_residual, h.records[i].relative_residual) << i;
+    }
+    EXPECT_GT(double(f), 1.14);
+
+    // Refusals: on read (format 3) and on restore.
+    for (const char* bad : {"scale_height 0x0p+0", "scale_height -0x1p+0", "scale_height nan"}) {
+        if (amrex::ParallelDescriptor::IOProcessor()) {
+            std::ofstream os(dir + "/Driver");
+            os << "ablsteady-driver 3\nstate 0 0x1p+0 0 -1\nhold -1\n" << bad
+               << "\naccounts 1\n0 0x0p+0 0x0p+0\nrecords 0\nswitches 0\ncriterion 0 0 0 \n1 0x0p+0\n1 0x0p+0\n1\n0\n";
+        }
+        amrex::ParallelDescriptor::Barrier();
+        EXPECT_THROW(ablsteady::read_driver_history(dir), std::runtime_error) << bad;
+    }
+    DriverHistory neg = h;
+    neg.scale_height = -1;
+    ablsteady::Driver e(o, one_stage<DecayStage>("decay", amrex::Real(0.5)), c.mesh, c.geom, nullptr);
+    EXPECT_THROW(e.restore(neg, q), std::runtime_error);
+    amrex::ParallelDescriptor::Barrier();
+    if (amrex::ParallelDescriptor::IOProcessor()) { amrex::FileSystem::RemoveAll(dir); }
+}

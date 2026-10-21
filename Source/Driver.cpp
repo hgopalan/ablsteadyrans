@@ -25,7 +25,8 @@ const char* const kKeys[] = {"residual_tol", "residual_drop_orders", "residual_r
                              "line_order", "line_alternate", "machine", "nodes", "stage",
                              "newton_preconditioner"};
 
-constexpr int kDriverVersion = 2;   // 2: the reference hold (version 1 files still read)
+// 2: the reference hold; 3: the residual scale height (versions 1 and 2 still read)
+constexpr int kDriverVersion = 3;
 const char* const kDriverMagic = "ablsteady-driver";
 
 std::string hexfloat (double x)
@@ -245,6 +246,7 @@ Driver::Driver (const SteadyOptions& opt, std::vector<std::unique_ptr<Stage>> st
     }
     m_h.accounts.resize(m_stages.size());
     m_h.cfl = opt.cfl0;
+    m_h.scale_height = residual_scale_height(m_mesh, m_geom);
 }
 
 void Driver::seed_reference (const std::vector<amrex::Real>& ref)
@@ -441,8 +443,30 @@ void Driver::restore (const DriverHistory& h, State& q)
     if (h.hold != -1 && h.hold != 0) {
         amrex::Abort("ablsteady: Driver::restore: the history's reference hold " + std::to_string(h.hold) + " is not -1 or 0");
     }
-    m_criterion.restore(h.criterion);   // checks its own sizes
-    m_h = h;
+    if (std::isnan(h.scale_height) || !std::isfinite(h.scale_height) || h.scale_height < 0) {
+        amrex::Abort("ablsteady: Driver::restore: the history's residual scale height is not finite and >= 0");
+    }
+    // The residual norms scale with H (rms / (U^2/H), ...). A history written
+    // with another H (format 1 and 2: prob_hi z - prob_lo z, which on a
+    // stretched mesh is not the depth of the layers) is brought to this H, so
+    // the reference, the drop and steady.residual_tol continue in one scale.
+    // r_n, a ratio of two norms, is kept as recorded.
+    DriverHistory hs = h;
+    const amrex::Real H_old = (h.scale_height > 0) ? h.scale_height : m_geom.ProbHi(2) - m_geom.ProbLo(2);
+    const amrex::Real H_new = residual_scale_height(m_mesh, m_geom);
+    if (H_old != H_new) {
+        const amrex::Real f = H_new / H_old;
+        auto rescale = [f] (std::vector<amrex::Real>& v) { for (auto& x : v) { x *= f; } };
+        rescale(hs.criterion.res_ref);
+        rescale(hs.criterion.res_last);
+        for (auto& r : hs.records) { rescale(r.residuals); }
+        for (auto& e : hs.switches) { rescale(e.residuals); }
+        amrex::Print() << "ablsteady: restart: the history's residuals were scaled with H = " << fmt(double(H_old))
+                       << " m; rescaled by " << fmt(double(f)) << " to H = " << fmt(double(H_new)) << " m\n";
+    }
+    hs.scale_height = H_new;
+    m_criterion.restore(hs.criterion);   // checks its own sizes
+    m_h = hs;
     // The options may have changed across the restart: the CFL continues
     // within the new bounds.
     m_h.cfl = amrex::min(amrex::max(m_h.cfl, m_opt.cfl0), m_opt.cfl_max);
@@ -531,6 +555,7 @@ void write_driver_history (const std::string& dir, const DriverHistory& h)
     os << kDriverMagic << " " << kDriverVersion << "\n";
     os << "state " << h.stage << " " << hexfloat(static_cast<double>(h.cfl)) << " " << h.below_count << " " << h.last_switch << "\n";
     os << "hold " << h.hold << "\n";
+    os << "scale_height " << hexfloat(static_cast<double>(h.scale_height)) << "\n";
     os << "accounts " << h.accounts.size() << "\n";
     for (const auto& a : h.accounts) {
         os << a.iterations << " " << hexfloat(a.wall_seconds) << " " << hexfloat(a.au) << "\n";
@@ -599,6 +624,11 @@ DriverHistory read_driver_history (const std::string& dir)
         h.hold = read_int(is, dir, "hold");
         if (h.hold != -1 && h.hold != 0) { history_error(dir, "corrupt: hold must be -1 or 0"); }
     }   // version 1 had no line: the hold of steady.residual_ref_iterations
+    if (version >= 3) {
+        expect(is, dir, "scale_height");
+        h.scale_height = static_cast<amrex::Real>(read_double(is, dir, "scale_height"));
+        if (!std::isfinite(h.scale_height) || !(h.scale_height > 0)) { history_error(dir, "corrupt: scale_height must be > 0"); }
+    }   // versions 1 and 2: 0, prob_hi z - prob_lo z (Driver::restore)
     expect(is, dir, "accounts");
     const int na = read_count(is, dir, "the account count", bytes);
     if (na < 1) { history_error(dir, "corrupt: no accounts"); }
