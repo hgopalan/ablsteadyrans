@@ -8,15 +8,15 @@
 #include "TestHelpers.H"
 
 namespace {
-using namespace ablsteady::ptest;
-using ablsteady::PoissonFace;
+using namespace gust::ptest;
+using gust::PoissonFace;
 
 // Orders of one manufactured case (2-D, three resolutions; two in single
 // precision, where MLMG's max-norm test cannot reach solver.poisson_reltol =
 // 1e-5 on the 64 x 32 mesh: rounding sets a floor near it).
 void orders_2d (const std::string& backend, PoissonFace kx, PoissonFace top, bool dirichlet_ground, double* order)
 {
-    ablsteady::PoissonOptions o;
+    gust::PoissonOptions o;
     o.backend = backend;
     Manufactured ms{1000, 800, 60, 0, kx, PoissonFace::periodic, top};
     ms.flat_y = true;
@@ -57,7 +57,7 @@ TEST (PoissonB, ManufacturedSecondOrder)
     }
     Manufactured ms{1000, 800, 60, 0, PoissonFace::neumann, PoissonFace::dirichlet, PoissonFace::dirichlet};
     ms.zero_gradient_ground = true;
-    ablsteady::PoissonOptions o;
+    gust::PoissonOptions o;
     o.backend = "mlmg";
     double err[2];
     int n = 0;
@@ -103,7 +103,7 @@ TEST (PoissonB, BackendsAgreeWithVariableCoefficients)
         b[d].define(areas[d]->boxArray(), c.dm, 1, 0);
         fill_faces(b[d], d, c, beta);
     }
-    ablsteady::FaceCoeffs fc;
+    gust::FaceCoeffs fc;
     fc.x = &b[0];
     fc.y = &b[1];
     fc.z = &b[2];
@@ -116,12 +116,12 @@ TEST (PoissonB, BackendsAgreeWithVariableCoefficients)
         for (const std::string be : {"gmres_fft", "mlmg"}) {
             phi[n].define(c.ba, c.dm, 1, 1);
             fill_cells(rhs, c, [ms] (double x, double y, double z) { return 1e-5 * ms.phi(x, y, z) + 1e-6; });
-            ablsteady::PoissonOptions o;
+            gust::PoissonOptions o;
             o.backend = be;
             o.reltol = static_cast<amrex::Real>(tol(1e-12, 1e-5));
-            ablsteady::PoissonSolver s(c.mesh, c.geom, c.z, o);
+            gust::PoissonSolver s(c.mesh, c.geom, c.z, o);
             const auto res = s.solve(rhs, phi[n], fc, bc, &F);
-            ablsteady::face_divergence(c.mesh, c.geom, {&F[0], &F[1], &F[2]}, div);
+            gust::face_divergence(c.mesh, c.geom, {&F[0], &F[1], &F[2]}, div);
             amrex::MultiFab::Add(div, rhs, 0, 0, 1, 0);
             EXPECT_LE(div.norm2(), 2 * res.final_residual + tol(1e-14, 1e-6) * rhs.norm2()) << be;
             ++n;
@@ -146,11 +146,11 @@ TEST (PoissonB, UnsupportedCombinationsAreRefused)
     amrex::MultiFab rhs(c.ba, c.dm, 1, 0), phi(c.ba, c.dm, 1, 1), bz(c.mesh.az.boxArray(), c.dm, 1, 0);
     rhs.setVal(1e-6);
     bz.setVal(1.0);
-    ablsteady::FaceCoeffs split;
+    gust::FaceCoeffs split;
     split.z_cross = &bz;
-    ablsteady::PoissonOptions mg;
+    gust::PoissonOptions mg;
     mg.backend = "mlmg";
-    ablsteady::PoissonSolver sb(c.mesh, c.geom, c.z, mg), sa(c.mesh, c.geom, c.z, back_end_a());
+    gust::PoissonSolver sb(c.mesh, c.geom, c.z, mg), sa(c.mesh, c.geom, c.z, back_end_a());
     const auto bc = make_bc(PoissonFace::neumann, PoissonFace::periodic, PoissonFace::dirichlet);
     const auto bcd = make_bc(PoissonFace::neumann, PoissonFace::periodic, PoissonFace::dirichlet, PoissonFace::dirichlet);
     EXPECT_NE(thrown([&] { sb.solve(rhs, phi, split, bc); }).find("FaceCoeffs::z_cross needs solver.poisson_backend = gmres_fft"),
@@ -158,31 +158,31 @@ TEST (PoissonB, UnsupportedCombinationsAreRefused)
     EXPECT_NE(thrown([&] { sa.solve(rhs, phi, split, bcd); }).find("z_cross with a Dirichlet ground"), std::string::npos);
     amrex::MultiFab Aphi(c.ba, c.dm, 1, 0);
     EXPECT_NE(thrown([&] { sb.apply(Aphi, phi, {}, bc); }).find("back end A's operator"), std::string::npos);
-    ablsteady::PoissonOptions bad;
+    gust::PoissonOptions bad;
     bad.backend = "hypre";
-    EXPECT_NE(ablsteady::check_poisson_options(bad).front().find("solver.poisson_backend"), std::string::npos);
+    EXPECT_NE(gust::check_poisson_options(bad).front().find("solver.poisson_backend"), std::string::npos);
     // Keys the chosen back end does not use.
-    ablsteady::PoissonOptions unused;
+    gust::PoissonOptions unused;
     unused.backend = "mlmg";
     unused.given = {"poisson_precond"};
-    EXPECT_NE(ablsteady::check_poisson_options(unused).front().find("solver.poisson_precond has no effect"),
+    EXPECT_NE(gust::check_poisson_options(unused).front().find("solver.poisson_precond has no effect"),
               std::string::npos);
     // solver.poisson_precond with the default back end (the key not given):
     // the message says how to fix the deck; given explicitly, it does not.
-    ablsteady::PoissonOptions dflt;
+    gust::PoissonOptions dflt;
     dflt.given = {"poisson_precond"};
-    EXPECT_NE(ablsteady::check_poisson_options(dflt).front().find("gmres_mlmg is the default"), std::string::npos);
+    EXPECT_NE(gust::check_poisson_options(dflt).front().find("gmres_mlmg is the default"), std::string::npos);
     dflt.given = {"poisson_precond", "poisson_backend"};
-    EXPECT_EQ(ablsteady::check_poisson_options(dflt).front().find("gmres_mlmg is the default"), std::string::npos);
+    EXPECT_EQ(gust::check_poisson_options(dflt).front().find("gmres_mlmg is the default"), std::string::npos);
     unused.given = {"poisson_restart"};
-    EXPECT_NE(ablsteady::check_poisson_options(unused).front().find("solver.poisson_restart has no effect"),
+    EXPECT_NE(gust::check_poisson_options(unused).front().find("solver.poisson_restart has no effect"),
               std::string::npos);
     unused.backend = "gmres_mlmg";
-    EXPECT_TRUE(ablsteady::check_poisson_options(unused).empty());   // GMRES-MLMG uses the restart length
-    ablsteady::PoissonOptions one;
+    EXPECT_TRUE(gust::check_poisson_options(unused).empty());   // GMRES-MLMG uses the restart length
+    gust::PoissonOptions one;
     one.backend = "mlmg";
     one.max_iter = 1;
-    ablsteady::PoissonSolver s1(c.mesh, c.geom, c.z, one);
+    gust::PoissonSolver s1(c.mesh, c.geom, c.z, one);
     EXPECT_NE(thrown([&] { s1.solve(rhs, phi, {}, bc); }).find("solver.poisson_max_iter"), std::string::npos);
 }
 

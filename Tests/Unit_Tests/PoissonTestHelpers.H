@@ -1,5 +1,5 @@
-#ifndef ABLSTEADY_POISSON_TEST_HELPERS_H_
-#define ABLSTEADY_POISSON_TEST_HELPERS_H_
+#ifndef GUST_POISSON_TEST_HELPERS_H_
+#define GUST_POISSON_TEST_HELPERS_H_
 
 // Shared by the Poisson-layer tests (test_Poisson.cpp, test_PoissonB.cpp,
 // test_WallDistance.cpp): a terrain-following mesh over an analytic ground,
@@ -29,9 +29,9 @@
 #include <string>
 #include <vector>
 
-namespace ablsteady::ptest {
+namespace gust::ptest {
 
-using ablsteady::PoissonFace;
+using gust::PoissonFace;
 
 constexpr double tol (double dbl, double flt) { return std::is_same_v<amrex::Real, double> ? dbl : flt; }
 
@@ -40,20 +40,20 @@ using Fn = std::function<double(double, double, double)>;
 // A terrain-following mesh over the ground h(x, y).
 struct PCase
 {
-    ablsteady::Inputs in;
+    gust::Inputs in;
     amrex::Geometry geom;
     amrex::BoxArray ba;
     amrex::DistributionMapping dm;
     amrex::MultiFab z;
-    ablsteady::Mesh mesh;
+    gust::Mesh mesh;
     double ztop{0};
 
     void make (const std::function<double(double, double)>& h)
     {
-        geom = ablsteady::make_geometry(in.mesh);
-        ba = ablsteady::make_box_array(in.mesh);
+        geom = gust::make_geometry(in.mesh);
+        ba = gust::make_box_array(in.mesh);
         dm = amrex::DistributionMapping(ba);
-        z.define(amrex::convert(ba, amrex::IntVect(1)), dm, 1, ablsteady::ngrow_nodal);
+        z.define(amrex::convert(ba, amrex::IntVect(1)), dm, 1, gust::ngrow_nodal);
         z.setVal(0.0);
         mesh.define(ba, dm);
         // The ground into the k = 0 slab, ghosts clamped to the domain.
@@ -208,10 +208,10 @@ inline double d1 (const Fn& g, double x, double y, double z, int dir, double e)
     return (p[0] - 8 * p[1] + 8 * p[3] - p[4]) / (12 * e);
 }
 
-inline ablsteady::PoissonBC make_bc (PoissonFace kx, PoissonFace ky, PoissonFace top,
+inline gust::PoissonBC make_bc (PoissonFace kx, PoissonFace ky, PoissonFace top,
                                      PoissonFace ground = PoissonFace::neumann)
 {
-    ablsteady::PoissonBC bc;
+    gust::PoissonBC bc;
     bc.face[amrex::Orientation(0, amrex::Orientation::low)] = kx;
     bc.face[amrex::Orientation(0, amrex::Orientation::high)] = kx;
     bc.face[amrex::Orientation(1, amrex::Orientation::low)] = ky;
@@ -252,23 +252,23 @@ inline PCase make_case (int nx, int ny, int nz, PoissonFace kx, PoissonFace ky, 
 struct SolveOut
 {
     double err;
-    ablsteady::PoissonResult res;
+    gust::PoissonResult res;
 };
 
 // Solve the manufactured problem; beta (if given) is a scalar field on all
 // faces, or (aniso) beta_h on x/y-faces and beta_v on z-faces.
 //! Back end A's options (gmres_fft): the tests of ERF's operator, its FFT
 //! preconditioner and its split coefficient (the default is gmres_mlmg).
-inline ablsteady::PoissonOptions back_end_a ()
+inline gust::PoissonOptions back_end_a ()
 {
-    ablsteady::PoissonOptions o;
+    gust::PoissonOptions o;
     o.backend = "gmres_fft";
     return o;
 }
 
-inline SolveOut solve_ms (PCase& c, Manufactured ms, const ablsteady::PoissonBC& bc, const Fn* beta = nullptr,
+inline SolveOut solve_ms (PCase& c, Manufactured ms, const gust::PoissonBC& bc, const Fn* beta = nullptr,
                    double beta_h = 1, double beta_v = 1, bool aniso = false,
-                   ablsteady::PoissonOptions opt = back_end_a(), double precond_ratio = 1, bool z_cross = true)
+                   gust::PoissonOptions opt = back_end_a(), double precond_ratio = 1, bool z_cross = true)
 {
     ms.ztop = c.ztop;
     const Fn phi = [ms] (double x, double y, double z) { return ms.phi(x, y, z); };
@@ -300,7 +300,7 @@ inline SolveOut solve_ms (PCase& c, Manufactured ms, const ablsteady::PoissonBC&
     fill_cells(exact, c, phi);
     sol.setVal(0);
 
-    ablsteady::FaceCoeffs fc;
+    gust::FaceCoeffs fc;
     amrex::MultiFab bx, by, bz, bzc;
     if (beta != nullptr || aniso) {
         bx.define(c.mesh.ax.boxArray(), c.dm, 1, 0);
@@ -325,7 +325,7 @@ inline SolveOut solve_ms (PCase& c, Manufactured ms, const ablsteady::PoissonBC&
         fc.z = &bz;
         fc.precond_ratio = precond_ratio;
     }
-    ablsteady::PoissonSolver solver(c.mesh, c.geom, c.z, opt);
+    gust::PoissonSolver solver(c.mesh, c.geom, c.z, opt);
     SolveOut out;
     out.res = solver.solve(rhs, sol, fc, bc);
     out.err = l2_diff(sol, exact, c.mesh.detJ, out.res.singular);
@@ -351,6 +351,6 @@ inline const std::vector<PoissonFace> kLateral{PoissonFace::periodic, PoissonFac
 
 inline double order_of (const double* e, int a) { return std::log2(e[a] / e[a + 1]); }
 
-} // namespace ablsteady::ptest
+} // namespace gust::ptest
 
 #endif

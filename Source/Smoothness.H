@@ -1,5 +1,5 @@
-#ifndef ABLSTEADY_SMOOTHNESS_H_
-#define ABLSTEADY_SMOOTHNESS_H_
+#ifndef GUST_SMOOTHNESS_H_
+#define GUST_SMOOTHNESS_H_
 
 // Smoothness handling around the Newton stage (plan sub-phase 3.4).
 //
@@ -65,7 +65,7 @@
 
 #include <string>
 
-namespace ablsteady {
+namespace gust {
 
 struct SmoothnessOptions
 {
@@ -118,6 +118,6 @@ private:
     bool m_active{false};
 };
 
-} // namespace ablsteady
+} // namespace gust
 
 #endif

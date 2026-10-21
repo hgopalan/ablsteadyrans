@@ -1,5 +1,5 @@
-#ifndef ABLSTEADY_INITIALIZER_H_
-#define ABLSTEADY_INITIALIZER_H_
+#ifndef GUST_INITIALIZER_H_
+#define GUST_INITIALIZER_H_
 
 // The mass-consistent initializer (sub-phase 1.12), WindNinja-style, with
 // FastWindTerrain's semantics for the anisotropy: a first guess u0 from the
@@ -58,7 +58,7 @@
 #include <string>
 #include <vector>
 
-namespace ablsteady {
+namespace gust {
 
 struct InitOptions
 {
@@ -138,6 +138,6 @@ InitResult initialize_state (const InitOptions& opt, const BoundaryInputs& bc, c
 amrex::Real obrien_omega (const amrex::MultiFab& u, const amrex::MultiFab& v, const amrex::MultiFab& z_nd, const Mesh& mesh,
                           const amrex::Geometry& geom, amrex::MultiFab& omega);
 
-} // namespace ablsteady
+} // namespace gust
 
 #endif

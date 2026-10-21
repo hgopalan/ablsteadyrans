@@ -1,9 +1,9 @@
-#ifndef ABLSTEADY_TURBULENCE_OUTPUT_H_
-#define ABLSTEADY_TURBULENCE_OUTPUT_H_
+#ifndef GUST_TURBULENCE_OUTPUT_H_
+#define GUST_TURBULENCE_OUTPUT_H_
 
 // The turbulence diagnostics plotfile (sub-phase 1.15): the closure's fields
 // under ERF's variable names, so ERF's Canonical_RANS check scripts
-// (check_neutral.py and its siblings) read an ablsteady result unchanged:
+// (check_neutral.py and its siblings) read a GUST result unchanged:
 //   x_velocity, y_velocity, z_velocity (cell means of the face velocities),
 //   theta, KE (k), Kmv (nu_t: rho = 1), Khv (gamma_theta - alpha_molecular),
 //   Lturb (L), walldist, diss (eps), density (1), Rt, cmu, cmu_prime (the
@@ -23,7 +23,7 @@
 
 #include <string>
 
-namespace ablsteady {
+namespace gust {
 
 //! Write <prefix>NNNNN (NNNNN = q.step). fields: the closure's evaluation at
 //! q; dist: the wall distance (cell-centred); surface: the wall state (null
@@ -35,6 +35,6 @@ std::string write_turbulence_plotfile (const std::string& prefix, const State& q
                                        const ClosureOptions& copt, const amrex::Geometry& geom,
                                        const ResidualFields* R = nullptr);
 
-} // namespace ablsteady
+} // namespace gust
 
 #endif

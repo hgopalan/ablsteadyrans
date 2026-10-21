@@ -12,7 +12,7 @@
 #include <limits>
 #include <string>
 
-namespace ablsteady {
+namespace gust {
 
 namespace {
 
@@ -36,7 +36,7 @@ void check_slab (const char* op, const SurfaceState& s, const amrex::MultiFab& l
 {
     if (s.ustar.boxArray() != ground_slab(amrex::convert(like.boxArray(), amrex::IntVect(0)))
         || s.ustar.DistributionMap() != like.DistributionMap()) {
-        amrex::Abort(std::string("ablsteady: ") + op + ": the surface state is not on this layout");
+        amrex::Abort(std::string("gust: ") + op + ": the surface state is not on this layout");
     }
 }
 
@@ -226,9 +226,9 @@ SurfaceLayerOptions read_surface_layer_options ()
     amrex::ParmParse pp("bc");
     for (const char* key : {"surface_z0", "surface_zref", "surface_stability", "surface_heat_flux", "surface_wall_k",
                             "surface_denominator_floor"}) {
-        if (pp.countname(key) > 1) { amrex::Abort(std::string("ablsteady: bc.") + key + " is given more than once"); }
+        if (pp.countname(key) > 1) { amrex::Abort(std::string("gust: bc.") + key + " is given more than once"); }
         if (pp.contains(key) && pp.countval(key) != 1) {
-            amrex::Abort(std::string("ablsteady: bc.") + key + " takes exactly one value");
+            amrex::Abort(std::string("gust: bc.") + key + " takes exactly one value");
         }
     }
     pp.query("surface_z0", opt.z0);
@@ -240,17 +240,17 @@ SurfaceLayerOptions read_surface_layer_options ()
     pp.query("surface_denominator_floor", f);
     if (s == "neutral") { opt.stability = SurfaceLayerOptions::Stability::neutral; }
     else if (s == "heat_flux") { opt.stability = SurfaceLayerOptions::Stability::heat_flux; }
-    else { amrex::Abort("ablsteady: bc.surface_stability = " + s + ": must be neutral or heat_flux"); }
+    else { amrex::Abort("gust: bc.surface_stability = " + s + ": must be neutral or heat_flux"); }
     if (w == "dirichlet") { opt.wall_k = SurfaceLayerOptions::WallK::dirichlet; }
     else if (w == "source") { opt.wall_k = SurfaceLayerOptions::WallK::source; }
-    else { amrex::Abort("ablsteady: bc.surface_wall_k = " + w + ": must be dirichlet or source"); }
+    else { amrex::Abort("gust: bc.surface_wall_k = " + w + ": must be dirichlet or source"); }
     if (f == "log_law") { opt.denominator_floor = SurfaceLayerOptions::DenominatorFloor::log_law; }
     else if (f == "one") { opt.denominator_floor = SurfaceLayerOptions::DenominatorFloor::one; }
-    else { amrex::Abort("ablsteady: bc.surface_denominator_floor = " + f + ": must be log_law or one"); }
+    else { amrex::Abort("gust: bc.surface_denominator_floor = " + f + ": must be log_law or one"); }
     const auto err = check_surface_layer_options(opt);
     if (!err.empty()) {
         // The checks say "surface layer z0"; the key is bc.surface_z0.
-        std::string all = "ablsteady: invalid inputs:";
+        std::string all = "gust: invalid inputs:";
         const std::string from = "surface layer ";
         for (std::string msg : err) {
             if (msg.rfind(from, 0) == 0) { msg = "bc.surface_" + msg.substr(from.size()); }
@@ -267,18 +267,18 @@ void compute_surface_state (const State& q, const SurfaceLayerOptions& opt, cons
     const char* op = "compute_surface_state";
     auto err = check_surface_layer_options(opt);
     for (const auto& e : check_buoyancy_options(buoyancy)) { err.push_back(e); }
-    if (!err.empty()) { amrex::Abort(std::string("ablsteady: ") + op + ": " + err.front()); }
+    if (!err.empty()) { amrex::Abort(std::string("gust: ") + op + ": " + err.front()); }
     check_operator_field(op, "u", q.u, Loc::xface, mesh, 1);
     check_operator_field(op, "v", q.v, Loc::yface, mesh, 1);
     check_operator_field(op, "w", q.w, Loc::zface, mesh, 1);
     check_nodal_heights(op, q.z_phys_nd, mesh);
     const amrex::Box& dom = geom.Domain();
     const int nz = dom.length(2), klo = dom.smallEnd(2);
-    if (nz < 2) { amrex::Abort("ablsteady: compute_surface_state: the mesh needs at least two layers"); }
+    if (nz < 2) { amrex::Abort("gust: compute_surface_state: the mesh needs at least two layers"); }
     const amrex::BoxArray& cba = mesh.detJ.boxArray();
     for (int n = 0; n < cba.size(); ++n) {
         if (cba[n].smallEnd(2) != klo || cba[n].bigEnd(2) != dom.bigEnd(2)) {
-            amrex::Abort("ablsteady: compute_surface_state: every box must span the whole z column");
+            amrex::Abort("gust: compute_surface_state: every box must span the whole z column");
         }
     }
 
@@ -301,7 +301,7 @@ void compute_surface_state (const State& q, const SurfaceLayerOptions& opt, cons
         amrex::ParallelAllReduce::Max(lo, amrex::ParallelDescriptor::Communicator());
         amrex::ParallelAllReduce::Min(hi, amrex::ParallelDescriptor::Communicator());
         if (!(opt.zref >= lo && opt.zref <= hi)) {
-            amrex::Abort("ablsteady: surface layer zref = " + std::to_string(opt.zref)
+            amrex::Abort("gust: surface layer zref = " + std::to_string(opt.zref)
                          + " m must lie between the first and last cell-centre heights above the ground of every column ("
                          + std::to_string(lo) + " to " + std::to_string(hi) + " m)");
         }
@@ -349,7 +349,7 @@ void compute_surface_state (const State& q, const SurfaceLayerOptions& opt, cons
     int bad = amrex::get<0>(data.value());
     amrex::ParallelAllReduce::Sum(bad, amrex::ParallelDescriptor::Communicator());
     if (bad > 0) {
-        amrex::Abort("ablsteady: compute_surface_state: no positive, finite friction velocity at "
+        amrex::Abort("gust: compute_surface_state: no positive, finite friction velocity at "
                      + std::to_string(bad) + " columns (surface layer heat_flux = " + std::to_string(opt.heat_flux)
                      + ", z0 = " + std::to_string(opt.z0) + ")");
     }
@@ -420,7 +420,7 @@ void apply_wall_to_implicit (const SurfaceState& s, Loc loc, const Mesh& mesh, c
                              amrex::MultiFab& A)
 {
     check_slab("apply_wall_to_implicit", s, A);
-    if (loc == Loc::zface) { amrex::Abort("ablsteady: apply_wall_to_implicit: w has no wall row (a boundary row)"); }
+    if (loc == Loc::zface) { amrex::Abort("gust: apply_wall_to_implicit: w has no wall row (a boundary row)"); }
     const amrex::Real dzinv = geom.InvCellSize(2);
     const amrex::Real half = amrex::Real(0.5);
     for (amrex::MFIter mfi(A, false); mfi.isValid(); ++mfi) {
@@ -456,7 +456,7 @@ void apply_wall_k_to_implicit (const SurfaceState& s, const SurfaceLayerOptions&
 {
     check_slab("apply_wall_k_to_implicit", s, A);
     if (A.nComp() != n_implicit_coefs || !A.ixType().cellCentered()) {
-        amrex::Abort("ablsteady: apply_wall_k_to_implicit: A must be the cell-centred implicit coefficients");
+        amrex::Abort("gust: apply_wall_k_to_implicit: A must be the cell-centred implicit coefficients");
     }
     const bool dirichlet = (opt.wall_k == SurfaceLayerOptions::WallK::dirichlet);
     for (amrex::MFIter mfi(A, false); mfi.isValid(); ++mfi) {
@@ -482,4 +482,4 @@ void apply_wall_k_to_implicit (const SurfaceState& s, const SurfaceLayerOptions&
     }
 }
 
-} // namespace ablsteady
+} // namespace gust

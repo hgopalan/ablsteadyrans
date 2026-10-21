@@ -22,7 +22,7 @@ match the same gold. The test-only driver is `poisson_projection` (`Supporting_F
 - The potential matches `Gold/poisson_askervein_plt00000` at relative 1e-8 for both back ends.
 - `abort_poisson_options`: `solver.poisson_reltol` repeated and out of range are both named.
 
-The golds were written by ablsteady, so they detect changes.
+The golds were written by GUST, so they detect changes.
 
 ## How to run
 ```bash

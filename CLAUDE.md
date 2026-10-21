@@ -1,6 +1,7 @@
-# CLAUDE.md — ablsteady
+# CLAUDE.md — GUST
 
-Rules for working on **ablsteady** (`hgopalan/ablsteadyrans`), a stand-alone AMReX steady RANS solver for the
+Rules for working on **GUST** (Grid-sequenced Unified Steady Terrain solver; called ablsteady until October 2026;
+repository `hgopalan/ablsteadyrans`), a stand-alone AMReX steady RANS solver for the
 atmospheric boundary layer. This is the subset of the multi-code rules (written for ERF, AMR-Wind and related codes)
 that applies here, plus what is specific to this repository.
 

@@ -97,16 +97,16 @@ int main (int argc, char* argv[])
 {
     amrex::Initialize(argc, argv);
     {
-        ablsteady::Inputs in = ablsteady::parse_inputs();
-        auto err = ablsteady::validate(in);
+        gust::Inputs in = gust::parse_inputs();
+        auto err = gust::validate(in);
         // The tool works on level 0 alone: a grid hierarchy would be ignored.
         if (in.mesh.hierarchy_levels != 1) { err.emplace_back("mesh.hierarchy_levels has no effect in closure_column"); }
-        ablsteady::BoundaryInputs bin = ablsteady::read_boundary_inputs();
-        ablsteady::SurfaceLayerOptions sopt = ablsteady::read_surface_layer_options();
-        const ablsteady::ClosureOptions copt = ablsteady::read_closure_options();
+        gust::BoundaryInputs bin = gust::read_boundary_inputs();
+        gust::SurfaceLayerOptions sopt = gust::read_surface_layer_options();
+        const gust::ClosureOptions copt = gust::read_closure_options();
         // One Cmu0 and kappa for the wall law, the wall k and the closure (the
         // state is their common equilibrium), as in the application.
-        ablsteady::use_closure_constants(bin, sopt, copt.Cmu0, copt.kappa, copt.max_geom_lscale);
+        gust::use_closure_constants(bin, sopt, copt.Cmu0, copt.kappa, copt.max_geom_lscale);
         amrex::Real ustar = amrex::Real(0.4), direction = 0;
         {
             amrex::ParmParse pp("fixed_state");
@@ -116,11 +116,11 @@ int main (int argc, char* argv[])
                 err.emplace_back("fixed_state.ustar must be > 0 and fixed_state.direction finite");
             }
         }
-        for (const auto& e : ablsteady::unknown_inputs(ablsteady::parmparse_entries(),
+        for (const auto& e : gust::unknown_inputs(gust::parmparse_entries(),
                                                        {"mesh", "terrain", "io", "bc", "turb", "fixed_state"})) {
             err.push_back(e);
         }
-        if (bin.face[2] != ablsteady::FaceType::surface_layer) {
+        if (bin.face[2] != gust::FaceType::surface_layer) {
             err.emplace_back("closure_column needs bc.zlo = surface_layer (the state is the wall law's)");
         }
         if (!err.empty()) {
@@ -129,17 +129,17 @@ int main (int argc, char* argv[])
             amrex::Abort(all);
         }
 
-        const amrex::Geometry geom = ablsteady::make_geometry(in.mesh);
-        const amrex::BoxArray ba = ablsteady::make_box_array(in.mesh);
+        const amrex::Geometry geom = gust::make_geometry(in.mesh);
+        const amrex::BoxArray ba = gust::make_box_array(in.mesh);
         const amrex::DistributionMapping dm(ba);
-        ablsteady::State q;
+        gust::State q;
         q.define(ba, dm);
-        ablsteady::Mesh mesh;
+        gust::Mesh mesh;
         mesh.define(ba, dm);
         mesh.build(in, geom, q.z_phys_nd);
-        const ablsteady::CoriolisOptions coriolis;
-        const ablsteady::BoundaryConditions bc(bin, geom, mesh, coriolis);
-        ablsteady::Closure closure(copt);
+        const gust::CoriolisOptions coriolis;
+        const gust::BoundaryConditions bc(bin, geom, mesh, coriolis);
+        gust::Closure closure(copt);
 
         // The equilibrium state of the wall law.
         const double kappa = copt.kappa, z0 = sopt.z0, cmu0 = copt.Cmu0;
@@ -149,21 +149,21 @@ int main (int argc, char* argv[])
         fill_points(q.v, 2, q.z_phys_nd, [&] (double h) { return speed(h) * std::sin(a); });
         q.w.setVal(0.0);
         q.p.setVal(0.0);
-        const ablsteady::ReferenceProfile& tp = bin.theta_ref;
+        const gust::ReferenceProfile& tp = bin.theta_ref;
         fill_points(q.theta, 0, q.z_phys_nd, [&] (double h) {
-            return static_cast<double>(ablsteady::table_interp(tp.z.data(), tp.theta.data(), static_cast<int>(tp.z.size()),
+            return static_cast<double>(gust::table_interp(tp.z.data(), tp.theta.data(), static_cast<int>(tp.z.size()),
                                                                static_cast<amrex::Real>(h)));
         });
         q.tke.setVal(static_cast<amrex::Real>(ustar * ustar / (cmu0 * cmu0)));
 
-        ablsteady::SurfaceState surface;
-        bc.fill_ghosts(q, &sopt, ablsteady::BuoyancyOptions{}, false, &surface);
+        gust::SurfaceState surface;
+        bc.fill_ghosts(q, &sopt, gust::BuoyancyOptions{}, false, &surface);
         amrex::MultiFab dist;
-        if (copt.wall_distance == ablsteady::WallDistanceKind::tucker) {
+        if (copt.wall_distance == gust::WallDistanceKind::tucker) {
             // The Tucker distance (WallDistance.H) with the Poisson defaults, then
             // its ghost ring by zero gradient (periodic images first).
             dist.define(ba, dm, 1, 1);
-            ablsteady::tucker_wall_distance(mesh, geom, q.z_phys_nd, dist);
+            gust::tucker_wall_distance(mesh, geom, q.z_phys_nd, dist);
             dist.FillBoundary(geom.periodicity());
             amrex::Box inside = geom.Domain();
             for (int d = 0; d < AMREX_SPACEDIM; ++d) { if (geom.isPeriodic(d)) { inside.grow(d, 1024); } }
@@ -180,24 +180,24 @@ int main (int argc, char* argv[])
                 });
             }
         } else {
-            ablsteady::height_above_ground(q.z_phys_nd, dist);
+            gust::height_above_ground(q.z_phys_nd, dist);
         }
         // turb.frozen_switch (default 1): the floor decisions frozen at this
         // state, as the Newton stage freezes them (Smoothness.H); the residual
         // is then the frozen evaluation, identical here.
         if (copt.frozen_switch) {
-            closure.freeze_switches(q, dist, sopt.z0, ablsteady::BuoyancyOptions{}, mesh, geom, ablsteady::FreezeScope::floor);
+            closure.freeze_switches(q, dist, sopt.z0, gust::BuoyancyOptions{}, mesh, geom, gust::FreezeScope::floor);
         }
 
-        ablsteady::ResidualInputs res_in;
+        gust::ResidualInputs res_in;
         res_in.closure = &closure;
         res_in.wall_distance = &dist;
         res_in.theta_ref = bin.theta_ref;
         res_in.surface = &sopt;
         res_in.bc = &bc;
-        ablsteady::ResidualFields R;
-        ablsteady::ClosureFields cf;
-        ablsteady::residual(q, res_in, mesh, geom, R, &cf);
+        gust::ResidualFields R;
+        gust::ClosureFields cf;
+        gust::residual(q, res_in, mesh, geom, R, &cf);
 
         // Output: cell fields.
         const int ncomp = 12;

@@ -1,7 +1,7 @@
 Terrain-following coordinates
 =============================
 
-Over hills the ground is not flat, so a regular box-shaped grid does not fit it. ablsteady uses a
+Over hills the ground is not flat, so a regular box-shaped grid does not fit it. GUST uses a
 terrain-following mesh instead: the grid lines run parallel to the ground near the surface and become flat
 higher up. The grid is still regular in computational space, which keeps the solver simple and fast.
 

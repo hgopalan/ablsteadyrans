@@ -68,7 +68,7 @@ The terrain file ``extern_erf/askervein.txt`` is passed on the command line, whi
 .. code-block:: bash
 
    mkdir -p runs/askervein && cd runs/askervein
-   mpirun -n 2 ../../build-rel/ablsteady ../../Tests/Real_Terrain/Askervein/inputs_steady_askervein \
+   mpirun -n 2 ../../build-rel/gust ../../Tests/Real_Terrain/Askervein/inputs_steady_askervein \
        terrain.file=../../extern_erf/askervein.txt
 
 The log reports the mass-consistent adjustment, and that it used the ``gmres_fft`` Poisson back end because
@@ -76,14 +76,14 @@ The log reports the mass-consistent adjustment, and that it used the ``gmres_fft
 
 .. code-block:: text
 
-   ablsteady: initializer: 13 Poisson iterations (gmres_fft, reltol 1.000e-10), divergence 4.048451025e-01 before, 6.095532275e-12 after
-   ablsteady: initializer: init.alpha_v / init.alpha_h = 0.5 needs the split z-face coefficient, which only solver.poisson_backend = gmres_fft has; ...
+   gust: initializer: 13 Poisson iterations (gmres_fft, reltol 1.000e-10), divergence 4.048451025e-01 before, 6.095532275e-12 after
+   gust: initializer: init.alpha_v / init.alpha_h = 0.5 needs the split z-face coefficient, which only solver.poisson_backend = gmres_fft has; ...
 
 The run converges in 175 iterations:
 
 .. code-block:: text
 
-   ablsteady: steady after 175 iterations (175 over the run)
+   gust: steady after 175 iterations (175 over the run)
 
 Look at the result
 ------------------

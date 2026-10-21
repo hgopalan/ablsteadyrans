@@ -1,10 +1,10 @@
-# Sphinx configuration for the ablsteady documentation.
+# Sphinx configuration for the GUST documentation.
 #
 #     make -C docs html        (warnings are errors; see docs/Makefile)
 
-project = "ablsteady"
-author = "ablsteady contributors"
-copyright = "2026, ablsteady contributors"
+project = "GUST"
+author = "GUST contributors"
+copyright = "2026, GUST contributors"
 
 extensions = ["sphinx.ext.mathjax"]
 templates_path = []

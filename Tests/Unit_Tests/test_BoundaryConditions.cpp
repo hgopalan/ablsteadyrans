@@ -33,17 +33,17 @@ using namespace amrex;   // NOLINT
 
 namespace {
 
-using ablsteady::BoundaryConditions;
-using ablsteady::BoundaryInputs;
-using ablsteady::FaceType;
-using ablsteady::InflowProfileOptions;
-using ablsteady::Loc;
-using ablsteady::PoissonFace;
-using ablsteady::ptest::PCase;
-using ablsteady::trtest::tol;
+using gust::BoundaryConditions;
+using gust::BoundaryInputs;
+using gust::FaceType;
+using gust::InflowProfileOptions;
+using gust::Loc;
+using gust::PoissonFace;
+using gust::ptest::PCase;
+using gust::trtest::tol;
 
-const ablsteady::BuoyancyOptions kBuoy{};
-const ablsteady::CoriolisOptions kNoCoriolis{};
+const gust::BuoyancyOptions kBuoy{};
+const gust::CoriolisOptions kNoCoriolis{};
 
 // A mesh with the given periodicity over the ground h(x, y): 16 x 12 x 8
 // cells on 1000 m x 800 m x 500 m, geometric layers.
@@ -67,7 +67,7 @@ PCase mesh_over (int perx, int pery, const H& h, int nz = 8)
 double ridge_y (double, double y) { return 60 * 0.5 * (1 - std::cos(2 * M_PI * y / 800)); }
 double flat (double, double) { return 0; }
 
-void define_state (ablsteady::State& q, const PCase& c)
+void define_state (gust::State& q, const PCase& c)
 {
     q.define(c.ba, c.dm);
     amrex::MultiFab::Copy(q.z_phys_nd, c.z, 0, 0, 1, c.z.nGrow());
@@ -147,17 +147,17 @@ TEST(BoundaryTypes, PoissonTypesMatchErfGetFftBc)
                 for (FaceType yhi : lateral) {
                     for (FaceType zlo : grounds) {
                         for (FaceType zhi : tops) {
-                            ablsteady::MeshInputs m;
+                            gust::MeshInputs m;
                             m.n_cell = amrex::IntVect(8, 8, 8);
                             m.prob_hi = {100, 100, 100};
                             m.is_periodic = {perx, pery, 0};
-                            const amrex::Geometry geom = ablsteady::make_geometry(m);
+                            const amrex::Geometry geom = gust::make_geometry(m);
                             BoundaryInputs in;
                             in.face = {perx ? FaceType::periodic : xlo, pery ? FaceType::periodic : FaceType::outflow, zlo,
                                        perx ? FaceType::periodic : FaceType::outflow, pery ? FaceType::periodic : yhi, zhi};
-                            const auto bc = ablsteady::poisson_bc_from_faces(in, geom);
+                            const auto bc = gust::poisson_bc_from_faces(in, geom);
                             amrex::Array<std::string, 6> names;
-                            for (int o = 0; o < 6; ++o) { names[o] = ablsteady::erf_bc_name(in.face[o]); }
+                            for (int o = 0; o < 6; ++o) { names[o] = gust::erf_bc_name(in.face[o]); }
                             const auto erf = get_fft_bc(geom, names, geom.Domain(), false);
                             for (int d = 0; d < 3; ++d) {
                                 const auto want_lo = erf[d].first, want_hi = erf[d].second;
@@ -168,7 +168,7 @@ TEST(BoundaryTypes, PoissonTypesMatchErfGetFftBc)
                                 EXPECT_EQ(bc.face[amrex::Orientation(d, amrex::Orientation::low)], to_face(want_lo)) << "dir " << d;
                                 EXPECT_EQ(bc.face[amrex::Orientation(d, amrex::Orientation::high)], to_face(want_hi)) << "dir " << d;
                             }
-                            EXPECT_TRUE(ablsteady::check_poisson_bc(bc, geom).empty());
+                            EXPECT_TRUE(gust::check_poisson_bc(bc, geom).empty());
                             ++cases;
                         }
                     }
@@ -184,7 +184,7 @@ TEST(BoundaryTypes, PoissonTypesMatchErfGetFftBc)
 
 TEST(InflowProfile, AnalyticKindsAndEquilibriumTurbulence)
 {
-    ablsteady::ReferenceProfile tref;
+    gust::ReferenceProfile tref;
     tref.z = {0, 700, 1000};
     tref.theta = {300, 300, 309};
     InflowProfileOptions opt;
@@ -192,7 +192,7 @@ TEST(InflowProfile, AnalyticKindsAndEquilibriumTurbulence)
     opt.z0 = amrex::Real(0.1);
     opt.direction = 30;
     opt.length = InflowProfileOptions::Length::unbounded;   // the wall-law length; the closure's: ClosureLengthCapsTheEquilibrium
-    ablsteady::InflowProfile log(opt, tref);
+    gust::InflowProfile log(opt, tref);
     const auto p = log.host_view();
     amrex::Real u, v, t, k, nut;
     p.eval(50, u, v, t, k, nut);
@@ -219,7 +219,7 @@ TEST(InflowProfile, AnalyticKindsAndEquilibriumTurbulence)
     opt.z_ref = 10;
     opt.alpha = amrex::Real(0.2);
     opt.direction = 0;
-    ablsteady::InflowProfile pow(opt, tref);
+    gust::InflowProfile pow(opt, tref);
     const auto pv = pow.host_view();
     pv.eval(40, u, v, t, k, nut);
     const double S40 = 8 * std::pow(4.0, 0.2), dsdz = 0.2 * S40 / 40, ul = 0.41 * 40.1 * dsdz;
@@ -244,14 +244,14 @@ TEST(InflowProfile, AnalyticKindsAndEquilibriumTurbulence)
 TEST(InflowProfile, TakesTheClosureConstants)
 {
     BoundaryInputs bin;
-    ablsteady::SurfaceLayerOptions surf;
+    gust::SurfaceLayerOptions surf;
     bin.inflow.ustar = amrex::Real(0.4);
     bin.inflow.z0 = amrex::Real(0.1);
-    ablsteady::use_closure_constants(bin, surf, amrex::Real(0.55), amrex::Real(0.40), amrex::Real(25));
+    gust::use_closure_constants(bin, surf, amrex::Real(0.55), amrex::Real(0.40), amrex::Real(25));
     EXPECT_EQ(surf.Cmu0, amrex::Real(0.55));
     EXPECT_EQ(surf.kappa, amrex::Real(0.40));
     EXPECT_EQ(bin.inflow.l_max, amrex::Real(25));
-    ablsteady::InflowProfile log(bin.inflow, bin.theta_ref);
+    gust::InflowProfile log(bin.inflow, bin.theta_ref);
     const auto p = log.host_view();
     amrex::Real u, v, t, k, nut;
     p.eval(50, u, v, t, k, nut);
@@ -270,13 +270,13 @@ TEST(InflowProfile, TakesTheClosureConstants)
 // on ERF's Askervein inflow, where ERF has 0.31).
 TEST(InflowProfile, ClosureLengthCapsTheEquilibrium)
 {
-    ablsteady::ReferenceProfile tref;
+    gust::ReferenceProfile tref;
     tref.z = {0};
     tref.theta = {300};
     const double kap = 0.41, cmu = 0.5562, z0 = 0.03, lmax = 30;
     auto lcap = [&] (double z) { return 1 / (1 / (kap * (z + z0)) + 1 / lmax); };
     for (const double z : {1.0, 10.0, 73.0, 316.0, 2000.0}) {
-        EXPECT_NEAR(static_cast<double>(ablsteady::closure::geom_length(amrex::Real(kap * (z + z0)), amrex::Real(lmax))),
+        EXPECT_NEAR(static_cast<double>(gust::closure::geom_length(amrex::Real(kap * (z + z0)), amrex::Real(lmax))),
                     lcap(z), tol(1e-13, 1e-5) * lcap(z)) << z;
     }
     InflowProfileOptions opt;
@@ -286,7 +286,7 @@ TEST(InflowProfile, ClosureLengthCapsTheEquilibrium)
     // log law: dS/dz = u*/(kappa (z + z0)), u*_l = u* l / (kappa (z + z0)).
     opt.ustar = amrex::Real(0.6);
     {
-        ablsteady::InflowProfile prof(opt, tref);
+        gust::InflowProfile prof(opt, tref);
         const auto p = prof.host_view();
         for (const double z : {1.0, 10.0, 73.0, 316.0, 2000.0}) {
             amrex::Real u, v, t, k, nut;
@@ -302,7 +302,7 @@ TEST(InflowProfile, ClosureLengthCapsTheEquilibrium)
     opt.z_ref = 10;
     opt.alpha = amrex::Real(0.22);
     {
-        ablsteady::InflowProfile prof(opt, tref);
+        gust::InflowProfile prof(opt, tref);
         const auto p = prof.host_view();
         for (const double z : {10.0, 316.0}) {
             amrex::Real u, v, t, k, nut;
@@ -314,7 +314,7 @@ TEST(InflowProfile, ClosureLengthCapsTheEquilibrium)
         // With the unbounded length, the same profile's k at 316 m is (l_raw/l)^2 = 11.7 times larger.
         InflowProfileOptions ub = opt;
         ub.length = InflowProfileOptions::Length::unbounded;
-        ablsteady::InflowProfile pu(ub, tref);
+        gust::InflowProfile pu(ub, tref);
         amrex::Real u, v, t, kc, ku, nut;
         p.eval(316, u, v, t, kc, nut);
         pu.host_view().eval(316, u, v, t, ku, nut);
@@ -323,11 +323,11 @@ TEST(InflowProfile, ClosureLengthCapsTheEquilibrium)
     }
     // A cap that is not finite and > 0 is refused, naming turb.max_geom_lscale.
     opt.l_max = 0;
-    const auto err = ablsteady::check_inflow_profile_options(opt);
+    const auto err = gust::check_inflow_profile_options(opt);
     ASSERT_EQ(err.size(), 1u);
     EXPECT_NE(err[0].find("turb.max_geom_lscale = 0"), std::string::npos) << err[0];
     opt.length = InflowProfileOptions::Length::unbounded;   // no cap used: not checked
-    EXPECT_TRUE(ablsteady::check_inflow_profile_options(opt).empty());
+    EXPECT_TRUE(gust::check_inflow_profile_options(opt).empty());
 }
 
 TEST(InflowProfile, FileTableWithAndWithoutK)
@@ -338,14 +338,14 @@ TEST(InflowProfile, FileTableWithAndWithoutK)
         os << "# z u v theta k\n0 0 0 300 0.5\n100 6 2 300 0.4\n500 10 4 303 0.1\n";
     }
     amrex::ParallelDescriptor::Barrier();
-    ablsteady::ReferenceProfile tref;
+    gust::ReferenceProfile tref;
     tref.z = {0};
     tref.theta = {290};
     InflowProfileOptions opt;
     opt.kind = InflowProfileOptions::Kind::file;
     opt.file = fname;
     opt.length = InflowProfileOptions::Length::unbounded;   // the wall-law length (closure: below)
-    ablsteady::InflowProfile f(opt, tref);
+    gust::InflowProfile f(opt, tref);
     EXPECT_EQ(f.table_size(), 3);
     EXPECT_TRUE(f.has_k());
     const auto p = f.host_view();
@@ -374,7 +374,7 @@ TEST(InflowProfile, FileTableWithAndWithoutK)
     {   // the closure's length: the table's k as given, nu_t = l Cmu0 sqrt(k)
         InflowProfileOptions oc = opt;
         oc.length = InflowProfileOptions::Length::closure;
-        ablsteady::InflowProfile fc(oc, tref);
+        gust::InflowProfile fc(oc, tref);
         fc.host_view().eval(300, u, v, t, k, nut);
         EXPECT_NEAR(k, 0.25, tol(1e-13, 1e-5));
         EXPECT_NEAR(nut, 1 / (1 / (0.41 * 300.1) + 1 / 30.0) * 0.5562 * 0.5, tol(1e-12, 1e-4) * nut);
@@ -389,7 +389,7 @@ TEST(InflowProfile, FileTableWithAndWithoutK)
         os << "0 0 0 300\n100 6 2 300\n";
     }
     amrex::ParallelDescriptor::Barrier();
-    ablsteady::InflowProfile g(opt, tref);
+    gust::InflowProfile g(opt, tref);
     EXPECT_FALSE(g.has_k());
     const auto pg = g.host_view();
     pg.eval(50, u, v, t, k, nut);
@@ -401,7 +401,7 @@ TEST(InflowProfile, FileTableWithAndWithoutK)
     {
         InflowProfileOptions oc = opt;
         oc.length = InflowProfileOptions::Length::closure;
-        ablsteady::InflowProfile gc(oc, tref);
+        gust::InflowProfile gc(oc, tref);
         gc.host_view().eval(50, u, v, t, k, nut);
         const double l = 1 / (1 / (0.41 * 50.1) + 1 / 30.0), ulc = l * std::sqrt(40.0) / 100;
         EXPECT_NEAR(k, ulc * ulc / (0.5562 * 0.5562), tol(1e-12, 1e-5) * k);
@@ -416,7 +416,7 @@ TEST(InflowProfile, FileTableWithAndWithoutK)
             os << bad;
         }
         amrex::ParallelDescriptor::Barrier();
-        EXPECT_THROW(ablsteady::InflowProfile(opt, tref), std::runtime_error) << bad;
+        EXPECT_THROW(gust::InflowProfile(opt, tref), std::runtime_error) << bad;
     }
     amrex::ParallelDescriptor::Barrier();
     if (amrex::ParallelDescriptor::IOProcessor()) { std::remove(fname.c_str()); }
@@ -432,7 +432,7 @@ TEST(InflowProfile, FileTableWithAndWithoutK)
 TEST(BoundaryFill, InflowFollowsTheGroundHeight)
 {
     PCase c = mesh_over(0, 1, ridge_y);
-    ablsteady::State q;
+    gust::State q;
     define_state(q, c);
     for (auto* mf : {&q.u, &q.v, &q.w, &q.p, &q.theta, &q.tke}) { mf->setVal(7.0); }
     BoundaryInputs in = lateral_inputs(FaceType::inflow, FaceType::outflow, FaceType::periodic, FaceType::periodic);
@@ -440,10 +440,10 @@ TEST(BoundaryFill, InflowFollowsTheGroundHeight)
     in.theta_ref.z = {0, 300};
     in.theta_ref.theta = {290, 296};
     BoundaryConditions bc(in, c.geom, c.mesh, kNoCoriolis);
-    ablsteady::SurfaceLayerOptions so;
+    gust::SurfaceLayerOptions so;
     bc.fill_ghosts(q, &so, kBuoy);
     const auto p = bc.profile().host_view();
-    ablsteady::ResidualFields R;
+    gust::ResidualFields R;
     R.define(c.ba, c.dm);
     R.u.setVal(1.0);
     bc.apply_rows(q, R);
@@ -510,16 +510,16 @@ TEST(BoundaryFill, InflowFollowsTheGroundHeight)
 TEST(BoundaryFill, RulesPerFaceType)
 {
     PCase c = mesh_over(0, 0, flat);
-    ablsteady::State q;
+    gust::State q;
     define_state(q, c);
-    const auto fl = ablsteady::trtest::make_flow(c, 0);
+    const auto fl = gust::trtest::make_flow(c, 0);
     const amrex::Array<amrex::MultiFab*, 3> vel{&q.u, &q.v, &q.w};
     for (int d = 0; d < 3; ++d) {
-        ablsteady::trtest::fill_loc(*vel[d], ablsteady::velocity_loc(d), c, [&] (double x, double y, double z) { return 1 + fl.vel(d, x, y, z); });
+        gust::trtest::fill_loc(*vel[d], gust::velocity_loc(d), c, [&] (double x, double y, double z) { return 1 + fl.vel(d, x, y, z); });
     }
-    ablsteady::trtest::fill_loc(q.theta, Loc::cell, c, [&] (double x, double y, double z) { return 300 + fl.q(x, y, z); });
-    ablsteady::trtest::fill_loc(q.tke, Loc::cell, c, [&] (double x, double y, double z) { return 0.2 + 0.1 * fl.q(x, y, z); });
-    ablsteady::trtest::fill_loc(q.p, Loc::cell, c, [&] (double x, double y, double z) { return 2 * fl.q(x, y, z); });
+    gust::trtest::fill_loc(q.theta, Loc::cell, c, [&] (double x, double y, double z) { return 300 + fl.q(x, y, z); });
+    gust::trtest::fill_loc(q.tke, Loc::cell, c, [&] (double x, double y, double z) { return 0.2 + 0.1 * fl.q(x, y, z); });
+    gust::trtest::fill_loc(q.p, Loc::cell, c, [&] (double x, double y, double z) { return 2 * fl.q(x, y, z); });
     // Ghosts start as NaN: a rule that leaves one shows up (under the trap too).
     for (auto* mf : {&q.u, &q.v, &q.w, &q.p, &q.theta, &q.tke}) {
         mf->setBndry(std::numeric_limits<amrex::Real>::quiet_NaN());
@@ -527,7 +527,7 @@ TEST(BoundaryFill, RulesPerFaceType)
     BoundaryInputs in = lateral_inputs(FaceType::outflow, FaceType::slip_wall, FaceType::no_slip_wall, FaceType::outflow,
                                        FaceType::slip_wall, FaceType::geostrophic);
     in.zhi_theta_grad = amrex::Real(0.01);
-    ablsteady::CoriolisOptions cor;
+    gust::CoriolisOptions cor;
     cor.enabled = true;
     cor.latitude = 45;
     cor.geostrophic = true;
@@ -597,12 +597,12 @@ TEST(BoundaryFill, RulesPerFaceType)
 TEST(BoundaryFill, GroundGradientIsTheWallLaw)
 {
     PCase c = mesh_over(1, 1, [] (double x, double y) { return 120 * 0.25 * (1 - std::cos(2 * M_PI * x / 1000)) * (1 - std::cos(2 * M_PI * y / 800)); });
-    ablsteady::State q;
+    gust::State q;
     define_state(q, c);
-    const auto fl = ablsteady::trtest::make_flow(c, 120);
+    const auto fl = gust::trtest::make_flow(c, 120);
     const amrex::Array<amrex::MultiFab*, 3> vel{&q.u, &q.v, &q.w};
     for (int d = 0; d < 3; ++d) {
-        ablsteady::trtest::fill_loc(*vel[d], ablsteady::velocity_loc(d), c, [&] (double x, double y, double z) { return fl.vel(d, x, y, z); });
+        gust::trtest::fill_loc(*vel[d], gust::velocity_loc(d), c, [&] (double x, double y, double z) { return fl.vel(d, x, y, z); });
     }
     q.theta.setVal(300.0);
     q.tke.setVal(0.3);
@@ -611,10 +611,10 @@ TEST(BoundaryFill, GroundGradientIsTheWallLaw)
     for (auto* mf : {&q.theta, &q.tke}) { mf->setBndry(std::numeric_limits<amrex::Real>::quiet_NaN()); }
     BoundaryInputs in;
     BoundaryConditions bc(in, c.geom, c.mesh, kNoCoriolis);
-    ablsteady::SurfaceLayerOptions so;
-    so.stability = ablsteady::SurfaceLayerOptions::Stability::heat_flux;
+    gust::SurfaceLayerOptions so;
+    so.stability = gust::SurfaceLayerOptions::Stability::heat_flux;
     so.heat_flux = amrex::Real(-0.004);   // weak enough that every column has a MOST solution
-    ablsteady::SurfaceState s;
+    gust::SurfaceState s;
     bc.fill_ghosts(q, &so, kBuoy, false, &s);
     // The fill covers the two lateral ghost columns too (periodic images and
     // the neighbouring boxes), so the check does: the surface state of the
@@ -691,7 +691,7 @@ TEST(BoundaryFill, GroundGradientIsTheWallLaw)
         gb.setBig(2, 0);
         amrex::LoopOnCpu(gb, [&] (int i, int j, int) {
             EXPECT_EQ(u(amrex::IntVect(i, j, -1)), u(amrex::IntVect(i, j, 1)));   // G = 0: g1 = c1
-            const amrex::Real wn = ablsteady::massflux::no_flux_w(zn.const_array(), u.const_array(), v.const_array(), i, j, 0, dxinv[0], dxinv[1]);
+            const amrex::Real wn = gust::massflux::no_flux_w(zn.const_array(), u.const_array(), v.const_array(), i, j, 0, dxinv[0], dxinv[1]);
             EXPECT_NEAR(w(amrex::IntVect(i, j, 0)), wn, tol(1e-14, 1e-6) * (1 + std::abs(wn)));
             EXPECT_EQ(k(amrex::IntVect(i, j, -1)), k(amrex::IntVect(i, j, 0)));
         });
@@ -707,52 +707,52 @@ TEST(BoundaryFill, GroundGradientIsTheWallLaw)
 TEST(BoundaryImplicit, FoldsMatchTheHomogeneousFill)
 {
     PCase c = mesh_over(0, 0, flat);
-    ablsteady::State q;
+    gust::State q;
     define_state(q, c);
-    const auto fl = ablsteady::trtest::make_flow(c, 0);
+    const auto fl = gust::trtest::make_flow(c, 0);
     const amrex::Array<amrex::MultiFab*, 3> vel{&q.u, &q.v, &q.w};
     for (int d = 0; d < 3; ++d) {
-        ablsteady::trtest::fill_loc(*vel[d], ablsteady::velocity_loc(d), c, [&] (double x, double y, double z) { return 2 + fl.vel(d, x, y, z); });
+        gust::trtest::fill_loc(*vel[d], gust::velocity_loc(d), c, [&] (double x, double y, double z) { return 2 + fl.vel(d, x, y, z); });
     }
-    ablsteady::trtest::fill_loc(q.theta, Loc::cell, c, [&] (double x, double y, double z) { return 300 + fl.q(x, y, z); });
-    ablsteady::trtest::fill_loc(q.tke, Loc::cell, c, [&] (double x, double y, double z) { return 0.2 + 0.1 * fl.q(x, y, z); });
+    gust::trtest::fill_loc(q.theta, Loc::cell, c, [&] (double x, double y, double z) { return 300 + fl.q(x, y, z); });
+    gust::trtest::fill_loc(q.tke, Loc::cell, c, [&] (double x, double y, double z) { return 0.2 + 0.1 * fl.q(x, y, z); });
     q.p.setVal(0.0);
     BoundaryInputs in = lateral_inputs(FaceType::inflow, FaceType::outflow, FaceType::no_slip_wall, FaceType::slip_wall,
                                        FaceType::surface_layer, FaceType::geostrophic);
-    ablsteady::CoriolisOptions cor;
+    gust::CoriolisOptions cor;
     cor.enabled = true;
     cor.latitude = 45;
     cor.geostrophic = true;
     cor.ug = 8;
     BoundaryConditions bc(in, c.geom, c.mesh, cor);
-    ablsteady::SurfaceLayerOptions so;
-    ablsteady::SurfaceState s;
+    gust::SurfaceLayerOptions so;
+    gust::SurfaceState s;
     bc.fill_ghosts(q, &so, kBuoy, false, &s);
     amrex::MultiFab nu(c.ba, c.dm, 1, 1);
     nu.setVal(3.0);
     amrex::Array<amrex::MultiFab, 3> F;
-    ablsteady::transport_fluxes(q.u, q.v, q.w, q.z_phys_nd, c.mesh, c.geom, F);
+    gust::transport_fluxes(q.u, q.v, q.w, q.z_phys_nd, c.mesh, c.geom, F);
     // The perturbation: the state itself with the homogeneous fill.
-    ablsteady::State v;
+    gust::State v;
     define_state(v, c);
     const amrex::MultiFab* qf[5] = {&q.u, &q.v, &q.w, &q.theta, &q.tke};
     amrex::MultiFab* vf[5] = {&v.u, &v.v, &v.w, &v.theta, &v.tke};
     for (int n = 0; n < 5; ++n) { amrex::MultiFab::Copy(*vf[n], *qf[n], 0, 0, 1, 0); }
     v.p.setVal(0.0);
     bc.fill_ghosts(v, nullptr, kBuoy, true);
-    using E = ablsteady::Equation;
+    using E = gust::Equation;
     const E eqs[5] = {E::u, E::v, E::w, E::theta, E::tke};
     const Loc locs[5] = {Loc::xface, Loc::yface, Loc::zface, Loc::cell, Loc::cell};
     for (int n = 0; n < 5; ++n) {
         amrex::MultiFab A, Af, out_f(vf[n]->boxArray(), c.dm, 1, 0), out_u(vf[n]->boxArray(), c.dm, 1, 0);
-        ablsteady::implicit_coefficients(locs[n], {&F[0], &F[1], &F[2]}, nu, q.z_phys_nd, c.mesh, c.geom, A);
-        if (locs[n] != Loc::zface) { ablsteady::apply_wall_to_implicit(s, locs[n], c.mesh, c.geom, A); }
-        Af.define(A.boxArray(), c.dm, ablsteady::n_implicit_coefs, 0);
-        amrex::MultiFab::Copy(Af, A, 0, 0, ablsteady::n_implicit_coefs, 0);
+        gust::implicit_coefficients(locs[n], {&F[0], &F[1], &F[2]}, nu, q.z_phys_nd, c.mesh, c.geom, A);
+        if (locs[n] != Loc::zface) { gust::apply_wall_to_implicit(s, locs[n], c.mesh, c.geom, A); }
+        Af.define(A.boxArray(), c.dm, gust::n_implicit_coefs, 0);
+        amrex::MultiFab::Copy(Af, A, 0, 0, gust::n_implicit_coefs, 0);
         bc.apply_to_implicit(eqs[n], locs[n], q.z_phys_nd, Af);
         // Unfolded A on the homogeneously filled v; folded Af on v with its
         // ghosts zeroed (the fold must not need them).
-        ablsteady::apply_implicit(locs[n], A, *vf[n], c.mesh, out_u);
+        gust::apply_implicit(locs[n], A, *vf[n], c.mesh, out_u);
         // The ghosts outside the domain zeroed; those between boxes keep the
         // neighbours' values (the fold is about the domain faces only).
         amrex::MultiFab vz(vf[n]->boxArray(), c.dm, 1, 2);
@@ -768,7 +768,7 @@ TEST(BoundaryImplicit, FoldsMatchTheHomogeneousFill)
             vz[mfi].copy<amrex::RunOn::Device>(h, h.box());
             amrex::Gpu::streamSynchronize();
         }
-        ablsteady::apply_implicit(locs[n], Af, vz, c.mesh, out_f);
+        gust::apply_implicit(locs[n], Af, vz, c.mesh, out_f);
         // Compare away from the Dirichlet face points (identity rows there).
         double worst = 0, scale = 0;
         amrex::IntVect where(-99);
@@ -781,8 +781,8 @@ TEST(BoundaryImplicit, FoldsMatchTheHomogeneousFill)
                 // an even mirror), v on both walls.
                 const bool dir_pt = (n == 0 && i == 0) || (n == 1 && (j == 0 || j == 12)) || (n == 2 && (k == 0 || k == 8));
                 if (dir_pt) {
-                    EXPECT_EQ(af(iv, ablsteady::coef_P), 1);
-                    for (int m = 1; m < ablsteady::n_implicit_coefs; ++m) { EXPECT_EQ(af(iv, m), 0); }
+                    EXPECT_EQ(af(iv, gust::coef_P), 1);
+                    for (int m = 1; m < gust::n_implicit_coefs; ++m) { EXPECT_EQ(af(iv, m), 0); }
                     return;
                 }
                 if (std::abs(double(a(iv)) - b(iv)) > worst) { where = iv; }
@@ -803,12 +803,12 @@ TEST(BoundaryImplicit, FoldsMatchTheHomogeneousFill)
 TEST(BoundaryResidual, DirichletRowsAndIdentityLines)
 {
     PCase c = mesh_over(0, 1, flat);
-    ablsteady::State q;
+    gust::State q;
     define_state(q, c);
-    const auto fl = ablsteady::trtest::make_flow(c, 0);
+    const auto fl = gust::trtest::make_flow(c, 0);
     const amrex::Array<amrex::MultiFab*, 3> vel{&q.u, &q.v, &q.w};
     for (int d = 0; d < 3; ++d) {
-        ablsteady::trtest::fill_loc(*vel[d], ablsteady::velocity_loc(d), c, [&] (double x, double y, double z) { return 3 + fl.vel(d, x, y, z); });
+        gust::trtest::fill_loc(*vel[d], gust::velocity_loc(d), c, [&] (double x, double y, double z) { return 3 + fl.vel(d, x, y, z); });
     }
     q.theta.setVal(300.0);
     q.tke.setVal(0.3);
@@ -816,20 +816,20 @@ TEST(BoundaryResidual, DirichletRowsAndIdentityLines)
     BoundaryInputs in = lateral_inputs(FaceType::inflow, FaceType::outflow, FaceType::periodic, FaceType::periodic);
     in.inflow.ustar = amrex::Real(0.3);
     BoundaryConditions bc(in, c.geom, c.mesh, kNoCoriolis);
-    ablsteady::SurfaceLayerOptions so;
+    gust::SurfaceLayerOptions so;
     bc.fill_ghosts(q, &so, kBuoy);
     amrex::MultiFab nu(c.ba, c.dm, 1, 1);
     nu.setVal(2.0);
-    ablsteady::ResidualInputs res_in;
+    gust::ResidualInputs res_in;
     res_in.nu = &nu;
     res_in.gamma_theta = &nu;
     res_in.gamma_tke = &nu;
     res_in.theta_ref = in.theta_ref;
     res_in.surface = &so;
-    ablsteady::ResidualFields R0, R;
-    ablsteady::residual(q, res_in, c.mesh, c.geom, R0);
+    gust::ResidualFields R0, R;
+    gust::residual(q, res_in, c.mesh, c.geom, R0);
     res_in.bc = &bc;
-    ablsteady::residual(q, res_in, c.mesh, c.geom, R);
+    gust::residual(q, res_in, c.mesh, c.geom, R);
     const auto p = bc.profile().host_view();
     for (amrex::MFIter mfi(q.p, false); mfi.isValid(); ++mfi) {
         const auto z = host_copy(q.z_phys_nd, mfi);
@@ -853,7 +853,7 @@ TEST(BoundaryResidual, DirichletRowsAndIdentityLines)
         amrex::LoopOnCpu(mfi.validbox(), [&] (int i, int j, int k) { EXPECT_EQ(rt(amrex::IntVect(i, j, k)), rt0(amrex::IntVect(i, j, k))); });
     }
     amrex::MultiFab tri;
-    ablsteady::line_jacobian(q, res_in, ablsteady::Equation::u, 0, c.mesh, c.geom, tri);
+    gust::line_jacobian(q, res_in, gust::Equation::u, 0, c.mesh, c.geom, tri);
     for (amrex::MFIter mfi(tri, false); mfi.isValid(); ++mfi) {
         const auto t = host_copy(tri, mfi);
         amrex::LoopOnCpu(mfi.validbox(), [&] (int i, int j, int k) {
@@ -875,7 +875,7 @@ TEST(BoundaryResidual, DirichletRowsAndIdentityLines)
 TEST(BoundaryDamping, RayleighAndSpongeHaveTheirShapes)
 {
     PCase c = mesh_over(0, 1, flat, 16);
-    ablsteady::State q;
+    gust::State q;
     define_state(q, c);
     BoundaryInputs in = lateral_inputs(FaceType::inflow, FaceType::outflow, FaceType::periodic, FaceType::periodic);
     in.rayleigh_zdamp = 300;
@@ -904,7 +904,7 @@ TEST(BoundaryDamping, RayleighAndSpongeHaveTheirShapes)
         }
     }
     q.p.setVal(0.0);
-    ablsteady::ResidualFields R;
+    gust::ResidualFields R;
     R.define(c.ba, c.dm);
     for (auto& f : R.fields()) { f.mf->setVal(0.0); }
     bc.add_damping(q, R);
@@ -931,9 +931,9 @@ TEST(BoundaryDamping, RayleighAndSpongeHaveTheirShapes)
     // rows and u rows), and only there.
     for (const Loc loc : {Loc::cell, Loc::xface}) {
         const amrex::BoxArray ba = (loc == Loc::cell) ? c.ba : amrex::convert(c.ba, amrex::IntVect(1, 0, 0));
-        amrex::MultiFab A(ba, c.dm, ablsteady::n_implicit_coefs, 0);
+        amrex::MultiFab A(ba, c.dm, gust::n_implicit_coefs, 0);
         A.setVal(0.0);
-        bc.apply_to_implicit(loc == Loc::cell ? ablsteady::Equation::theta : ablsteady::Equation::u, loc, q.z_phys_nd, A);
+        bc.apply_to_implicit(loc == Loc::cell ? gust::Equation::theta : gust::Equation::u, loc, q.z_phys_nd, A);
         for (amrex::MFIter mfi(A, false); mfi.isValid(); ++mfi) {
             const auto z = host_copy(q.z_phys_nd, mfi);
             const auto a = host_copy(A, mfi);
@@ -945,8 +945,8 @@ TEST(BoundaryDamping, RayleighAndSpongeHaveTheirShapes)
                 if (x < 200) { cexp += 0.02 * std::pow(1 - x / 200, 2); }
                 if (1000 - x < 200) { cexp += 0.02 * std::pow(1 - (1000 - x) / 200, 2); }
                 if (face && i == 0) { cexp = 1; }   // the inflow face point: identity row
-                EXPECT_NEAR(a(amrex::IntVect(i, j, k), ablsteady::coef_P), cexp, tol(1e-12, 1e-5) * (1 + cexp)) << i << " " << k;
-                for (int m = 1; m < ablsteady::n_implicit_coefs; ++m) { EXPECT_EQ(a(amrex::IntVect(i, j, k), m), 0); }
+                EXPECT_NEAR(a(amrex::IntVect(i, j, k), gust::coef_P), cexp, tol(1e-12, 1e-5) * (1 + cexp)) << i << " " << k;
+                for (int m = 1; m < gust::n_implicit_coefs; ++m) { EXPECT_EQ(a(amrex::IntVect(i, j, k), m), 0); }
             });
         }
     }
@@ -977,18 +977,18 @@ TEST(BoundaryDamping, RayleighEndsAtTheTopLevelOfAStretchedMesh)
     c.make(flat);
     const double ztop = 20 * (std::pow(1.08, 16) - 1) / 0.08;
     ASSERT_NEAR(static_cast<double>(c.mesh.zlevels().back()), ztop, tol(1e-9, 1e-3) * ztop);
-    ablsteady::State q;
+    gust::State q;
     define_state(q, c);
     BoundaryInputs in = lateral_inputs(FaceType::periodic, FaceType::periodic, FaceType::periodic, FaceType::periodic);
     in.rayleigh_zdamp = 520;   // above prob_hi z, below the top level
     in.rayleigh_dampcoef = amrex::Real(0.2);
     in.rayleigh_fields = {false, false, true, true, false};
-    EXPECT_TRUE(ablsteady::check_boundary_inputs(in, c.geom, kNoCoriolis, c.mesh.zlevels().back()).empty());
+    EXPECT_TRUE(gust::check_boundary_inputs(in, c.geom, kNoCoriolis, c.mesh.zlevels().back()).empty());
     BoundaryConditions bc(in, c.geom, c.mesh, kNoCoriolis);
     const double delta = 0.3, th0 = 300;
     q.theta.setVal(th0 + delta);
     q.w.setVal(delta);
-    ablsteady::ResidualFields R;
+    gust::ResidualFields R;
     R.define(c.ba, c.dm);
     for (auto& f : R.fields()) { f.mf->setVal(0.0); }
     bc.add_damping(q, R);
@@ -1016,7 +1016,7 @@ TEST(BoundaryDamping, RayleighEndsAtTheTopLevelOfAStretchedMesh)
     EXPECT_EQ(at_top, 16 * 12);
     // A start at or above the top level is refused, naming the top.
     in.rayleigh_zdamp = 610;
-    const auto err = ablsteady::check_boundary_inputs(in, c.geom, kNoCoriolis, c.mesh.zlevels().back());
+    const auto err = gust::check_boundary_inputs(in, c.geom, kNoCoriolis, c.mesh.zlevels().back());
     ASSERT_EQ(err.size(), 1u);
     EXPECT_NE(err[0].find("bc.rayleigh_zdamp = 610"), std::string::npos) << err[0];
     EXPECT_NE(err[0].find("the top level 606.5"), std::string::npos) << err[0];
@@ -1044,10 +1044,10 @@ TEST(BoundaryInputs, KeysAreReadAndChecked)
     amrex::ParmParse::addfile(fname);
     amrex::ParallelDescriptor::Barrier();
     if (amrex::ParallelDescriptor::IOProcessor()) { std::remove(fname.c_str()); }
-    const BoundaryInputs in = ablsteady::read_boundary_inputs();
-    const ablsteady::SurfaceLayerOptions so = ablsteady::read_surface_layer_options();
+    const BoundaryInputs in = gust::read_boundary_inputs();
+    const gust::SurfaceLayerOptions so = gust::read_surface_layer_options();
     // Every bc key of the file was read (none is left unread in the bc namespace).
-    for (const auto& e : ablsteady::unknown_inputs(ablsteady::parmparse_entries(), {"bc"})) {
+    for (const auto& e : gust::unknown_inputs(gust::parmparse_entries(), {"bc"})) {
         if (e.find("bc.") != std::string::npos) { ADD_FAILURE() << e; }
     }
     {
@@ -1081,16 +1081,16 @@ TEST(BoundaryInputs, KeysAreReadAndChecked)
     EXPECT_EQ(so.z0, amrex::Real(0.3));
     EXPECT_EQ(so.zref, 12);
     EXPECT_EQ(so.heat_flux, amrex::Real(0.02));
-    EXPECT_EQ(so.stability, ablsteady::SurfaceLayerOptions::Stability::heat_flux);
-    EXPECT_EQ(so.wall_k, ablsteady::SurfaceLayerOptions::WallK::source);
-    EXPECT_EQ(so.denominator_floor, ablsteady::SurfaceLayerOptions::DenominatorFloor::one);
+    EXPECT_EQ(so.stability, gust::SurfaceLayerOptions::Stability::heat_flux);
+    EXPECT_EQ(so.wall_k, gust::SurfaceLayerOptions::WallK::source);
+    EXPECT_EQ(so.denominator_floor, gust::SurfaceLayerOptions::DenominatorFloor::one);
 
-    ablsteady::MeshInputs m;
+    gust::MeshInputs m;
     m.n_cell = amrex::IntVect(8, 8, 8);
     m.prob_hi = {1000, 1000, 1000};
     m.is_periodic = {0, 0, 0};
-    const amrex::Geometry geom = ablsteady::make_geometry(m);
-    const auto ok = ablsteady::check_boundary_inputs(in, geom, kNoCoriolis);
+    const amrex::Geometry geom = gust::make_geometry(m);
+    const auto ok = gust::check_boundary_inputs(in, geom, kNoCoriolis);
     EXPECT_TRUE(ok.empty()) << (ok.empty() ? "" : ok.front());
     struct Bad { const char* key; void (*mutate) (BoundaryInputs&); };
     const Bad bads[] = {
@@ -1122,7 +1122,7 @@ TEST(BoundaryInputs, KeysAreReadAndChecked)
     for (const Bad& b : bads) {
         BoundaryInputs x = in;
         b.mutate(x);
-        const auto err = ablsteady::check_boundary_inputs(x, geom, kNoCoriolis);
+        const auto err = gust::check_boundary_inputs(x, geom, kNoCoriolis);
         ASSERT_FALSE(err.empty()) << b.key;
         const std::string key = std::string(b.key).substr(0, std::string(b.key).find(' '));
         bool found = false;
@@ -1136,14 +1136,14 @@ TEST(BoundaryInputs, KeysAreReadAndChecked)
     y.rayleigh_zdamp = 0;
     y.sponge_width = 0;
     y.given = {"inflow_speed"};
-    const auto err = ablsteady::check_boundary_inputs(y, geom, kNoCoriolis);
+    const auto err = gust::check_boundary_inputs(y, geom, kNoCoriolis);
     ASSERT_FALSE(err.empty());
     EXPECT_NE(err.front().find("inflow_speed"), std::string::npos);
     y.given = {"inflow_tke_length"};
-    const auto errl = ablsteady::check_boundary_inputs(y, geom, kNoCoriolis);
+    const auto errl = gust::check_boundary_inputs(y, geom, kNoCoriolis);
     ASSERT_EQ(errl.size(), 1u);
     EXPECT_NE(errl.front().find("bc.inflow_tke_length has no effect without an inflow face"), std::string::npos) << errl.front();
-    EXPECT_THROW(ablsteady::face_type_from_name("open", "bc.xlo"), std::runtime_error);
+    EXPECT_THROW(gust::face_type_from_name("open", "bc.xlo"), std::runtime_error);
     const PCase pc = mesh_over(0, 0, flat);
     EXPECT_THROW(BoundaryConditions(y, geom, pc.mesh, kNoCoriolis), std::runtime_error);
     // The checks run before the inflow profile is built: a bad reference

@@ -24,15 +24,15 @@ field statistics of `z` and `detJ` and the quality report with a JSON gold (`--w
 - 2-D hill: the plotfile matches `Gold/hill2d_plt00000` at relative 1e-12 (1e-5 in single precision). The
   plotfile holds cell fields only; UT-1.4.7 compares the nodal heights with ERF.
 
-The three golds were written by ablsteady: they detect changes, they do not show correctness. Correctness of
+The three golds were written by gust: they detect changes, they do not show correctness. Correctness of
 these code paths comes from UT-1.4.7 (ERF's own output) and the closed-form unit tests.
 
 ## Gold files
 | Gold | How it was made |
 |---|---|
-| `askervein_mesh.json` | `Supporting_Files/check_mesh.py Gold/askervein_mesh.json --write -- ablsteady inputs_mesh_askervein terrain.file=extern_erf/askervein.txt` |
-| `steep_ridge_mesh.json` | `Supporting_Files/check_mesh.py Gold/steep_ridge_mesh.json --write -- ablsteady inputs_mesh_steep_ridge` |
-| `hill2d_plt00000/` | `ablsteady inputs_mesh_hill2d` |
+| `askervein_mesh.json` | `Supporting_Files/check_mesh.py Gold/askervein_mesh.json --write -- gust inputs_mesh_askervein terrain.file=extern_erf/askervein.txt` |
+| `steep_ridge_mesh.json` | `Supporting_Files/check_mesh.py Gold/steep_ridge_mesh.json --write -- gust inputs_mesh_steep_ridge` |
+| `hill2d_plt00000/` | `gust inputs_mesh_hill2d` |
 
 `hill2d_plt00000/Level_0/z_phys_nd_D_00000` (the node heights with ghost nodes; no test reads it) was rewritten when
 the ghost columns were made to match their periodic images: 8 values of the row below the ground changed.

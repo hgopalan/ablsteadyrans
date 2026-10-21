@@ -1,5 +1,5 @@
-#ifndef ABLSTEADY_CLOSURE_K_H_
-#define ABLSTEADY_CLOSURE_K_H_
+#ifndef GUST_CLOSURE_K_H_
+#define GUST_CLOSURE_K_H_
 
 // Point kernels of the Axell–Liungman (2001) k–L closure (sub-phase 1.9),
 // the relations of ERF's ERF_RANSClosure.H (extern_erf/, the reference of
@@ -41,7 +41,7 @@
 #include <cmath>
 #include <limits>
 
-namespace ablsteady {
+namespace gust {
 
 //! The closure's constants, in the form the kernels use.
 struct ClosureConstants
@@ -180,6 +180,6 @@ amrex::Real patankar_diagonal (const Point<amrex::Real>& p) noexcept
 }
 
 } // namespace closure
-} // namespace ablsteady
+} // namespace gust
 
 #endif

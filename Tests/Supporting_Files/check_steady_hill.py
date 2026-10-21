@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run ablsteady on a hill deck and apply ERF's own checks (RT-1.16.1, RT-1.16.2).
+"""Run GUST on a hill deck and apply ERF's own checks (RT-1.16.1, RT-1.16.2).
 
     check_steady_hill.py --erf-check check_hill.py|check_hill3d.py [--orders N] -- COMMAND [ARGS ...]
 
@@ -72,9 +72,9 @@ def main(argv):
     if run.returncode != 0:
         sys.stdout.write(run.stderr)
         raise SystemExit("check_steady_hill: the command failed with code %d" % run.returncode)
-    ok = "ablsteady: steady after" in run.stdout
+    ok = "gust: steady after" in run.stdout
     print("  steady verdict reached: %s" % ("pass" if ok else "FAIL"))
-    wrote = [ln.split()[-1] for ln in run.stdout.splitlines() if ln.startswith("ablsteady: wrote ")]
+    wrote = [ln.split()[-1] for ln in run.stdout.splitlines() if ln.startswith("gust: wrote ")]
     turb = [n for n in wrote if "_turb" in n]
     chk = [n for n in wrote if "_chk" in n]
     if not turb:

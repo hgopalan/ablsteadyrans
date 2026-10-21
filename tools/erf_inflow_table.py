@@ -7,7 +7,7 @@
 ERF_FILE holds rows of "z u v w" (ERF's xlo.dirichlet_file, for example
 extern_erf/inflow_powerlaw.txt). The table has rows of "z u v theta": a z = 0
 row first (u = v = 0), then ERF's rows with w dropped and theta = THETA (a
-neutral case). k is left out, so ablsteady sets the equilibrium k of its wall
+neutral case). k is left out, so GUST sets the equilibrium k of its wall
 law at the inflow (docs/boundary_conditions.rst).
 
 Prints the wind direction (degrees, meteorological: where it blows from) and

@@ -1,5 +1,5 @@
-#ifndef ABLSTEADY_SIMPLEC_H_
-#define ABLSTEADY_SIMPLEC_H_
+#ifndef GUST_SIMPLEC_H_
+#define GUST_SIMPLEC_H_
 
 // The SIMPLEC stage (sub-phase 1.15): one pseudo-time iteration of the
 // segregated solver, run by the driver (Driver.H).
@@ -74,7 +74,7 @@
 #include <string>
 #include <vector>
 
-namespace ablsteady {
+namespace gust {
 
 struct SimplecOptions
 {
@@ -247,6 +247,6 @@ private:
     amrex::Real m_height{1};
 };
 
-} // namespace ablsteady
+} // namespace gust
 
 #endif

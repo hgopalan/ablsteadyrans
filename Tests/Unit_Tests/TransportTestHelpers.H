@@ -1,5 +1,5 @@
-#ifndef ABLSTEADY_TRANSPORT_TEST_HELPERS_H_
-#define ABLSTEADY_TRANSPORT_TEST_HELPERS_H_
+#ifndef GUST_TRANSPORT_TEST_HELPERS_H_
+#define GUST_TRANSPORT_TEST_HELPERS_H_
 
 // Shared by the convection, diffusion and implicit-operator tests
 // (test_Convection.cpp, test_Diffusion.cpp, test_ImplicitOperator.cpp): fills
@@ -19,7 +19,7 @@
 #include <array>
 #include <cmath>
 
-namespace ablsteady::trtest {
+namespace gust::trtest {
 
 using ptest::PCase;
 
@@ -300,6 +300,6 @@ inline Norms error_norms (const amrex::MultiFab& a, const amrex::MultiFab& b, Lo
 // Largest |value| over the valid points (same counting as error_norms).
 inline double max_abs (const amrex::MultiFab& a) { return static_cast<double>(a.norm0()); }
 
-} // namespace ablsteady::trtest
+} // namespace gust::trtest
 
 #endif

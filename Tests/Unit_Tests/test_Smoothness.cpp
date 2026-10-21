@@ -37,24 +37,24 @@
 
 namespace {
 
-using ablsteady::FaceType;
-using ablsteady::FreezeScope;
-using ablsteady::Limiter;
-using ablsteady::Loc;
-using ablsteady::ptest::PCase;
-using ablsteady::hilltest::HillRun;
+using gust::FaceType;
+using gust::FreezeScope;
+using gust::Limiter;
+using gust::Loc;
+using gust::ptest::PCase;
+using gust::hilltest::HillRun;
 
 constexpr double kPi = 3.14159265358979323846;
 constexpr bool kDouble = std::is_same_v<amrex::Real, double>;
 
-amrex::MultiFab& field (ablsteady::State& q, int f)
+amrex::MultiFab& field (gust::State& q, int f)
 {
     amrex::MultiFab* p[6] = {&q.u, &q.v, &q.w, &q.p, &q.theta, &q.tke};
     return *p[f];
 }
 
 // to = from on every point (ghosts and heights included).
-void copy_state (ablsteady::State& to, ablsteady::State& from)
+void copy_state (gust::State& to, gust::State& from)
 {
     auto t = to.fields();
     const auto f = from.fields();
@@ -62,7 +62,7 @@ void copy_state (ablsteady::State& to, ablsteady::State& from)
 }
 
 // max |a - b| over the valid points of field f (same layout).
-double diff (ablsteady::State& a, ablsteady::State& b, int f)
+double diff (gust::State& a, gust::State& b, int f)
 {
     amrex::MultiFab d(field(a, f).boxArray(), field(a, f).DistributionMap(), 1, 0);
     amrex::MultiFab::Copy(d, field(a, f), 0, 0, 1, 0);
@@ -85,8 +85,8 @@ struct ClosureBox
 {
     PCase c;
     amrex::MultiFab dist;
-    ablsteady::BuoyancyOptions buoy;
-    ablsteady::State q;
+    gust::BuoyancyOptions buoy;
+    gust::State q;
     explicit ClosureBox (int max_grid = 4)
     {
         c.in.mesh.n_cell = amrex::IntVect(8, 4, 8);
@@ -96,37 +96,37 @@ struct ClosureBox
         c.make([] (double, double) { return 0.0; });
         c.z.FillBoundary(c.geom.periodicity());
         c.mesh.build_from_ground(c.in, c.geom, c.z);
-        ablsteady::trtest::smooth_vertical_ghost_nodes(c);
-        ablsteady::height_above_ground(c.z, dist);
+        gust::trtest::smooth_vertical_ghost_nodes(c);
+        gust::height_above_ground(c.z, dist);
         q.define(c.ba, c.dm);
         amrex::MultiFab::Copy(q.z_phys_nd, c.z, 0, 0, 1, c.z.nGrow());
         set(2e-4, 0.5);
     }
     void set (double gamma, double k0)
     {
-        ablsteady::trtest::fill_loc(q.u, Loc::xface, c, [] (double x, double, double z) {
+        gust::trtest::fill_loc(q.u, Loc::xface, c, [] (double x, double, double z) {
             return 2 + 0.02 * z + 0.5 * std::sin(2 * kPi * x / 1000);
         });
-        ablsteady::trtest::fill_loc(q.v, Loc::yface, c, [] (double, double y, double z) {
+        gust::trtest::fill_loc(q.v, Loc::yface, c, [] (double, double y, double z) {
             return 0.3 * std::cos(2 * kPi * y / 800) + 0.005 * z;
         });
         q.w.setVal(0.0);
         q.p.setVal(0.0);
-        ablsteady::trtest::fill_loc(q.theta, Loc::cell, c, [=] (double, double, double z) { return 300 + gamma * z; });
+        gust::trtest::fill_loc(q.theta, Loc::cell, c, [=] (double, double, double z) { return 300 + gamma * z; });
         q.tke.setVal(amrex::Real(k0));
         for (auto* mf : {&q.u, &q.v, &q.w, &q.p, &q.theta, &q.tke}) { mf->FillBoundary(c.geom.periodicity()); }
     }
-    ablsteady::ClosureFields eval (const ablsteady::Closure& cl)
+    gust::ClosureFields eval (const gust::Closure& cl)
     {
-        ablsteady::ClosureFields f;
+        gust::ClosureFields f;
         cl.evaluate(q, dist, amrex::Real(0.1), buoy, c.mesh, c.geom, f);
         return f;
     }
-    amrex::Long changed (const ablsteady::Closure& cl)
+    amrex::Long changed (const gust::Closure& cl)
     {
         return cl.changed_switches(q, dist, amrex::Real(0.1), buoy, c.mesh, c.geom);
     }
-    void freeze (ablsteady::Closure& cl, FreezeScope s)
+    void freeze (gust::Closure& cl, FreezeScope s)
     {
         cl.freeze_switches(q, dist, amrex::Real(0.1), buoy, c.mesh, c.geom, s);
     }
@@ -143,17 +143,17 @@ struct NewtonResult
 
 // Plain Newton (cfl0 = cfl_max = 8: infinite dtau from the first step) with
 // the SIMPLEC preconditioner and GMRES(200), on the residual inputs given.
-NewtonResult run_newton (HillRun& hr, ablsteady::State& q, const ablsteady::ResidualInputs& in, int max_steps, double tol)
+NewtonResult run_newton (HillRun& hr, gust::State& q, const gust::ResidualInputs& in, int max_steps, double tol)
 {
-    ablsteady::ContinuationOptions co = ablsteady::continuation_options(hr.s.sopt);
+    gust::ContinuationOptions co = gust::continuation_options(hr.s.sopt);
     co.cfl0 = hr.s.sopt.cfl_max;
-    ablsteady::NewtonOptions no;
+    gust::NewtonOptions no;
     no.gmres_restart = 200;
-    auto pc = ablsteady::make_newton_preconditioner(ablsteady::NewtonPreconditionerKind::simplec, hr.s.simplec,
+    auto pc = gust::make_newton_preconditioner(gust::NewtonPreconditionerKind::simplec, hr.s.simplec,
                                                     hr.s.sopt.zline_sweeps, in, hr.s.popt, hr.c.mesh, hr.c.geom, hr.c.z,
                                                     hr.s.sopt.cfl_max, hr.c.ba, hr.c.dm,
-                                                    ablsteady::line_sweep_options(hr.s.sopt));
-    ablsteady::Continuation pt(co, no, in, hr.c.mesh, hr.c.geom, &hr.ls->stage().nu(), hr.s.copt.tke_floor, hr.c.ba,
+                                                    gust::line_sweep_options(hr.s.sopt));
+    gust::Continuation pt(co, no, in, hr.c.mesh, hr.c.geom, &hr.ls->stage().nu(), hr.s.copt.tke_floor, hr.c.ba,
                                hr.c.dm, 0);
     testing::internal::CaptureStdout();
     const auto res = pt.run(q, max_steps, amrex::Real(tol), pc.get());
@@ -167,10 +167,10 @@ NewtonResult run_newton (HillRun& hr, ablsteady::State& q, const ablsteady::Resi
     out.r0 = static_cast<double>(pt.state().r0);
     out.r_abs = static_cast<double>(pt.state().r_last);
     for (const auto& r : pt.records()) {
-        if (r.outcome == ablsteady::AttemptOutcome::accepted) { out.hist.push_back(static_cast<double>(r.residual_new)); }
+        if (r.outcome == gust::AttemptOutcome::accepted) { out.hist.push_back(static_cast<double>(r.residual_new)); }
         out.gmres_per.push_back(r.gmres_iterations);
     }
-    out.failed = (res.status == ablsteady::ContinuationStatus::failed);
+    out.failed = (res.status == gust::ContinuationStatus::failed);
     return out;
 }
 
@@ -196,9 +196,9 @@ NewtonResult run_newton (HillRun& hr, ablsteady::State& q, const ablsteady::Resi
 TEST(Smoothness, FloorScopeHoldsOnlyTheFloor)
 {
     ClosureBox b;
-    ablsteady::ClosureOptions opt;
-    const ablsteady::Closure live(opt);
-    ablsteady::Closure fl(opt), al(opt);
+    gust::ClosureOptions opt;
+    const gust::Closure live(opt);
+    gust::Closure fl(opt), al(opt);
     const amrex::Long cells = b.c.ba.numPts();
     b.freeze(fl, FreezeScope::floor);
     b.freeze(al, FreezeScope::all);
@@ -236,7 +236,7 @@ TEST(Smoothness, FloorScopeHoldsOnlyTheFloor)
     }
     {
         b.set(-2e-4, 1e-20);   // unstable and floored at the freeze
-        ablsteady::Closure fu(opt);
+        gust::Closure fu(opt);
         b.freeze(fu, FreezeScope::floor);
         const auto at_floor = b.eval(live);
         b.set(-2e-4, 0.4);
@@ -280,7 +280,7 @@ TEST(Smoothness, RiGateClosedFormAndLimits)
         S2[mfi].copy<amrex::RunOn::Device>(fs, bx);
         amrex::Gpu::streamSynchronize();
     }
-    ablsteady::gate_stratification(N2, S2, amrex::Real(r0));
+    gust::gate_stratification(N2, S2, amrex::Real(r0));
     for (amrex::MFIter mfi(N2, false); mfi.isValid(); ++mfi) {
         const amrex::Box bx = mfi.validbox();
         amrex::FArrayBox fn(bx, 1, amrex::The_Pinned_Arena());
@@ -291,19 +291,19 @@ TEST(Smoothness, RiGateClosedFormAndLimits)
             const double x = static_cast<amrex::Real>(pts[i].n2), s = static_cast<amrex::Real>(pts[i].s2);
             const double expect = (x == 0) ? 0 : x * x * x / (x * x + r0 * r0 * s * s);
             const double got = fn(amrex::IntVect(i, 0, 0));
-            EXPECT_NEAR(got, expect, ablsteady::trtest::tol(1e-14, 1e-5) * std::abs(expect)) << i;
+            EXPECT_NEAR(got, expect, gust::trtest::tol(1e-14, 1e-5) * std::abs(expect)) << i;
             EXPECT_TRUE(got == 0 ? expect == 0 : std::signbit(got) == std::signbit(x)) << i;
         });
         // Ri = 1e3 Ri_0: kept to 1e-6; Ri = 1e-3 Ri_0: suppressed to 1e-6 of N^2.
         EXPECT_NEAR(fn(amrex::IntVect(7, 0, 0)) / static_cast<amrex::Real>(pts[7].n2), 1.0, 1.5e-6);
-        EXPECT_NEAR(fn(amrex::IntVect(8, 0, 0)) / static_cast<amrex::Real>(pts[8].n2), 1e-6, ablsteady::trtest::tol(1e-12, 1e-9));
+        EXPECT_NEAR(fn(amrex::IntVect(8, 0, 0)) / static_cast<amrex::Real>(pts[8].n2), 1e-6, gust::trtest::tol(1e-12, 1e-9));
     }
-    EXPECT_THROW(ablsteady::gate_stratification(N2, S2, 0), std::runtime_error);
+    EXPECT_THROW(gust::gate_stratification(N2, S2, 0), std::runtime_error);
 
     ClosureBox b;
-    ablsteady::ClosureOptions off, on;
+    gust::ClosureOptions off, on;
     on.ri_gate = amrex::Real(0.1);
-    const ablsteady::Closure c_def(ablsteady::ClosureOptions{}), c_off(off), c_on(on);
+    const gust::Closure c_def(gust::ClosureOptions{}), c_off(off), c_on(on);
     {
         // gamma 2e-4: N^2 = 6.5e-6, S^2 >= (0.02)^2 = 4e-4: Ri <= 0.016 < Ri_0, so
         // N^2 is lowered and nu_t grows.
@@ -313,11 +313,11 @@ TEST(Smoothness, RiGateClosedFormAndLimits)
         EXPECT_GT(mf_diff(f0.nut, f2.nut, b.c.geom), 1e-3 * static_cast<double>(f0.nut.norm0()));
         // P_b keeps the ungated N^2: P_b = -nu_t' N^2 = -gamma_theta N^2 (no molecular part here).
         amrex::MultiFab N2, S2, pb(b.c.ba, b.c.dm, 1, 0);
-        ablsteady::stratification_and_strain(b.q, b.buoy, b.c.geom, N2, S2);
+        gust::stratification_and_strain(b.q, b.buoy, b.c.geom, N2, S2);
         amrex::MultiFab::Copy(pb, f2.gamma_theta, 0, 0, 1, 0);
         amrex::MultiFab::Multiply(pb, N2, 0, 0, 1, 0);
         pb.mult(-1);
-        EXPECT_LE(mf_diff(pb, f2.Pb, b.c.geom), ablsteady::trtest::tol(1e-15, 1e-7) * static_cast<double>(f2.Pb.norm0()));
+        EXPECT_LE(mf_diff(pb, f2.Pb, b.c.geom), gust::trtest::tol(1e-15, 1e-7) * static_cast<double>(f2.Pb.norm0()));
     }
     b.set(0, 0.5);   // neutral: N^2 = 0 exactly
     {
@@ -327,9 +327,9 @@ TEST(Smoothness, RiGateClosedFormAndLimits)
         EXPECT_EQ(mf_diff(f0.Pb, f2.Pb, b.c.geom), 0);
     }
     for (const double bad : {-0.1, 1e-7, 1.5, std::numeric_limits<double>::quiet_NaN()}) {
-        ablsteady::ClosureOptions o;
+        gust::ClosureOptions o;
         o.ri_gate = static_cast<amrex::Real>(bad);
-        const auto err = ablsteady::check_closure_options(o);
+        const auto err = gust::check_closure_options(o);
         ASSERT_EQ(err.size(), 1u) << bad;
         EXPECT_NE(err[0].find("turb.ri_gate"), std::string::npos) << err[0];
     }
@@ -348,48 +348,48 @@ TEST(Smoothness, RiGateClosedFormAndLimits)
 // file means the run is not in the Newton stage.
 TEST(Smoothness, ModuleInputsAbortsAndCheckpoint)
 {
-    ablsteady::ResidualInputs in;
+    gust::ResidualInputs in;
     in.momentum.limiter = Limiter::van_leer;
     in.momentum.smooth_eps = amrex::Real(0.03);
     in.theta.limiter = Limiter::upwind;
     in.theta.smooth_eps = amrex::Real(0.02);
     in.pressure_gradient = {1, 2, 3};
-    ablsteady::SmoothnessOptions so;
-    const auto out = ablsteady::newton_residual_inputs(in, so);
+    gust::SmoothnessOptions so;
+    const auto out = gust::newton_residual_inputs(in, so);
     EXPECT_EQ(out.momentum.limiter, Limiter::van_albada);
     EXPECT_EQ(out.theta.limiter, Limiter::upwind);
     EXPECT_EQ(out.momentum.smooth_eps, in.momentum.smooth_eps);
     EXPECT_EQ(out.theta.smooth_eps, in.theta.smooth_eps);
     EXPECT_EQ(out.pressure_gradient[2], 3);
-    EXPECT_EQ(ablsteady::smooth_counterpart(Limiter::van_albada), Limiter::van_albada);
+    EXPECT_EQ(gust::smooth_counterpart(Limiter::van_albada), Limiter::van_albada);
     so.smooth_limiter = false;
-    EXPECT_EQ(ablsteady::newton_residual_inputs(in, so).momentum.limiter, Limiter::van_leer);
-    ablsteady::ClosureOptions copt;
-    EXPECT_TRUE(ablsteady::smoothness_options(copt).freeze_floor);   // turb.frozen_switch defaults to 1
+    EXPECT_EQ(gust::newton_residual_inputs(in, so).momentum.limiter, Limiter::van_leer);
+    gust::ClosureOptions copt;
+    EXPECT_TRUE(gust::smoothness_options(copt).freeze_floor);   // turb.frozen_switch defaults to 1
     copt.frozen_switch = false;
-    EXPECT_FALSE(ablsteady::smoothness_options(copt).freeze_floor);
+    EXPECT_FALSE(gust::smoothness_options(copt).freeze_floor);
 
     ClosureBox b;
-    ablsteady::Closure cl(ablsteady::ClosureOptions{});
-    ablsteady::ResidualInputs run_in;
+    gust::Closure cl(gust::ClosureOptions{});
+    gust::ResidualInputs run_in;
     run_in.closure = &cl;
     run_in.wall_distance = &b.dist;
-    ablsteady::SurfaceLayerOptions sl;
+    gust::SurfaceLayerOptions sl;
     sl.z0 = amrex::Real(0.1);
     run_in.surface = &sl;
     // Floored at the start (k below the floor in the lower half), above it at the end.
     const auto low_k = [] (double klow) {
         return [=] (double, double, double z) { return z < 200 ? klow : 0.5; };
     };
-    ablsteady::trtest::fill_loc(b.q.tke, Loc::cell, b.c, low_k(1e-20));
+    gust::trtest::fill_loc(b.q.tke, Loc::cell, b.c, low_k(1e-20));
     b.q.tke.FillBoundary(b.c.geom.periodicity());
-    ablsteady::NewtonSmoothness sm{ablsteady::SmoothnessOptions{}};
+    gust::NewtonSmoothness sm{gust::SmoothnessOptions{}};
     sm.enter(b.q, &cl, run_in, b.c.mesh, b.c.geom);
     EXPECT_TRUE(sm.active());
     ASSERT_TRUE(cl.frozen());
     EXPECT_EQ(cl.freeze_scope(), FreezeScope::floor);
     EXPECT_THROW(sm.enter(b.q, &cl, run_in, b.c.mesh, b.c.geom), std::runtime_error);
-    const ablsteady::ClosureFields frozen_eval = b.eval(cl);
+    const gust::ClosureFields frozen_eval = b.eval(cl);
 
     // The checkpoint, read on another layout (one box instead of four).
     const std::string dir = "ut_smoothness_chk";
@@ -399,19 +399,19 @@ TEST(Smoothness, ModuleInputsAbortsAndCheckpoint)
     {
         ClosureBox b1(8);
         ASSERT_EQ(b1.c.ba.size(), 1);
-        ablsteady::trtest::fill_loc(b1.q.tke, Loc::cell, b1.c, low_k(0.4));
+        gust::trtest::fill_loc(b1.q.tke, Loc::cell, b1.c, low_k(0.4));
         b1.q.tke.FillBoundary(b1.c.geom.periodicity());
-        ablsteady::Closure c1(ablsteady::ClosureOptions{});
-        ablsteady::NewtonSmoothness s1{ablsteady::SmoothnessOptions{}};
+        gust::Closure c1(gust::ClosureOptions{});
+        gust::NewtonSmoothness s1{gust::SmoothnessOptions{}};
         s1.read_checkpoint(dir, &c1, b1.c.ba, b1.c.dm, b1.c.geom);
         EXPECT_TRUE(s1.active());
         ASSERT_TRUE(c1.frozen());
         EXPECT_EQ(c1.freeze_scope(), FreezeScope::floor);
         // Above the floor everywhere now: the restored decisions hold k at
         // the floor in the lower half, as the original's do.
-        ablsteady::trtest::fill_loc(b.q.tke, Loc::cell, b.c, low_k(0.4));
+        gust::trtest::fill_loc(b.q.tke, Loc::cell, b.c, low_k(0.4));
         b.q.tke.FillBoundary(b.c.geom.periodicity());
-        const ablsteady::Closure live(ablsteady::ClosureOptions{});
+        const gust::Closure live(gust::ClosureOptions{});
         const auto f_orig = b.eval(cl), f_rest = b1.eval(c1), f_live = b.eval(live);
         EXPECT_EQ(mf_diff(f_orig.nut, f_rest.nut, b.c.geom), 0);
         // k = floor in the lower half for the frozen closures: nu_t as at the freeze, bit for bit; the live one is far larger.
@@ -419,10 +419,10 @@ TEST(Smoothness, ModuleInputsAbortsAndCheckpoint)
         EXPECT_GT(f_live.nut.min(0), 100 * f_orig.nut.min(0));
         EXPECT_THROW(s1.read_checkpoint(dir, nullptr, b1.c.ba, b1.c.dm, b1.c.geom), std::runtime_error);
         // A deck with turb.frozen_switch = 0 cannot restart from frozen decisions.
-        ablsteady::SmoothnessOptions off;
+        gust::SmoothnessOptions off;
         off.freeze_floor = false;
-        ablsteady::NewtonSmoothness s_off(off);
-        ablsteady::Closure c3(ablsteady::ClosureOptions{});
+        gust::NewtonSmoothness s_off(off);
+        gust::Closure c3(gust::ClosureOptions{});
         EXPECT_THROW(s_off.read_checkpoint(dir, &c3, b1.c.ba, b1.c.dm, b1.c.geom), std::runtime_error);
     }
     // leave: the lower half's floor decisions moved (k is above the floor now).
@@ -432,25 +432,25 @@ TEST(Smoothness, ModuleInputsAbortsAndCheckpoint)
     EXPECT_FALSE(sm.active());
     EXPECT_THROW((void)sm.leave(b.q, &cl, run_in, b.c.mesh, b.c.geom), std::runtime_error);
     // A closure that is not the inputs'.
-    ablsteady::Closure other(ablsteady::ClosureOptions{});
+    gust::Closure other(gust::ClosureOptions{});
     EXPECT_THROW(sm.enter(b.q, &other, run_in, b.c.mesh, b.c.geom), std::runtime_error);
     // freeze_floor off, or no closure: nothing frozen.
-    ablsteady::SmoothnessOptions nof;
+    gust::SmoothnessOptions nof;
     nof.freeze_floor = false;
-    ablsteady::NewtonSmoothness s2(nof);
+    gust::NewtonSmoothness s2(nof);
     s2.enter(b.q, &cl, run_in, b.c.mesh, b.c.geom);
     EXPECT_FALSE(cl.frozen());
     EXPECT_EQ(s2.leave(b.q, &cl, run_in, b.c.mesh, b.c.geom), 0);
-    const ablsteady::ResidualInputs fixed;
-    ablsteady::NewtonSmoothness s3{ablsteady::SmoothnessOptions{}};
+    const gust::ResidualInputs fixed;
+    gust::NewtonSmoothness s3{gust::SmoothnessOptions{}};
     s3.enter(b.q, nullptr, fixed, b.c.mesh, b.c.geom);
     EXPECT_EQ(s3.leave(b.q, nullptr, fixed, b.c.mesh, b.c.geom), 0);
     // An unfrozen checkpoint thaws a closure on read; missing and corrupt files abort.
     s3.write_checkpoint(dir, nullptr);
     {
-        ablsteady::Closure c2(ablsteady::ClosureOptions{});
+        gust::Closure c2(gust::ClosureOptions{});
         b.freeze(c2, FreezeScope::all);
-        ablsteady::NewtonSmoothness s4{ablsteady::SmoothnessOptions{}};
+        gust::NewtonSmoothness s4{gust::SmoothnessOptions{}};
         s4.read_checkpoint(dir, &c2, b.c.ba, b.c.dm, b.c.geom);
         EXPECT_FALSE(c2.frozen());
         EXPECT_FALSE(s4.active());
@@ -462,11 +462,11 @@ TEST(Smoothness, ModuleInputsAbortsAndCheckpoint)
     }
     if (amrex::ParallelDescriptor::IOProcessor()) {
         std::ofstream os(dir + "/Smoothness");
-        os << "ablsteady-smoothness 1\nactive 2 frozen 0 scope floor\n";
+        os << "gust-smoothness 1\nactive 2 frozen 0 scope floor\n";
     }
     amrex::ParallelDescriptor::Barrier();
     {
-        ablsteady::NewtonSmoothness s5{ablsteady::SmoothnessOptions{}};
+        gust::NewtonSmoothness s5{gust::SmoothnessOptions{}};
         EXPECT_THROW(s5.read_checkpoint(dir, nullptr, b.c.ba, b.c.dm, b.c.geom), std::runtime_error);
     }
     amrex::ParallelDescriptor::Barrier();
@@ -497,7 +497,7 @@ TEST(Smoothness, NewtonCycleReturnsTheSimplecSolution)
     ASSERT_EQ(hr.c.ba.size(), 2);
     hr.simplec_to(1e-4, 5000);
     ASSERT_LT(hr.r(), 1e-4);
-    ablsteady::State q4, qn, qs;
+    gust::State q4, qn, qs;
     for (auto* s : {&q4, &qn, &qs}) { s->define(hr.c.ba, hr.c.dm); }
     copy_state(q4, hr.q);
     hr.simplec_to(1e-8, 10000);
@@ -505,18 +505,18 @@ TEST(Smoothness, NewtonCycleReturnsTheSimplecSolution)
     copy_state(qs, hr.q);
     const double umax = static_cast<double>(qs.u.norm0()), kmax = static_cast<double>(qs.tke.norm0());
 
-    const ablsteady::SmoothnessOptions so = ablsteady::smoothness_options(hr.s.copt);
-    ablsteady::NewtonSmoothness sm(so);
+    const gust::SmoothnessOptions so = gust::smoothness_options(hr.s.copt);
+    gust::NewtonSmoothness sm(so);
     copy_state(qn, q4);
     sm.enter(qn, &hr.ls->closure, hr.ls->res_in, hr.c.mesh, hr.c.geom);
     ASSERT_TRUE(hr.ls->closure.frozen());
-    const auto smooth = run_newton(hr, qn, ablsteady::newton_residual_inputs(hr.ls->res_in, so), 14, 1e-9);
+    const auto smooth = run_newton(hr, qn, gust::newton_residual_inputs(hr.ls->res_in, so), 14, 1e-9);
     EXPECT_TRUE(smooth.converged) << smooth.rel;
     EXPECT_FALSE(smooth.failed);
     EXPECT_EQ(sm.leave(qn, &hr.ls->closure, hr.ls->res_in, hr.c.mesh, hr.c.geom), 0);
     EXPECT_FALSE(hr.ls->closure.frozen());
     {
-        ablsteady::State qvl;
+        gust::State qvl;
         qvl.define(hr.c.ba, hr.c.dm);
         copy_state(qvl, q4);
         const auto standard = run_newton(hr, qvl, hr.ls->res_in, 14, 1e-9);
@@ -562,13 +562,13 @@ TEST(Smoothness, NewtonCycleReturnsTheSimplecSolution)
 TEST(Smoothness, DISABLED_Sweep)
 {
     struct Case { double lapse, gate; Limiter lim; };
-    std::unique_ptr<ablsteady::State> ref;
+    std::unique_ptr<gust::State> ref;
     for (const Case cs : {Case{0, 0, Limiter::van_leer}, Case{0.01, 0, Limiter::van_leer}, Case{0.01, 0.01, Limiter::van_leer},
                           Case{0.01, 0.1, Limiter::van_leer}, Case{0, 0, Limiter::van_albada}, Case{0.01, 0, Limiter::van_albada},
                           Case{0.01, 0.01, Limiter::van_albada}}) {
         HillRun hr(cs.lapse, 16, 16, 8, cs.gate, cs.lim);
         const int i4 = hr.simplec_to(1e-4, 20000);
-        ablsteady::State q4;
+        gust::State q4;
         q4.define(hr.c.ba, hr.c.dm);
         copy_state(q4, hr.q);
         const int i9 = i4 + hr.simplec_to(1e-9, 40000);
@@ -576,24 +576,24 @@ TEST(Smoothness, DISABLED_Sweep)
         amrex::Print() << std::setprecision(3) << (cs.lim == Limiter::van_albada ? "van_albada" : "van_leer") << " run, lapse "
                        << cs.lapse << ", ri_gate " << cs.gate << ": SIMPLEC to 1e-4 " << i4 << ", to 1e-9 " << i9 << "\n";
         if (cs.lapse > 0 && cs.gate == 0 && cs.lim == Limiter::van_leer) {
-            ref = std::make_unique<ablsteady::State>();
+            ref = std::make_unique<gust::State>();
             ref->define(hr.c.ba, hr.c.dm);
             copy_state(*ref, hr.q);
         } else if (ref && cs.lapse > 0) {
             amrex::Print() << "  vs van_leer, gate off: |du|/max u " << diff(hr.q, *ref, 0) / umax << ", |dtheta| "
                            << diff(hr.q, *ref, 4) << " K, |dk| " << diff(hr.q, *ref, 5) << "\n";
         }
-        ablsteady::State qs;
+        gust::State qs;
         qs.define(hr.c.ba, hr.c.dm);
         copy_state(qs, hr.q);
         enum Mode { own, smooth, all };
         for (const Mode mode : {own, smooth, all}) {
             if (mode == smooth && cs.lim == Limiter::van_albada) { continue; }
             if (mode == all && cs.gate > 0) { continue; }
-            ablsteady::SmoothnessOptions so;
+            gust::SmoothnessOptions so;
             so.smooth_limiter = (mode == smooth);
-            ablsteady::NewtonSmoothness sm(so);
-            ablsteady::State q;
+            gust::NewtonSmoothness sm(so);
+            gust::State q;
             q.define(hr.c.ba, hr.c.dm);
             copy_state(q, q4);
             amrex::Long moved = 0;
@@ -603,7 +603,7 @@ TEST(Smoothness, DISABLED_Sweep)
             } else {
                 sm.enter(q, &hr.ls->closure, hr.ls->res_in, hr.c.mesh, hr.c.geom);
             }
-            const auto nr = run_newton(hr, q, ablsteady::newton_residual_inputs(hr.ls->res_in, so), 30, 1e-12);
+            const auto nr = run_newton(hr, q, gust::newton_residual_inputs(hr.ls->res_in, so), 30, 1e-12);
             if (mode == all) {
                 moved = hr.ls->closure.changed_switches(q, hr.ls->dist, hr.s.surf.z0, hr.s.fopt.buoyancy, hr.c.mesh, hr.c.geom);
                 hr.ls->closure.thaw();

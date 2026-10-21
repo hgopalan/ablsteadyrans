@@ -5,7 +5,7 @@
 int main (int argc, char* argv[])
 {
     amrex::Initialize(argc, argv);
-    ablsteady::run();
+    gust::run();
     amrex::Finalize();
     return 0;
 }

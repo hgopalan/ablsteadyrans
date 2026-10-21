@@ -15,7 +15,7 @@
 #include <limits>
 #include <sstream>
 
-namespace ablsteady {
+namespace gust {
 
 namespace {
 
@@ -206,7 +206,7 @@ NewtonOptions read_newton_options ()
         if (pp.countval(key) != 1) { err.emplace_back(std::string("steady.") + key + " takes exactly one value"); }
     }
     if (!err.empty()) {
-        std::string all = "ablsteady: invalid inputs:";
+        std::string all = "gust: invalid inputs:";
         for (const auto& e : err) { all += "\n  " + e; }
         amrex::Abort(all);
     }
@@ -217,7 +217,7 @@ NewtonOptions read_newton_options ()
     pp.query("newton_mem_budget_gb", opt.mem_budget_gb);
     err = check_newton_options(opt);
     if (!err.empty()) {
-        std::string all = "ablsteady: invalid inputs:";
+        std::string all = "gust: invalid inputs:";
         for (const auto& e : err) { all += "\n  " + e; }
         amrex::Abort(all);
     }
@@ -241,7 +241,7 @@ NewtonOperator::NewtonOperator (const State& q, const ResidualFields& R0, const 
       m_ba(q.p.boxArray()), m_dm(q.p.DistributionMap())
 {
     if (in.bc == nullptr) {
-        amrex::Abort("ablsteady: NewtonOperator: ResidualInputs::bc is null (the perturbation's homogeneous ghost fill needs the boundary conditions)");
+        amrex::Abort("gust: NewtonOperator: ResidualInputs::bc is null (the perturbation's homogeneous ghost fill needs the boundary conditions)");
     }
     const auto& js = in.jvp_scales;
     m_s = {js.velocity, js.velocity, js.velocity, js.pressure, js.theta, js.tke};
@@ -447,25 +447,25 @@ NewtonKrylov::NewtonKrylov (const NewtonOptions& opt, const ResidualInputs& in, 
 {
     const auto err = check_newton_options(opt);
     if (!err.empty()) {
-        std::string all = "ablsteady: NewtonKrylov: invalid inputs:";
+        std::string all = "gust: NewtonKrylov: invalid inputs:";
         for (const auto& e : err) { all += "\n  " + e; }
         amrex::Abort(all);
     }
     if (in.bc == nullptr) {
-        amrex::Abort("ablsteady: NewtonKrylov: ResidualInputs::bc is null (the perturbation's homogeneous ghost fill needs the boundary conditions)");
+        amrex::Abort("gust: NewtonKrylov: ResidualInputs::bc is null (the perturbation's homogeneous ghost fill needs the boundary conditions)");
     }
     m_in.jvp_scales.step = opt.fd_eps_scale;
     m_mem = krylov_memory(opt.gmres_restart, ba, dm);
     const double gb = 1.0e9;
     if (m_verbose > 0) {
-        amrex::Print() << "ablsteady: Newton-Krylov: FGMRES(" << opt.gmres_restart << ") Krylov memory estimate "
+        amrex::Print() << "gust: Newton-Krylov: FGMRES(" << opt.gmres_restart << ") Krylov memory estimate "
                        << m_mem.vectors << " vectors (" << m_mem.arnoldi_vectors << " Arnoldi + "
                        << opt.gmres_restart << " preconditioned + 2 work) x " << m_mem.vector_bytes / gb
                        << " GB = " << m_mem.total_bytes / gb << " GB in total, " << m_mem.max_rank_bytes / gb
                        << " GB on rank " << m_mem.max_rank << " (budget " << opt.mem_budget_gb << " GB per rank)\n";
     }
     if (m_mem.max_rank_bytes > static_cast<double>(opt.mem_budget_gb) * gb) {
-        amrex::Abort("ablsteady: steady.newton_mem_budget_gb = " + num(static_cast<double>(opt.mem_budget_gb))
+        amrex::Abort("gust: steady.newton_mem_budget_gb = " + num(static_cast<double>(opt.mem_budget_gb))
                      + ": the Krylov memory estimate of rank " + std::to_string(m_mem.max_rank) + ", "
                      + num(m_mem.max_rank_bytes / gb) + " GB (steady.newton_gmres_restart = "
                      + std::to_string(opt.gmres_restart) + ": " + std::to_string(m_mem.vectors)
@@ -542,7 +542,7 @@ NewtonStepInfo NewtonKrylov::solve (State& q, const amrex::MultiFab* dtau, Newto
 void NewtonKrylov::report (const NewtonStepInfo& info) const
 {
     if (m_verbose > 0 || !info.applied) {
-        amrex::Print() << "ablsteady: Newton step: |R| = " << info.residual_norm << ", GMRES "
+        amrex::Print() << "gust: Newton step: |R| = " << info.residual_norm << ", GMRES "
                        << info.gmres_iterations << " iterations (status " << info.gmres_status
                        << "), Krylov residual " << info.krylov_residual << " (" << info.krylov_relative
                        << " relative), " << info.jvp_calls << " jvp calls, eps " << info.eps_min << " .. "
@@ -563,7 +563,7 @@ NewtonStepInfo NewtonKrylov::step (State& q, const amrex::MultiFab* dtau, Newton
 NewtonStepInfo NewtonKrylov::direction (State& q, const amrex::MultiFab* dtau, State& dq, NewtonPreconditioner* pc)
 {
     if (dq.p.boxArray() != q.p.boxArray() || dq.p.DistributionMap() != q.p.DistributionMap()) {
-        amrex::Abort("ablsteady: NewtonKrylov::direction: dq is not on q's layout");
+        amrex::Abort("gust: NewtonKrylov::direction: dq is not on q's layout");
     }
     for (int f = 0; f < n_newton_fields; ++f) { state_field(dq, f).setVal(0.0); }
     NewtonStepInfo info = solve(q, dtau, pc, [&] (const NewtonOperator& op, const NewtonVector& x) { op.add_update(dq, x); });
@@ -585,4 +585,4 @@ amrex::Real NewtonKrylov::residual_norm (State& q)
     return r;
 }
 
-} // namespace ablsteady
+} // namespace gust

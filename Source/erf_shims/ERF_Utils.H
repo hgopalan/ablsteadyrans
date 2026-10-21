@@ -1,5 +1,5 @@
-#ifndef ABLSTEADY_ERF_SHIM_UTILS_H_
-#define ABLSTEADY_ERF_SHIM_UTILS_H_
+#ifndef GUST_ERF_SHIM_UTILS_H_
+#define GUST_ERF_SHIM_UTILS_H_
 
 // Shim for ERF's ERF_Utils.H. The real header pulls in most of ERF (data
 // structures, surface layer, fill patchers); the files in extern_erf/ need

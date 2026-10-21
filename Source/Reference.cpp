@@ -1,5 +1,6 @@
 #include "Reference.H"
 
+#include "FileMagic.H"
 #include "Reductions.H"
 #include "Sha256.H"
 
@@ -23,11 +24,11 @@
 
 namespace fs = std::filesystem;
 
-namespace ablsteady {
+namespace gust {
 
 namespace {
 
-constexpr const char* kMagic = "ablsteady-reference";
+constexpr const char* kMagic = "gust-reference";
 constexpr int kVersion = 1;
 
 // Every file-system call below runs on the I/O rank only, uses the
@@ -81,7 +82,7 @@ bool is_word (const std::string& s)
 
 [[noreturn]] void fail (const std::string& msg)
 {
-    amrex::Abort("ablsteady: " + msg);
+    amrex::Abort("gust: " + msg);
     std::abort();   // not reached; amrex::Abort does not return
 }
 
@@ -159,8 +160,8 @@ Manifest parse_manifest (const std::vector<std::string>& lines, std::vector<std:
         std::string magic, ver;
         hs >> magic >> ver;
         int version = 0;
-        if (magic != kMagic || !parse_int(ver, version) || version != kVersion) {
-            err.emplace_back("MANIFEST: not an ablsteady reference manifest of version " + std::to_string(kVersion));
+        if (!is_file_magic(magic, kMagic) || !parse_int(ver, version) || version != kVersion) {
+            err.emplace_back("MANIFEST: not a GUST reference manifest of version " + std::to_string(kVersion));
             return m;
         }
     }
@@ -596,4 +597,4 @@ Reference load_reference (const std::string& dir)
     return r;
 }
 
-} // namespace ablsteady
+} // namespace gust

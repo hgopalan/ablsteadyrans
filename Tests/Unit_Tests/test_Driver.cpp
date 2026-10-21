@@ -26,26 +26,26 @@
 
 namespace {
 
-using ablsteady::DriverHistory;
-using ablsteady::MonitorSpec;
-using ablsteady::SteadyOptions;
-using ablsteady::SteadyStatus;
-using ablsteady::ptest::PCase;
-using ablsteady::trtest::tol;
+using gust::DriverHistory;
+using gust::MonitorSpec;
+using gust::SteadyOptions;
+using gust::SteadyStatus;
+using gust::ptest::PCase;
+using gust::trtest::tol;
 
 PCase make_mesh (double H0, bool stretched)
 {
-    ablsteady::ptest::Manufactured ms;
+    gust::ptest::Manufactured ms;
     ms.Lx = 1000;
     ms.Ly = 800;
     ms.H0 = H0;
-    PCase c = ablsteady::ptest::make_case(16, 8, 8, ablsteady::PoissonFace::periodic, ablsteady::PoissonFace::periodic, ms, 0,
+    PCase c = gust::ptest::make_case(16, 8, 8, gust::PoissonFace::periodic, gust::PoissonFace::periodic, ms, 0,
                                           stretched);
-    ablsteady::trtest::smooth_vertical_ghost_nodes(c);
+    gust::trtest::smooth_vertical_ghost_nodes(c);
     return c;
 }
 
-void define_state (ablsteady::State& q, const PCase& c)
+void define_state (gust::State& q, const PCase& c)
 {
     q.define(c.ba, c.dm);
     amrex::MultiFab::Copy(q.z_phys_nd, c.z, 0, 0, 1, c.z.nGrow());
@@ -63,13 +63,13 @@ amrex::FArrayBox host_copy (const amrex::MultiFab& mf, const amrex::MFIter& mfi)
 // by `rate`, the residual is max |u| (a global reduction, so bit-identical
 // on every rank), the monitor is 1 + max |u|. Counts the calls it receives
 // and remembers the dtau range of the last iterate.
-class DecayStage : public ablsteady::Stage
+class DecayStage : public gust::Stage
 {
 public:
     DecayStage (std::string name, amrex::Real rate) : m_name(std::move(name)), m_rate(rate) {}
     [[nodiscard]] std::string name () const override { return m_name; }
-    void init (ablsteady::State&) override { ++inits; }
-    void iterate (ablsteady::State& q, const amrex::MultiFab& dtau) override
+    void init (gust::State&) override { ++inits; }
+    void iterate (gust::State& q, const amrex::MultiFab& dtau) override
     {
         q.u.mult(m_rate, 0, 1, 0);
         m_res = q.u.norm0();
@@ -96,13 +96,13 @@ const std::vector<MonitorSpec> DecayStage::s_specs{{"speed", amrex::Real(1)}};
 
 // A stage with a scripted residual sequence (per call of iterate, cycling at
 // the end) and a constant monitor; it does not touch the state.
-class ScriptedStage : public ablsteady::Stage
+class ScriptedStage : public gust::Stage
 {
 public:
     ScriptedStage (std::string name, std::vector<amrex::Real> script) : m_name(std::move(name)), m_script(std::move(script)) {}
     [[nodiscard]] std::string name () const override { return m_name; }
-    void init (ablsteady::State&) override { ++inits; }
-    void iterate (ablsteady::State&, const amrex::MultiFab&) override
+    void init (gust::State&) override { ++inits; }
+    void iterate (gust::State&, const amrex::MultiFab&) override
     {
         m_res = m_script[static_cast<std::size_t>(iterates) % m_script.size()];
         ++iterates;
@@ -158,9 +158,9 @@ SteadyOptions base_options ()
 }
 
 template <class S, class... A>
-std::vector<std::unique_ptr<ablsteady::Stage>> one_stage (A&&... a)
+std::vector<std::unique_ptr<gust::Stage>> one_stage (A&&... a)
 {
-    std::vector<std::unique_ptr<ablsteady::Stage>> v;
+    std::vector<std::unique_ptr<gust::Stage>> v;
     v.push_back(std::make_unique<S>(std::forward<A>(a)...));
     return v;
 }
@@ -176,7 +176,7 @@ TEST (PseudoTime, LocalStepMatchesTheAnalyticLimits)
 {
     PCase c = make_mesh(0, false);
     const auto dx = c.geom.CellSizeArray();
-    ablsteady::State q;
+    gust::State q;
     define_state(q, c);
     const double U = 7, V = -3, W = 0.5, NU = 2, CFL = 1.5;
     q.u.setVal(amrex::Real(U));
@@ -185,14 +185,14 @@ TEST (PseudoTime, LocalStepMatchesTheAnalyticLimits)
     amrex::MultiFab nu(c.ba, c.dm, 1, 0);
     nu.setVal(amrex::Real(NU));
     amrex::MultiFab dtau;
-    ablsteady::local_dtau(q, &nu, c.mesh, c.geom, amrex::Real(CFL), dtau);
+    gust::local_dtau(q, &nu, c.mesh, c.geom, amrex::Real(CFL), dtau);
     EXPECT_EQ(dtau.nGrow(), 0);
     const double want = CFL / (std::abs(U) / dx[0] + std::abs(V) / dx[1] + std::abs(W) / dx[2]
                               + 2 * NU * (1 / (dx[0] * dx[0]) + 1 / (dx[1] * dx[1])));
     EXPECT_NEAR(dtau.min(0), want, tol(1e-14, 1e-6) * want);
     EXPECT_NEAR(dtau.max(0), want, tol(1e-14, 1e-6) * want);
     // without diffusion
-    ablsteady::local_dtau(q, nullptr, c.mesh, c.geom, amrex::Real(CFL), dtau);
+    gust::local_dtau(q, nullptr, c.mesh, c.geom, amrex::Real(CFL), dtau);
     const double want0 = CFL / (std::abs(U) / dx[0] + std::abs(V) / dx[1] + std::abs(W) / dx[2]);
     EXPECT_NEAR(dtau.min(0), want0, tol(1e-14, 1e-6) * want0);
     EXPECT_NEAR(dtau.max(0), want0, tol(1e-14, 1e-6) * want0);
@@ -200,11 +200,11 @@ TEST (PseudoTime, LocalStepMatchesTheAnalyticLimits)
     q.u.setVal(0.0);
     q.v.setVal(0.0);
     q.w.setVal(0.0);
-    ablsteady::local_dtau(q, nullptr, c.mesh, c.geom, amrex::Real(CFL), dtau);
-    EXPECT_EQ(dtau.min(0), amrex::Real(CFL) / ablsteady::kMinRate);
+    gust::local_dtau(q, nullptr, c.mesh, c.geom, amrex::Real(CFL), dtau);
+    EXPECT_EQ(dtau.min(0), amrex::Real(CFL) / gust::kMinRate);
     // u varying in x: the cell value is the mean of its two faces
     fill_with_i(q.u);
-    ablsteady::local_dtau(q, nullptr, c.mesh, c.geom, amrex::Real(CFL), dtau);
+    gust::local_dtau(q, nullptr, c.mesh, c.geom, amrex::Real(CFL), dtau);
     int seen = 0;
     for (amrex::MFIter mfi(dtau, false); mfi.isValid(); ++mfi) {
         const auto d = host_copy(dtau, mfi);
@@ -218,26 +218,26 @@ TEST (PseudoTime, LocalStepMatchesTheAnalyticLimits)
     EXPECT_EQ(seen, 16 * 8 * 8);
     // a terrain-following field over a hill: Omega = 0, no vertical term
     PCase h = make_mesh(120, true);
-    ablsteady::State qh;
+    gust::State qh;
     define_state(qh, h);
     qh.u.setVal(amrex::Real(U));
     qh.v.setVal(amrex::Real(V));
     amrex::MultiFab omega(h.mesh.az.boxArray(), h.dm, 1, 0);
     omega.setVal(0.0);
-    ablsteady::w_from_omega(qh.u, qh.v, omega, qh.z_phys_nd, h.mesh, h.geom, qh.w);
+    gust::w_from_omega(qh.u, qh.v, omega, qh.z_phys_nd, h.mesh, h.geom, qh.w);
     EXPECT_GT(qh.w.norm0(), 0.1);   // the slopes give a real w
     amrex::MultiFab dtau_h;   // the hill mesh has its own layout
-    ablsteady::local_dtau(qh, nullptr, h.mesh, h.geom, amrex::Real(CFL), dtau_h);
+    gust::local_dtau(qh, nullptr, h.mesh, h.geom, amrex::Real(CFL), dtau_h);
     const double wanth = CFL / (std::abs(U) / dx[0] + std::abs(V) / dx[1]);
     EXPECT_NEAR(dtau_h.min(0), wanth, tol(1e-12, 1e-5) * wanth);
     EXPECT_NEAR(dtau_h.max(0), wanth, tol(1e-12, 1e-5) * wanth);
     // the same w as a plain vertical velocity has a vertical term
-    ablsteady::State qw;
+    gust::State qw;
     define_state(qw, h);
     qw.u.setVal(0.0);
     qw.v.setVal(0.0);
     qw.w.setVal(amrex::Real(W));
-    ablsteady::local_dtau(qw, nullptr, h.mesh, h.geom, amrex::Real(CFL), dtau_h);
+    gust::local_dtau(qw, nullptr, h.mesh, h.geom, amrex::Real(CFL), dtau_h);
     // dtau = CFL J dzeta / |W|: J varies with the hill, so compare cell by cell
     for (amrex::MFIter mfi(dtau_h, false); mfi.isValid(); ++mfi) {
         const auto d = host_copy(dtau_h, mfi), J = host_copy(h.mesh.detJ, mfi);
@@ -248,11 +248,11 @@ TEST (PseudoTime, LocalStepMatchesTheAnalyticLimits)
         });
     }
     // refusals
-    EXPECT_THROW(ablsteady::local_dtau(q, nullptr, c.mesh, c.geom, amrex::Real(0), dtau), std::runtime_error);
-    EXPECT_THROW(ablsteady::local_dtau(q, nullptr, c.mesh, c.geom, std::numeric_limits<amrex::Real>::quiet_NaN(), dtau),
+    EXPECT_THROW(gust::local_dtau(q, nullptr, c.mesh, c.geom, amrex::Real(0), dtau), std::runtime_error);
+    EXPECT_THROW(gust::local_dtau(q, nullptr, c.mesh, c.geom, std::numeric_limits<amrex::Real>::quiet_NaN(), dtau),
                  std::runtime_error);
     amrex::MultiFab bad(c.mesh.ax.boxArray(), c.dm, 1, 0);   // a face layout
-    EXPECT_THROW(ablsteady::local_dtau(q, nullptr, c.mesh, c.geom, amrex::Real(1), bad), std::runtime_error);
+    EXPECT_THROW(gust::local_dtau(q, nullptr, c.mesh, c.geom, amrex::Real(1), bad), std::runtime_error);
 }
 
 // ---------------------------------------------------------------------------
@@ -269,12 +269,12 @@ TEST (Driver, SerRampFollowsTheLawAndItsCaps)
     o.ser_exponent = 1;
     o.ser_max_growth = 4;
     auto run = [&] (const SteadyOptions& opt, int n) {
-        ablsteady::State q;
+        gust::State q;
         define_state(q, c);
         q.u.setVal(1.0);
         auto stages = one_stage<DecayStage>("decay", amrex::Real(0.25));
         auto* st = static_cast<DecayStage*>(stages.front().get());
-        ablsteady::Driver d(opt, std::move(stages), c.mesh, c.geom, nullptr);
+        gust::Driver d(opt, std::move(stages), c.mesh, c.geom, nullptr);
         std::vector<double> cfl, dtmax;
         for (int i = 0; i < n; ++i) {
             d.step(q);
@@ -322,11 +322,11 @@ TEST (Driver, SerRampFollowsTheLawAndItsCaps)
     // residual far below the tolerance from the start (1e-9, then 1e-10) has
     // r = 1e-10 / 1e-6 = 1e-4, not 0.1, so the CFL goes 1, 1, 1, 4, 16, 64
     {
-        ablsteady::State q;
+        gust::State q;
         define_state(q, c);
         SteadyOptions of = o;
         of.criterion.monitor_window = 1000;
-        ablsteady::Driver d(of, one_stage<ScriptedStage>("tiny", std::vector<amrex::Real>{amrex::Real(1e-9), amrex::Real(1e-9), amrex::Real(1e-10)}),
+        gust::Driver d(of, one_stage<ScriptedStage>("tiny", std::vector<amrex::Real>{amrex::Real(1e-9), amrex::Real(1e-9), amrex::Real(1e-10)}),
                             c.mesh, c.geom, nullptr);
         for (int i = 0; i < 5; ++i) { d.step(q); }
         EXPECT_EQ(d.history().records[2].relative_residual, amrex::Real(1e-10) / amrex::Real(1e-6));
@@ -336,11 +336,11 @@ TEST (Driver, SerRampFollowsTheLawAndItsCaps)
     // a residual exactly 0 gives the cap (through the growth cap), not
     // infinity: 1, 1, 1, 4, 16, 64
     {
-        ablsteady::State q;
+        gust::State q;
         define_state(q, c);
         SteadyOptions oz = o;
         oz.criterion.monitor_window = 1000;   // never steady, so the CFL keeps updating
-        ablsteady::Driver d(oz, one_stage<ScriptedStage>("zero", std::vector<amrex::Real>{1, 0, 0, 0, 0, 0, 0}), c.mesh, c.geom,
+        gust::Driver d(oz, one_stage<ScriptedStage>("zero", std::vector<amrex::Real>{1, 0, 0, 0, 0, 0, 0}), c.mesh, c.geom,
                             nullptr);
         for (int i = 0; i < 5; ++i) { d.step(q); }
         EXPECT_EQ(d.cfl(), o.cfl_max);
@@ -350,7 +350,7 @@ TEST (Driver, SerRampFollowsTheLawAndItsCaps)
         // the residual that gives the cap (it would overflow), same CFLs
         SteadyOptions op = oz;
         op.ser_exponent = 2;
-        ablsteady::Driver d2(op, one_stage<ScriptedStage>("tiny", std::vector<amrex::Real>{1, std::numeric_limits<amrex::Real>::min(), 0, 0, 0, 0}),
+        gust::Driver d2(op, one_stage<ScriptedStage>("tiny", std::vector<amrex::Real>{1, std::numeric_limits<amrex::Real>::min(), 0, 0, 0, 0}),
                              c.mesh, c.geom, nullptr);
         for (int i = 0; i < 5; ++i) { d2.step(q); }
         EXPECT_EQ(d2.cfl(), o.cfl_max);
@@ -369,7 +369,7 @@ TEST (Driver, SerRampFollowsTheLawAndItsCaps)
 TEST (Driver, SwitchRulesHaveHysteresis)
 {
     PCase c = make_mesh(0, false);
-    ablsteady::State q;
+    gust::State q;
     define_state(q, c);
     SteadyOptions o = base_options();
     o.criterion.residual_ref_iterations = 1;
@@ -378,7 +378,7 @@ TEST (Driver, SwitchRulesHaveHysteresis)
     o.switch_back_growth = 10;
     o.criterion.monitor_window = 1000;   // never steady here
     auto two_stages = [] (std::vector<amrex::Real> s1, std::vector<amrex::Real> s2) {
-        std::vector<std::unique_ptr<ablsteady::Stage>> v;
+        std::vector<std::unique_ptr<gust::Stage>> v;
         v.push_back(std::make_unique<ScriptedStage>("first", std::move(s1)));
         v.push_back(std::make_unique<ScriptedStage>("second", std::move(s2)));
         return v;
@@ -387,7 +387,7 @@ TEST (Driver, SwitchRulesHaveHysteresis)
     {
         std::vector<amrex::Real> s{1};   // the reference
         for (int i = 0; i < 40; ++i) { s.push_back(i % 5 == 4 ? amrex::Real(0.02) : amrex::Real(0.005)); }
-        ablsteady::Driver d(o, two_stages(s, {amrex::Real(0.001)}), c.mesh, c.geom, nullptr);
+        gust::Driver d(o, two_stages(s, {amrex::Real(0.001)}), c.mesh, c.geom, nullptr);
         for (int i = 0; i < 40; ++i) { d.step(q); }
         EXPECT_EQ(d.stage(), 0);
         EXPECT_TRUE(d.history().switches.empty());
@@ -402,7 +402,7 @@ TEST (Driver, SwitchRulesHaveHysteresis)
         for (int i = 0; i < 100; ++i) { s2.push_back(amrex::Real(0.08)); }
         auto stages = two_stages(s1, s2);
         auto* second = static_cast<ScriptedStage*>(stages[1].get());
-        ablsteady::Driver d(o, std::move(stages), c.mesh, c.geom, nullptr);
+        gust::Driver d(o, std::move(stages), c.mesh, c.geom, nullptr);
         for (int i = 0; i < 30; ++i) { d.step(q); }
         const auto& sw = d.history().switches;
         ASSERT_GE(sw.size(), 2u);
@@ -447,7 +447,7 @@ TEST (Driver, SwitchRulesHaveHysteresis)
     {
         std::vector<amrex::Real> s{1};
         for (int i = 0; i < 30; ++i) { s.push_back(amrex::Real(1e-4)); }
-        ablsteady::Driver d(o, one_stage<ScriptedStage>("only", s), c.mesh, c.geom, nullptr);
+        gust::Driver d(o, one_stage<ScriptedStage>("only", s), c.mesh, c.geom, nullptr);
         for (int i = 0; i < 20; ++i) { d.step(q); }
         EXPECT_TRUE(d.history().switches.empty());
         EXPECT_EQ(d.stage(), 0);
@@ -464,12 +464,12 @@ public:
                          bool accepts = true)
         : ScriptedStage(std::move(name), std::move(script)), m_mon(std::move(mon)), m_fallback_at(fallback_at), m_accepts(accepts)
     {}
-    void iterate (ablsteady::State& q, const amrex::MultiFab& dtau) override
+    void iterate (gust::State& q, const amrex::MultiFab& dtau) override
     {
         ScriptedStage::iterate(q, dtau);
         m_cur = m_mon[static_cast<std::size_t>(iterates - 1) % m_mon.size()];
     }
-    void leave (ablsteady::State&) override { ++leaves; }
+    void leave (gust::State&) override { ++leaves; }
     [[nodiscard]] std::vector<amrex::Real> monitors () const override { return {m_cur}; }
     [[nodiscard]] bool fallback_requested () const override { return m_fallback_at > 0 && iterates >= m_fallback_at; }
     [[nodiscard]] std::string fallback_reason () const override { return "scripted fallback"; }
@@ -502,7 +502,7 @@ private:
 TEST (Driver, NewtonSwitchOnceAndFallback)
 {
     PCase c = make_mesh(0, false);
-    ablsteady::State q;
+    gust::State q;
     define_state(q, c);
     SteadyOptions o = base_options();
     o.criterion.residual_ref_iterations = 1;
@@ -513,13 +513,13 @@ TEST (Driver, NewtonSwitchOnceAndFallback)
     std::vector<amrex::Real> res{1, amrex::Real(1e-2), amrex::Real(1e-3)};
     for (int i = 0; i < 60; ++i) { res.push_back(amrex::Real(5e-5)); }
     auto run = [&] (const SteadyOptions& opt, std::vector<amrex::Real> mon, int fallback_at, bool accepts, int steps) {
-        std::vector<std::unique_ptr<ablsteady::Stage>> v;
+        std::vector<std::unique_ptr<gust::Stage>> v;
         v.push_back(std::make_unique<ScriptedSwitchStage>("simplec", res, mon));
         v.push_back(std::make_unique<ScriptedSwitchStage>("newton", std::vector<amrex::Real>{amrex::Real(4e-5)},
                                                           std::vector<amrex::Real>{amrex::Real(3)}, fallback_at, accepts));
         auto* first = static_cast<ScriptedSwitchStage*>(v[0].get());
         auto* second = static_cast<ScriptedSwitchStage*>(v[1].get());
-        auto d = std::make_unique<ablsteady::Driver>(opt, std::move(v), c.mesh, c.geom, nullptr);
+        auto d = std::make_unique<gust::Driver>(opt, std::move(v), c.mesh, c.geom, nullptr);
         for (int i = 0; i < steps; ++i) { d->step(q); }
         return std::make_tuple(std::move(d), first, second);
     };
@@ -584,20 +584,20 @@ TEST (Driver, NewtonSwitchOnceAndFallback)
 TEST (Driver, OneStageHistoryContinuesWithTwoStages)
 {
     PCase c = make_mesh(0, false);
-    ablsteady::State q;
+    gust::State q;
     define_state(q, c);
     SteadyOptions o = base_options();
     o.criterion.monitor_window = 1000;
     std::vector<amrex::Real> s{1, amrex::Real(0.5), amrex::Real(0.25)};
-    ablsteady::Driver one(o, one_stage<ScriptedStage>("simplec", s), c.mesh, c.geom, nullptr);
+    gust::Driver one(o, one_stage<ScriptedStage>("simplec", s), c.mesh, c.geom, nullptr);
     for (int i = 0; i < 3; ++i) { one.step(q); }
     auto two_stages = [&] {
-        std::vector<std::unique_ptr<ablsteady::Stage>> v;
+        std::vector<std::unique_ptr<gust::Stage>> v;
         v.push_back(std::make_unique<ScriptedStage>("simplec", s));
         v.push_back(std::make_unique<ScriptedStage>("newton", s));
         return v;
     };
-    ablsteady::Driver two(o, two_stages(), c.mesh, c.geom, nullptr);
+    gust::Driver two(o, two_stages(), c.mesh, c.geom, nullptr);
     two.restore(one.history(), q);
     EXPECT_EQ(two.history().records.size(), 3u);
     ASSERT_EQ(two.history().accounts.size(), 2u);
@@ -607,7 +607,7 @@ TEST (Driver, OneStageHistoryContinuesWithTwoStages)
     EXPECT_EQ(two.cfl(), one.cfl());
     two.step(q);
     EXPECT_EQ(two.history().records.size(), 4u);
-    ablsteady::Driver back(o, one_stage<ScriptedStage>("simplec", s), c.mesh, c.geom, nullptr);
+    gust::Driver back(o, one_stage<ScriptedStage>("simplec", s), c.mesh, c.geom, nullptr);
     try {
         back.restore(two.history(), q);
         ADD_FAILURE() << "a two-stage history restored into one stage";
@@ -629,19 +629,19 @@ TEST (Driver, HistoryIsRestartableBitForBit)
     o.cfl_max = 8;
     o.switch_window = 3;
     o.switch_residual = amrex::Real(0.2);
-    o.machine = ablsteady::Machine::KestrelCpu;
+    o.machine = gust::Machine::KestrelCpu;
     o.nodes = 2;
     auto stages = [] {
-        std::vector<std::unique_ptr<ablsteady::Stage>> v;
+        std::vector<std::unique_ptr<gust::Stage>> v;
         v.push_back(std::make_unique<DecayStage>("slow", amrex::Real(0.5)));
         v.push_back(std::make_unique<DecayStage>("fast", amrex::Real(0.1)));
         return v;
     };
     // the uninterrupted run
-    ablsteady::State qa;
+    gust::State qa;
     define_state(qa, c);
     qa.u.setVal(1.0);
-    ablsteady::Driver a(o, stages(), c.mesh, c.geom, nullptr);
+    gust::Driver a(o, stages(), c.mesh, c.geom, nullptr);
     const auto ra = a.run(qa);
     EXPECT_EQ(ra.verdict.status, SteadyStatus::Steady);
     EXPECT_GT(ra.iterations, 10);
@@ -649,7 +649,7 @@ TEST (Driver, HistoryIsRestartableBitForBit)
     // the interrupted run: K iterations, the history to a directory, a new
     // driver restores it and continues on a copy of the state
     const int K = 6;
-    ablsteady::State qb;
+    gust::State qb;
     define_state(qb, c);
     qb.u.setVal(1.0);
     const std::string dir = "ut_driver_history";
@@ -659,11 +659,11 @@ TEST (Driver, HistoryIsRestartableBitForBit)
     }
     amrex::ParallelDescriptor::Barrier();
     {
-        ablsteady::Driver b(o, stages(), c.mesh, c.geom, nullptr);
+        gust::Driver b(o, stages(), c.mesh, c.geom, nullptr);
         for (int i = 0; i < K; ++i) { b.step(qb); }
-        ablsteady::write_driver_history(dir, b.history());
+        gust::write_driver_history(dir, b.history());
         // the round trip is exact, field by field
-        const DriverHistory h = ablsteady::read_driver_history(dir);
+        const DriverHistory h = gust::read_driver_history(dir);
         const DriverHistory& g = b.history();
         EXPECT_EQ(h.stage, g.stage);
         EXPECT_EQ(h.cfl, g.cfl);
@@ -706,8 +706,8 @@ TEST (Driver, HistoryIsRestartableBitForBit)
         EXPECT_GE(wall, 0);
     }
     {
-        const DriverHistory h = ablsteady::read_driver_history(dir);
-        ablsteady::Driver b(o, stages(), c.mesh, c.geom, nullptr);
+        const DriverHistory h = gust::read_driver_history(dir);
+        gust::Driver b(o, stages(), c.mesh, c.geom, nullptr);
         b.restore(h, qb);
         EXPECT_EQ(b.stage(), h.stage);
         EXPECT_EQ(b.cfl(), h.cfl);
@@ -755,17 +755,17 @@ TEST (Driver, HistoryIsRestartableBitForBit)
             os << "trailing garbage\n";
         }
         amrex::ParallelDescriptor::Barrier();
-        EXPECT_NO_THROW(ablsteady::read_driver_history(dir));   // trailing text after a complete history is ignored
+        EXPECT_NO_THROW(gust::read_driver_history(dir));   // trailing text after a complete history is ignored
         if (amrex::ParallelDescriptor::IOProcessor()) {
             std::ofstream os(dir + "/Driver");
-            os << "ablsteady-driver 1\nstate 0 0x1p+0 0 -1\naccounts 2\n0 0x0p+0 0x0p+0\n";   // truncated
+            os << "gust-driver 1\nstate 0 0x1p+0 0 -1\naccounts 2\n0 0x0p+0 0x0p+0\n";   // truncated
         }
         amrex::ParallelDescriptor::Barrier();
-        EXPECT_THROW(ablsteady::read_driver_history(dir), std::runtime_error);
+        EXPECT_THROW(gust::read_driver_history(dir), std::runtime_error);
         const DriverHistory h = a.history();
-        ablsteady::Driver d1(o, one_stage<DecayStage>("one", amrex::Real(0.5)), c.mesh, c.geom, nullptr);
+        gust::Driver d1(o, one_stage<DecayStage>("one", amrex::Real(0.5)), c.mesh, c.geom, nullptr);
         EXPECT_THROW(d1.restore(h, qb), std::runtime_error);
-        EXPECT_THROW(ablsteady::read_driver_history("no_such_dir_ut_driver"), std::runtime_error);
+        EXPECT_THROW(gust::read_driver_history("no_such_dir_ut_driver"), std::runtime_error);
     }
     amrex::ParallelDescriptor::Barrier();
     if (amrex::ParallelDescriptor::IOProcessor()) { amrex::FileSystem::RemoveAll(dir); }
@@ -779,7 +779,7 @@ TEST (Driver, HistoryIsRestartableBitForBit)
 TEST (Driver, DivergenceStopsAndTheChecksNameTheirInput)
 {
     PCase c = make_mesh(0, false);
-    ablsteady::State q;
+    gust::State q;
     define_state(q, c);
     q.u.setVal(1.0);
     SteadyOptions o = base_options();
@@ -791,7 +791,7 @@ TEST (Driver, DivergenceStopsAndTheChecksNameTheirInput)
         q.u.setVal(std::numeric_limits<amrex::Real>::max() / amrex::Real(1e15));
         auto stages = one_stage<DecayStage>("blow", amrex::Real(1e10));
         auto* st = static_cast<DecayStage*>(stages.front().get());
-        ablsteady::Driver d(o, std::move(stages), c.mesh, c.geom, nullptr);
+        gust::Driver d(o, std::move(stages), c.mesh, c.geom, nullptr);
         const auto r = d.run(q);
         EXPECT_EQ(r.verdict.status, SteadyStatus::Diverged);
         EXPECT_LT(r.iterations, o.max_iterations);
@@ -801,7 +801,7 @@ TEST (Driver, DivergenceStopsAndTheChecksNameTheirInput)
     // a NaN residual: Diverged at once, no arithmetic on it (the traps)
     {
         q.u.setVal(1.0);
-        ablsteady::Driver d(o, one_stage<ScriptedStage>("nan", std::vector<amrex::Real>{1, std::numeric_limits<amrex::Real>::quiet_NaN()}),
+        gust::Driver d(o, one_stage<ScriptedStage>("nan", std::vector<amrex::Real>{1, std::numeric_limits<amrex::Real>::quiet_NaN()}),
                             c.mesh, c.geom, nullptr);
         const auto r = d.run(q);
         EXPECT_EQ(r.verdict.status, SteadyStatus::Diverged);
@@ -813,32 +813,32 @@ TEST (Driver, DivergenceStopsAndTheChecksNameTheirInput)
         q.u.setVal(1.0);
         SteadyOptions om = o;
         om.max_iterations = 7;
-        ablsteady::Driver d(om, one_stage<ScriptedStage>("flat", std::vector<amrex::Real>{1}), c.mesh, c.geom, nullptr);
+        gust::Driver d(om, one_stage<ScriptedStage>("flat", std::vector<amrex::Real>{1}), c.mesh, c.geom, nullptr);
         const auto r = d.run(q);
         EXPECT_EQ(r.verdict.status, SteadyStatus::NotSteady);
         EXPECT_EQ(r.iterations, 7);
         EXPECT_EQ(d.run(q).iterations, 0);   // nothing left
     }
     // stage consistency
-    EXPECT_THROW(ablsteady::Driver(o, {}, c.mesh, c.geom, nullptr), std::runtime_error);
+    EXPECT_THROW(gust::Driver(o, {}, c.mesh, c.geom, nullptr), std::runtime_error);
     {
-        std::vector<std::unique_ptr<ablsteady::Stage>> v;
+        std::vector<std::unique_ptr<gust::Stage>> v;
         v.push_back(std::make_unique<ScriptedStage>("a", std::vector<amrex::Real>{1}));
         v.push_back(std::make_unique<OtherStage>("b", std::vector<amrex::Real>{1}));
-        EXPECT_THROW(ablsteady::Driver(o, std::move(v), c.mesh, c.geom, nullptr), std::runtime_error);
+        EXPECT_THROW(gust::Driver(o, std::move(v), c.mesh, c.geom, nullptr), std::runtime_error);
     }
     {
-        std::vector<std::unique_ptr<ablsteady::Stage>> v;
+        std::vector<std::unique_ptr<gust::Stage>> v;
         v.push_back(std::make_unique<ScriptedStage>("a", std::vector<amrex::Real>{1}));
         v.push_back(nullptr);
-        EXPECT_THROW(ablsteady::Driver(o, std::move(v), c.mesh, c.geom, nullptr), std::runtime_error);
-        std::vector<std::unique_ptr<ablsteady::Stage>> w;
+        EXPECT_THROW(gust::Driver(o, std::move(v), c.mesh, c.geom, nullptr), std::runtime_error);
+        std::vector<std::unique_ptr<gust::Stage>> w;
         w.push_back(nullptr);   // a null first stage is refused, not dereferenced
-        EXPECT_THROW(ablsteady::Driver(o, std::move(w), c.mesh, c.geom, nullptr), std::runtime_error);
+        EXPECT_THROW(gust::Driver(o, std::move(w), c.mesh, c.geom, nullptr), std::runtime_error);
     }
     // restore refuses an inconsistent history and brings the CFL within the bounds
     {
-        ablsteady::Driver d(o, one_stage<ScriptedStage>("s", std::vector<amrex::Real>{1}), c.mesh, c.geom, nullptr);
+        gust::Driver d(o, one_stage<ScriptedStage>("s", std::vector<amrex::Real>{1}), c.mesh, c.geom, nullptr);
         q.u.setVal(1.0);
         for (int i = 0; i < 3; ++i) { d.step(q); }
         DriverHistory h = d.history();
@@ -854,7 +854,7 @@ TEST (Driver, DivergenceStopsAndTheChecksNameTheirInput)
         SteadyOptions low = o;
         low.cfl_max = amrex::Real(1.5);
         low.cfl0 = amrex::Real(1.5);
-        ablsteady::Driver e(low, one_stage<ScriptedStage>("s", std::vector<amrex::Real>{1}), c.mesh, c.geom, nullptr);
+        gust::Driver e(low, one_stage<ScriptedStage>("s", std::vector<amrex::Real>{1}), c.mesh, c.geom, nullptr);
         h.cfl = 4;
         e.restore(h, q);
         EXPECT_EQ(e.cfl(), amrex::Real(1.5));
@@ -877,66 +877,66 @@ TEST (Driver, DivergenceStopsAndTheChecksNameTheirInput)
         {"steady.switch_monitor_tol", [] (SteadyOptions& b) { b.switch_monitor_tol = 1; }},
         {"steady.newton_fallback_failures", [] (SteadyOptions& b) { b.newton_fallback_failures = 0; }},
         {"steady.newton_cfl_max", [] (SteadyOptions& b) {
-             b.stage = ablsteady::StageKind::simplec_newton;
+             b.stage = gust::StageKind::simplec_newton;
              b.newton_cfl_max = b.cfl_max / 2;
          }},
         {"steady.nodes", [] (SteadyOptions& b) { b.nodes = 0; }},
         {"steady.zline_sweeps", [] (SteadyOptions& b) { b.zline_sweeps = 1; }},
         {"steady.zline_sweeps", [] (SteadyOptions& b) { b.zline_sweeps = 101; }},
-        {"steady.zline_sweeps", [] (SteadyOptions& b) { b.sweep = ablsteady::SweepKind::lusgs; b.zline_sweeps = 0; }},
-        {"steady.zline_sweeps", [] (SteadyOptions& b) { b.sweep = ablsteady::SweepKind::lusgs; b.zline_sweeps = 101; }},
+        {"steady.zline_sweeps", [] (SteadyOptions& b) { b.sweep = gust::SweepKind::lusgs; b.zline_sweeps = 0; }},
+        {"steady.zline_sweeps", [] (SteadyOptions& b) { b.sweep = gust::SweepKind::lusgs; b.zline_sweeps = 101; }},
         // sub-phase 2.2: the overlap's range, and the line keys without lusgs
-        {"steady.line_overlap", [] (SteadyOptions& b) { b.sweep = ablsteady::SweepKind::lusgs; b.line_ghosts = ablsteady::LineGhosts::zero; b.line_overlap = -1; }},
-        {"steady.line_overlap", [] (SteadyOptions& b) { b.sweep = ablsteady::SweepKind::lusgs; b.line_ghosts = ablsteady::LineGhosts::zero; b.line_overlap = ablsteady::max_line_overlap + 1; }},
-        {"steady.line_overlap", [] (SteadyOptions& b) { b.sweep = ablsteady::SweepKind::lusgs; b.line_overlap = 2; }},   // lagged ghosts
+        {"steady.line_overlap", [] (SteadyOptions& b) { b.sweep = gust::SweepKind::lusgs; b.line_ghosts = gust::LineGhosts::zero; b.line_overlap = -1; }},
+        {"steady.line_overlap", [] (SteadyOptions& b) { b.sweep = gust::SweepKind::lusgs; b.line_ghosts = gust::LineGhosts::zero; b.line_overlap = gust::max_line_overlap + 1; }},
+        {"steady.line_overlap", [] (SteadyOptions& b) { b.sweep = gust::SweepKind::lusgs; b.line_overlap = 2; }},   // lagged ghosts
         {"steady.line_ghosts", [] (SteadyOptions& b) { b.given.emplace_back("line_ghosts"); }},
         {"steady.line_overlap", [] (SteadyOptions& b) { b.given.emplace_back("line_overlap"); }},
         {"steady.line_order", [] (SteadyOptions& b) { b.given.emplace_back("line_order"); }},
         {"steady.line_alternate", [] (SteadyOptions& b) { b.given.emplace_back("line_alternate"); }},
-        {"steady.line_alternate", [] (SteadyOptions& b) { b.sweep = ablsteady::SweepKind::lusgs; b.line_alternate = 2; }},
-        {"steady.line_alternate", [] (SteadyOptions& b) { b.sweep = ablsteady::SweepKind::lusgs; b.line_alternate = -1; }},
-        {"steady.line_alternate", [] (SteadyOptions& b) { b.sweep = ablsteady::SweepKind::lusgs; b.line_alternate = 1; b.zline_sweeps = 1; }},
+        {"steady.line_alternate", [] (SteadyOptions& b) { b.sweep = gust::SweepKind::lusgs; b.line_alternate = 2; }},
+        {"steady.line_alternate", [] (SteadyOptions& b) { b.sweep = gust::SweepKind::lusgs; b.line_alternate = -1; }},
+        {"steady.line_alternate", [] (SteadyOptions& b) { b.sweep = gust::SweepKind::lusgs; b.line_alternate = 1; b.zline_sweeps = 1; }},
         {"steady.residual_tol", [] (SteadyOptions& b) { b.criterion.residual_tol = 0; }},
         {"steady.monitor_window", [] (SteadyOptions& b) { b.criterion.monitor_window = 1; }},
     };
     for (const Bad& b : bads) {
         SteadyOptions x = o;
         b.mutate(x);
-        const auto err = ablsteady::check_steady_options(x);
+        const auto err = gust::check_steady_options(x);
         ASSERT_FALSE(err.empty()) << b.key;
         bool found = false;
         for (const auto& e : err) { found = found || e.find(b.key) != std::string::npos; }
         EXPECT_TRUE(found) << b.key << ": " << err.front();
-        EXPECT_THROW(ablsteady::Driver(x, one_stage<ScriptedStage>("s", std::vector<amrex::Real>{1}), c.mesh, c.geom, nullptr),
+        EXPECT_THROW(gust::Driver(x, one_stage<ScriptedStage>("s", std::vector<amrex::Real>{1}), c.mesh, c.geom, nullptr),
                      std::runtime_error);
     }
-    EXPECT_TRUE(ablsteady::check_steady_options(o).empty());
+    EXPECT_TRUE(gust::check_steady_options(o).empty());
     {   // one sweep is allowed with lusgs (sub-phase 2.1), not with zjacobi
         SteadyOptions x = o;
-        x.sweep = ablsteady::SweepKind::lusgs;
+        x.sweep = gust::SweepKind::lusgs;
         x.zline_sweeps = 1;
-        EXPECT_TRUE(ablsteady::check_steady_options(x).empty());
-        x.sweep = ablsteady::SweepKind::zjacobi;
-        EXPECT_FALSE(ablsteady::check_steady_options(x).empty());
+        EXPECT_TRUE(gust::check_steady_options(x).empty());
+        x.sweep = gust::SweepKind::zjacobi;
+        EXPECT_FALSE(gust::check_steady_options(x).empty());
     }
     {   // the overlap's bounds are accepted with the zero ghosts (sub-phase 2.2)
         SteadyOptions x = o;
-        x.sweep = ablsteady::SweepKind::lusgs;
-        x.line_ghosts = ablsteady::LineGhosts::zero;
+        x.sweep = gust::SweepKind::lusgs;
+        x.line_ghosts = gust::LineGhosts::zero;
         x.given = {"sweep", "line_ghosts", "line_overlap", "line_order"};
-        for (const int n : {0, 4, ablsteady::max_line_overlap}) {
+        for (const int n : {0, 4, gust::max_line_overlap}) {
             x.line_overlap = n;
-            EXPECT_TRUE(ablsteady::check_steady_options(x).empty()) << n;
+            EXPECT_TRUE(gust::check_steady_options(x).empty()) << n;
         }
         // the layout bounds it by the narrowest box: 64 x 64 in boxes of 32 and 16
         const amrex::Box dom(amrex::IntVect(0), amrex::IntVect(63, 63, 9));
         amrex::BoxArray ba(dom);
         ba.maxSize(amrex::IntVect(32, 16, 10));
-        EXPECT_TRUE(ablsteady::check_line_overlap_layout(ba, 16).empty());
-        const std::string e = ablsteady::check_line_overlap_layout(ba, 17);
+        EXPECT_TRUE(gust::check_line_overlap_layout(ba, 16).empty());
+        const std::string e = gust::check_line_overlap_layout(ba, 17);
         EXPECT_NE(e.find("steady.line_overlap"), std::string::npos) << e;
         EXPECT_NE(e.find("16 cells"), std::string::npos) << e;
-        EXPECT_TRUE(ablsteady::check_line_overlap_layout(amrex::convert(ba, amrex::IntVect(1, 0, 0)), 16).empty());   // faces: the cells' width
+        EXPECT_TRUE(gust::check_line_overlap_layout(amrex::convert(ba, amrex::IntVect(1, 0, 0)), 16).empty());   // faces: the cells' width
     }
     // the reader
     {
@@ -972,20 +972,20 @@ TEST (Driver, DivergenceStopsAndTheChecksNameTheirInput)
         pp.add("switch_monitor_tol", amrex::Real(0.05));
         pp.add("newton_fallback_failures", 3);
         pp.add("stage", std::string("simplec_newton"));
-        const SteadyOptions r = ablsteady::read_steady_options();
+        const SteadyOptions r = gust::read_steady_options();
         EXPECT_EQ(r.switch_monitor_tol, amrex::Real(0.05));
         EXPECT_EQ(r.newton_fallback_failures, 3);
-        EXPECT_EQ(r.stage, ablsteady::StageKind::simplec_newton);
-        EXPECT_EQ(r.sweep, ablsteady::SweepKind::lusgs);
-        EXPECT_EQ(r.line_ghosts, ablsteady::LineGhosts::zero);
+        EXPECT_EQ(r.stage, gust::StageKind::simplec_newton);
+        EXPECT_EQ(r.sweep, gust::SweepKind::lusgs);
+        EXPECT_EQ(r.line_ghosts, gust::LineGhosts::zero);
         EXPECT_EQ(r.line_overlap, 3);
-        EXPECT_EQ(r.line_order, ablsteady::LineOrder::diagonal);
+        EXPECT_EQ(r.line_order, gust::LineOrder::diagonal);
         EXPECT_EQ(r.line_alternate, 1);
-        const ablsteady::LineSweepOptions lo = ablsteady::line_sweep_options(r);
-        EXPECT_EQ(lo.kind, ablsteady::SweepKind::lusgs);
-        EXPECT_EQ(lo.ghosts, ablsteady::LineGhosts::zero);
+        const gust::LineSweepOptions lo = gust::line_sweep_options(r);
+        EXPECT_EQ(lo.kind, gust::SweepKind::lusgs);
+        EXPECT_EQ(lo.ghosts, gust::LineGhosts::zero);
         EXPECT_EQ(lo.overlap, 3);
-        EXPECT_EQ(lo.order, ablsteady::LineOrder::diagonal);
+        EXPECT_EQ(lo.order, gust::LineOrder::diagonal);
         EXPECT_EQ(lo.alternate, 1);
         EXPECT_EQ(r.criterion.residual_tol, amrex::Real(1e-4));
         EXPECT_EQ(r.criterion.residual_drop_orders, 3);
@@ -1000,12 +1000,12 @@ TEST (Driver, DivergenceStopsAndTheChecksNameTheirInput)
         EXPECT_EQ(r.switch_window, 10);
         EXPECT_EQ(r.switch_residual, amrex::Real(0.05));
         EXPECT_EQ(r.switch_back_growth, 4);
-        EXPECT_EQ(r.machine, ablsteady::Machine::KestrelGpu);
+        EXPECT_EQ(r.machine, gust::Machine::KestrelGpu);
         EXPECT_EQ(r.nodes, 3);
         EXPECT_EQ(r.zline_sweeps, 4);
         EXPECT_EQ(r.given.size(), 24u);
         clear();
-        const SteadyOptions d = ablsteady::read_steady_options();
+        const SteadyOptions d = gust::read_steady_options();
         EXPECT_EQ(d.cfl0, 1);
         // The switch rules of sub-phase 3.5 (plan rev. 6: 1e-4, monitors within 1 %, two failures).
         EXPECT_EQ(d.switch_residual, amrex::Real(1e-4));
@@ -1015,13 +1015,13 @@ TEST (Driver, DivergenceStopsAndTheChecksNameTheirInput)
         EXPECT_EQ(d.switch_window, 20);
         // The application defaults of sub-phase 2.6: the build's sweep and
         // that sweep's CFL cap (lusgs and 8 on a CPU build).
-        EXPECT_EQ(d.sweep, ablsteady::default_sweep());
-        EXPECT_EQ(d.cfl_max, ablsteady::default_cfl_max(d.sweep));
-        EXPECT_EQ(d.machine, ablsteady::Machine::Local);
+        EXPECT_EQ(d.sweep, gust::default_sweep());
+        EXPECT_EQ(d.cfl_max, gust::default_cfl_max(d.sweep));
+        EXPECT_EQ(d.machine, gust::Machine::Local);
         EXPECT_EQ(d.zline_sweeps, 2);
-        EXPECT_EQ(d.line_ghosts, ablsteady::LineGhosts::lagged);
+        EXPECT_EQ(d.line_ghosts, gust::LineGhosts::lagged);
         EXPECT_EQ(d.line_overlap, 0);
-        EXPECT_EQ(d.line_order, ablsteady::LineOrder::sequential);
+        EXPECT_EQ(d.line_order, gust::LineOrder::sequential);
         EXPECT_EQ(d.line_alternate, 0);
         EXPECT_TRUE(d.given.empty());
         // the line keys: unknown words, the overlap without the zero ghosts,
@@ -1030,88 +1030,88 @@ TEST (Driver, DivergenceStopsAndTheChecksNameTheirInput)
             clear();
             pp.add("sweep", std::string("lusgs"));
             pp.add(kv.first, std::string(kv.second));
-            EXPECT_THROW(ablsteady::read_steady_options(), std::runtime_error) << kv.first;
+            EXPECT_THROW(gust::read_steady_options(), std::runtime_error) << kv.first;
         }
         clear();
         pp.add("sweep", std::string("lusgs"));
         pp.add("line_overlap", 2);
-        EXPECT_THROW(ablsteady::read_steady_options(), std::runtime_error);
+        EXPECT_THROW(gust::read_steady_options(), std::runtime_error);
         pp.add("line_ghosts", std::string("zero"));
-        EXPECT_EQ(ablsteady::read_steady_options().line_overlap, 2);
+        EXPECT_EQ(gust::read_steady_options().line_overlap, 2);
         while (pp.remove("line_overlap") > 0) {}
-        pp.add("line_overlap", ablsteady::max_line_overlap + 1);
-        EXPECT_THROW(ablsteady::read_steady_options(), std::runtime_error);
+        pp.add("line_overlap", gust::max_line_overlap + 1);
+        EXPECT_THROW(gust::read_steady_options(), std::runtime_error);
         pp.add("line_overlap", 1);   // repeated key
-        EXPECT_THROW(ablsteady::read_steady_options(), std::runtime_error);
+        EXPECT_THROW(gust::read_steady_options(), std::runtime_error);
         clear();
         pp.add("sweep", std::string("zjacobi"));
         pp.add("line_order", std::string("sequential"));
-        EXPECT_THROW(ablsteady::read_steady_options(), std::runtime_error);
+        EXPECT_THROW(gust::read_steady_options(), std::runtime_error);
         clear();
         pp.add("sweep", std::string("zjacobi"));
         pp.add("line_alternate", 1);
-        EXPECT_THROW(ablsteady::read_steady_options(), std::runtime_error);
+        EXPECT_THROW(gust::read_steady_options(), std::runtime_error);
         clear();
         pp.add("sweep", std::string("lusgs"));
         pp.add("line_alternate", 2);
-        EXPECT_THROW(ablsteady::read_steady_options(), std::runtime_error);
+        EXPECT_THROW(gust::read_steady_options(), std::runtime_error);
         clear();
         pp.add("sweep", std::string("gauss"));
-        EXPECT_THROW(ablsteady::read_steady_options(), std::runtime_error);
+        EXPECT_THROW(gust::read_steady_options(), std::runtime_error);
         clear();
         pp.add("sweep", std::string("zjacobi"));
-        EXPECT_EQ(ablsteady::read_steady_options().sweep, ablsteady::SweepKind::zjacobi);
-        EXPECT_EQ(ablsteady::read_steady_options().cfl_max, 10);   // zjacobi keeps Phase 1's cap
+        EXPECT_EQ(gust::read_steady_options().sweep, gust::SweepKind::zjacobi);
+        EXPECT_EQ(gust::read_steady_options().cfl_max, 10);   // zjacobi keeps Phase 1's cap
         pp.add("sweep", std::string("lusgs"));   // repeated key
-        EXPECT_THROW(ablsteady::read_steady_options(), std::runtime_error);
+        EXPECT_THROW(gust::read_steady_options(), std::runtime_error);
         // The Phase 2 defaults (PT-2.6.1): lusgs at a cap of 8 on a CPU build,
         // zjacobi on a GPU build until PR-32; a given cap is kept with either.
 #ifdef AMREX_USE_GPU
-        EXPECT_EQ(ablsteady::default_sweep(), ablsteady::SweepKind::zjacobi);
+        EXPECT_EQ(gust::default_sweep(), gust::SweepKind::zjacobi);
 #else
-        EXPECT_EQ(ablsteady::default_sweep(), ablsteady::SweepKind::lusgs);
+        EXPECT_EQ(gust::default_sweep(), gust::SweepKind::lusgs);
 #endif
-        EXPECT_EQ(ablsteady::default_cfl_max(ablsteady::SweepKind::lusgs), 8);
-        EXPECT_EQ(ablsteady::default_cfl_max(ablsteady::SweepKind::zjacobi), 10);
+        EXPECT_EQ(gust::default_cfl_max(gust::SweepKind::lusgs), 8);
+        EXPECT_EQ(gust::default_cfl_max(gust::SweepKind::zjacobi), 10);
         clear();
         pp.add("sweep", std::string("lusgs"));
-        EXPECT_EQ(ablsteady::read_steady_options().cfl_max, 8);
+        EXPECT_EQ(gust::read_steady_options().cfl_max, 8);
         pp.add("cfl_max", amrex::Real(16));
-        EXPECT_EQ(ablsteady::read_steady_options().cfl_max, 16);
+        EXPECT_EQ(gust::read_steady_options().cfl_max, 16);
         clear();
         pp.add("cfl_max", amrex::Real(3));
-        EXPECT_EQ(ablsteady::read_steady_options().cfl_max, 3);
+        EXPECT_EQ(gust::read_steady_options().cfl_max, 3);
         // steady.cfl0 above a default cap: the message says the cap is the sweep's default.
         {
             SteadyOptions o;
-            o.sweep = ablsteady::SweepKind::lusgs;
-            o.cfl_max = ablsteady::default_cfl_max(o.sweep);
+            o.sweep = gust::SweepKind::lusgs;
+            o.cfl_max = gust::default_cfl_max(o.sweep);
             o.cfl0 = 9;
             o.given = {"cfl0", "sweep"};
-            const auto e = ablsteady::check_steady_options(o);
+            const auto e = gust::check_steady_options(o);
             ASSERT_EQ(e.size(), 1u);
             EXPECT_NE(e[0].find("steady.cfl_max = 8"), std::string::npos) << e[0];
             EXPECT_NE(e[0].find("(the default with steady.sweep = lusgs; give steady.cfl_max)"), std::string::npos) << e[0];
             o.given.emplace_back("cfl_max");
-            const auto g = ablsteady::check_steady_options(o);
+            const auto g = gust::check_steady_options(o);
             ASSERT_EQ(g.size(), 1u);
             EXPECT_EQ(g[0].find("the default with"), std::string::npos) << g[0];
         }
         clear();
         pp.add("cfl0", amrex::Real(1));
         pp.add("cfl0", amrex::Real(2));
-        EXPECT_THROW(ablsteady::read_steady_options(), std::runtime_error);
+        EXPECT_THROW(gust::read_steady_options(), std::runtime_error);
         clear();
         pp.add("machine", std::string("laptop"));
-        EXPECT_THROW(ablsteady::read_steady_options(), std::runtime_error);
+        EXPECT_THROW(gust::read_steady_options(), std::runtime_error);
         clear();
         pp.add("cfl_max", amrex::Real(0.1));
-        EXPECT_THROW(ablsteady::read_steady_options(), std::runtime_error);
+        EXPECT_THROW(gust::read_steady_options(), std::runtime_error);
         clear();
         pp.addarr("nodes", std::vector<int>{1, 2});
-        EXPECT_THROW(ablsteady::read_steady_options(), std::runtime_error);
+        EXPECT_THROW(gust::read_steady_options(), std::runtime_error);
         clear();
-        EXPECT_NO_THROW(ablsteady::read_steady_options());
+        EXPECT_NO_THROW(gust::read_steady_options());
     }
 }
 
@@ -1135,10 +1135,10 @@ TEST (Driver, ReleasedHoldRampsFromTheFirstIteration)
     // residuals 1/4, 1/16, 1/64, ... (DecayStage, rate 1/4, u = 1)
     auto cfls = [&] (const std::vector<amrex::Real>& seed, bool release, amrex::Real start, int n,
                      std::vector<double>* rel = nullptr) {
-        ablsteady::State q;
+        gust::State q;
         define_state(q, c);
         q.u.setVal(1.0);
-        ablsteady::Driver d(o, one_stage<DecayStage>("decay", amrex::Real(0.25)), c.mesh, c.geom, nullptr);
+        gust::Driver d(o, one_stage<DecayStage>("decay", amrex::Real(0.25)), c.mesh, c.geom, nullptr);
         if (!seed.empty()) { d.seed_reference(seed); }
         if (release) { d.release_reference_hold(); }
         if (start > 0) { d.start_cfl(start); }
@@ -1180,73 +1180,74 @@ TEST (Driver, ReleasedHoldRampsFromTheFirstIteration)
             amrex::UtilCreateDirectory(dir, 0755);
         }
         amrex::ParallelDescriptor::Barrier();
-        ablsteady::State q;
+        gust::State q;
         define_state(q, c);
         q.u.setVal(1.0);
-        ablsteady::Driver a(o, one_stage<DecayStage>("decay", amrex::Real(0.25)), c.mesh, c.geom, nullptr);
+        gust::Driver a(o, one_stage<DecayStage>("decay", amrex::Real(0.25)), c.mesh, c.geom, nullptr);
         a.seed_reference({amrex::Real(1)});
         a.release_reference_hold();
         a.step(q);
-        ablsteady::write_driver_history(dir, a.history());
-        const DriverHistory h = ablsteady::read_driver_history(dir);
+        gust::write_driver_history(dir, a.history());
+        const DriverHistory h = gust::read_driver_history(dir);
         EXPECT_EQ(h.hold, 0);
-        ablsteady::Driver b(o, one_stage<DecayStage>("decay", amrex::Real(0.25)), c.mesh, c.geom, nullptr);
+        gust::Driver b(o, one_stage<DecayStage>("decay", amrex::Real(0.25)), c.mesh, c.geom, nullptr);
         b.restore(h, q);
         EXPECT_EQ(b.hold_iterations(), 0);
         for (int i = 0; i < 3; ++i) { b.step(q); }
         std::vector<double> got;
         for (const auto& r : b.history().records) { got.push_back(r.cfl); }
         expect_seq(got, {1, 4, 16, 64});
-        // A version-1 history (no hold line) reads as the default hold.
+        // A version-1 history (no hold line, written as ablsteady before the rename
+        // to GUST) reads as the default hold.
         if (amrex::ParallelDescriptor::IOProcessor()) {
             std::ofstream os(dir + "/Driver");
             os << "ablsteady-driver 1\nstate 0 0x1p+0 0 -1\naccounts 1\n0 0x0p+0 0x0p+0\nrecords 0\nswitches 0\n"
                   "criterion 0 0 0 \n1 0x0p+0\n1 0x0p+0\n1\n0\n";
         }
         amrex::ParallelDescriptor::Barrier();
-        const DriverHistory v1 = ablsteady::read_driver_history(dir);
+        const DriverHistory v1 = gust::read_driver_history(dir);
         EXPECT_EQ(v1.hold, -1);
-        ablsteady::Driver d1(o, one_stage<DecayStage>("decay", amrex::Real(0.25)), c.mesh, c.geom, nullptr);
+        gust::Driver d1(o, one_stage<DecayStage>("decay", amrex::Real(0.25)), c.mesh, c.geom, nullptr);
         d1.restore(v1, q);
         EXPECT_EQ(d1.hold_iterations(), 2);
         // A hold other than -1 or 0 is refused (on read and on restore).
         if (amrex::ParallelDescriptor::IOProcessor()) {
             std::ofstream os(dir + "/Driver");
-            os << "ablsteady-driver 2\nstate 0 0x1p+0 0 -1\nhold -2\naccounts 1\n0 0x0p+0 0x0p+0\nrecords 0\nswitches 0\n"
+            os << "gust-driver 2\nstate 0 0x1p+0 0 -1\nhold -2\naccounts 1\n0 0x0p+0 0x0p+0\nrecords 0\nswitches 0\n"
                   "criterion 0 0 0 \n1 0x0p+0\n1 0x0p+0\n1\n0\n";
         }
         amrex::ParallelDescriptor::Barrier();
-        EXPECT_THROW(ablsteady::read_driver_history(dir), std::runtime_error);
+        EXPECT_THROW(gust::read_driver_history(dir), std::runtime_error);
         // the same complete file with hold 0 reads
         if (amrex::ParallelDescriptor::IOProcessor()) {
             std::ofstream os(dir + "/Driver");
-            os << "ablsteady-driver 2\nstate 0 0x1p+0 0 -1\nhold 0\naccounts 1\n0 0x0p+0 0x0p+0\nrecords 0\nswitches 0\n"
+            os << "gust-driver 2\nstate 0 0x1p+0 0 -1\nhold 0\naccounts 1\n0 0x0p+0 0x0p+0\nrecords 0\nswitches 0\n"
                   "criterion 0 0 0 \n1 0x0p+0\n1 0x0p+0\n1\n0\n";
         }
         amrex::ParallelDescriptor::Barrier();
-        EXPECT_EQ(ablsteady::read_driver_history(dir).hold, 0);
+        EXPECT_EQ(gust::read_driver_history(dir).hold, 0);
         for (const char* bad : {"hold -2", "hold 3"}) {
             if (amrex::ParallelDescriptor::IOProcessor()) {
                 std::ofstream os(dir + "/Driver");
-                os << "ablsteady-driver 2\nstate 0 0x1p+0 0 -1\n" << bad << "\naccounts 1\n0 0x0p+0 0x0p+0\nrecords 0\nswitches 0\n"
+                os << "gust-driver 2\nstate 0 0x1p+0 0 -1\n" << bad << "\naccounts 1\n0 0x0p+0 0x0p+0\nrecords 0\nswitches 0\n"
                       "criterion 0 0 0 \n1 0x0p+0\n1 0x0p+0\n1\n0\n";
             }
             amrex::ParallelDescriptor::Barrier();
-            EXPECT_THROW(ablsteady::read_driver_history(dir), std::runtime_error) << bad;
+            EXPECT_THROW(gust::read_driver_history(dir), std::runtime_error) << bad;
         }
         DriverHistory h3 = v1;
         h3.hold = 3;
-        ablsteady::Driver d3(o, one_stage<DecayStage>("decay", amrex::Real(0.25)), c.mesh, c.geom, nullptr);
+        gust::Driver d3(o, one_stage<DecayStage>("decay", amrex::Real(0.25)), c.mesh, c.geom, nullptr);
         EXPECT_THROW(d3.restore(h3, q), std::runtime_error);
         amrex::ParallelDescriptor::Barrier();
         if (amrex::ParallelDescriptor::IOProcessor()) { amrex::FileSystem::RemoveAll(dir); }
     }
     // Refusals.
     {
-        ablsteady::State q;
+        gust::State q;
         define_state(q, c);
         q.u.setVal(1.0);
-        ablsteady::Driver d(o, one_stage<DecayStage>("decay", amrex::Real(0.25)), c.mesh, c.geom, nullptr);
+        gust::Driver d(o, one_stage<DecayStage>("decay", amrex::Real(0.25)), c.mesh, c.geom, nullptr);
         EXPECT_THROW(d.release_reference_hold(), std::runtime_error);   // not seeded
         d.seed_reference({amrex::Real(1)});
         EXPECT_THROW(d.start_cfl(2), std::runtime_error);   // the hold is on
@@ -1278,13 +1279,13 @@ TEST (Driver, HistoryRecordsTheResidualScaleHeight)
 {
     {
         // 30 uniform layers: 30 (500 / 30) is 500 + 5.7e-14 in double.
-        ablsteady::ptest::Manufactured ms;
+        gust::ptest::Manufactured ms;
         ms.Lx = 1000;
         ms.Ly = 800;
         ms.H0 = 0;
-        PCase u = ablsteady::ptest::make_case(16, 8, 30, ablsteady::PoissonFace::periodic, ablsteady::PoissonFace::periodic,
+        PCase u = gust::ptest::make_case(16, 8, 30, gust::PoissonFace::periodic, gust::PoissonFace::periodic,
                                               ms, 0, false);
-        ablsteady::Driver d(base_options(), one_stage<DecayStage>("decay", amrex::Real(0.25)), u.mesh, u.geom, nullptr);
+        gust::Driver d(base_options(), one_stage<DecayStage>("decay", amrex::Real(0.25)), u.mesh, u.geom, nullptr);
         EXPECT_EQ(d.history().scale_height, amrex::Real(500));
     }
     PCase c;
@@ -1296,14 +1297,14 @@ TEST (Driver, HistoryRecordsTheResidualScaleHeight)
     c.in.mesh.stretch_ratio = amrex::Real(1.1);
     c.in.mesh.stretch_ratio_given = true;
     c.make([] (double, double) { return 0.0; });
-    ablsteady::trtest::smooth_vertical_ghost_nodes(c);
+    gust::trtest::smooth_vertical_ghost_nodes(c);
     const double H = 50 * (std::pow(1.1, 8) - 1) / 0.1;   // 571.79 m
     SteadyOptions o = base_options();
     o.criterion.monitor_window = 1000;   // never steady
-    ablsteady::State q;
+    gust::State q;
     define_state(q, c);
     q.u.setVal(1.0);
-    ablsteady::Driver a(o, one_stage<DecayStage>("decay", amrex::Real(0.5)), c.mesh, c.geom, nullptr);
+    gust::Driver a(o, one_stage<DecayStage>("decay", amrex::Real(0.5)), c.mesh, c.geom, nullptr);
     EXPECT_NEAR(double(a.history().scale_height), H, tol(1e-12, 1e-4) * H);
     for (int i = 0; i < 4; ++i) { a.step(q); }
     const DriverHistory h = a.history();
@@ -1316,17 +1317,17 @@ TEST (Driver, HistoryRecordsTheResidualScaleHeight)
         amrex::UtilCreateDirectory(dir, 0755);
     }
     amrex::ParallelDescriptor::Barrier();
-    ablsteady::write_driver_history(dir, h);
-    const DriverHistory r = ablsteady::read_driver_history(dir);
+    gust::write_driver_history(dir, h);
+    const DriverHistory r = gust::read_driver_history(dir);
     EXPECT_EQ(r.scale_height, h.scale_height);
-    ablsteady::Driver b(o, one_stage<DecayStage>("decay", amrex::Real(0.5)), c.mesh, c.geom, nullptr);
+    gust::Driver b(o, one_stage<DecayStage>("decay", amrex::Real(0.5)), c.mesh, c.geom, nullptr);
     b.restore(r, q);
     EXPECT_EQ(b.history().criterion.res_ref, h.criterion.res_ref);   // the same H: unchanged
 
     // A history without H (as read from format 2): rescaled by H / 500.
     DriverHistory old = h;
     old.scale_height = 0;
-    ablsteady::Driver d(o, one_stage<DecayStage>("decay", amrex::Real(0.5)), c.mesh, c.geom, nullptr);
+    gust::Driver d(o, one_stage<DecayStage>("decay", amrex::Real(0.5)), c.mesh, c.geom, nullptr);
     d.restore(old, q);
     const DriverHistory& g = d.history();
     const amrex::Real f = h.scale_height / amrex::Real(500);
@@ -1344,15 +1345,15 @@ TEST (Driver, HistoryRecordsTheResidualScaleHeight)
     for (const char* bad : {"scale_height 0x0p+0", "scale_height -0x1p+0", "scale_height nan"}) {
         if (amrex::ParallelDescriptor::IOProcessor()) {
             std::ofstream os(dir + "/Driver");
-            os << "ablsteady-driver 3\nstate 0 0x1p+0 0 -1\nhold -1\n" << bad
+            os << "gust-driver 3\nstate 0 0x1p+0 0 -1\nhold -1\n" << bad
                << "\naccounts 1\n0 0x0p+0 0x0p+0\nrecords 0\nswitches 0\ncriterion 0 0 0 \n1 0x0p+0\n1 0x0p+0\n1\n0\n";
         }
         amrex::ParallelDescriptor::Barrier();
-        EXPECT_THROW(ablsteady::read_driver_history(dir), std::runtime_error) << bad;
+        EXPECT_THROW(gust::read_driver_history(dir), std::runtime_error) << bad;
     }
     DriverHistory neg = h;
     neg.scale_height = -1;
-    ablsteady::Driver e(o, one_stage<DecayStage>("decay", amrex::Real(0.5)), c.mesh, c.geom, nullptr);
+    gust::Driver e(o, one_stage<DecayStage>("decay", amrex::Real(0.5)), c.mesh, c.geom, nullptr);
     EXPECT_THROW(e.restore(neg, q), std::runtime_error);
     amrex::ParallelDescriptor::Barrier();
     if (amrex::ParallelDescriptor::IOProcessor()) { amrex::FileSystem::RemoveAll(dir); }

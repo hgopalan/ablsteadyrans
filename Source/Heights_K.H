@@ -1,5 +1,5 @@
-#ifndef ABLSTEADY_HEIGHTS_K_H_
-#define ABLSTEADY_HEIGHTS_K_H_
+#ifndef GUST_HEIGHTS_K_H_
+#define GUST_HEIGHTS_K_H_
 
 // Heights of the points of the terrain-following mesh from its nodes
 // (sub-phase 1.8, shared by the boundary fills and the initializer): the
@@ -14,7 +14,7 @@
 #include <AMReX_GpuQualifiers.H>
 #include <AMReX_REAL.H>
 
-namespace ablsteady {
+namespace gust {
 
 //! Node heights with the lateral indices clamped to the stored nodes and the
 //! vertical ones extrapolated linearly beyond them (the second ghost layer).
@@ -67,6 +67,6 @@ amrex::Real point_z (const NodeZ& z, int i, int j, int k) noexcept
     return zp / (nx * ny * nz);
 }
 
-} // namespace ablsteady
+} // namespace gust
 
 #endif

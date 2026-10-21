@@ -15,14 +15,14 @@
 #include <cstdio>
 #include <sstream>
 
-namespace ablsteady {
+namespace gust {
 
 namespace {
 
 constexpr amrex::Real kRadToDeg = amrex::Real(57.29577951308232);
 
 // ERF's boundary types for the terrain construction: only symmetry would
-// change it (mirrored ghost nodes), and ablsteady has none yet.
+// change it (mirrored ghost nodes), and GUST has none yet.
 amrex::GpuArray<ERF_BC, AMREX_SPACEDIM * 2> terrain_bc (const amrex::Geometry& geom)
 {
     amrex::GpuArray<ERF_BC, AMREX_SPACEDIM * 2> bc{};
@@ -140,12 +140,12 @@ void Mesh::build_from_ground (const Inputs& in, const amrex::Geometry& geom, amr
 
     const auto& q = m_quality;
     if (!(q.max_ground_height < m_zlevels.back())) {
-        amrex::Abort("ablsteady: the terrain (terrain.type = " + in.terrain.type + ") reaches "
+        amrex::Abort("gust: the terrain (terrain.type = " + in.terrain.type + ") reaches "
                      + std::to_string(q.max_ground_height) + " m, at or above the top level "
                      + std::to_string(m_zlevels.back()) + " m; raise mesh.prob_hi z");
     }
     if (!(q.min_thickness_ratio > 0) || !(q.min_nodal_thickness_ratio > 0)) {
-        amrex::Abort("ablsteady: the terrain-following mesh has inverted or empty cells (min layer thickness "
+        amrex::Abort("gust: the terrain-following mesh has inverted or empty cells (min layer thickness "
                      "ratio " + std::to_string(q.min_nodal_thickness_ratio) + "); raise mesh.prob_hi z or "
                      "use terrain.smoothing = 1 (STF)");
     }
@@ -181,7 +181,7 @@ void Mesh::check_restart (const Inputs& in, const amrex::Geometry& geom, amrex::
     }
     amrex::ParallelAllReduce::Sum(ndiff, amrex::ParallelDescriptor::Communicator());
     if (ndiff != 0) {
-        amrex::Abort("ablsteady: io.restart: the checkpoint's node heights differ from the ones the "
+        amrex::Abort("gust: io.restart: the checkpoint's node heights differ from the ones the "
                      "mesh and terrain inputs give at " + std::to_string(ndiff)
                      + " nodes; restart with the inputs the checkpoint was written with");
     }
@@ -306,7 +306,7 @@ std::string Mesh::quality_report () const
         std::snprintf(line, sizeof(line), "  %-42s = %.9e\n", name, v);
         os << line;
     };
-    os << "ablsteady: mesh quality\n";
+    os << "gust: mesh quality\n";
     put("min cell thickness / flat layer thickness", q.min_thickness_ratio);
     put("min nodal layer thickness / flat thickness", q.min_nodal_thickness_ratio);
     put("max ground height (m)", q.max_ground_height);
@@ -332,7 +332,7 @@ std::string Mesh::quality_report () const
 amrex::Real residual_scale_height (const Mesh& mesh, const amrex::Geometry& geom)
 {
     const auto& z = mesh.zlevels();
-    if (z.empty()) { amrex::Abort("ablsteady: residual_scale_height: the mesh has no levels (not built)"); }
+    if (z.empty()) { amrex::Abort("gust: residual_scale_height: the mesh has no levels (not built)"); }
     const amrex::Real depth = z.back() - z.front();
     const amrex::Real box = geom.ProbHi(2) - geom.ProbLo(2);
     const amrex::Real tol = amrex::Real(1000) * std::numeric_limits<amrex::Real>::epsilon() * box;
@@ -368,4 +368,4 @@ amrex::Real free_stream_divergence (const Mesh& mesh, const amrex::Geometry& geo
     return m;
 }
 
-} // namespace ablsteady
+} // namespace gust

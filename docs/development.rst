@@ -36,7 +36,7 @@ Layout
 
 .. code-block:: text
 
-   Source/          application and ablsteady_refavg: inputs, state, I/O, reductions,
+   Source/          application and gust_refavg: inputs, state, I/O, reductions,
                     steady criterion, reference archives
    Tests/           one folder per test case (Tests/README.md), the GoogleTest suite
                     (Tests/Unit_Tests/) and shared check scripts (Tests/Supporting_Files/)

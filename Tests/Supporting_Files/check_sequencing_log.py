@@ -3,7 +3,7 @@
 
     check_sequencing_log.py LOG GOLD.json [--iter_rel_tol 0.1] [--write]
 
-LOG is the standard output of an ablsteady run with steady.sequencing = 1.
+LOG is the standard output of a GUST run with steady.sequencing = 1.
 GOLD.json holds the expected history:
 
     {"levels": [{"level": 1, "cells": [150, 150], "stop": "every residual ...", "iterations": 100}, ...],
@@ -14,7 +14,7 @@ Passes (exit code 0) when the levels appear in the gold order with the same
 cells and the same stop reason (exact text), every level's iterations within
 --iter_rel_tol (relative) of the gold count, the stage switches are the gold list, in order, and the run ends with
 the gold verdict. A switch is recorded as "<from> to <to>: <reason>" from the
-driver's "ablsteady: iteration N: switching from stage ..." line (the
+driver's "gust: iteration N: switching from stage ..." line (the
 iteration and the residuals are left out: they move with rounding). Iteration counts move with the compiler's rounding
 (gcc contracts multiply-adds), so they get a tolerance; the sequence does not.
 With --write, writes GOLD.json from LOG instead (for a reviewed gold change).
@@ -28,7 +28,7 @@ import sys
 def parse(log):
     levels, switches, verdict, inside = [], [], None, False
     for line in log.splitlines():
-        if line.startswith("ablsteady: grid sequencing summary"):
+        if line.startswith("gust: grid sequencing summary"):
             inside, levels = True, []
             continue
         if inside:
@@ -40,11 +40,11 @@ def parse(log):
             if line.startswith("  level") or line.startswith("         prolonged"):
                 continue
             inside = False
-        m = re.match(r"ablsteady: (?:level \d+: )?iteration \d+: switching from stage (\S+) to (\S+): (.*?)"
+        m = re.match(r"gust: (?:level \d+: )?iteration \d+: switching from stage (\S+) to (\S+): (.*?)"
                      r"(?: \(scaled residuals:.*)?$", line)
         if m:
             switches.append(f"{m.group(1)} to {m.group(2)}: {m.group(3)}")
-        m = re.match(r"ablsteady: (steady|not steady) after \d+ iterations", line)
+        m = re.match(r"gust: (steady|not steady) after \d+ iterations", line)
         if m:
             verdict = m.group(1)
     return {"levels": levels, "switches": switches, "verdict": verdict}

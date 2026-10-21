@@ -7,14 +7,14 @@
 #include <cmath>
 #include <string>
 
-namespace ablsteady {
+namespace gust {
 
 void local_dtau (const State& q, const amrex::MultiFab* nu, const Mesh& mesh, const amrex::Geometry& geom,
                  amrex::Real cfl, amrex::MultiFab& dtau)
 {
     const char* op = "local_dtau";
     if (std::isnan(cfl) || !std::isfinite(cfl) || !(cfl > 0)) {   // isnan first: gcc traps on an ordered compare with NaN
-        amrex::Abort(std::string("ablsteady: local_dtau: cfl must be finite and > 0 (got ") + std::to_string(double(cfl)) + ")");
+        amrex::Abort(std::string("gust: local_dtau: cfl must be finite and > 0 (got ") + std::to_string(double(cfl)) + ")");
     }
     check_operator_field(op, "u", q.u, Loc::xface, mesh, 1);
     check_operator_field(op, "v", q.v, Loc::yface, mesh, 1);
@@ -60,4 +60,4 @@ amrex::Real ser_cfl (amrex::Real cfl, amrex::Real r, amrex::Real cfl0, amrex::Re
     return amrex::min(capped, cfl0 * std::pow(r, -p));
 }
 
-} // namespace ablsteady
+} // namespace gust

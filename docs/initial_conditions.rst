@@ -2,7 +2,7 @@ Initial conditions
 ==================
 
 The steady solver starts from an initial field. A good initial field is already close to the solution, so the solver
-needs fewer iterations. ablsteady builds the initial field in two steps:
+needs fewer iterations. GUST builds the initial field in two steps:
 
 #. **Initial profile.** A wind profile is placed on the mesh by height above the local ground.
 #. **Mass-consistent adjustment.** The field is corrected so that it conserves mass, which bends the flow over and

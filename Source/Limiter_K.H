@@ -1,5 +1,5 @@
-#ifndef ABLSTEADY_LIMITER_K_H_
-#define ABLSTEADY_LIMITER_K_H_
+#ifndef GUST_LIMITER_K_H_
+#define GUST_LIMITER_K_H_
 
 // Slope limiters for the MUSCL reconstruction (sub-phase 1.5). Each takes the
 // backward and forward differences a = q_i - q_{i-1}, b = q_{i+1} - q_i of a
@@ -9,7 +9,7 @@
 #include <AMReX_GpuQualifiers.H>
 #include <AMReX_REAL.H>
 
-namespace ablsteady {
+namespace gust {
 
 //! van_leer: the standard limiter, 2ab/(a+b) where a and b have the same
 //! sign and 0 otherwise (TVD; continuous, with kinks where a or b is zero).
@@ -68,6 +68,6 @@ amrex::Real muscl_face<Limiter::upwind> (amrex::Real tr, amrex::Real, amrex::Rea
     return (tr >= 0) ? q0 : q1;
 }
 
-} // namespace ablsteady
+} // namespace gust
 
 #endif

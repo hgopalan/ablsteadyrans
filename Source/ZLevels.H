@@ -1,12 +1,12 @@
-#ifndef ABLSTEADY_ZLEVELS_H_
-#define ABLSTEADY_ZLEVELS_H_
+#ifndef GUST_ZLEVELS_H_
+#define GUST_ZLEVELS_H_
 
 #include "Inputs.H"
 
 #include <AMReX_Geometry.H>
 #include <AMReX_Vector.H>
 
-namespace ablsteady {
+namespace gust {
 
 //! Node heights z_0 = 0 < z_1 < ... < z_nz of the flat mesh, the reference
 //! levels the terrain-following coordinates are built from. As in ERF's
@@ -21,6 +21,6 @@ namespace ablsteady {
 //! stretch factor cannot be solved for.
 amrex::Vector<amrex::Real> make_zlevels (const MeshInputs& mesh, const amrex::Geometry& geom);
 
-} // namespace ablsteady
+} // namespace gust
 
 #endif

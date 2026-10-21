@@ -1,5 +1,5 @@
-#ifndef ABLSTEADY_COLUMNGUESS_H_
-#define ABLSTEADY_COLUMNGUESS_H_
+#ifndef GUST_COLUMNGUESS_H_
+#define GUST_COLUMNGUESS_H_
 
 // The converged-column first guess (sub-phase 2.1b, init.first_guess =
 // column): the deck's horizontally uniform column is solved as a 1-D
@@ -59,7 +59,7 @@
 #include <string>
 #include <vector>
 
-namespace ablsteady {
+namespace gust {
 
 struct ColumnGuessResult
 {
@@ -86,6 +86,6 @@ ColumnGuessResult run_column_guess (const Inputs& in, const InitOptions& iopt, c
                                     const ClosureOptions& copt, const ForcingOptions& fopt,
                                     const std::string& table_file = std::string());
 
-} // namespace ablsteady
+} // namespace gust
 
 #endif

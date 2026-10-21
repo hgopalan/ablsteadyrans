@@ -1,5 +1,5 @@
-#ifndef ABLSTEADY_STENCIL_K_H_
-#define ABLSTEADY_STENCIL_K_H_
+#ifndef GUST_STENCIL_K_H_
+#define GUST_STENCIL_K_H_
 
 // Second-order interpolation and differences between the staggered locations
 // of ERF's Arakawa C-grid on the terrain-following mesh (sub-phase 1.5).
@@ -23,7 +23,7 @@
 #include <AMReX_GpuQualifiers.H>
 #include <AMReX_REAL.H>
 
-namespace ablsteady::stencil {
+namespace gust::stencil {
 
 inline constexpr int CC = 0;
 inline constexpr int XF = 1;
@@ -128,6 +128,6 @@ amrex::GpuArray<amrex::Real, 3> grad_at (amrex::Array4<amrex::Real const> const&
 //! d (fluxes on the d-nodal locations), (-1, 0) where TS is nodal in d.
 constexpr int flux_lo (int ts, int d) { return nodal(ts, d) ? -1 : 0; }
 
-} // namespace ablsteady::stencil
+} // namespace gust::stencil
 
 #endif

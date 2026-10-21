@@ -1,7 +1,7 @@
 # Reference_Archive
 
 ## Purpose
-`ablsteady_refavg` end to end. Three copies of the smoke plotfile at t = 0, 5 and 10 s are archived on two ranks
+`gust_refavg` end to end. Three copies of the smoke plotfile at t = 0, 5 and 10 s are archived on two ranks
 with two inputs files. The archive must verify on three ranks, and its trapezoid average (weights 1/4, 1/2, 1/4)
 must reproduce the smoke plotfile bit for bit. A damaged archive and bad tool inputs must be refused.
 

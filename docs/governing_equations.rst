@@ -1,7 +1,7 @@
 Governing equations
 ===================
 
-ablsteady models the atmosphere as an incompressible fluid under the Boussinesq approximation. Density changes
+GUST models the atmosphere as an incompressible fluid under the Boussinesq approximation. Density changes
 enter only through buoyancy. The unknowns are the mean velocity :math:`\mathbf u = (u, v, w)`, the kinematic
 perturbation pressure :math:`p`, the potential temperature :math:`\theta` and the turbulent kinetic energy (TKE)
 :math:`k`. This page gives the equations in Cartesian form; :doc:`terrain_coordinates` gives their form on the

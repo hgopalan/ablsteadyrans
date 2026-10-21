@@ -19,25 +19,25 @@
 
 namespace {
 
-using ablsteady::Equation;
-using ablsteady::FaceType;
-using ablsteady::ptest::PCase;
-using ablsteady::trtest::tol;
+using gust::Equation;
+using gust::FaceType;
+using gust::ptest::PCase;
+using gust::trtest::tol;
 
 PCase hill_case (int nx, int ny, int nz, double H0)
 {
-    ablsteady::ptest::Manufactured ms;
+    gust::ptest::Manufactured ms;
     ms.Lx = 1000;
     ms.Ly = 800;
     ms.H0 = H0;
-    PCase c = ablsteady::ptest::make_case(nx, ny, nz, ablsteady::PoissonFace::periodic, ablsteady::PoissonFace::periodic, ms, 0, true);
+    PCase c = gust::ptest::make_case(nx, ny, nz, gust::PoissonFace::periodic, gust::PoissonFace::periodic, ms, 0, true);
     c.z.FillBoundary(c.geom.periodicity());
     c.mesh.build_from_ground(c.in, c.geom, c.z);
-    ablsteady::trtest::smooth_vertical_ghost_nodes(c);
+    gust::trtest::smooth_vertical_ghost_nodes(c);
     return c;
 }
 
-void define_state (ablsteady::State& q, const PCase& c)
+void define_state (gust::State& q, const PCase& c)
 {
     q.define(c.ba, c.dm);
     amrex::MultiFab::Copy(q.z_phys_nd, c.z, 0, 0, 1, c.z.nGrow());
@@ -86,11 +86,11 @@ TEST (Terrain, GroundAndTopCarryNoFlux)
 {
     for (const double H0 : {60.0, 0.0}) {
         PCase c = hill_case(8, 4, 6, H0);
-        ablsteady::BoundaryInputs bin;
+        gust::BoundaryInputs bin;
         bin.face = {FaceType::periodic, FaceType::periodic, FaceType::slip_wall, FaceType::periodic, FaceType::periodic, FaceType::slip_wall};
-        const ablsteady::CoriolisOptions cor;
-        const ablsteady::BoundaryConditions bc(bin, c.geom, c.mesh, cor);
-        ablsteady::State q;
+        const gust::CoriolisOptions cor;
+        const gust::BoundaryConditions bc(bin, c.geom, c.mesh, cor);
+        gust::State q;
         define_state(q, c);
         fill_random(q.u, 5, 10, 11, c);
         fill_random(q.v, -3, 3, 12, c);
@@ -100,7 +100,7 @@ TEST (Terrain, GroundAndTopCarryNoFlux)
         amrex::MultiFab omega(c.mesh.az.boxArray(), c.dm, 1, 0);
         q.u.FillBoundary(c.geom.periodicity());
         q.v.FillBoundary(c.geom.periodicity());
-        ablsteady::omega_from_w(q.u, q.v, q.w, q.z_phys_nd, c.mesh, c.geom, omega, 0);
+        gust::omega_from_w(q.u, q.v, q.w, q.z_phys_nd, c.mesh, c.geom, omega, 0);
         auto slab_max = [&] (const amrex::MultiFab& f, int k) {
             double m = 0;
             for (amrex::MFIter mfi(f, false); mfi.isValid(); ++mfi) {
@@ -113,9 +113,9 @@ TEST (Terrain, GroundAndTopCarryNoFlux)
             return m;
         };
         EXPECT_GT(slab_max(omega, 0), 0.1);   // random w: a flux through the ground before the fill
-        ablsteady::BuoyancyOptions buoy;
+        gust::BuoyancyOptions buoy;
         bc.fill_ghosts(q, nullptr, buoy);
-        ablsteady::omega_from_w(q.u, q.v, q.w, q.z_phys_nd, c.mesh, c.geom, omega, 0);
+        gust::omega_from_w(q.u, q.v, q.w, q.z_phys_nd, c.mesh, c.geom, omega, 0);
         EXPECT_LT(slab_max(omega, 0), tol(1e-13, 1e-5) * 10) << H0;
         EXPECT_LT(slab_max(omega, 6), tol(1e-13, 1e-5) * 10) << H0;
         if (H0 == 0) { EXPECT_EQ(slab_max(q.w, 0), 0); }
@@ -152,20 +152,20 @@ TEST (Terrain, GroundAndTopCarryNoFlux)
             }
         }
         // the Dirichlet rows of the residual vanish after the fill
-        ablsteady::ResidualFields R;
+        gust::ResidualFields R;
         R.define(c.ba, c.dm);
         R.w.setVal(1.0);
         bc.apply_rows(q, R);
         EXPECT_LT(slab_max(R.w, 0), tol(1e-13, 1e-5) * 10);
         EXPECT_LT(slab_max(R.w, 6), tol(1e-13, 1e-5) * 10);
         // the homogeneous fill is the same linear relation
-        ablsteady::State p;
+        gust::State p;
         define_state(p, c);
         fill_random(p.u, -1, 1, 21, c);
         fill_random(p.v, -1, 1, 22, c);
         fill_random(p.w, -1, 1, 23, c);
         bc.fill_ghosts(p, nullptr, buoy, true);
-        ablsteady::omega_from_w(p.u, p.v, p.w, p.z_phys_nd, c.mesh, c.geom, omega, 0);
+        gust::omega_from_w(p.u, p.v, p.w, p.z_phys_nd, c.mesh, c.geom, omega, 0);
         EXPECT_LT(slab_max(omega, 0), tol(1e-13, 1e-5));
     }
 }
@@ -181,7 +181,7 @@ TEST (Terrain, GroundAndTopCarryNoFlux)
 TEST (Terrain, RayleighFieldsAndHeight)
 {
     PCase c = hill_case(8, 4, 8, 60);
-    ablsteady::BoundaryInputs bin;
+    gust::BoundaryInputs bin;
     bin.face = {FaceType::periodic, FaceType::periodic, FaceType::slip_wall, FaceType::periodic, FaceType::periodic, FaceType::slip_wall};
     bin.rayleigh_zdamp = 300;
     bin.rayleigh_dampcoef = amrex::Real(0.2);
@@ -189,19 +189,19 @@ TEST (Terrain, RayleighFieldsAndHeight)
     bin.theta_ref.z = {0, 1000};
     bin.theta_ref.theta = {300, 310};
     bin.given = {"rayleigh_zdamp", "rayleigh_dampcoef", "rayleigh_fields"};
-    const ablsteady::CoriolisOptions cor;
-    EXPECT_TRUE(ablsteady::check_boundary_inputs(bin, c.geom, cor).empty());
+    const gust::CoriolisOptions cor;
+    EXPECT_TRUE(gust::check_boundary_inputs(bin, c.geom, cor).empty());
     for (const bool above : {false, true}) {
         bin.rayleigh_above_ground = above;
-        const ablsteady::BoundaryConditions bc(bin, c.geom, c.mesh, cor);
-        ablsteady::State q;
+        const gust::BoundaryConditions bc(bin, c.geom, c.mesh, cor);
+        gust::State q;
         define_state(q, c);
         q.u.setVal(7.0);
         q.v.setVal(1.0);
         q.w.setVal(amrex::Real(0.5));
         q.theta.setVal(305.0);
         q.tke.setVal(1.0);
-        ablsteady::ResidualFields R;
+        gust::ResidualFields R;
         R.define(c.ba, c.dm);
         for (auto* f : {&R.u, &R.v, &R.w, &R.theta, &R.tke}) { f->setVal(0.0); }
         bc.add_damping(q, R);
@@ -211,11 +211,11 @@ TEST (Terrain, RayleighFieldsAndHeight)
         EXPECT_GT(R.w.norm0(), 0);
         EXPECT_GT(R.theta.norm0(), 0);
         // the implicit diagonal: w and theta get the coefficient, u does not
-        amrex::MultiFab Au(c.mesh.ax.boxArray(), c.dm, ablsteady::n_implicit_coefs, 0), At(c.ba, c.dm, ablsteady::n_implicit_coefs, 0);
+        amrex::MultiFab Au(c.mesh.ax.boxArray(), c.dm, gust::n_implicit_coefs, 0), At(c.ba, c.dm, gust::n_implicit_coefs, 0);
         Au.setVal(0.0);
         At.setVal(0.0);
-        bc.add_damping_to_implicit(Equation::u, ablsteady::Loc::xface, c.z, Au);
-        bc.add_damping_to_implicit(Equation::theta, ablsteady::Loc::cell, c.z, At);
+        bc.add_damping_to_implicit(Equation::u, gust::Loc::xface, c.z, Au);
+        bc.add_damping_to_implicit(Equation::theta, gust::Loc::cell, c.z, At);
         EXPECT_EQ(Au.norm0(), 0);
         EXPECT_GT(At.norm0(), 0);
         // theta's residual is c (theta - theta_ref(z)) with the sounding at the absolute height
@@ -226,7 +226,7 @@ TEST (Terrain, RayleighFieldsAndHeight)
             const auto r = host_copy(R.theta, mfi), a = host_copy(At, mfi), z = host_copy(c.z, mfi);
             amrex::LoopOnCpu(mfi.validbox(), [&] (int i, int j, int k) {
                 const amrex::IntVect iv(i, j, k);
-                const double cc = a(iv, ablsteady::coef_P);
+                const double cc = a(iv, gust::coef_P);
                 if (cc <= 0) { return; }
                 double zc = 0, zg = 0;
                 for (int d0 = 0; d0 < 2; ++d0) { for (int d1 = 0; d1 < 2; ++d1) {
@@ -253,20 +253,20 @@ TEST (Terrain, RayleighFieldsAndHeight)
         pp.add("rayleigh_dampcoef", amrex::Real(0.2));
         pp.addarr("rayleigh_fields", std::vector<std::string>{"w", "theta"});
         pp.add("rayleigh_height", std::string("above_ground"));
-        ablsteady::BoundaryInputs r = ablsteady::read_boundary_inputs();
+        gust::BoundaryInputs r = gust::read_boundary_inputs();
         EXPECT_EQ(r.rayleigh_fields, (std::array<bool, 5>{false, false, true, true, false}));
         EXPECT_TRUE(r.rayleigh_above_ground);
-        EXPECT_TRUE(ablsteady::check_boundary_inputs(r, c.geom, cor).empty());
+        EXPECT_TRUE(gust::check_boundary_inputs(r, c.geom, cor).empty());
         clear();
         pp.addarr("rayleigh_fields", std::vector<std::string>{"w", "pressure"});
-        EXPECT_THROW(ablsteady::read_boundary_inputs(), std::runtime_error);
+        EXPECT_THROW(gust::read_boundary_inputs(), std::runtime_error);
         clear();
         pp.add("rayleigh_height", std::string("sideways"));
-        EXPECT_THROW(ablsteady::read_boundary_inputs(), std::runtime_error);
+        EXPECT_THROW(gust::read_boundary_inputs(), std::runtime_error);
         clear();
         pp.addarr("rayleigh_fields", std::vector<std::string>{"w"});   // no layer: no effect
-        r = ablsteady::read_boundary_inputs();
-        const auto err = ablsteady::check_boundary_inputs(r, c.geom, cor);
+        r = gust::read_boundary_inputs();
+        const auto err = gust::check_boundary_inputs(r, c.geom, cor);
         ASSERT_FALSE(err.empty());
         EXPECT_NE(err.front().find("bc.rayleigh_fields has no effect"), std::string::npos) << err.front();
         clear();

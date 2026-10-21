@@ -139,7 +139,7 @@ make_terrain_fitted_coords (int lev,
             z_phys_nd.ParallelCopy(z_phys_nd_new,0,0,1,z_phys_nd.nGrowVect(),z_phys_nd.nGrowVect());
         }
     } else {
-        // ablsteady builds every grid level as its own full-domain mesh (lev = 0);
+        // GUST builds every grid level as its own full-domain mesh (lev = 0);
         // ERF's refined-level path is not copied.
         Abort("make_terrain_fitted_coords: only lev = 0 is supported");
     }
@@ -258,7 +258,7 @@ init_which_terrain_grid (int lev,
                          Real terrain_gamma_m,
                          int* n_capped_out)
 {
-    // ablsteady: the method and gamma_m come from the caller (terrain.smoothing,
+    // GUST: the method and gamma_m come from the caller (terrain.smoothing,
     // terrain.gamma_m) instead of ParmParse, and only lev = 0 is built.
     if (n_capped_out != nullptr) { *n_capped_out = 0; }
 
@@ -331,7 +331,7 @@ init_which_terrain_grid (int lev,
             {
                 int ii = amrex::max(amrex::min(i,imax),imin);
                 int jj = amrex::max(amrex::min(j,jmax),jmin);
-                // ablsteady: the ground layer k0 inside the domain is not rewritten.
+                // GUST: the ground layer k0 inside the domain is not rewritten.
                 // ERF writes z_sfc z_top / z_top there while other threads read
                 // z_arr(ii,jj,k0), a race on GPU; the value differs from z_sfc by at
                 // most 1 ulp. Ghost columns outside a non-periodic side were set to

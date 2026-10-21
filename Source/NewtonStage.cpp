@@ -1,6 +1,7 @@
 #include "NewtonStage.H"
 
 #include "BoundaryConditions.H"
+#include "FileMagic.H"
 #include "PseudoTime.H"
 
 #include <AMReX_ParallelDescriptor.H>
@@ -11,7 +12,7 @@
 #include <fstream>
 #include <sstream>
 
-namespace ablsteady {
+namespace gust {
 
 namespace {
 
@@ -31,12 +32,12 @@ ContinuationOptions newton_ramp (ContinuationOptions o, const SteadyOptions& sop
 //! Hand-backs after this many failure fallbacks: the stage refuses later switches.
 constexpr int kMaxFailedVisits = 3;
 
-const char* const kMagic = "ablsteady-newton-stage";
+const char* const kMagic = "gust-newton-stage";
 constexpr int kVersion = 1;
 
 void state_error (const std::string& dir, const std::string& what)
 {
-    amrex::Abort("ablsteady: " + dir + "/NewtonStage: " + what);
+    amrex::Abort("gust: " + dir + "/NewtonStage: " + what);
 }
 
 bool exists_everywhere (const std::string& name)
@@ -74,12 +75,12 @@ NewtonStage::NewtonStage (const SteadyOptions& sopt, const NewtonStageOptions& o
              tke_floor, ba, dm, verbose),
       m_pc(hook), m_smooth(opt.smoothness), m_verbose(verbose)
 {
-    if (in.bc == nullptr) { amrex::Abort("ablsteady: NewtonStage: the residual inputs need the boundary conditions (bc)"); }
+    if (in.bc == nullptr) { amrex::Abort("gust: NewtonStage: the residual inputs need the boundary conditions (bc)"); }
     if (in.closure != closure) {
-        amrex::Abort("ablsteady: NewtonStage: closure must be the object the residual inputs point to (or both null)");
+        amrex::Abort("gust: NewtonStage: closure must be the object the residual inputs point to (or both null)");
     }
     if (std::isnan(norm_height) || !(norm_height > 0 && std::isfinite(norm_height))) {
-        amrex::Abort("ablsteady: NewtonStage: the norm height must be finite and > 0");
+        amrex::Abort("gust: NewtonStage: the norm height must be finite and > 0");
     }
     if (m_pc == nullptr) {
         m_own_pc = make_newton_preconditioner(sopt.newton_preconditioner, simplec, sopt.zline_sweeps, m_nin, popt, mesh, geom,
@@ -117,7 +118,7 @@ void NewtonStage::init (State& q)
     }
     run_norms(q);   // the closure's fields at q: the continuation's diffusivity
     if (m_verbose > 0) {
-        amrex::Print() << "ablsteady: Newton stage: " << (m_nin.momentum.limiter != m_in.momentum.limiter ? "smooth limiter, " : "")
+        amrex::Print() << "gust: Newton stage: " << (m_nin.momentum.limiter != m_in.momentum.limiter ? "smooth limiter, " : "")
                        << (m_closure != nullptr && m_closure->frozen() ? "k floor frozen, " : "") << "continuation from CFL "
                        << m_cont.state().cfl << (m_cont.state().infinite ? " (infinite)" : "") << ", "
                        << newton_preconditioner_name(m_sopt.newton_preconditioner) << " preconditioner\n";
@@ -187,7 +188,7 @@ void NewtonStage::leave (State& q)
     const amrex::Long moved = m_smooth.leave(q, m_closure, m_in, m_mesh, m_geom);
     m_saved.clear();
     if (m_verbose > 0) {
-        amrex::Print() << "ablsteady: Newton stage left after " << m_cont.state().steps << " steps; " << moved
+        amrex::Print() << "gust: Newton stage left after " << m_cont.state().steps << " steps; " << moved
                        << " k-floor decisions moved\n";
     }
 }
@@ -253,8 +254,8 @@ void NewtonStage::read_checkpoint (const std::string& dir, const amrex::BoxArray
     std::string magic, w1, w2, w3, w4;
     int version = 0, failures = -1, back = -1, visits = -1, idle = -1;
     is >> magic >> version;
-    if (!is || magic != kMagic || version != kVersion) {
-        state_error(dir, "not an ablsteady Newton stage state of format version " + std::to_string(kVersion));
+    if (!is || !is_file_magic(magic, kMagic) || version != kVersion) {
+        state_error(dir, "not a GUST Newton stage state of format version " + std::to_string(kVersion));
     }
     if (!(is >> w1 >> failures >> w2 >> back >> w3 >> visits >> w4 >> idle) || w1 != "failures" || w2 != "handed_back"
         || w3 != "failed_visits" || w4 != "idle" || failures < 0 || (back != 0 && back != 1) || visits < 0 || idle < 0) {
@@ -270,4 +271,4 @@ void NewtonStage::read_checkpoint (const std::string& dir, const amrex::BoxArray
     }
 }
 
-} // namespace ablsteady
+} // namespace gust

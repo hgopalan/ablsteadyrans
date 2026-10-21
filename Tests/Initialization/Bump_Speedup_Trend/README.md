@@ -11,7 +11,7 @@ the same hill and profile. One CTest runs all five cases on two ranks.
 | `inputs_init_bump` | The 1000 m x 1000 m domain with FastWindTerrain's hill. |
 | `terrain_bump_fwt.txt` | The hill, given on the command line as `terrain.file=`. |
 | `fwt_bump_speedup.py` | Writes the FastWindTerrain section of the gold from its plotfiles. |
-| `Gold/init_bump_trend.json` | Both codes' speed-ups and ablsteady's iterations. |
+| `Gold/init_bump_trend.json` | Both codes' speed-ups and GUST's iterations. |
 
 Check script: `Supporting_Files/check_init.py trend` (shared with `Mass_Consistent_Askervein`).
 
@@ -24,13 +24,13 @@ Check script: `Supporting_Files/check_init.py trend` (shared with `Mass_Consiste
 - Every speed-up above 1 at 20, 40, 80 and 150 m.
 - The two codes within 0.02, 0.01, 0.005 and 0.003 of each other at those heights (measured 0.011, 0.0057,
   0.0020, 0.0008).
-- ablsteady's own values (1e-6) and iterations (10 %) pinned.
+- GUST's own values (1e-6) and iterations (10 %) pinned.
 
 ## Gold files
 | Gold | How it was made |
 |---|---|
 | `init_bump_trend.json` (FastWindTerrain section) | `fwt_bump_speedup.py Gold/init_bump_trend.json SHA ALPHA=PLOTFILE ...` on FastWindTerrain's plotfiles |
-| `init_bump_trend.json` (ablsteady section) | `check_init.py trend Gold/init_bump_trend.json --write -- ablsteady inputs_init_bump terrain.file=terrain_bump_fwt.txt` |
+| `init_bump_trend.json` (GUST values, key `ablsteady`) | `check_init.py trend Gold/init_bump_trend.json --write -- gust inputs_init_bump terrain.file=terrain_bump_fwt.txt` |
 
 ## How to run
 ```bash

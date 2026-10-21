@@ -36,23 +36,23 @@
 
 namespace {
 
-using ablsteady::AttemptOutcome;
-using ablsteady::Continuation;
-using ablsteady::ContinuationOptions;
-using ablsteady::ContinuationState;
-using ablsteady::ContinuationStatus;
-using ablsteady::FaceType;
-using ablsteady::Loc;
-using ablsteady::NewtonOptions;
-using ablsteady::NewtonVector;
-using ablsteady::ptest::PCase;
-using ablsteady::trtest::tol;
+using gust::AttemptOutcome;
+using gust::Continuation;
+using gust::ContinuationOptions;
+using gust::ContinuationState;
+using gust::ContinuationStatus;
+using gust::FaceType;
+using gust::Loc;
+using gust::NewtonOptions;
+using gust::NewtonVector;
+using gust::ptest::PCase;
+using gust::trtest::tol;
 
 constexpr double kPi = 3.14159265358979323846;
 constexpr bool kDouble = std::is_same_v<amrex::Real, double>;
 constexpr Loc kLoc[6] = {Loc::xface, Loc::yface, Loc::zface, Loc::cell, Loc::cell, Loc::cell};
 
-amrex::MultiFab& field (ablsteady::State& q, int f)
+amrex::MultiFab& field (gust::State& q, int f)
 {
     amrex::MultiFab* p[6] = {&q.u, &q.v, &q.w, &q.p, &q.theta, &q.tke};
     return *p[f];
@@ -81,11 +81,11 @@ struct HillCase
 {
     PCase c;
     amrex::MultiFab nu, gt, gk;
-    ablsteady::BoundaryInputs bin;
-    std::unique_ptr<ablsteady::BoundaryConditions> bc;
-    ablsteady::SurfaceLayerOptions sl;
-    ablsteady::ResidualInputs in;
-    ablsteady::State q;
+    gust::BoundaryInputs bin;
+    std::unique_ptr<gust::BoundaryConditions> bc;
+    gust::SurfaceLayerOptions sl;
+    gust::ResidualInputs in;
+    gust::State q;
     static constexpr double Lx = 900, Ly = 600, H = 400;
     HillCase (int max_grid, FaceType ground, double hill, bool on_rank0 = false, bool perx = false)
     {
@@ -106,7 +106,7 @@ struct HillCase
         }
         c.z.FillBoundary(c.geom.periodicity());
         c.mesh.build_from_ground(c.in, c.geom, c.z);
-        ablsteady::trtest::smooth_vertical_ghost_nodes(c);
+        gust::trtest::smooth_vertical_ghost_nodes(c);
         sl.z0 = amrex::Real(0.1);
         for (auto* mf : {&nu, &gt, &gk}) {
             mf->define(c.ba, c.dm, 1, 1);
@@ -118,21 +118,21 @@ struct HillCase
         in.theta_ref.z = {-1000, 5000};
         in.theta_ref.theta = {300, 300};
         in.buoyancy.gravity = 0;
-        in.momentum.limiter = ablsteady::Limiter::upwind;
-        in.theta.limiter = ablsteady::Limiter::upwind;
+        in.momentum.limiter = gust::Limiter::upwind;
+        in.theta.limiter = gust::Limiter::upwind;
         in.surface = (ground == FaceType::surface_layer) ? &sl : nullptr;
         const FaceType xlo = perx ? FaceType::periodic : FaceType::inflow;
         const FaceType xhi = perx ? FaceType::periodic : FaceType::outflow;
         bin.face = {xlo, FaceType::periodic, ground, xhi, FaceType::periodic, FaceType::slip_wall};
         // The pinned residuals below were measured with the wall-law inflow length (before the
         // closure's capped length became the default of bc.inflow_tke_length).
-        bin.inflow.length = ablsteady::InflowProfileOptions::Length::unbounded;
-        bc = std::make_unique<ablsteady::BoundaryConditions>(bin, c.geom, c.mesh, in.coriolis);
+        bin.inflow.length = gust::InflowProfileOptions::Length::unbounded;
+        bc = std::make_unique<gust::BoundaryConditions>(bin, c.geom, c.mesh, in.coriolis);
         in.bc = bc.get();
         q.define(c.ba, c.dm);
         amrex::MultiFab::Copy(q.z_phys_nd, c.z, 0, 0, 1, c.z.nGrow());
         for (int f = 0; f < 6; ++f) {
-            ablsteady::trtest::fill_loc(field(q, f), kLoc[f], c,
+            gust::trtest::fill_loc(field(q, f), kLoc[f], c,
                                         [&] (double x, double y, double z) { return base_value(f, x, y, z, Lx, Ly, H); });
         }
         bc->fill_ghosts(q, in.surface, in.buoyancy);
@@ -141,7 +141,7 @@ struct HillCase
 
 ContinuationOptions default_options ()
 {
-    return ablsteady::continuation_options(ablsteady::SteadyOptions{});
+    return gust::continuation_options(gust::SteadyOptions{});
 }
 
 // The Krylov settings of the hill runs: restart 200 (restart 30 stagnates
@@ -154,7 +154,7 @@ NewtonOptions hill_newton ()
 }
 
 // to = from on every point (ghosts and heights included).
-void copy_state (ablsteady::State& to, ablsteady::State& from)
+void copy_state (gust::State& to, gust::State& from)
 {
     auto t = to.fields();
     const auto f = from.fields();
@@ -163,7 +163,7 @@ void copy_state (ablsteady::State& to, ablsteady::State& from)
 
 // max |a - b| over the six fields' valid points of two states on the same
 // BoxArray (any DistributionMapping: b is copied to a's); inf on NaN.
-double valid_diff (ablsteady::State& a, ablsteady::State& b)
+double valid_diff (gust::State& a, gust::State& b)
 {
     double d = 0;
     for (int f = 0; f < 6; ++f) {
@@ -187,7 +187,7 @@ double valid_diff (ablsteady::State& a, ablsteady::State& b)
 }
 
 // A hook that returns NaN: the Krylov residual is NaN, the update unusable.
-class NaNHook : public ablsteady::NewtonPreconditioner
+class NaNHook : public gust::NewtonPreconditioner
 {
 public:
     void apply (NewtonVector& dq, const NewtonVector& /*r*/) override
@@ -238,7 +238,7 @@ TEST(Continuation, LineSearchRejectsOvershoot)
     {
         HillCase hc(64, FaceType::surface_layer, 30);
         make(hc);
-        ablsteady::NewtonKrylov nk(nopt, hc.in, hc.c.mesh, hc.c.geom, hc.c.ba, hc.c.dm, 0);
+        gust::NewtonKrylov nk(nopt, hc.in, hc.c.mesh, hc.c.geom, hc.c.ba, hc.c.dm, 0);
         const auto info = nk.step(hc.q, nullptr);
         full = static_cast<double>(nk.residual_norm(hc.q) / info.residual_norm);
         eta = static_cast<double>(info.krylov_relative);
@@ -254,10 +254,10 @@ TEST(Continuation, LineSearchRejectsOvershoot)
     make(hc);
     Continuation pt(po, nopt, hc.in, hc.c.mesh, hc.c.geom, &hc.nu, 0, hc.c.ba, hc.c.dm, 0);
     pt.restore(plain);
-    std::vector<std::unique_ptr<ablsteady::State>> before(nsteps);
+    std::vector<std::unique_ptr<gust::State>> before(nsteps);
     std::vector<ContinuationState> st_before(nsteps);
     for (int n = 0; n < nsteps; ++n) {
-        before[n] = std::make_unique<ablsteady::State>();
+        before[n] = std::make_unique<gust::State>();
         before[n]->define(hc.c.ba, hc.c.dm);
         copy_state(*before[n], hc.q);
         st_before[n] = pt.state();
@@ -296,8 +296,8 @@ TEST(Continuation, LineSearchRejectsOvershoot)
     o.max_retries = 1;
     Continuation p2(o, nopt, hc.in, hc.c.mesh, hc.c.geom, &hc.nu, 0, hc.c.ba, hc.c.dm, 0);
     p2.restore(st_before[first_backtrack]);
-    ablsteady::State& at = *before[first_backtrack];
-    ablsteady::State keep;
+    gust::State& at = *before[first_backtrack];
+    gust::State keep;
     keep.define(hc.c.ba, hc.c.dm);
     copy_state(keep, at);
     testing::internal::CaptureStdout();
@@ -358,7 +358,7 @@ TEST(Continuation, DtauRampFollowsSer)
             bool infinite = false;
             bool grew = false, capped = false;
             for (std::size_t n = 1; n < rs.size(); ++n) {
-                st = ablsteady::continuation_after_accept(o, st, static_cast<amrex::Real>(rs[n]));
+                st = gust::continuation_after_accept(o, st, static_cast<amrex::Real>(rs[n]));
                 // the closed form; the law's power only where it is below the cap
                 const double from = infinite ? ser.cfl_max : cfl;
                 const double law = (ser.p == 0) ? ser.cfl0
@@ -376,7 +376,7 @@ TEST(Continuation, DtauRampFollowsSer)
             EXPECT_EQ(grew, ser.grows) << ser.cfl0 << " " << ser.p;
             EXPECT_EQ(capped, ser.caps) << ser.cfl0 << " " << ser.p;
             // a failure: the cut, finite again
-            const ContinuationState cut = ablsteady::continuation_after_failure(o, st);
+            const ContinuationState cut = gust::continuation_after_failure(o, st);
             EXPECT_FALSE(cut.infinite);
             EXPECT_EQ(cut.cfl, o.cfl_cut * (st.infinite ? o.cfl_max : st.cfl));
             EXPECT_EQ(cut.steps, st.steps);
@@ -390,11 +390,11 @@ TEST(Continuation, DtauRampFollowsSer)
     st.r0 = 10;
     const amrex::Real expect_cfl[] = {amrex::Real(1.25), amrex::Real(2.5), 5, 10};
     for (int n = 0; n < 4; ++n) {
-        st = ablsteady::continuation_after_accept(o, st, static_cast<amrex::Real>(rs[n + 1]));
+        st = gust::continuation_after_accept(o, st, static_cast<amrex::Real>(rs[n + 1]));
         EXPECT_EQ(st.cfl, expect_cfl[n]) << n;
         EXPECT_EQ(st.infinite, n == 3) << n;
     }
-    st = ablsteady::continuation_after_failure(o, st);
+    st = gust::continuation_after_failure(o, st);
     EXPECT_EQ(st.cfl, amrex::Real(2.5));
     EXPECT_FALSE(st.infinite);
     // While infinite the law grows from cfl_max (a restored state may carry a
@@ -403,7 +403,7 @@ TEST(Continuation, DtauRampFollowsSer)
     inf_st.cfl = 1;
     inf_st.infinite = true;
     inf_st.r0 = 10;
-    inf_st = ablsteady::continuation_after_accept(o, inf_st, amrex::Real(1e-3));
+    inf_st = gust::continuation_after_accept(o, inf_st, amrex::Real(1e-3));
     EXPECT_EQ(inf_st.cfl, 10);
     EXPECT_TRUE(inf_st.infinite);
     // The growth bound applies at a finite dtau only.
@@ -412,9 +412,9 @@ TEST(Continuation, DtauRampFollowsSer)
         x.ptc_growth = amrex::Real(1.5);
         ContinuationState f;
         f.cfl = 3;
-        EXPECT_EQ(ablsteady::line_search_growth(x, f), amrex::Real(1.5));
+        EXPECT_EQ(gust::line_search_growth(x, f), amrex::Real(1.5));
         f.infinite = true;
-        EXPECT_EQ(ablsteady::line_search_growth(x, f), 1);
+        EXPECT_EQ(gust::line_search_growth(x, f), 1);
     }
     // Repeated cuts stop at the smallest normal Real, never 0.
     {
@@ -422,13 +422,13 @@ TEST(Continuation, DtauRampFollowsSer)
         x.cfl_cut = std::numeric_limits<amrex::Real>::min();
         ContinuationState f;
         f.cfl = 1;
-        for (int n = 0; n < 3; ++n) { f = ablsteady::continuation_after_failure(x, f); }
+        for (int n = 0; n < 3; ++n) { f = gust::continuation_after_failure(x, f); }
         EXPECT_EQ(f.cfl, std::numeric_limits<amrex::Real>::min());
     }
     // ser_cfl is the driver's law: a vanished residual gives the cap without
     // the power (no overflow), p = 0 gives cfl0.
-    EXPECT_EQ(ablsteady::ser_cfl(4, 0, 1, 10, 3, 2), amrex::Real(8));
-    EXPECT_EQ(ablsteady::ser_cfl(4, amrex::Real(0.5), 1, 10, 0, 2), amrex::Real(1));
+    EXPECT_EQ(gust::ser_cfl(4, 0, 1, 10, 3, 2), amrex::Real(8));
+    EXPECT_EQ(gust::ser_cfl(4, amrex::Real(0.5), 1, 10, 0, 2), amrex::Real(1));
 }
 
 // ---------------------------------------------------------------------------
@@ -449,7 +449,7 @@ TEST(Continuation, SkippedStepCutsCflAndKeepsState)
     no.gmres_max_iters = 10;
     {
         HillCase hc(4, FaceType::slip_wall, 0, false, true);
-        ablsteady::State before;
+        gust::State before;
         before.define(hc.c.ba, hc.c.dm);
         copy_state(before, hc.q);
         Continuation pt(o, no, hc.in, hc.c.mesh, hc.c.geom, &hc.nu, 0, hc.c.ba, hc.c.dm, 0);
@@ -525,7 +525,7 @@ TEST(Continuation, ArmijoOnKnownQuadratic)
         o.lambda_min = static_cast<amrex::Real>(cs.lambda_min);
         const amrex::Real r = 7;
         int calls = 0;
-        const auto ls = ablsteady::armijo_line_search([&] (amrex::Real l) {
+        const auto ls = gust::armijo_line_search([&] (amrex::Real l) {
             ++calls;
             return r * (1 - l + static_cast<amrex::Real>(cs.K) * l * l);
         }, r, o);
@@ -548,9 +548,9 @@ TEST(Continuation, ArmijoOnKnownQuadratic)
     const amrex::Real nan = std::numeric_limits<amrex::Real>::quiet_NaN();
     const auto prev_fpe = amrex::disableFPExcept(amrex::FPExcept::invalid);
     std::feclearexcept(FE_INVALID);
-    const auto ls = ablsteady::armijo_line_search([&] (amrex::Real l) { return l > amrex::Real(0.3) ? nan : (l > amrex::Real(0.2) ? inf : amrex::Real(1)); },
+    const auto ls = gust::armijo_line_search([&] (amrex::Real l) { return l > amrex::Real(0.3) ? nan : (l > amrex::Real(0.2) ? inf : amrex::Real(1)); },
                                                   amrex::Real(2), o);
-    const volatile bool a_nan = ablsteady::armijo_accepts(nan, 1, 1, amrex::Real(1e-4));
+    const volatile bool a_nan = gust::armijo_accepts(nan, 1, 1, amrex::Real(1e-4));
     const bool raised = std::fetestexcept(FE_INVALID) != 0;
     std::feclearexcept(FE_INVALID);
     amrex::setFPExcept(prev_fpe);
@@ -559,9 +559,9 @@ TEST(Continuation, ArmijoOnKnownQuadratic)
     EXPECT_EQ(ls.backtracks, 3);
     EXPECT_FALSE(a_nan);
     EXPECT_FALSE(raised);
-    EXPECT_FALSE(ablsteady::armijo_accepts(inf, 1, 1, amrex::Real(1e-4)));
-    EXPECT_TRUE(ablsteady::armijo_accepts(amrex::Real(0.5), 1, 1, amrex::Real(0.5)));               // the edge
-    EXPECT_FALSE(ablsteady::armijo_accepts(std::nextafter(amrex::Real(0.5), amrex::Real(1)), 1, 1, amrex::Real(0.5)));
+    EXPECT_FALSE(gust::armijo_accepts(inf, 1, 1, amrex::Real(1e-4)));
+    EXPECT_TRUE(gust::armijo_accepts(amrex::Real(0.5), 1, 1, amrex::Real(0.5)));               // the edge
+    EXPECT_FALSE(gust::armijo_accepts(std::nextafter(amrex::Real(0.5), amrex::Real(1)), 1, 1, amrex::Real(0.5)));
 
     // The growth bound (steady.newton_ptc_growth): K = 100, lambda_min 0.05
     // rejects every lambda; phi(1) = 100 r, so a growth of 100 accepts the full
@@ -573,7 +573,7 @@ TEST(Continuation, ArmijoOnKnownQuadratic)
         const amrex::Real r = 2;
         for (const amrex::Real growth : {amrex::Real(100), std::nextafter(amrex::Real(100), amrex::Real(0)), amrex::Real(1)}) {
             std::vector<amrex::Real> calls;
-            const auto lg = ablsteady::armijo_line_search([&] (amrex::Real l) {
+            const auto lg = gust::armijo_line_search([&] (amrex::Real l) {
                 calls.push_back(l);
                 return r * (1 - l + 100 * l * l);
             }, r, g, growth);
@@ -591,7 +591,7 @@ TEST(Continuation, ArmijoOnKnownQuadratic)
         // a NaN full step is never accepted by the bound, and raises no flag
         const auto prev = amrex::disableFPExcept(amrex::FPExcept::invalid);
         std::feclearexcept(FE_INVALID);
-        const auto ln = ablsteady::armijo_line_search([&] (amrex::Real) { return nan; }, r, g, amrex::Real(1e30));
+        const auto ln = gust::armijo_line_search([&] (amrex::Real) { return nan; }, r, g, amrex::Real(1e30));
         const bool flag = std::fetestexcept(FE_INVALID) != 0;
         std::feclearexcept(FE_INVALID);
         amrex::setFPExcept(prev);
@@ -609,12 +609,12 @@ TEST(Continuation, ArmijoOnKnownQuadratic)
 // application's unknown-input hint for every new key.
 TEST(Continuation, InputReadersAndRangeChecks)
 {
-    ablsteady::SteadyOptions so;
+    gust::SteadyOptions so;
     so.cfl0 = 2;
     so.cfl_max = 20;
     so.ser_exponent = amrex::Real(1.5);
     so.ser_max_growth = 3;
-    const ContinuationOptions def = ablsteady::read_continuation_options(so);
+    const ContinuationOptions def = gust::read_continuation_options(so);
     EXPECT_EQ(def.cfl0, 2);
     EXPECT_EQ(def.cfl_max, 20);
     EXPECT_EQ(def.ser_exponent, amrex::Real(1.5));
@@ -627,7 +627,7 @@ TEST(Continuation, InputReadersAndRangeChecks)
     EXPECT_EQ(def.dtau_inf_at_cap, 1);
     EXPECT_EQ(def.ptc_growth, 1);
     EXPECT_TRUE(def.given.empty());
-    EXPECT_TRUE(ablsteady::check_continuation_options(def).empty());
+    EXPECT_TRUE(gust::check_continuation_options(def).empty());
     const char* keys[] = {"newton_armijo_c", "newton_backtrack", "newton_lambda_min", "newton_cfl_cut",
                           "newton_max_retries", "newton_dtau_inf_at_cap", "newton_ptc_growth", "newton_gmres_max_iters"};
     amrex::ParmParse pp("steady");
@@ -641,7 +641,7 @@ TEST(Continuation, InputReadersAndRangeChecks)
     pp.add("newton_dtau_inf_at_cap", 0);
     pp.add("newton_ptc_growth", amrex::Real(1.5));
     pp.add("newton_gmres_max_iters", 300);
-    const ContinuationOptions o = ablsteady::read_continuation_options(so);
+    const ContinuationOptions o = gust::read_continuation_options(so);
     EXPECT_EQ(o.armijo_c, amrex::Real(0.25));
     EXPECT_EQ(o.backtrack, amrex::Real(0.3));
     EXPECT_EQ(o.lambda_min, amrex::Real(0.05));
@@ -650,12 +650,12 @@ TEST(Continuation, InputReadersAndRangeChecks)
     EXPECT_EQ(o.dtau_inf_at_cap, 0);
     EXPECT_EQ(o.ptc_growth, amrex::Real(1.5));
     EXPECT_EQ(o.given.size(), 7U);
-    EXPECT_EQ(ablsteady::read_newton_options().gmres_max_iters, 300);
+    EXPECT_EQ(gust::read_newton_options().gmres_max_iters, 300);
     for (const auto& k : amrex::ParmParse::getUnusedInputs("steady")) {
         EXPECT_EQ(k.find("steady.newton_"), std::string::npos) << k;   // every key given is read
     }
     clear();
-    EXPECT_EQ(ablsteady::read_newton_options().gmres_max_iters, 2000);
+    EXPECT_EQ(gust::read_newton_options().gmres_max_iters, 2000);
 
     const amrex::Real nan = std::numeric_limits<amrex::Real>::quiet_NaN();
     struct Bad { const char* key; void (*mutate) (ContinuationOptions&); };
@@ -681,7 +681,7 @@ TEST(Continuation, InputReadersAndRangeChecks)
     for (const Bad& b : bads) {
         ContinuationOptions x = default_options();
         b.mutate(x);
-        const auto err = ablsteady::check_continuation_options(x);
+        const auto err = gust::check_continuation_options(x);
         ASSERT_EQ(err.size(), 1U) << b.key;
         EXPECT_NE(err.front().find(b.key), std::string::npos) << err.front();
     }
@@ -692,7 +692,7 @@ TEST(Continuation, InputReadersAndRangeChecks)
         x.lambda_min = nan;
         x.cfl_cut = nan;
         x.ptc_growth = nan;
-        EXPECT_EQ(ablsteady::check_continuation_options(x).size(), 5U);
+        EXPECT_EQ(gust::check_continuation_options(x).size(), 5U);
         x = default_options();   // the edges inside
         x.armijo_c = std::nextafter(amrex::Real(0.5), amrex::Real(0));
         x.backtrack = std::nextafter(amrex::Real(1), amrex::Real(0));
@@ -701,16 +701,16 @@ TEST(Continuation, InputReadersAndRangeChecks)
         x.max_retries = 1;
         x.dtau_inf_at_cap = 0;
         x.ptc_growth = 1;
-        EXPECT_TRUE(ablsteady::check_continuation_options(x).empty());
+        EXPECT_TRUE(gust::check_continuation_options(x).empty());
     }
     {
         NewtonOptions x;
         x.gmres_max_iters = 0;
-        const auto err = ablsteady::check_newton_options(x);
+        const auto err = gust::check_newton_options(x);
         ASSERT_EQ(err.size(), 1U);
         EXPECT_NE(err.front().find("steady.newton_gmres_max_iters = 0"), std::string::npos) << err.front();
         x.gmres_max_iters = 1;
-        EXPECT_TRUE(ablsteady::check_newton_options(x).empty());
+        EXPECT_TRUE(gust::check_newton_options(x).empty());
     }
     // the reader aborts
     struct Given { const char* key; double value; };
@@ -722,30 +722,30 @@ TEST(Continuation, InputReadersAndRangeChecks)
         } else {
             pp.add(g.key, static_cast<amrex::Real>(g.value));
         }
-        EXPECT_THROW(ablsteady::read_continuation_options(so), std::runtime_error) << g.key;
+        EXPECT_THROW(gust::read_continuation_options(so), std::runtime_error) << g.key;
         clear();
     }
     pp.add("newton_gmres_max_iters", 0);
-    EXPECT_THROW(ablsteady::read_newton_options(), std::runtime_error);
+    EXPECT_THROW(gust::read_newton_options(), std::runtime_error);
     clear();
     pp.add("newton_cfl_cut", amrex::Real(0.5));
     pp.add("newton_cfl_cut", amrex::Real(0.4));   // repeated
-    EXPECT_THROW(ablsteady::read_continuation_options(so), std::runtime_error);
+    EXPECT_THROW(gust::read_continuation_options(so), std::runtime_error);
     clear();
     pp.addarr("newton_backtrack", std::vector<amrex::Real>{amrex::Real(0.5), amrex::Real(0.6)});   // two values
-    EXPECT_THROW(ablsteady::read_continuation_options(so), std::runtime_error);
+    EXPECT_THROW(gust::read_continuation_options(so), std::runtime_error);
     clear();
-    ablsteady::SteadyOptions bad_ser = so;
+    gust::SteadyOptions bad_ser = so;
     bad_ser.cfl_max = 1;   // below cfl0
-    EXPECT_THROW(ablsteady::read_continuation_options(bad_ser), std::runtime_error);
-    EXPECT_NO_THROW(ablsteady::read_continuation_options(so));
+    EXPECT_THROW(gust::read_continuation_options(bad_ser), std::runtime_error);
+    EXPECT_NO_THROW(gust::read_continuation_options(so));
     // the application's hint: read with steady.stage = simplec_newton
     for (const char* k : keys) {
-        const auto msg = ablsteady::unknown_inputs({{std::string("steady.") + k, false}}, {"steady"});
+        const auto msg = gust::unknown_inputs({{std::string("steady.") + k, false}}, {"steady"});
         ASSERT_EQ(msg.size(), 1U);
         EXPECT_NE(msg.front().find("steady.stage = simplec_newton"), std::string::npos) << msg.front();
     }
-    const auto other = ablsteady::unknown_inputs({{"steady.newton_armijo", false}}, {"steady"});
+    const auto other = gust::unknown_inputs({{"steady.newton_armijo", false}}, {"steady"});
     ASSERT_EQ(other.size(), 1U);
     EXPECT_EQ(other.front().find("steady.stage = simplec_newton"), std::string::npos) << other.front();
 }
@@ -804,7 +804,7 @@ TEST(Continuation, HillSameOnAnyRankCount)
             EXPECT_EQ(r.cfl, st.cfl);
             EXPECT_EQ(r.infinite, st.infinite);
             EXPECT_EQ(r.gmres_status, 0);
-            st = ablsteady::continuation_after_accept(o, st, r.residual_new);
+            st = gust::continuation_after_accept(o, st, r.residual_new);
             hist[L].push_back(r.residual);
             hist[L].push_back(r.residual_new);
         }
@@ -836,18 +836,18 @@ TEST(Continuation, RestartIsBitIdentical)
         amrex::UtilCreateDirectory(dir, 0755);
     }
     amrex::ParallelDescriptor::Barrier();
-    ablsteady::State qsave;
+    gust::State qsave;
     qsave.define(hb.c.ba, hb.c.dm);
     ContinuationState saved;
     {
         Continuation b(default_options(), hill_newton(), hb.in, hb.c.mesh, hb.c.geom, &hb.nu, 0, hb.c.ba, hb.c.dm, 0);
         for (int n = 0; n < K; ++n) { ASSERT_EQ(b.step(hb.q), ContinuationStatus::accepted); }
-        ablsteady::write_continuation_state(dir, b.state());
+        gust::write_continuation_state(dir, b.state());
         saved = b.state();
         copy_state(qsave, hb.q);
     }
     Continuation c(default_options(), hill_newton(), hb.in, hb.c.mesh, hb.c.geom, &hb.nu, 0, hb.c.ba, hb.c.dm, 0);
-    const ContinuationState rd = ablsteady::read_continuation_state(dir);
+    const ContinuationState rd = gust::read_continuation_state(dir);
     EXPECT_EQ(rd.steps, K);
     c.restore(rd);
     // every field restored, the switch to infinite dtau included
@@ -877,13 +877,13 @@ TEST(Continuation, RestartIsBitIdentical)
     EXPECT_EQ(a.state().r0, c.state().r0);
     EXPECT_EQ(a.state().r_last, c.state().r_last);
     // refusals
-    EXPECT_THROW(ablsteady::read_continuation_state("ut_continuation_missing"), std::runtime_error);
+    EXPECT_THROW(gust::read_continuation_state("ut_continuation_missing"), std::runtime_error);
     if (amrex::ParallelDescriptor::IOProcessor()) {
         std::ofstream os(dir + "/Continuation");
-        os << "ablsteady-continuation 1\nstate 3 0x1p+0 2 0x1p+0 0x1p+0\n";
+        os << "gust-continuation 1\nstate 3 0x1p+0 2 0x1p+0 0x1p+0\n";
     }
     amrex::ParallelDescriptor::Barrier();
-    EXPECT_THROW(ablsteady::read_continuation_state(dir), std::runtime_error);
+    EXPECT_THROW(gust::read_continuation_state(dir), std::runtime_error);
     ContinuationState bad = rd;
     bad.cfl = 0;
     EXPECT_THROW(c.restore(bad), std::runtime_error);
@@ -892,7 +892,7 @@ TEST(Continuation, RestartIsBitIdentical)
     EXPECT_THROW(c.restore(bad), std::runtime_error);
     // The refusal comes from Continuation::step itself, not from a later
     // AMReX check.
-    const auto refuses = [&c] (ablsteady::State& q) {
+    const auto refuses = [&c] (gust::State& q) {
         try {
             c.step(q);
         } catch (const std::runtime_error& e) {
@@ -943,7 +943,7 @@ TEST(Continuation, ReferenceResidualFromCaller)
     EXPECT_EQ(c.state().r0, r_ref);
     EXPECT_EQ(c.records().front().residual, r_first);
     const auto& o = c.options();
-    EXPECT_EQ(c.state().cfl, ablsteady::ser_cfl(o.cfl0, c.state().r_last / r_ref, o.cfl0, o.cfl_max, o.ser_exponent,
+    EXPECT_EQ(c.state().cfl, gust::ser_cfl(o.cfl0, c.state().r_last / r_ref, o.cfl0, o.cfl_max, o.ser_exponent,
                                                 o.ser_max_growth));
     EXPECT_NEAR(static_cast<double>(c.state().cfl), 10 * static_cast<double>(own.state().cfl),
                 tol(1e-12, 1e-4) * static_cast<double>(c.state().cfl));
@@ -993,22 +993,22 @@ TEST(Newton, TrueLinearResidualMatchesEstimate)
     for (const int max_grid : {64, 4}) {
         HillCase hc(max_grid, FaceType::surface_layer, 30);
         NewtonOptions no = hill_newton();
-        ablsteady::NewtonKrylov nk(no, hc.in, hc.c.mesh, hc.c.geom, hc.c.ba, hc.c.dm, 0);
+        gust::NewtonKrylov nk(no, hc.in, hc.c.mesh, hc.c.geom, hc.c.ba, hc.c.dm, 0);
         amrex::MultiFab dtau(hc.c.ba, hc.c.dm, 1, 0);
         dtau.setVal(20.0);
         hc.bc->fill_ghosts(hc.q, hc.in.surface, hc.in.buoyancy);
-        ablsteady::ResidualFields R;
+        gust::ResidualFields R;
         {
-            ablsteady::State qf;
+            gust::State qf;
             qf.define(hc.c.ba, hc.c.dm);
             copy_state(qf, hc.q);
             hc.bc->fill_ghosts(qf, hc.in.surface, hc.in.buoyancy);
-            ablsteady::residual(qf, nk.residual_inputs(), hc.c.mesh, hc.c.geom, R);
+            gust::residual(qf, nk.residual_inputs(), hc.c.mesh, hc.c.geom, R);
         }
-        ablsteady::NewtonOperator op(hc.q, R, nk.residual_inputs(), hc.c.mesh, hc.c.geom, &dtau);
+        gust::NewtonOperator op(hc.q, R, nk.residual_inputs(), hc.c.mesh, hc.c.geom, &dtau);
         NewtonVector b = op.makeVecRHS(), x = op.makeVecLHS(), Ax = op.makeVecRHS();
         op.rhs(R, b);
-        amrex::GMRES<NewtonVector, ablsteady::NewtonOperator> gmres;
+        amrex::GMRES<NewtonVector, gust::NewtonOperator> gmres;
         gmres.setRestartLength(no.gmres_restart);
         gmres.setFlexible(true);
         gmres.define(op);
@@ -1042,11 +1042,11 @@ struct ColumnCase
 {
     PCase c;
     amrex::MultiFab nu, gt, gk;
-    ablsteady::BoundaryInputs bin;
-    std::unique_ptr<ablsteady::BoundaryConditions> bc;
-    ablsteady::SurfaceLayerOptions sl;
-    ablsteady::ResidualInputs in;
-    ablsteady::State q;
+    gust::BoundaryInputs bin;
+    std::unique_ptr<gust::BoundaryConditions> bc;
+    gust::SurfaceLayerOptions sl;
+    gust::ResidualInputs in;
+    gust::State q;
     ColumnCase ()
     {
         c.in.mesh.n_cell = amrex::IntVect(2, 2, 32);
@@ -1056,7 +1056,7 @@ struct ColumnCase
         c.make([] (double, double) { return 0.0; });
         c.z.FillBoundary(c.geom.periodicity());
         c.mesh.build_from_ground(c.in, c.geom, c.z);
-        ablsteady::trtest::smooth_vertical_ghost_nodes(c);
+        gust::trtest::smooth_vertical_ghost_nodes(c);
         sl.z0 = amrex::Real(0.1);
         for (auto* mf : {&nu, &gt, &gk}) {
             mf->define(c.ba, c.dm, 1, 1);
@@ -1075,7 +1075,7 @@ struct ColumnCase
         in.coriolis.ug = 10;
         bin.face = {FaceType::periodic, FaceType::periodic, FaceType::surface_layer, FaceType::periodic, FaceType::periodic, FaceType::slip_wall};
         in.surface = &sl;
-        bc = std::make_unique<ablsteady::BoundaryConditions>(bin, c.geom, c.mesh, in.coriolis);
+        bc = std::make_unique<gust::BoundaryConditions>(bin, c.geom, c.mesh, in.coriolis);
         in.bc = bc.get();
         q.define(c.ba, c.dm);
         amrex::MultiFab::Copy(q.z_phys_nd, c.z, 0, 0, 1, c.z.nGrow());
@@ -1133,7 +1133,7 @@ void plain_newton (const std::string& name, double umult)
     }
     NewtonOptions no;
     no.gmres_restart = 200;
-    ablsteady::NewtonKrylov nk(no, cs.in, cs.c.mesh, cs.c.geom, cs.c.ba, cs.c.dm, 0);
+    gust::NewtonKrylov nk(no, cs.in, cs.c.mesh, cs.c.geom, cs.c.ba, cs.c.dm, 0);
     amrex::Print() << std::setprecision(3) << "  " << std::left << std::setw(14) << name << "plain Newton (step()) |R|:";
     amrex::Real r0 = 0;
     for (int n = 0; n < 12; ++n) {

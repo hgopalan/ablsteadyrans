@@ -1,6 +1,6 @@
 # The solver is a library so the executable and the unit tests link the
 # same compiled code.
-set(ABLSTEADY_SOURCES
+set(GUST_SOURCES
     Inputs.cpp
     State.cpp
     StateIO.cpp
@@ -48,31 +48,31 @@ set(ABLSTEADY_SOURCES
     ${PROJECT_SOURCE_DIR}/extern_erf/ERF_TerrainPoisson.cpp
 )
 
-add_library(ablsteady_core STATIC ${ABLSTEADY_SOURCES})
+add_library(gust_core STATIC ${GUST_SOURCES})
 # extern_erf/ holds the copied ERF files; erf_shims/ the small headers that
-# stand in for ERF headers they include but ablsteady does not copy.
-target_include_directories(ablsteady_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}
+# stand in for ERF headers they include but GUST does not copy.
+target_include_directories(gust_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}
                            ${PROJECT_SOURCE_DIR}/extern_erf ${CMAKE_CURRENT_SOURCE_DIR}/erf_shims)
-target_link_libraries(ablsteady_core PUBLIC AMReX::amrex)
+target_link_libraries(gust_core PUBLIC AMReX::amrex)
 # The copied TerrainPoisson files compile only under ERF_USE_FFT.
-target_compile_definitions(ablsteady_core PUBLIC ERF_USE_FFT)
+target_compile_definitions(gust_core PUBLIC ERF_USE_FFT)
 
 # Intel's compilers default to a fast floating-point model that may reorder
 # sums; the deterministic reductions need the source order kept.
 if(CMAKE_CXX_COMPILER_ID STREQUAL "IntelLLVM")
-    target_compile_options(ablsteady_core PUBLIC -fp-model=precise)
+    target_compile_options(gust_core PUBLIC -fp-model=precise)
 endif()
 
-add_executable(ablsteady main.cpp)
-target_link_libraries(ablsteady PRIVATE ablsteady_core)
+add_executable(gust main.cpp)
+target_link_libraries(gust PRIVATE gust_core)
 
 # Builds and verifies ERF reference archives (sub-phase 1.1).
-add_executable(ablsteady_refavg RefAvgTool.cpp)
-target_link_libraries(ablsteady_refavg PRIVATE ablsteady_core)
+add_executable(gust_refavg RefAvgTool.cpp)
+target_link_libraries(gust_refavg PRIVATE gust_core)
 
-if(ABLSTEADY_GPU_BACKEND STREQUAL "CUDA")
+if(GUST_GPU_BACKEND STREQUAL "CUDA")
     include(AMReXTargetHelpers)
-    setup_target_for_cuda_compilation(ablsteady_core)
-    setup_target_for_cuda_compilation(ablsteady)
-    setup_target_for_cuda_compilation(ablsteady_refavg)
+    setup_target_for_cuda_compilation(gust_core)
+    setup_target_for_cuda_compilation(gust)
+    setup_target_for_cuda_compilation(gust_refavg)
 endif()

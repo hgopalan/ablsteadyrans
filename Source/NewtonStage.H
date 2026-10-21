@@ -1,5 +1,5 @@
-#ifndef ABLSTEADY_NEWTON_STAGE_H_
-#define ABLSTEADY_NEWTON_STAGE_H_
+#ifndef GUST_NEWTON_STAGE_H_
+#define GUST_NEWTON_STAGE_H_
 
 // The Newton stage (plan sub-phase 3.5): the driver's second stage with
 // steady.stage = simplec_newton (Driver.H). The driver switches to it from
@@ -74,7 +74,7 @@
 #include <string>
 #include <vector>
 
-namespace ablsteady {
+namespace gust {
 
 //! The stage's inputs: the Newton and continuation keys (steady.newton_*)
 //! and the smoothness options (turb.frozen_switch).
@@ -171,6 +171,6 @@ private:
     int m_verbose;
 };
 
-} // namespace ablsteady
+} // namespace gust
 
 #endif

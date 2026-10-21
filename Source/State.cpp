@@ -2,7 +2,7 @@
 
 #include <math.h>   // fma: host and CUDA device overloads for float and double
 
-namespace ablsteady {
+namespace gust {
 
 void State::define (const amrex::BoxArray& ba, const amrex::DistributionMapping& dm)
 {
@@ -55,4 +55,4 @@ amrex::BoxArray make_box_array (const MeshInputs& mesh)
     return ba;
 }
 
-} // namespace ablsteady
+} // namespace gust

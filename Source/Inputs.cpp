@@ -11,7 +11,7 @@
 #include <set>
 #include <sstream>
 
-namespace ablsteady {
+namespace gust {
 
 namespace {
 
@@ -328,11 +328,11 @@ Inputs read_inputs ()
     auto unk = unknown_inputs(parmparse_entries());
     err.insert(err.end(), unk.begin(), unk.end());
     if (!err.empty()) {
-        std::string all = "ablsteady: invalid inputs:";
+        std::string all = "gust: invalid inputs:";
         for (const auto& e : err) { all += "\n  " + e; }
         amrex::Abort(all);
     }
     return in;
 }
 
-} // namespace ablsteady
+} // namespace gust

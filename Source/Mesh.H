@@ -1,5 +1,5 @@
-#ifndef ABLSTEADY_MESH_H_
-#define ABLSTEADY_MESH_H_
+#ifndef GUST_MESH_H_
+#define GUST_MESH_H_
 
 #include "Inputs.H"
 
@@ -9,7 +9,7 @@
 
 #include <string>
 
-namespace ablsteady {
+namespace gust {
 
 //! What the mesh-quality report says about a terrain-following mesh.
 struct MeshQuality
@@ -119,6 +119,6 @@ amrex::Real free_stream_divergence (const Mesh& mesh, const amrex::Geometry& geo
 //! Aborts on a mesh without levels.
 amrex::Real residual_scale_height (const Mesh& mesh, const amrex::Geometry& geom);
 
-} // namespace ablsteady
+} // namespace gust
 
 #endif

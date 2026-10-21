@@ -9,24 +9,24 @@
 
 namespace {
 
-using ablsteady::Loc;
-using ablsteady::PoissonFace;
-using ablsteady::ptest::PCase;
-using ablsteady::trtest::D1;
-using ablsteady::trtest::Flow;
-using ablsteady::trtest::tol;
+using gust::Loc;
+using gust::PoissonFace;
+using gust::ptest::PCase;
+using gust::trtest::D1;
+using gust::trtest::Flow;
+using gust::trtest::tol;
 
 constexpr double kHill = 120;
 
 PCase make_mesh (int m, int smoothing)
 {
-    ablsteady::ptest::Manufactured ms;
+    gust::ptest::Manufactured ms;
     ms.Lx = 1000;
     ms.Ly = 800;
     ms.H0 = kHill;
-    PCase c = ablsteady::ptest::make_case(16 << m, 12 << m, 8 << m, PoissonFace::periodic, PoissonFace::periodic, ms,
+    PCase c = gust::ptest::make_case(16 << m, 12 << m, 8 << m, PoissonFace::periodic, PoissonFace::periodic, ms,
                                           smoothing, true);
-    ablsteady::trtest::smooth_vertical_ghost_nodes(c);
+    gust::trtest::smooth_vertical_ghost_nodes(c);
     return c;
 }
 
@@ -36,15 +36,15 @@ amrex::IntVect itype (Loc loc)
     return {t & 1, (t >> 1) & 1, (t >> 2) & 1};
 }
 
-ablsteady::trtest::Norms scalar_error (int m, int smoothing)
+gust::trtest::Norms scalar_error (int m, int smoothing)
 {
     PCase c = make_mesh(m, smoothing);
-    const Flow fl = ablsteady::trtest::make_flow(c, kHill);
+    const Flow fl = gust::trtest::make_flow(c, kHill);
     amrex::MultiFab q(c.ba, c.dm, 1, 1), g(c.ba, c.dm, 1, 1), out(c.ba, c.dm, 1, 0), ex(c.ba, c.dm, 1, 0);
-    ablsteady::trtest::fill_loc(q, Loc::cell, c, [&] (double x, double y, double z) { return fl.q(x, y, z); });
-    ablsteady::trtest::fill_loc(g, Loc::cell, c, [&] (double x, double y, double z) { return fl.nu(x, y, z); });
-    ablsteady::scalar_diffusion(q, g, c.z, c.mesh, c.geom, out);
-    ablsteady::trtest::fill_valid(ex, Loc::cell, c, [&] (double x, double y, double z) {
+    gust::trtest::fill_loc(q, Loc::cell, c, [&] (double x, double y, double z) { return fl.q(x, y, z); });
+    gust::trtest::fill_loc(g, Loc::cell, c, [&] (double x, double y, double z) { return fl.nu(x, y, z); });
+    gust::scalar_diffusion(q, g, c.z, c.mesh, c.geom, out);
+    gust::trtest::fill_valid(ex, Loc::cell, c, [&] (double x, double y, double z) {
         double r = 0;
         for (int d = 0; d < 3; ++d) {
             r += D1([&] (double a, double b, double cc) {
@@ -53,28 +53,28 @@ ablsteady::trtest::Norms scalar_error (int m, int smoothing)
         }
         return r;
     });
-    return ablsteady::trtest::error_norms(out, ex, Loc::cell, c);
+    return gust::trtest::error_norms(out, ex, Loc::cell, c);
 }
 
-std::array<ablsteady::trtest::Norms, 3> momentum_error (int m, int smoothing)
+std::array<gust::trtest::Norms, 3> momentum_error (int m, int smoothing)
 {
     PCase c = make_mesh(m, smoothing);
-    const Flow fl = ablsteady::trtest::make_flow(c, kHill);
+    const Flow fl = gust::trtest::make_flow(c, kHill);
     amrex::Array<amrex::MultiFab, 3> vel, out, ex;
     for (int cc = 0; cc < 3; ++cc) {
-        const Loc loc = ablsteady::velocity_loc(cc);
+        const Loc loc = gust::velocity_loc(cc);
         vel[cc].define(amrex::convert(c.ba, itype(loc)), c.dm, 1, 2);
         out[cc].define(amrex::convert(c.ba, itype(loc)), c.dm, 1, 0);
         ex[cc].define(amrex::convert(c.ba, itype(loc)), c.dm, 1, 0);
-        ablsteady::trtest::fill_loc(vel[cc], loc, c, [&] (double x, double y, double z) { return fl.vel(cc, x, y, z); });
+        gust::trtest::fill_loc(vel[cc], loc, c, [&] (double x, double y, double z) { return fl.vel(cc, x, y, z); });
     }
     amrex::MultiFab nu(c.ba, c.dm, 1, 1);
-    ablsteady::trtest::fill_loc(nu, Loc::cell, c, [&] (double x, double y, double z) { return fl.nu(x, y, z); });
-    ablsteady::momentum_diffusion({&vel[0], &vel[1], &vel[2]}, nu, c.z, c.mesh, c.geom, {&out[0], &out[1], &out[2]});
-    std::array<ablsteady::trtest::Norms, 3> e;
+    gust::trtest::fill_loc(nu, Loc::cell, c, [&] (double x, double y, double z) { return fl.nu(x, y, z); });
+    gust::momentum_diffusion({&vel[0], &vel[1], &vel[2]}, nu, c.z, c.mesh, c.geom, {&out[0], &out[1], &out[2]});
+    std::array<gust::trtest::Norms, 3> e;
     for (int cc = 0; cc < 3; ++cc) {
-        const Loc loc = ablsteady::velocity_loc(cc);
-        ablsteady::trtest::fill_valid(ex[cc], loc, c, [&] (double x, double y, double z) {
+        const Loc loc = gust::velocity_loc(cc);
+        gust::trtest::fill_valid(ex[cc], loc, c, [&] (double x, double y, double z) {
             double r = 0;
             for (int j = 0; j < 3; ++j) {
                 r += D1([&] (double a, double b, double c3) {
@@ -85,7 +85,7 @@ std::array<ablsteady::trtest::Norms, 3> momentum_error (int m, int smoothing)
             }
             return r;
         });
-        e[cc] = ablsteady::trtest::error_norms(out[cc], ex[cc], loc, c);
+        e[cc] = gust::trtest::error_norms(out[cc], ex[cc], loc, c);
     }
     return e;
 }
@@ -97,7 +97,7 @@ double order (double a, double b) { return std::log2(a / b); }
 // the three meshes and in the max norm on the finest pair.
 TEST(DiffusionMMS, ScalarIsSecondOrder)
 {
-    ablsteady::trtest::Norms e[3];
+    gust::trtest::Norms e[3];
     for (int m = 0; m < 3; ++m) { e[m] = scalar_error(m, 0); }
     EXPECT_GE(order(e[0].l2, e[1].l2), 1.9) << e[0].l2 << " " << e[1].l2;
     EXPECT_GE(order(e[1].l2, e[2].l2), 1.9) << e[1].l2 << " " << e[2].l2;
@@ -108,7 +108,7 @@ TEST(DiffusionMMS, ScalarIsSecondOrder)
 // stress tensor, the metric cross terms and a variable nu, for u, v and w.
 TEST(DiffusionMMS, MomentumIsSecondOrder)
 {
-    std::array<ablsteady::trtest::Norms, 3> e[3];
+    std::array<gust::trtest::Norms, 3> e[3];
     for (int m = 0; m < 3; ++m) { e[m] = momentum_error(m, 0); }
     for (int cc = 0; cc < 3; ++cc) {
         EXPECT_GE(order(e[0][cc].l2, e[1][cc].l2), 1.9) << "component " << cc;

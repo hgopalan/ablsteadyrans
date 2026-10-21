@@ -1,5 +1,5 @@
-#ifndef ABLSTEADY_ERF_SHIM_INDEX_DEFINES_H_
-#define ABLSTEADY_ERF_SHIM_INDEX_DEFINES_H_
+#ifndef GUST_ERF_SHIM_INDEX_DEFINES_H_
+#define GUST_ERF_SHIM_INDEX_DEFINES_H_
 
 // Shim for ERF's ERF_IndexDefines.H, which the files in extern_erf/ include.
 // They use only the boundary-condition enum below; it is ERF's ERF_BC

@@ -1,5 +1,5 @@
-#ifndef ABLSTEADY_BOUNDARYCONDITIONS_H_
-#define ABLSTEADY_BOUNDARYCONDITIONS_H_
+#ifndef GUST_BOUNDARYCONDITIONS_H_
+#define GUST_BOUNDARYCONDITIONS_H_
 
 // Domain boundary conditions (sub-phase 1.8): one type per domain face, the
 // ghost-cell fills that express it, the rows of the residual and of the
@@ -78,7 +78,7 @@
 #include <string>
 #include <vector>
 
-namespace ablsteady {
+namespace gust {
 
 enum class FaceType { periodic, inflow, outflow, slip_wall, no_slip_wall, surface_layer, geostrophic };
 
@@ -208,6 +208,6 @@ private:
     InflowProfile m_profile;
 };
 
-} // namespace ablsteady
+} // namespace gust
 
 #endif

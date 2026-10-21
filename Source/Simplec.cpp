@@ -15,7 +15,7 @@
 #include <limits>
 #include <string>
 
-namespace ablsteady {
+namespace gust {
 
 // NaN is tested with isnan before any ordered comparison (gcc's ordered
 // comparisons raise the invalid-operation trap on a NaN).
@@ -73,7 +73,7 @@ SimplecOptions read_simplec_options ()
         }
     }
     if (!err.empty()) {
-        std::string all = "ablsteady: invalid inputs:";
+        std::string all = "gust: invalid inputs:";
         for (const auto& e : err) { all += "\n  " + e; }
         amrex::Abort(all);
     }
@@ -93,7 +93,7 @@ void face_coefficients (const char* what, const amrex::MultiFab& d, amrex::Multi
     {
         const amrex::Real lo = d.min(0);   // collective: every rank aborts together
         if (std::isnan(lo) || !(lo >= 0) || !std::isfinite(d.max(0))) {
-            amrex::Abort(std::string("ablsteady: pressure_correction: the SIMPLEC denominator ") + what
+            amrex::Abort(std::string("gust: pressure_correction: the SIMPLEC denominator ") + what
                          + " must be finite and >= 0 everywhere");
         }
     }
@@ -137,7 +137,7 @@ PressureCorrectionResult pressure_correction (State& q, const PredictorFields& d
 {
     const char* op = "pressure_correction";
     if (std::isnan(alpha_p) || !(alpha_p > 0 && alpha_p <= 1)) {
-        amrex::Abort("ablsteady: pressure_correction: alpha_p must be > 0 and <= 1");
+        amrex::Abort("gust: pressure_correction: alpha_p must be > 0 and <= 1");
     }
     check_operator_field(op, "d_u", d.d_u, Loc::xface, mesh, 0);
     check_operator_field(op, "d_v", d.d_v, Loc::yface, mesh, 0);
@@ -182,7 +182,7 @@ PressureCorrectionResult pressure_correction (State& q, const PredictorFields& d
     w.phi.setVal(0.0);
     res.poisson = solver.solve(w.rhs, w.phi, coeffs, bc, &w.F);
     if (!project_net_source && res.poisson.singular && std::abs(res.poisson.removed_mean) > amrex::Real(1.0e-8) * speed * inv_h) {
-        amrex::Abort("ablsteady: pressure_correction: the predicted velocity has a net source the boundaries cannot carry: "
+        amrex::Abort("gust: pressure_correction: the predicted velocity has a net source the boundaries cannot carry: "
                      "J-weighted mean divergence " + std::to_string(double(res.poisson.removed_mean)) + " 1/s against the scale "
                      + std::to_string(double(speed * inv_h)) + " 1/s (a boundary condition or the predictor is inconsistent)");
     }
@@ -226,15 +226,15 @@ ScalarSweepResult scalar_sweep (Equation eq, amrex::MultiFab& field, const amrex
                                 const ClosureFields* fields, SimplecWorkspace& w, const LineSweepOptions& sweep, bool clip)
 {
     const char* op = "scalar_sweep";
-    if (eq != Equation::theta && eq != Equation::tke) { amrex::Abort("ablsteady: scalar_sweep: eq must be theta or tke"); }
+    if (eq != Equation::theta && eq != Equation::tke) { amrex::Abort("gust: scalar_sweep: eq must be theta or tke"); }
     check_operator_field(op, "field", field, Loc::cell, mesh, 1);
     check_operator_field(op, "R", R_eq, Loc::cell, mesh, 0);
     check_operator_field(op, "dtau", dtau, Loc::cell, mesh, 0);
-    if (std::isnan(floor) || !(floor >= 0)) { amrex::Abort("ablsteady: scalar_sweep: the floor must be >= 0"); }
+    if (std::isnan(floor) || !(floor >= 0)) { amrex::Abort("gust: scalar_sweep: the floor must be >= 0"); }
     {
         const amrex::Real lo = dtau.min(0);
         if (std::isnan(lo) || !(lo > 0) || !std::isfinite(dtau.max(0))) {
-            amrex::Abort("ablsteady: scalar_sweep: dtau must be finite and > 0 everywhere");
+            amrex::Abort("gust: scalar_sweep: dtau must be finite and > 0 everywhere");
         }
     }
     ScalarSweepResult res;
@@ -299,19 +299,19 @@ SimplecStage::SimplecStage (const SimplecOptions& opt, int sweeps, const Residua
       m_pbc(in.bc != nullptr ? poisson_bc_from_faces(in.bc->inputs(), geom) : PoissonBC{}),
       m_solver(mesh, geom, z_nd, m_popt)
 {
-    for (const auto& e : check_simplec_options(opt)) { amrex::Abort("ablsteady: SimplecStage: " + e); }
-    if (sweeps < 1) { amrex::Abort("ablsteady: SimplecStage: sweeps must be >= 1 (steady.zline_sweeps)"); }
-    if (in.bc == nullptr) { amrex::Abort("ablsteady: SimplecStage: the residual inputs need the boundary conditions (bc)"); }
+    for (const auto& e : check_simplec_options(opt)) { amrex::Abort("gust: SimplecStage: " + e); }
+    if (sweeps < 1) { amrex::Abort("gust: SimplecStage: sweeps must be >= 1 (steady.zline_sweeps)"); }
+    if (in.bc == nullptr) { amrex::Abort("gust: SimplecStage: the residual inputs need the boundary conditions (bc)"); }
     if (in.closure != closure) {
-        amrex::Abort("ablsteady: SimplecStage: closure must be the object the residual inputs point to (or both null)");
+        amrex::Abort("gust: SimplecStage: closure must be the object the residual inputs point to (or both null)");
     }
     if (in.closure == nullptr && in.nu == nullptr) {
-        amrex::Abort("ablsteady: SimplecStage: without a closure the residual inputs need the diffusivities");
+        amrex::Abort("gust: SimplecStage: without a closure the residual inputs need the diffusivities");
     }
-    if (std::isnan(tke_floor) || !(tke_floor >= 0)) { amrex::Abort("ablsteady: SimplecStage: tke_floor must be >= 0 (turb.tke_floor)"); }
+    if (std::isnan(tke_floor) || !(tke_floor >= 0)) { amrex::Abort("gust: SimplecStage: tke_floor must be >= 0 (turb.tke_floor)"); }
     for (const amrex::Real sc : {in.jvp_scales.velocity, in.jvp_scales.theta, in.jvp_scales.tke}) {
         if (std::isnan(sc) || !(sc > 0 && std::isfinite(sc))) {
-            amrex::Abort("ablsteady: SimplecStage: the residual scales (jvp_scales) must be finite and > 0");
+            amrex::Abort("gust: SimplecStage: the residual scales (jvp_scales) must be finite and > 0");
         }
     }
     m_R.define(ba, dm);
@@ -425,4 +425,4 @@ void SimplecStage::iterate (State& q, const amrex::MultiFab& dtau)
     if (m_closure != nullptr) { m_closure->accept(m_cf); }
 }
 
-} // namespace ablsteady
+} // namespace gust

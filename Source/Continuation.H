@@ -1,5 +1,5 @@
-#ifndef ABLSTEADY_CONTINUATION_H_
-#define ABLSTEADY_CONTINUATION_H_
+#ifndef GUST_CONTINUATION_H_
+#define GUST_CONTINUATION_H_
 
 // Pseudo-transient continuation around the Newton–Krylov step (plan
 // sub-phase 3.2). One continuation step from q:
@@ -63,7 +63,7 @@
 #include <string>
 #include <vector>
 
-namespace ablsteady {
+namespace gust {
 
 struct ContinuationOptions
 {
@@ -215,6 +215,6 @@ private:
     amrex::MultiFab m_dtau;
 };
 
-} // namespace ablsteady
+} // namespace gust
 
 #endif

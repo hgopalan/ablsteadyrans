@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 
-namespace ablsteady {
+namespace gust {
 
 // NaN is tested with isnan before any ordered comparison: gcc's ordered
 // comparisons raise the invalid-operation trap on a NaN.
@@ -84,10 +84,10 @@ amrex::Real coriolis_parameter (const CoriolisOptions& opt)
 void fill_theta_ref (const ReferenceProfile& prof, const amrex::MultiFab& z_nd, amrex::MultiFab& theta_ref)
 {
     const auto err = check_reference_profile(prof);
-    if (!err.empty()) { amrex::Abort("ablsteady: fill_theta_ref: " + err.front()); }
+    if (!err.empty()) { amrex::Abort("gust: fill_theta_ref: " + err.front()); }
     if (theta_ref.boxArray() != amrex::convert(z_nd.boxArray(), amrex::IntVect(0))
         || theta_ref.DistributionMap() != z_nd.DistributionMap() || theta_ref.nGrow() > z_nd.nGrow()) {
-        amrex::Abort("ablsteady: fill_theta_ref: theta_ref must be cell-centred on z_nd's cells, ghosts <= z_nd's");
+        amrex::Abort("gust: fill_theta_ref: theta_ref must be cell-centred on z_nd's cells, ghosts <= z_nd's");
     }
     const int n = static_cast<int>(prof.z.size());
     amrex::Gpu::DeviceVector<amrex::Real> zs(n), ts(n);
@@ -128,7 +128,7 @@ void subtract_buoyancy (const amrex::MultiFab& theta, const amrex::MultiFab& the
                         const Mesh& mesh, amrex::MultiFab& Rw)
 {
     const auto err = check_buoyancy_options(opt);
-    if (!err.empty()) { amrex::Abort("ablsteady: subtract_buoyancy: " + err.front()); }
+    if (!err.empty()) { amrex::Abort("gust: subtract_buoyancy: " + err.front()); }
     check_operator_field("subtract_buoyancy", "theta", theta, Loc::cell, mesh, 1);
     check_operator_field("subtract_buoyancy", "theta_ref", theta_ref, Loc::cell, mesh, 1);
     check_operator_field("subtract_buoyancy", "Rw", Rw, Loc::zface, mesh, 0);
@@ -151,7 +151,7 @@ void subtract_coriolis (const amrex::MultiFab& u, const amrex::MultiFab& v, cons
                         amrex::MultiFab& Rw)
 {
     const auto err = check_coriolis_options(opt);
-    if (!err.empty()) { amrex::Abort("ablsteady: subtract_coriolis: " + err.front()); }
+    if (!err.empty()) { amrex::Abort("gust: subtract_coriolis: " + err.front()); }
     if (!opt.enabled) { return; }
     const char* op = "subtract_coriolis";
     check_operator_field(op, "u", u, Loc::xface, mesh, 1);
@@ -275,7 +275,7 @@ ForcingOptions read_forcing_options ()
         }
     }
     if (!err.empty()) {
-        std::string all = "ablsteady: invalid inputs:";
+        std::string all = "gust: invalid inputs:";
         for (const auto& e : err) { all += "\n  " + e; }
         amrex::Abort(all);
     }
@@ -287,7 +287,7 @@ void subtract_pressure_gradient (const amrex::Array<amrex::Real, 3>& F, const Me
 {
     const char* op = "subtract_pressure_gradient";
     for (int d = 0; d < 3; ++d) {
-        if (!std::isfinite(F[d])) { amrex::Abort(std::string("ablsteady: ") + op + ": the force must be finite"); }
+        if (!std::isfinite(F[d])) { amrex::Abort(std::string("gust: ") + op + ": the force must be finite"); }
     }
     check_operator_field(op, "Ru", Ru, Loc::xface, mesh, 0);
     check_operator_field(op, "Rv", Rv, Loc::yface, mesh, 0);
@@ -298,4 +298,4 @@ void subtract_pressure_gradient (const amrex::Array<amrex::Real, 3>& F, const Me
     }
 }
 
-} // namespace ablsteady
+} // namespace gust

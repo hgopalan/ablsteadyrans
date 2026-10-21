@@ -10,7 +10,7 @@
 #include <cmath>
 #include <string>
 
-namespace ablsteady {
+namespace gust {
 
 namespace {
 
@@ -109,12 +109,12 @@ void interpolate (const amrex::MultiFab& c, amrex::MultiFab& fine, const Axis& a
 void check_levels (const char* op, const MeshHierarchy& h, int lf, int lc)
 {
     if (!(lf >= 0 && lf < lc && lc < h.num_levels())) {
-        amrex::Abort(std::string("ablsteady: ") + op + ": the levels must satisfy 0 <= fine (" + std::to_string(lf)
+        amrex::Abort(std::string("gust: ") + op + ": the levels must satisfy 0 <= fine (" + std::to_string(lf)
                      + ") < coarse (" + std::to_string(lc) + ") < " + std::to_string(h.num_levels()));
     }
     const amrex::IntVect ratio(hierarchy_ratio(lc - lf), hierarchy_ratio(lc - lf), 1);
     if (!h.boxArray(lf).coarsenable(ratio)) {
-        amrex::Abort(std::string("ablsteady: ") + op + ": level " + std::to_string(lf) + "'s boxes do not coarsen by "
+        amrex::Abort(std::string("gust: ") + op + ": level " + std::to_string(lf) + "'s boxes do not coarsen by "
                      + std::to_string(ratio[0]));
     }
 }
@@ -334,7 +334,7 @@ ProlongResult prolong_state (const MeshHierarchy& h, int lc, const State& coarse
                              const BuoyancyOptions& buoyancy, PoissonSolver& solver, amrex::Real tke_floor)
 {
     if (!std::isfinite(tke_floor) || !(tke_floor >= 0)) {
-        amrex::Abort("ablsteady: prolong_state: tke_floor must be finite and >= 0 (turb.tke_floor)");
+        amrex::Abort("gust: prolong_state: tke_floor must be finite and >= 0 (turb.tke_floor)");
     }
     ProlongResult res;
     prolong_fields(h, lc, coarse, lf, fine);
@@ -382,4 +382,4 @@ ProlongResult prolong_state (const MeshHierarchy& h, int lc, const State& coarse
     return res;
 }
 
-} // namespace ablsteady
+} // namespace gust

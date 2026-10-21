@@ -1,5 +1,5 @@
 // RT-1.10.1: project a fixed wind on a terrain mesh with the Poisson layer and
-// write the potential. Test-only tool: the ablsteady application has no
+// write the potential. Test-only tool: the GUST application has no
 // Poisson solve yet (the initializer and SIMPLEC come later).
 //
 //   poisson_projection <deck> [key=value ...]
@@ -52,13 +52,13 @@ int main (int argc, char* argv[])
 {
     amrex::Initialize(argc, argv);
     {
-        using ablsteady::PoissonFace;
-        ablsteady::Inputs in = ablsteady::parse_inputs();
-        auto err = ablsteady::validate(in);
+        using gust::PoissonFace;
+        gust::Inputs in = gust::parse_inputs();
+        auto err = gust::validate(in);
         // The tool works on level 0 alone: a grid hierarchy would be ignored.
         if (in.mesh.hierarchy_levels != 1) { err.emplace_back("mesh.hierarchy_levels has no effect in poisson_projection"); }
-        const auto opt = ablsteady::read_poisson_options();
-        for (const auto& e : ablsteady::unknown_inputs(ablsteady::parmparse_entries(),
+        const auto opt = gust::read_poisson_options();
+        for (const auto& e : gust::unknown_inputs(gust::parmparse_entries(),
                                                        {"mesh", "terrain", "io", "solver"})) {
             err.push_back(e);
         }
@@ -68,16 +68,16 @@ int main (int argc, char* argv[])
             amrex::Abort(all);
         }
 
-        const amrex::Geometry geom = ablsteady::make_geometry(in.mesh);
-        const amrex::BoxArray ba = ablsteady::make_box_array(in.mesh);
+        const amrex::Geometry geom = gust::make_geometry(in.mesh);
+        const amrex::BoxArray ba = gust::make_box_array(in.mesh);
         const amrex::DistributionMapping dm(ba);
-        amrex::MultiFab z(amrex::convert(ba, amrex::IntVect(1)), dm, 1, ablsteady::ngrow_nodal);
+        amrex::MultiFab z(amrex::convert(ba, amrex::IntVect(1)), dm, 1, gust::ngrow_nodal);
         z.setVal(0.0);
-        ablsteady::Mesh mesh;
+        gust::Mesh mesh;
         mesh.define(ba, dm);
         mesh.build(in, geom, z);
 
-        ablsteady::PoissonBC bc;
+        gust::PoissonBC bc;
         auto set = [&] (int d, PoissonFace lo, PoissonFace hi) {
             const bool per = geom.isPeriodic(d);
             bc.face[amrex::Orientation(d, amrex::Orientation::low)] = per ? PoissonFace::periodic : lo;
@@ -105,13 +105,13 @@ int main (int argc, char* argv[])
         U[2].setVal(0.0);
 
         amrex::MultiFab rhs(ba, dm, 1, 0), phi(ba, dm, 1, 1), div(ba, dm, 1, 0);
-        ablsteady::face_divergence(mesh, geom, {&U[0], &U[1], &U[2]}, rhs);
+        gust::face_divergence(mesh, geom, {&U[0], &U[1], &U[2]}, rhs);
         const amrex::Real div0 = rhs.norm2();
         phi.setVal(0.0);
-        ablsteady::PoissonSolver solver(mesh, geom, z, opt);
+        gust::PoissonSolver solver(mesh, geom, z, opt);
         const auto res = solver.solve(rhs, phi, {}, bc, &F);
         for (int d = 0; d < 3; ++d) { amrex::MultiFab::Add(U[d], F[d], 0, 0, 1, 0); }
-        ablsteady::face_divergence(mesh, geom, {&U[0], &U[1], &U[2]}, div);
+        gust::face_divergence(mesh, geom, {&U[0], &U[1], &U[2]}, div);
         const amrex::Real div1 = div.norm2();
 
         char line[200];

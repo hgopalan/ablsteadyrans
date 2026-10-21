@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run ablsteady with the mass-consistent initializer and check the result (RT-1.12.1, RT-1.12.2).
+"""Run GUST with the mass-consistent initializer and check the result (RT-1.12.1, RT-1.12.2).
 
     check_init.py askervein GOLD.json [--write] -- COMMAND [ARGS ...]
     check_init.py trend GOLD.json [--write] -- COMMAND [ARGS ...]
@@ -25,10 +25,10 @@ gold's heights. Checks:
   * every speed-up above 1 (the hill speeds the flow up) in both codes;
   * the ranking of the alpha_v values by speed-up equals FastWindTerrain's
     at the gold's ranking heights (not where two values nearly tie);
-  * |ablsteady - FastWindTerrain| within the gold's tolerance per height;
-  * ablsteady's own values equal to the gold to a relative 1e-6 and its
+  * |GUST - FastWindTerrain| within the gold's tolerance per height;
+  * GUST's own values equal to the gold to a relative 1e-6 and its
     iterations at most 10 % above the gold's (regression).
---write stores the measured ablsteady values as the new gold, keeping the
+--write stores the measured GUST values as the new gold, keeping the
 "fwt" section (review the diff before committing it). The exit code is the
 verdict.
 """
@@ -55,8 +55,8 @@ def run(cmd):
 
 def measure(out):
     # "(<back end>, reltol R)": the back end the projection used (gmres_fft when alpha_v != alpha_h).
-    m = re.search(r"ablsteady: initializer: (\d+) Poisson iterations \((?:\w+, )?reltol (\S+)\), divergence (\S+) before, (\S+) after", out)
-    w = re.search(r"ablsteady: wrote (\S+)", out)
+    m = re.search(r"gust: initializer: (\d+) Poisson iterations \((?:\w+, )?reltol (\S+)\), divergence (\S+) before, (\S+) after", out)
+    w = re.search(r"gust: wrote (\S+)", out)
     if not m or not w:
         raise SystemExit("check_init: the run did not print the initializer report and the plotfile name")
     return {"iterations": int(m.group(1)), "reltol": float(m.group(2)), "div_before": float(m.group(3)),
@@ -172,7 +172,7 @@ def trend(gold, write, cmd):
         with open(gold, "w") as fh:
             json.dump(g, fh, indent=2, sort_keys=True)
             fh.write("\n")
-        print(f"check_init: wrote the ablsteady section of {gold}")
+        print(f"check_init: wrote the GUST section (key 'ablsteady') of {gold}")
         return 0
     rows = []
     print(f"{'alpha_v':>8} " + " ".join(f"{'abl ' + str(h) + ' m':>12} {'fwt ' + str(h) + ' m':>12}" for h in heights))

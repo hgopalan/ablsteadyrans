@@ -9,5 +9,5 @@ archives and the Kestrel scripts.
 |---|---|
 | `Smoke_Restart` | A 2-rank run, then a 3-rank restart on another box layout; the two plotfiles identical. Two decks that must stop on a bad restart. |
 | `Input_Validation` | Decks that must stop, with the input named in the message. |
-| `Reference_Archive` | `ablsteady_refavg` end to end on copies of the smoke plotfile. |
+| `Reference_Archive` | `gust_refavg` end to end on copies of the smoke plotfile. |
 | `Kestrel_Dryrun` | A dry run of the Kestrel submit and archive scripts with stub `module`/`sbatch`/`srun`. |

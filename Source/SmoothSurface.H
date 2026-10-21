@@ -1,10 +1,10 @@
-#ifndef ABLSTEADY_SMOOTH_SURFACE_H_
-#define ABLSTEADY_SMOOTH_SURFACE_H_
+#ifndef GUST_SMOOTH_SURFACE_H_
+#define GUST_SMOOTH_SURFACE_H_
 
 #include <AMReX_Geometry.H>
 #include <AMReX_MultiFab.H>
 
-namespace ablsteady {
+namespace gust {
 
 //! Smooth the k = 0 slab of a nodal surface h (for example z_phys_nd)
 //! with `passes` passes of the stencil ERF's STF uses at each level
@@ -37,6 +37,6 @@ void smooth_surface (amrex::MultiFab& h, const amrex::Geometry& geom, int passes
 //! with the height of the nearest domain node (as smooth_surface leaves them).
 void fill_surface_ghosts (amrex::MultiFab& h, const amrex::Geometry& geom);
 
-} // namespace ablsteady
+} // namespace gust
 
 #endif

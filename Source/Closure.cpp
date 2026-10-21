@@ -13,7 +13,7 @@
 #include <limits>
 #include <string>
 
-namespace ablsteady {
+namespace gust {
 
 namespace {
 
@@ -114,7 +114,7 @@ const ClosureOptions& checked (const ClosureOptions& opt)
 {
     const auto err = check_closure_options(opt);
     if (!err.empty()) {
-        std::string all = "ablsteady: invalid closure options:";
+        std::string all = "gust: invalid closure options:";
         for (const auto& e : err) { all += "\n  " + e; }
         amrex::Abort(all);
     }
@@ -156,9 +156,9 @@ ClosureOptions read_closure_options ()
     ClosureOptions opt;
     amrex::ParmParse pp("turb");
     for (const char* key : kKeys) {
-        if (pp.countname(key) > 1) { amrex::Abort(std::string("ablsteady: turb.") + key + " is given more than once"); }
+        if (pp.countname(key) > 1) { amrex::Abort(std::string("gust: turb.") + key + " is given more than once"); }
         if (pp.contains(key) && pp.countval(key) != 1) {
-            amrex::Abort(std::string("ablsteady: turb.") + key + " takes exactly one value");
+            amrex::Abort(std::string("gust: turb.") + key + " takes exactly one value");
         }
     }
     pp.query("Cmu0", opt.Cmu0);
@@ -175,17 +175,17 @@ ClosureOptions read_closure_options ()
     pp.query("ri_gate", opt.ri_gate);
     int frozen = opt.frozen_switch ? 1 : 0;
     pp.query("frozen_switch", frozen);
-    if (frozen != 0 && frozen != 1) { amrex::Abort("ablsteady: turb.frozen_switch must be 0 or 1"); }
+    if (frozen != 0 && frozen != 1) { amrex::Abort("gust: turb.frozen_switch must be 0 or 1"); }
     opt.frozen_switch = (frozen == 1);
     std::string fm = "arithmetic", wd = "terrain_height";
     pp.query("face_mean", fm);
     pp.query("wall_distance", wd);
     if (fm == "arithmetic") { opt.face_mean = FaceMean::arithmetic; }
     else if (fm == "logarithmic") { opt.face_mean = FaceMean::logarithmic; }
-    else { amrex::Abort("ablsteady: turb.face_mean = " + fm + ": must be arithmetic or logarithmic"); }
+    else { amrex::Abort("gust: turb.face_mean = " + fm + ": must be arithmetic or logarithmic"); }
     if (wd == "terrain_height") { opt.wall_distance = WallDistanceKind::terrain_height; }
     else if (wd == "tucker") { opt.wall_distance = WallDistanceKind::tucker; }
-    else { amrex::Abort("ablsteady: turb.wall_distance = " + wd + ": must be terrain_height or tucker"); }
+    else { amrex::Abort("gust: turb.wall_distance = " + wd + ": must be terrain_height or tucker"); }
     return checked(opt);
 }
 
@@ -216,14 +216,14 @@ void height_above_ground (const amrex::MultiFab& z_nd, amrex::MultiFab& dist)
     const amrex::BoxArray cba = amrex::convert(z_nd.boxArray(), amrex::IntVect::TheZeroVector());
     if (dist.empty()) { dist.define(cba, z_nd.DistributionMap(), 1, 1); }
     if (dist.boxArray() != cba || dist.DistributionMap() != z_nd.DistributionMap() || dist.nGrow() < 1) {
-        amrex::Abort("ablsteady: height_above_ground: dist must be cell-centred on the nodes' layout with one ghost cell");
+        amrex::Abort("gust: height_above_ground: dist must be cell-centred on the nodes' layout with one ghost cell");
     }
     // Every box spans the column (State.cpp's layout): the ground is each
     // box's first layer and the vertical ghosts are outside the domain.
     const amrex::Box dom = cba.minimalBox();
     for (int n = 0; n < cba.size(); ++n) {
         if (cba[n].smallEnd(2) != dom.smallEnd(2) || cba[n].bigEnd(2) != dom.bigEnd(2)) {
-            amrex::Abort("ablsteady: height_above_ground: every box must span the whole z column");
+            amrex::Abort("gust: height_above_ground: every box must span the whole z column");
         }
     }
     for (amrex::MFIter mfi(dist, false); mfi.isValid(); ++mfi) {
@@ -290,7 +290,7 @@ void stratification_and_strain (const State& q, const BuoyancyOptions& buoyancy,
 void gate_stratification (amrex::MultiFab& N2, const amrex::MultiFab& S2, amrex::Real ri0)
 {
     if (std::isnan(ri0) || !(ri0 > 0 && std::isfinite(ri0))) {
-        amrex::Abort("ablsteady: gate_stratification: ri0 = " + std::to_string(ri0) + " must be finite and > 0");
+        amrex::Abort("gust: gate_stratification: ri0 = " + std::to_string(ri0) + " must be finite and > 0");
     }
     const amrex::Real r2 = ri0 * ri0;
     // N2^2 / (N2^2 + r2 S2^2) with a denominator floor: 0/tiny = 0 where both vanish.
@@ -323,12 +323,12 @@ void Closure::evaluate (const State& q, const amrex::MultiFab& dist, amrex::Real
     check_operator_field(op, "theta", q.theta, Loc::cell, mesh, 2);
     check_operator_field(op, "dist", dist, Loc::cell, mesh, 1);
     if (std::isnan(z0) || !(z0 >= 0 && std::isfinite(z0))) {
-        amrex::Abort(std::string("ablsteady: ") + op + ": z0 = " + std::to_string(z0) + " must be finite and >= 0");
+        amrex::Abort(std::string("gust: ") + op + ": z0 = " + std::to_string(z0) + " must be finite and >= 0");
     }
-    for (const auto& e : check_buoyancy_options(buoyancy)) { amrex::Abort(std::string("ablsteady: ") + op + ": " + e); }
+    for (const auto& e : check_buoyancy_options(buoyancy)) { amrex::Abort(std::string("gust: ") + op + ": " + e); }
     // l_g = kappa (d + z0) must be positive everywhere the kernels run (1/l_g^2).
     if (!(dist.min(0, 1) + z0 > 0)) {
-        amrex::Abort(std::string("ablsteady: ") + op + ": the wall distance plus z0 must be > 0 at every cell (min "
+        amrex::Abort(std::string("gust: ") + op + ": the wall distance plus z0 must be > 0 at every cell (min "
                      + std::to_string(dist.min(0, 1)) + " + " + std::to_string(z0) + ")");
     }
     if (f.empty()) { f.define(q.p.boxArray(), q.p.DistributionMap()); }
@@ -336,7 +336,7 @@ void Closure::evaluate (const State& q, const amrex::MultiFab& dist, amrex::Real
     if (has_history()) { check_operator_field(op, "history", m_nut_prev, Loc::cell, mesh, 1); }
     if (frozen() && (m_switches.boxArray() != q.p.boxArray() || m_switches.DistributionMap() != q.p.DistributionMap()
                      || m_switches.nGrow() < 1)) {
-        amrex::Abort(std::string("ablsteady: ") + op + ": the frozen switches are not on this layout");
+        amrex::Abort(std::string("gust: ") + op + ": the frozen switches are not on this layout");
     }
 
     // N^2 as the theta equation sees it (P_b, the heat flux's buoyancy sink)
@@ -408,7 +408,7 @@ void Closure::evaluate (const State& q, const amrex::MultiFab& dist, amrex::Real
 
 void Closure::accept (const ClosureFields& f)
 {
-    if (f.empty()) { amrex::Abort("ablsteady: Closure::accept: the fields are not defined"); }
+    if (f.empty()) { amrex::Abort("gust: Closure::accept: the fields are not defined"); }
     if (m_nut_prev.empty() || m_nut_prev.boxArray() != f.nut.boxArray() || m_nut_prev.DistributionMap() != f.nut.DistributionMap()) {
         m_nut_prev.clear();
         m_nut_prev.define(f.nut.boxArray(), f.nut.DistributionMap(), 1, 1);
@@ -478,10 +478,10 @@ amrex::Long Closure::changed_switches (const State& q, const amrex::MultiFab& di
                                        const BuoyancyOptions& buoyancy, const Mesh& mesh, const amrex::Geometry& geom) const
 {
     const char* op = "Closure::changed_switches";
-    if (!frozen()) { amrex::Abort(std::string("ablsteady: ") + op + ": the switches are not frozen"); }
+    if (!frozen()) { amrex::Abort(std::string("gust: ") + op + ": the switches are not frozen"); }
     check_operator_field(op, "dist", dist, Loc::cell, mesh, 1);
     if (m_switches.boxArray() != q.p.boxArray() || m_switches.DistributionMap() != q.p.DistributionMap()) {
-        amrex::Abort(std::string("ablsteady: ") + op + ": the frozen switches are not on this layout");
+        amrex::Abort(std::string("gust: ") + op + ": the frozen switches are not on this layout");
     }
     amrex::MultiFab N2, S2;
     stratification(q, buoyancy, geom, N2, S2);
@@ -512,7 +512,7 @@ void Closure::restore_switches (const amrex::iMultiFab& src, FreezeScope scope, 
 {
     if (src.nComp() != 1 || src.nGrow() < 1 || amrex::convert(src.boxArray(), amrex::IntVect(0)).minimalBox() != geom.Domain()
         || !src.boxArray().ixType().cellCentered()) {
-        amrex::Abort("ablsteady: Closure::restore_switches: the switches must be one cell-centred component with one ghost "
+        amrex::Abort("gust: Closure::restore_switches: the switches must be one cell-centred component with one ghost "
                      "cell on this domain");
     }
     m_scope = scope;
@@ -523,4 +523,4 @@ void Closure::restore_switches (const amrex::iMultiFab& src, FreezeScope scope, 
     m_switches.ParallelCopy(src, 0, 0, 1, amrex::IntVect(0), amrex::IntVect(0), geom.periodicity());
 }
 
-} // namespace ablsteady
+} // namespace gust

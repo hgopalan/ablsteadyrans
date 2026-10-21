@@ -1,5 +1,5 @@
-#ifndef ABLSTEADY_MASSFLUX_H_
-#define ABLSTEADY_MASSFLUX_H_
+#ifndef GUST_MASSFLUX_H_
+#define GUST_MASSFLUX_H_
 
 // Volume fluxes, divergence and pressure gradient on the terrain-following
 // C-grid (sub-phase 1.6).
@@ -42,7 +42,7 @@
 #include <AMReX_Geometry.H>
 #include <AMReX_MultiFab.H>
 
-namespace ablsteady {
+namespace gust {
 
 //! Omega on the z-faces, on the valid faces and ngrow ghost faces (0 or 1).
 //! u, v need ngrow + 1 ghost cells filled, w ngrow; omega needs ngrow ghosts.
@@ -75,6 +75,6 @@ void velocity_divergence (const amrex::MultiFab& u, const amrex::MultiFab& v, co
 void pressure_gradient (const amrex::MultiFab& p, const amrex::MultiFab& z_nd, const Mesh& mesh,
                         const amrex::Geometry& geom, const amrex::Array<amrex::MultiFab*, AMREX_SPACEDIM>& Gp);
 
-} // namespace ablsteady
+} // namespace gust
 
 #endif

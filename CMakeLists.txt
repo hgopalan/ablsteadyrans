@@ -1,5 +1,5 @@
 # ---------------------------------------------------------------------------
-# ablsteady -- top-level CMake build
+# GUST -- top-level CMake build
 #
 #   git submodule update --init --recursive
 #   cmake -S . -B build-rel -DCMAKE_BUILD_TYPE=Release
@@ -9,11 +9,11 @@
 # AMReX comes from the submodule in external/amrex, pinned to the SHA the
 # development plan was checked against. To use an installed AMReX instead:
 #
-#   cmake -S . -B build-rel -DABLSTEADY_USE_INTERNAL_AMREX=OFF -DAMReX_ROOT=/path
+#   cmake -S . -B build-rel -DGUST_USE_INTERNAL_AMREX=OFF -DAMReX_ROOT=/path
 # ---------------------------------------------------------------------------
 cmake_minimum_required(VERSION 3.25)   # required by the pinned AMReX
 
-project(ablsteady
+project(gust
         VERSION 0.1.0
         DESCRIPTION "Stand-alone AMReX steady RANS solver for the atmospheric boundary layer"
         LANGUAGES C CXX)
@@ -29,47 +29,61 @@ endif()
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
-option(ABLSTEADY_MPI                "Build with MPI"                                   ON)
-option(ABLSTEADY_OMP                "Build with OpenMP"                                OFF)
-option(ABLSTEADY_FFT                "Build AMReX FFT (required by the Poisson layer)"   ON)
-option(ABLSTEADY_HYPRE              "Build AMReX with hypre (optional preconditioner)" OFF)
-option(ABLSTEADY_TESTING            "AMReX_TESTING + assertions (SNaN fills, as GPU CI)" OFF)
-option(ABLSTEADY_USE_INTERNAL_AMREX "Use the AMReX git submodule"                      ON)
-option(ABLSTEADY_ENABLE_TESTS       "Build the unit tests and register all tests"      ON)
+option(GUST_MPI                "Build with MPI"                                   ON)
+option(GUST_OMP                "Build with OpenMP"                                OFF)
+option(GUST_FFT                "Build AMReX FFT (required by the Poisson layer)"   ON)
+option(GUST_HYPRE              "Build AMReX with hypre (optional preconditioner)" OFF)
+option(GUST_TESTING            "AMReX_TESTING + assertions (SNaN fills, as GPU CI)" OFF)
+option(GUST_USE_INTERNAL_AMREX "Use the AMReX git submodule"                      ON)
+option(GUST_ENABLE_TESTS       "Build the unit tests and register all tests"      ON)
 
-# The Poisson layer (sub-phase 1.10) uses AMReX's FFT module for its
-# preconditioner; stop before AMReX is configured without it.
-if(NOT ABLSTEADY_FFT)
-    message(FATAL_ERROR "ablsteady needs ABLSTEADY_FFT=ON: the Poisson layer uses AMReX's FFT module")
-endif()
-
-set(ABLSTEADY_PRECISION DOUBLE CACHE STRING "Floating-point precision: DOUBLE or SINGLE")
-set_property(CACHE ABLSTEADY_PRECISION PROPERTY STRINGS DOUBLE SINGLE)
+set(GUST_PRECISION DOUBLE CACHE STRING "Floating-point precision: DOUBLE or SINGLE")
+set_property(CACHE GUST_PRECISION PROPERTY STRINGS DOUBLE SINGLE)
 
 # GPU backend, passed to AMReX. Kestrel's GPU nodes are H100 (CUDA arch 9.0).
 # HIP (AMD) and SYCL (Intel) need the vendor compiler as CMAKE_CXX_COMPILER
 # (ROCm clang++, icpx) and, for HIP, AMReX_AMD_ARCH. The FFT library follows
 # the backend (AMReX FFT): FFTW on the CPU, cuFFT, rocFFT or oneMKL.
-set(ABLSTEADY_GPU_BACKEND NONE CACHE STRING "GPU backend: NONE, CUDA, HIP or SYCL")
-set_property(CACHE ABLSTEADY_GPU_BACKEND PROPERTY STRINGS NONE CUDA HIP SYCL)
+set(GUST_GPU_BACKEND NONE CACHE STRING "GPU backend: NONE, CUDA, HIP or SYCL")
+set_property(CACHE GUST_GPU_BACKEND PROPERTY STRINGS NONE CUDA HIP SYCL)
 
 # Extra flags for mpiexec in the tests (CI passes --oversubscribe to Open MPI
 # so 4-rank tests run on 2-core runners).
-set(ABLSTEADY_MPIEXEC_PREFLAGS "" CACHE STRING "Extra mpiexec flags for the tests")
+set(GUST_MPIEXEC_PREFLAGS "" CACHE STRING "Extra mpiexec flags for the tests")
 
-foreach(opt PRECISION GPU_BACKEND)
-    get_property(allowed CACHE ABLSTEADY_${opt} PROPERTY STRINGS)
-    if(NOT ABLSTEADY_${opt} IN_LIST allowed)
-        message(FATAL_ERROR "ABLSTEADY_${opt}=${ABLSTEADY_${opt}} is not one of: ${allowed}")
+# The solver was called ablsteady until October 2026. The old cache options
+# (-DABLSTEADY_MPI=OFF and so on) still work: each sets its GUST_* option, with
+# a warning, and is then removed from the cache. If both names are given, the
+# old one's value is used. (message(DEPRECATION) would be silent on a second
+# configure: AMReX sets CMAKE_WARN_DEPRECATED=OFF in the cache.)
+foreach(opt MPI OMP FFT HYPRE TESTING USE_INTERNAL_AMREX ENABLE_TESTS
+            PRECISION GPU_BACKEND MPIEXEC_PREFLAGS)
+    if(DEFINED ABLSTEADY_${opt})
+        message(WARNING "ABLSTEADY_${opt} is deprecated; use GUST_${opt}")
+        set_property(CACHE GUST_${opt} PROPERTY VALUE "${ABLSTEADY_${opt}}")
+        unset(ABLSTEADY_${opt} CACHE)
     endif()
 endforeach()
 
-if(ABLSTEADY_GPU_BACKEND STREQUAL "CUDA")
+# The Poisson layer (sub-phase 1.10) uses AMReX's FFT module for its
+# preconditioner; stop before AMReX is configured without it.
+if(NOT GUST_FFT)
+    message(FATAL_ERROR "GUST needs GUST_FFT=ON: the Poisson layer uses AMReX's FFT module")
+endif()
+
+foreach(opt PRECISION GPU_BACKEND)
+    get_property(allowed CACHE GUST_${opt} PROPERTY STRINGS)
+    if(NOT GUST_${opt} IN_LIST allowed)
+        message(FATAL_ERROR "GUST_${opt}=${GUST_${opt}} is not one of: ${allowed}")
+    endif()
+endforeach()
+
+if(GUST_GPU_BACKEND STREQUAL "CUDA")
     enable_language(CUDA)
 endif()
 
 # --- AMReX ----------------------------------------------------------------
-if(ABLSTEADY_USE_INTERNAL_AMREX)
+if(GUST_USE_INTERNAL_AMREX)
     if(NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/external/amrex/CMakeLists.txt)
         message(FATAL_ERROR
             "The AMReX submodule is empty. Run:\n"
@@ -77,12 +91,12 @@ if(ABLSTEADY_USE_INTERNAL_AMREX)
     endif()
 
     set(AMReX_SPACEDIM       3)
-    set(AMReX_PRECISION      ${ABLSTEADY_PRECISION})
-    set(AMReX_MPI            ${ABLSTEADY_MPI})
-    set(AMReX_OMP            ${ABLSTEADY_OMP})
-    set(AMReX_FFT            ${ABLSTEADY_FFT})
-    set(AMReX_HYPRE          ${ABLSTEADY_HYPRE})
-    set(AMReX_GPU_BACKEND    ${ABLSTEADY_GPU_BACKEND})
+    set(AMReX_PRECISION      ${GUST_PRECISION})
+    set(AMReX_MPI            ${GUST_MPI})
+    set(AMReX_OMP            ${GUST_OMP})
+    set(AMReX_FFT            ${GUST_FFT})
+    set(AMReX_HYPRE          ${GUST_HYPRE})
+    set(AMReX_GPU_BACKEND    ${GUST_GPU_BACKEND})
     set(AMReX_FORTRAN        OFF)
     set(AMReX_INSTALL        OFF)
     set(AMReX_LINEAR_SOLVERS ON)
@@ -91,7 +105,7 @@ if(ABLSTEADY_USE_INTERNAL_AMREX)
     set(AMReX_EB             OFF)
     # fcompare is the comparison tool for the regression tests.
     set(AMReX_PLOTFILE_TOOLS ON)
-    if(ABLSTEADY_TESTING)
+    if(GUST_TESTING)
         set(AMReX_TESTING    ON)
         set(AMReX_ASSERTIONS ON)
     endif()
@@ -100,7 +114,7 @@ if(ABLSTEADY_USE_INTERNAL_AMREX)
     # For AMReXTargetHelpers (setup_target_for_cuda_compilation).
     list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/external/amrex/Tools/CMake)
 else()
-    find_package(AMReX REQUIRED 3D ${ABLSTEADY_PRECISION} FFT)
+    find_package(AMReX REQUIRED 3D ${GUST_PRECISION} FFT)
 endif()
 
 # MSVC: M_PI and friends need _USE_MATH_DEFINES; NOMINMAX keeps <windows.h>
@@ -112,7 +126,7 @@ endif()
 add_subdirectory(Source)
 
 # --- Tests ----------------------------------------------------------------
-if(ABLSTEADY_ENABLE_TESTS)
+if(GUST_ENABLE_TESTS)
     enable_testing()
     find_package(Python3 COMPONENTS Interpreter REQUIRED)
     add_subdirectory(Tests)

@@ -6,7 +6,7 @@
 
 #include <cmath>
 
-namespace ablsteady {
+namespace gust {
 
 namespace {
 
@@ -79,7 +79,7 @@ PoissonResult tucker_wall_distance (const Mesh& mesh, const amrex::Geometry& geo
                                     amrex::MultiFab& dist, const PoissonOptions& opt)
 {
     if (dist.boxArray() != mesh.detJ.boxArray() || dist.DistributionMap() != mesh.detJ.DistributionMap()) {
-        amrex::Abort("ablsteady: tucker_wall_distance: dist must be on the mesh's BoxArray and DistributionMapping");
+        amrex::Abort("gust: tucker_wall_distance: dist must be on the mesh's BoxArray and DistributionMapping");
     }
     const PoissonBC bc = tucker_bc(geom);
     amrex::MultiFab rhs(mesh.detJ.boxArray(), mesh.detJ.DistributionMap(), 1, 0);
@@ -93,4 +93,4 @@ PoissonResult tucker_wall_distance (const Mesh& mesh, const amrex::Geometry& geo
     return res;
 }
 
-} // namespace ablsteady
+} // namespace gust

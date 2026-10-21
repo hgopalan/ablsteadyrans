@@ -58,10 +58,13 @@ Checkpoint
 one for the node heights. (Older checkpoints with one ghost layer restart unchanged, since only valid values are read
 back.)
 
-The ``Header`` lists the format version, the bytes per real (8 or 4), the step, the mesh (``n_cell``, and
+The ``Header`` starts with ``gust-checkpoint`` and lists the format version, the bytes per real (8 or 4), the step, the mesh (``n_cell``, and
 ``prob_lo`` and ``prob_hi`` in hexadecimal floating point so they read back exactly), ``is_periodic`` and the
 BoxArray. The fields are ``u v w`` (faces), ``p theta tke`` (cell centres) and ``z_phys_nd`` (nodes).
 
 A restart restores every valid value exactly, and the ghost nodes of ``z_phys_nd``, which come from the terrain.
 Other ghost cells are refilled by the solver. With the SIMPLEC stage the checkpoint also holds the driver history
 (``Driver``, :doc:`solution_algorithm`) and the closure's :math:`\nu_t` history (``Level_0/closure_nut``, :doc:`turbulence_model`).
+
+Checkpoints, driver and stage histories and reference archives written before the rename to GUST (October 2026)
+start with ``ablsteady-<kind>`` instead of ``gust-<kind>``. They are read the same way and restart unchanged.

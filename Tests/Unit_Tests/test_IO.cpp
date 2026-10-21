@@ -1,5 +1,6 @@
 // UT-1.3.2: plotfile round trip (cell-centred variables and nodal z_phys_nd).
 // UT-1.3.3: checkpoint/restart round trip, onto a different box layout.
+#include "FileMagic.H"
 #include "StateIO.H"
 #include "State.H"
 #include "TestHelpers.H"
@@ -11,14 +12,17 @@
 
 #include <gtest/gtest.h>
 
+#include <fstream>
+#include <sstream>
+
 namespace {
 
-using ablsteady::test::count_bit_differences;
-using ablsteady::test::fill_pattern;
+using gust::test::count_bit_differences;
+using gust::test::fill_pattern;
 
-ablsteady::MeshInputs test_mesh ()
+gust::MeshInputs test_mesh ()
 {
-    ablsteady::MeshInputs m;
+    gust::MeshInputs m;
     m.n_cell = amrex::IntVect(20, 12, 10);
     // -100/3 is not a short decimal: a header that printed it with fewer
     // digits than a hex float would fail the restart's exact mesh check.
@@ -31,7 +35,7 @@ ablsteady::MeshInputs test_mesh ()
 
 // Ghost values that disagree with every valid value, so a restart that let a
 // checkpoint ghost land on a valid point would show up.
-void fill_state (ablsteady::State& s)
+void fill_state (gust::State& s)
 {
     int c = 0;
     for (auto& f : s.fields()) {
@@ -54,7 +58,7 @@ struct ScopedDir
 
 // Cell-centred values the plotfile should hold, computed independently of
 // write_plotfile on the host from the same fields.
-amrex::MultiFab expected_plot (ablsteady::State& s)
+amrex::MultiFab expected_plot (gust::State& s)
 {
     const auto& ba = s.p.boxArray();
     amrex::MultiFab out(ba, s.p.DistributionMap(), 7, 0, amrex::MFInfo().SetArena(amrex::The_Pinned_Arena()));
@@ -92,27 +96,27 @@ amrex::MultiFab expected_plot (ablsteady::State& s)
 TEST (IO, PlotfileRoundTripIsBitIdentical)
 {
     const auto mesh = test_mesh();
-    const auto geom = ablsteady::make_geometry(mesh);
-    const auto ba = ablsteady::make_box_array(mesh);
+    const auto geom = gust::make_geometry(mesh);
+    const auto ba = gust::make_box_array(mesh);
     ASSERT_EQ(ba.size(), 6);
     const amrex::DistributionMapping dm(ba);
 
-    ablsteady::State s;
+    gust::State s;
     s.define(ba, dm);
     fill_state(s);
 
-    const ScopedDir dir{ablsteady::write_plotfile("ut_io_plt", s, geom)};
+    const ScopedDir dir{gust::write_plotfile("ut_io_plt", s, geom)};
     EXPECT_EQ(dir.name, "ut_io_plt00007");
 
     amrex::PlotFileData pf(dir.name);
     ASSERT_EQ(pf.spaceDim(), 3);
     EXPECT_EQ(pf.levelStep(0), 7);
-    EXPECT_EQ(pf.varNames(), std::vector<std::string>(ablsteady::plot_var_names().begin(),
-                                                      ablsteady::plot_var_names().end()));
+    EXPECT_EQ(pf.varNames(), std::vector<std::string>(gust::plot_var_names().begin(),
+                                                      gust::plot_var_names().end()));
     EXPECT_EQ(pf.probDomain(0), geom.Domain());
 
     const amrex::MultiFab expect = expected_plot(s);
-    const auto& names = ablsteady::plot_var_names();
+    const auto& names = gust::plot_var_names();
     for (int n = 0; n < static_cast<int>(names.size()); ++n) {
         const amrex::MultiFab& got = pf.get(0, names[n]);
         amrex::MultiFab a(ba, dm, 1, 0), b(ba, dm, 1, 0);
@@ -123,33 +127,33 @@ TEST (IO, PlotfileRoundTripIsBitIdentical)
 
     // Nodal heights, ghost nodes included. Read into the same BoxArray and
     // DistributionMapping, so each box is compared with its own ghosts.
-    amrex::MultiFab z_read(s.z_phys_nd.boxArray(), dm, 1, ablsteady::ngrow_nodal);
+    amrex::MultiFab z_read(s.z_phys_nd.boxArray(), dm, 1, gust::ngrow_nodal);
     amrex::VisMF::Read(z_read, dir.name + "/Level_0/z_phys_nd");
-    EXPECT_EQ(count_bit_differences(z_read, s.z_phys_nd, ablsteady::ngrow_nodal), 0);
+    EXPECT_EQ(count_bit_differences(z_read, s.z_phys_nd, gust::ngrow_nodal), 0);
 }
 
 TEST (IO, CheckpointRestartIsBitIdenticalOnANewLayout)
 {
     const auto mesh = test_mesh();
-    const auto ba = ablsteady::make_box_array(mesh);
+    const auto ba = gust::make_box_array(mesh);
     const amrex::DistributionMapping dm(ba);
 
-    ablsteady::State s;
+    gust::State s;
     s.define(ba, dm);
     fill_state(s);
-    const ScopedDir dir{ablsteady::write_checkpoint("ut_io_chk", s, mesh)};
+    const ScopedDir dir{gust::write_checkpoint("ut_io_chk", s, mesh)};
     EXPECT_EQ(dir.name, "ut_io_chk00007");
 
     // Restart onto another layout: 2 x 3 boxes instead of 3 x 2.
     auto mesh2 = mesh;
     mesh2.max_grid_size = {10, 4};
-    const auto ba2 = ablsteady::make_box_array(mesh2);
+    const auto ba2 = gust::make_box_array(mesh2);
     ASSERT_EQ(ba2.size(), 6);
     ASSERT_NE(ba2, ba);
     const amrex::DistributionMapping dm2(ba2);
-    ablsteady::State r;
+    gust::State r;
     r.define(ba2, dm2);
-    ablsteady::read_checkpoint(dir.name, r, mesh);
+    gust::read_checkpoint(dir.name, r, mesh);
     EXPECT_EQ(r.step, 7);
 
     // Compare on the original layout, valid region.
@@ -170,10 +174,10 @@ TEST (IO, CheckpointRestartIsBitIdenticalOnANewLayout)
 TEST (IO, CheckpointWithOneGhostCellRestarts)
 {
     const auto mesh = test_mesh();
-    const auto ba = ablsteady::make_box_array(mesh);
+    const auto ba = gust::make_box_array(mesh);
     const amrex::DistributionMapping dm(ba);
 
-    ablsteady::State s;
+    gust::State s;
     s.define(ba, dm);
     for (auto& f : s.fields()) {
         if (f.mf == &s.z_phys_nd) { continue; }
@@ -182,12 +186,12 @@ TEST (IO, CheckpointWithOneGhostCellRestarts)
         f.mf->define(fba, dm, 1, 1);
     }
     fill_state(s);
-    const ScopedDir dir{ablsteady::write_checkpoint("ut_io_chk1g", s, mesh)};
+    const ScopedDir dir{gust::write_checkpoint("ut_io_chk1g", s, mesh)};
 
-    ablsteady::State r;
+    gust::State r;
     r.define(ba, dm);
     ASSERT_EQ(r.u.nGrow(), 2);
-    ablsteady::read_checkpoint(dir.name, r, mesh);
+    gust::read_checkpoint(dir.name, r, mesh);
     auto rf = r.fields();
     auto sf = s.fields();
     for (int n = 0; n < static_cast<int>(sf.size()); ++n) {
@@ -195,21 +199,77 @@ TEST (IO, CheckpointWithOneGhostCellRestarts)
     }
 }
 
+// A checkpoint written before the rename to GUST starts its Header with
+// "ablsteady-checkpoint" and restarts bit for bit.
+TEST (IO, CheckpointWithTheOldMagicRestarts)
+{
+    const auto mesh = test_mesh();
+    const auto ba = gust::make_box_array(mesh);
+    const amrex::DistributionMapping dm(ba);
+
+    gust::State s;
+    s.define(ba, dm);
+    fill_state(s);
+    const ScopedDir dir{gust::write_checkpoint("ut_io_chkold", s, mesh)};
+    // The I/O rank rewrites the Header; every rank learns whether it could,
+    // so a failed check stops all ranks before the collective read.
+    bool rewritten = true;
+    if (amrex::ParallelDescriptor::IOProcessor()) {
+        std::ifstream in(dir.name + "/Header");
+        std::stringstream ss;
+        ss << in.rdbuf();
+        std::string text = ss.str();
+        const std::string now = "gust-checkpoint ";
+        rewritten = text.compare(0, now.size(), now) == 0;
+        if (rewritten) {
+            text.replace(0, now.size(), "ablsteady-checkpoint ");
+            std::ofstream(dir.name + "/Header") << text;
+        }
+    }
+    amrex::ParallelDescriptor::ReduceBoolAnd(rewritten);
+    ASSERT_TRUE(rewritten) << "the Header does not start with gust-checkpoint";
+
+    gust::State r;
+    r.define(ba, dm);
+    gust::read_checkpoint(dir.name, r, mesh);
+    EXPECT_EQ(r.step, 7);
+    auto rf = r.fields();
+    auto sf = s.fields();
+    for (int n = 0; n < static_cast<int>(sf.size()); ++n) {
+        EXPECT_EQ(count_bit_differences(*rf[n].mf, *sf[n].mf, 0), 0) << sf[n].name;
+    }
+}
+
+// The readers take "gust-<kind>" and the older "ablsteady-<kind>" of the
+// same kind, and nothing else.
+TEST (IO, FileMagicTakesTheNewAndTheOldName)
+{
+    EXPECT_TRUE(gust::is_file_magic("gust-checkpoint", "gust-checkpoint"));
+    EXPECT_TRUE(gust::is_file_magic("ablsteady-checkpoint", "gust-checkpoint"));
+    EXPECT_TRUE(gust::is_file_magic("ablsteady-newton-stage", "gust-newton-stage"));
+    EXPECT_FALSE(gust::is_file_magic("ablsteady-driver", "gust-checkpoint"));
+    EXPECT_FALSE(gust::is_file_magic("gust-driver", "gust-checkpoint"));
+    EXPECT_FALSE(gust::is_file_magic("ablsteady-", "gust-checkpoint"));
+    EXPECT_FALSE(gust::is_file_magic("checkpoint", "gust-checkpoint"));
+    EXPECT_FALSE(gust::is_file_magic("", "gust-checkpoint"));
+    EXPECT_FALSE(gust::is_file_magic("GUST-checkpoint", "gust-checkpoint"));
+}
+
 TEST (IO, CheckpointRestartRestoresNodalGhostsOnTheSameLayout)
 {
     const auto mesh = test_mesh();
-    const auto ba = ablsteady::make_box_array(mesh);
+    const auto ba = gust::make_box_array(mesh);
     const amrex::DistributionMapping dm(ba);
 
-    ablsteady::State s;
+    gust::State s;
     s.define(ba, dm);
-    ablsteady::init_flat_z_phys_nd(s.z_phys_nd, ablsteady::make_geometry(mesh));
-    const ScopedDir dir{ablsteady::write_checkpoint("ut_io_chkz", s, mesh)};
+    gust::init_flat_z_phys_nd(s.z_phys_nd, gust::make_geometry(mesh));
+    const ScopedDir dir{gust::write_checkpoint("ut_io_chkz", s, mesh)};
 
-    ablsteady::State r;
+    gust::State r;
     r.define(ba, dm);
-    ablsteady::read_checkpoint(dir.name, r, mesh);
-    EXPECT_EQ(count_bit_differences(r.z_phys_nd, s.z_phys_nd, ablsteady::ngrow_nodal), 0);
+    gust::read_checkpoint(dir.name, r, mesh);
+    EXPECT_EQ(count_bit_differences(r.z_phys_nd, s.z_phys_nd, gust::ngrow_nodal), 0);
 }
 
 } // namespace

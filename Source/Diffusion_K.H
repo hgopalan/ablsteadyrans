@@ -1,5 +1,5 @@
-#ifndef ABLSTEADY_DIFFUSION_K_H_
-#define ABLSTEADY_DIFFUSION_K_H_
+#ifndef GUST_DIFFUSION_K_H_
+#define GUST_DIFFUSION_K_H_
 
 #include "Stencil_K.H"
 
@@ -11,7 +11,7 @@
 #include <limits>
 #include <type_traits>
 
-namespace ablsteady {
+namespace gust {
 
 //! How a cell-centred diffusivity is averaged to a face (sub-phase 1.9):
 //! arithmetic everywhere, or the logarithmic mean across vertical cell pairs
@@ -97,6 +97,6 @@ amrex::GpuArray<amrex::Real, 3> stress_row (amrex::GpuArray<amrex::Real, 3> cons
     return {gc[0] + gu[C], gc[1] + gv[C], gc[2] + gw[C]};
 }
 
-} // namespace ablsteady
+} // namespace gust
 
 #endif

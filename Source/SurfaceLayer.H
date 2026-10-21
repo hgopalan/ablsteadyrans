@@ -1,5 +1,5 @@
-#ifndef ABLSTEADY_SURFACELAYER_H_
-#define ABLSTEADY_SURFACELAYER_H_
+#ifndef GUST_SURFACELAYER_H_
+#define GUST_SURFACELAYER_H_
 
 // Surface layer and wall treatment (sub-phase 1.7).
 //
@@ -75,7 +75,7 @@
 #include <string>
 #include <vector>
 
-namespace ablsteady {
+namespace gust {
 
 //! MOST's gradient functions phi_m and phi_h of zeta = d/L (Businger-Dyer, as
 //! ERF's similarity_funs::calc_phi_m/calc_phi_h, which UT-1.7.1 pins). Written
@@ -205,6 +205,6 @@ void apply_wall_to_implicit (const SurfaceState& s, Loc loc, const Mesh& mesh, c
 //! gives the residual.
 void apply_wall_k_to_implicit (const SurfaceState& s, const SurfaceLayerOptions& opt, amrex::MultiFab& A);
 
-} // namespace ablsteady
+} // namespace gust
 
 #endif

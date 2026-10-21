@@ -12,7 +12,7 @@
 #include <cstdio>
 #include <sstream>
 
-namespace ablsteady {
+namespace gust {
 
 struct MeshHierarchy::Level
 {
@@ -47,7 +47,7 @@ void cell_mean_height (const amrex::MultiFab& z_nd, amrex::MultiFab& out, int co
 
 std::string join_errors (const std::vector<std::string>& err)
 {
-    std::string all = "ablsteady: invalid grid hierarchy:";
+    std::string all = "gust: invalid grid hierarchy:";
     for (const auto& e : err) { all += "\n  " + e; }
     return all;
 }
@@ -57,7 +57,7 @@ std::string join_errors (const std::vector<std::string>& err)
 int hierarchy_ratio (int level)
 {
     if (level < 0 || level >= kMaxHierarchyLevels) {
-        amrex::Abort("ablsteady: hierarchy level " + std::to_string(level) + " outside [0, "
+        amrex::Abort("gust: hierarchy level " + std::to_string(level) + " outside [0, "
                      + std::to_string(kMaxHierarchyLevels - 1) + "] (mesh.hierarchy_levels)");
     }
     return 1 << level;
@@ -128,7 +128,7 @@ void inject_ground (const amrex::MultiFab& z_fine, int r, amrex::MultiFab& z_coa
     const amrex::IntVect rv(r, r, 1);
     if (!(amrex::coarsen(z_fine.boxArray(), rv) == z_coarse.boxArray())
         || !(z_fine.DistributionMap() == z_coarse.DistributionMap())) {
-        amrex::Abort("ablsteady: inject_ground: the coarse node heights must sit on the fine layout coarsened by ("
+        amrex::Abort("gust: inject_ground: the coarse node heights must sit on the fine layout coarsened by ("
                      + std::to_string(r) + ", " + std::to_string(r) + ", 1)");
     }
     const int k0 = geom_coarse.Domain().smallEnd(2);
@@ -158,22 +158,22 @@ MeshHierarchy::MeshHierarchy (const Inputs& in, const amrex::Geometry& geom, con
     const amrex::DistributionMapping& dm0 = mesh.detJ.DistributionMap();
     const amrex::Box& dom0 = geom.Domain();
     if (!(dom0 == amrex::Box(amrex::IntVect(0), in.mesh.n_cell - 1))) {
-        amrex::Abort("ablsteady: MeshHierarchy: the level-0 geometry is not the domain of mesh.n_cell");
+        amrex::Abort("gust: MeshHierarchy: the level-0 geometry is not the domain of mesh.n_cell");
     }
     if (z_phys_nd.nGrowVect()[0] < 1 || z_phys_nd.nGrowVect()[1] < 1) {
-        amrex::Abort("ablsteady: MeshHierarchy: z_phys_nd needs a ghost node in x and y (smooth_surface reads it)");
+        amrex::Abort("gust: MeshHierarchy: z_phys_nd needs a ghost node in x and y (smooth_surface reads it)");
     }
     if (!(z_phys_nd.boxArray() == amrex::convert(ba0, amrex::IntVect(1))) || !(z_phys_nd.DistributionMap() == dm0)) {
-        amrex::Abort("ablsteady: MeshHierarchy: z_phys_nd is not on the mesh's layout");
+        amrex::Abort("gust: MeshHierarchy: z_phys_nd is not on the mesh's layout");
     }
     const int rmax = hierarchy_ratio(m_levels - 1);
     if (!ba0.coarsenable(amrex::IntVect(rmax, rmax, 1))) {
-        amrex::Abort("ablsteady: mesh.max_grid_size: the level-0 boxes do not coarsen by 2^(mesh.hierarchy_levels - 1) = "
+        amrex::Abort("gust: mesh.max_grid_size: the level-0 boxes do not coarsen by 2^(mesh.hierarchy_levels - 1) = "
                      + std::to_string(rmax) + " in x and y (lay level 0 out with hierarchy_box_array)");
     }
     for (int b = 0; b < ba0.size(); ++b) {
         if (ba0[b].smallEnd(2) != dom0.smallEnd(2) || ba0[b].bigEnd(2) != dom0.bigEnd(2)) {
-            amrex::Abort("ablsteady: MeshHierarchy: every box must span the full z column");
+            amrex::Abort("gust: MeshHierarchy: every box must span the full z column");
         }
     }
 
@@ -185,10 +185,10 @@ MeshHierarchy::MeshHierarchy (const Inputs& in, const amrex::Geometry& geom, con
         lev->geom.define(dom, geom.ProbDomain(), geom.Coord(), geom.isPeriodic());
         lev->ba = amrex::coarsen(ba0, rv);
         lev->dm = dm0;
-        lev->passes = ablsteady::ground_passes(l, m_passes);
+        lev->passes = gust::ground_passes(l, m_passes);
         // Placed before the build, so that ERF's STF note (which names its own
         // level 0 for every level) follows the level it is about.
-        amrex::Print() << "ablsteady: grid hierarchy: building level " << l << " (" << dom.length(0) << " x "
+        amrex::Print() << "gust: grid hierarchy: building level " << l << " (" << dom.length(0) << " x "
                        << dom.length(1) << " x " << dom.length(2) << " cells, ground smoothing passes " << lev->passes
                        << ")\n";
 
@@ -233,7 +233,7 @@ MeshHierarchy::~MeshHierarchy () = default;
 void MeshHierarchy::check_level (int l) const
 {
     if (l < 0 || l >= m_levels) {
-        amrex::Abort("ablsteady: MeshHierarchy: level " + std::to_string(l) + " outside [0, "
+        amrex::Abort("gust: MeshHierarchy: level " + std::to_string(l) + " outside [0, "
                      + std::to_string(m_levels - 1) + "]");
     }
 }
@@ -291,7 +291,7 @@ std::string MeshHierarchy::quality_report () const
     std::ostringstream os;
     char line[256];
     std::snprintf(line, sizeof(line),
-                  "ablsteady: grid hierarchy: %d levels, x and y coarsened by 2 per level, the same %d layers (%d "
+                  "gust: grid hierarchy: %d levels, x and y coarsened by 2 per level, the same %d layers (%d "
                   "z-levels) on every level, terrain.hierarchy_passes = %d\n",
                   m_levels, geom(0).Domain().length(2), geom(0).Domain().length(2) + 1, m_passes);
     os << line;
@@ -299,7 +299,7 @@ std::string MeshHierarchy::quality_report () const
         const amrex::Box& d = geom(l).Domain();
         const auto dx = geom(l).CellSizeArray();
         std::snprintf(line, sizeof(line),
-                      "ablsteady: mesh quality, hierarchy level %d (%d x %d x %d cells, dx %.6g m, dy %.6g m, "
+                      "gust: mesh quality, hierarchy level %d (%d x %d x %d cells, dx %.6g m, dy %.6g m, "
                       "ground smoothing passes %d, boxes %d%s)\n",
                       l, d.length(0), d.length(1), d.length(2), static_cast<double>(dx[0]), static_cast<double>(dx[1]),
                       ground_passes(l), static_cast<int>(boxArray(l).size()),
@@ -318,7 +318,7 @@ std::string MeshHierarchy::quality_report () const
                << "lower terrain.gamma_m or lower mesh.hierarchy_levels\n";
         }
     }
-    os << "ablsteady: grid hierarchy summary\n";
+    os << "gust: grid hierarchy summary\n";
     std::snprintf(line, sizeof(line), "  %5s %6s %6s %10s %10s %6s %12s %12s %10s %6s\n", "level", "nx", "ny", "dx (m)",
                   "dy (m)", "passes", "max aspect", "min thick", "max slope", "capped");
     os << line;
@@ -351,4 +351,4 @@ std::vector<std::string> MeshHierarchy::write_plotfiles (const std::string& pref
     return names;
 }
 
-} // namespace ablsteady
+} // namespace gust

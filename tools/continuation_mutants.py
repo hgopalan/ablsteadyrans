@@ -61,8 +61,8 @@ M = [
  # reference residual and step
  ("C21", "set_reference_residual ignores its argument", C, "    m_st.r0 = r0;\n", "\n"),
  ("C22", "set_reference_residual accepts 0", C,
-  "|| !(d > 0)) {\n        amrex::Abort(\"ablsteady: Continuation::set_reference_residual",
-  "|| !(d >= 0)) {\n        amrex::Abort(\"ablsteady: Continuation::set_reference_residual"),
+  "|| !(d > 0)) {\n        amrex::Abort(\"gust: Continuation::set_reference_residual",
+  "|| !(d >= 0)) {\n        amrex::Abort(\"gust: Continuation::set_reference_residual"),
  ("C23", "no layout check in step", C,
   "if (q.p.boxArray() != m_qb.p.boxArray() || q.p.DistributionMap() != m_qb.p.DistributionMap()) {",
   "if (false) {"),

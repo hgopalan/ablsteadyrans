@@ -14,13 +14,13 @@ namespace {
 
 TEST (Sha256, NistVectors)
 {
-    EXPECT_EQ(ablsteady::sha256_hex(""),
+    EXPECT_EQ(gust::sha256_hex(""),
               "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
-    EXPECT_EQ(ablsteady::sha256_hex("abc"),
+    EXPECT_EQ(gust::sha256_hex("abc"),
               "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
-    EXPECT_EQ(ablsteady::sha256_hex("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq"),
+    EXPECT_EQ(gust::sha256_hex("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq"),
               "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1");
-    EXPECT_EQ(ablsteady::sha256_hex(std::string(1000000, 'a')),
+    EXPECT_EQ(gust::sha256_hex(std::string(1000000, 'a')),
               "cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0");
 }
 
@@ -31,9 +31,9 @@ TEST (Sha256, ChunkingDoesNotMatter)
     for (const std::size_t n : {55u, 56u, 63u, 64u, 65u, 1000u}) {
         std::string msg(n, '\0');
         for (std::size_t i = 0; i < n; ++i) { msg[i] = static_cast<char>((i * 31 + 7) & 0xff); }
-        ablsteady::Sha256 s;
+        gust::Sha256 s;
         for (const char c : msg) { s.update(&c, 1); }
-        EXPECT_EQ(s.hex(), ablsteady::sha256_hex(msg)) << n;
+        EXPECT_EQ(s.hex(), gust::sha256_hex(msg)) << n;
     }
 }
 
@@ -41,11 +41,11 @@ TEST (Sha256, ChunkingDoesNotMatter)
 // more data afterwards gives the digest of the longer message.
 TEST (Sha256, HexIsRepeatable)
 {
-    ablsteady::Sha256 s;
+    gust::Sha256 s;
     s.update("ab", 2);
     EXPECT_EQ(s.hex(), s.hex());
     s.update("c", 1);
-    EXPECT_EQ(s.hex(), ablsteady::sha256_hex("abc"));
+    EXPECT_EQ(s.hex(), gust::sha256_hex("abc"));
 }
 
 TEST (Sha256, FileDigestMatchesBytes)
@@ -57,9 +57,9 @@ TEST (Sha256, FileDigestMatchesBytes)
         std::ofstream os(name, std::ios::binary);
         os.write(msg.data(), static_cast<std::streamsize>(msg.size()));
     }
-    EXPECT_EQ(ablsteady::sha256_file(name), ablsteady::sha256_hex(msg));
+    EXPECT_EQ(gust::sha256_file(name), gust::sha256_hex(msg));
     std::remove(name.c_str());
-    EXPECT_EQ(ablsteady::sha256_file(name), "");   // missing file
+    EXPECT_EQ(gust::sha256_file(name), "");   // missing file
 }
 
 } // namespace

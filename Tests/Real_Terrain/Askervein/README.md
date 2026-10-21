@@ -9,7 +9,7 @@ outflow, slip sides, no Coriolis, four sweeps, CFL cap 2, to the steady verdict.
 |---|---|
 | `inputs_steady_askervein` | The deck. Terrain file on the command line: `terrain.file=extern_erf/askervein.txt`. |
 
-Check script: `Supporting_Files/expect_abort.py --success "ablsteady: steady after"` (shared).
+Check script: `Supporting_Files/expect_abort.py --success "gust: steady after"` (shared).
 
 ## CTest
 `rt_steady_askervein` (labels `regression;smoke`, double precision only).

@@ -69,14 +69,14 @@ Run the case
 .. code-block:: bash
 
    mkdir -p runs/flat && cd runs/flat
-   mpirun -n 2 ../../build-rel/ablsteady ../../Tests/Canonical_RANS/Neutral_ABL_Flat/inputs_steady_neutral_flat
+   mpirun -n 2 ../../build-rel/gust ../../Tests/Canonical_RANS/Neutral_ABL_Flat/inputs_steady_neutral_flat
 
 The run ends with
 
 .. code-block:: text
 
-   ablsteady: it 2840 cfl 2.000e+00 r 6.816e-03 res 1.793e-05 6.202e-06 5.720e-06 6.324e-08 7.754e-06 1.488e-05 mon 1.114e+01 1.346e-01 3.774e-01 ...
-   ablsteady: steady after 2840 iterations (2840 over the run)
+   gust: it 2840 cfl 2.000e+00 r 6.816e-03 res 1.793e-05 6.202e-06 5.720e-06 6.324e-08 7.754e-06 1.488e-05 mon 1.114e+01 1.346e-01 3.774e-01 ...
+   gust: steady after 2840 iterations (2840 over the run)
 
 Unlike tutorial 1, all six residuals are non-zero: the Coriolis force couples :math:`u` and :math:`v`, and the
 inversion couples :math:`w` and :math:`\theta`. The largest wind speed is 11.1 m/s, slightly above the geostrophic
@@ -104,6 +104,6 @@ What you have seen
 
 - Coriolis forcing and a sounding are set in the ``forcing`` and ``bc`` namespaces.
 - With rotation and stratification the solver needs a smaller CFL cap than the column (2 instead of 50).
-- ERF's check scripts work directly on ablsteady's turbulence plotfile.
+- ERF's check scripts work directly on GUST's turbulence plotfile.
 
 Next: :doc:`tutorial_hill` adds terrain.

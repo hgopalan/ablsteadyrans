@@ -16,7 +16,7 @@
 #include <cmath>
 #include <string>
 
-namespace ablsteady {
+namespace gust {
 
 namespace {
 
@@ -35,7 +35,7 @@ void face_dtau (const amrex::MultiFab& dtau_cc, const Mesh& mesh, const amrex::G
     {
         const amrex::Real lo = dtau_cc.min(0);   // collective: every rank aborts together
         if (std::isnan(lo) || !(lo > 0) || !std::isfinite(dtau_cc.max(0))) {
-            amrex::Abort("ablsteady: face_dtau: dtau_cc must be finite and > 0 everywhere");
+            amrex::Abort("gust: face_dtau: dtau_cc must be finite and > 0 everywhere");
         }
     }
     const amrex::MultiFab* areas[3] = {&mesh.ax, &mesh.ay, &mesh.az};
@@ -137,28 +137,28 @@ MomentumPredictorResult momentum_predictor (State& q, const ResidualFields& R,
 {
     const char* op = "momentum_predictor";
     if (std::isnan(rotation_relax) || !(rotation_relax > 0 && rotation_relax <= 1)) {
-        amrex::Abort("ablsteady: momentum_predictor: rotation_relax must be > 0 and <= 1 (simplec.rotation_relax)");
+        amrex::Abort("gust: momentum_predictor: rotation_relax must be > 0 and <= 1 (simplec.rotation_relax)");
     }
     if (std::isnan(w_vnn_cap) || !(w_vnn_cap == 0 || (w_vnn_cap > 0 && std::isfinite(w_vnn_cap) && std::isfinite(1 / w_vnn_cap)))) {
-        amrex::Abort("ablsteady: momentum_predictor: w_vnn_cap must be 0 (off), or finite and > 0 with a finite reciprocal "
+        amrex::Abort("gust: momentum_predictor: w_vnn_cap must be 0 (off), or finite and > 0 with a finite reciprocal "
                      "(simplec.w_vnn_cap)");
     }
     if (std::isnan(w_vnn_slope_margin) || !(w_vnn_slope_margin == 0 || (w_vnn_slope_margin >= 1 && std::isfinite(w_vnn_slope_margin)))) {
-        amrex::Abort("ablsteady: momentum_predictor: w_vnn_slope_margin must be 0 (off), or finite and >= 1 "
+        amrex::Abort("gust: momentum_predictor: w_vnn_slope_margin must be 0 (off), or finite and >= 1 "
                      "(simplec.w_vnn_cap_slope_margin)");
     }
-    if (sweeps < 1) { amrex::Abort("ablsteady: momentum_predictor: sweeps must be >= 1 (got " + std::to_string(sweeps) + ")"); }
+    if (sweeps < 1) { amrex::Abort("gust: momentum_predictor: sweeps must be >= 1 (got " + std::to_string(sweeps) + ")"); }
     check_operator_field(op, "dtau_x", dtau_faces[0], Loc::xface, mesh, 0);
     check_operator_field(op, "dtau_y", dtau_faces[1], Loc::yface, mesh, 0);
     check_operator_field(op, "dtau_z", dtau_faces[2], Loc::zface, mesh, 0);
     for (int d = 0; d < 3; ++d) {
         const amrex::Real lo = dtau_faces[d].min(0);
         if (std::isnan(lo) || !(lo > 0) || !std::isfinite(dtau_faces[d].max(0))) {
-            amrex::Abort("ablsteady: momentum_predictor: dtau_faces must be finite and > 0 everywhere");
+            amrex::Abort("gust: momentum_predictor: dtau_faces must be finite and > 0 everywhere");
         }
     }
     if (in.bc == nullptr && (in.buoyancy.gravity > 0 || (in.coriolis.enabled && coriolis_parameter(in.coriolis) != 0))) {
-        amrex::Abort("ablsteady: momentum_predictor: the point-implicit buoyancy and rotation need the boundary conditions "
+        amrex::Abort("gust: momentum_predictor: the point-implicit buoyancy and rotation need the boundary conditions "
                      "(the Dirichlet rows they skip); give in.bc, or gravity 0 and Coriolis off");
     }
     MomentumPredictorResult out;
@@ -404,4 +404,4 @@ MomentumPredictorResult momentum_predictor (State& q, const ResidualFields& R,
     return out;
 }
 
-} // namespace ablsteady
+} // namespace gust

@@ -38,20 +38,20 @@ constexpr double tol (double dbl, double flt) { return kDouble ? dbl : flt; }
 // The run's level 0 (as App.cpp lays it out) and the hierarchy built on it.
 struct HCase
 {
-    ablsteady::Inputs in;
+    gust::Inputs in;
     amrex::Geometry geom;
     amrex::BoxArray ba;
     amrex::DistributionMapping dm;
     amrex::MultiFab z;
-    ablsteady::Mesh mesh;
-    std::unique_ptr<ablsteady::MeshHierarchy> h;
+    gust::Mesh mesh;
+    std::unique_ptr<gust::MeshHierarchy> h;
 
     void layout ()
     {
-        geom = ablsteady::make_geometry(in.mesh);
-        ba = ablsteady::hierarchy_box_array(in.mesh);
+        geom = gust::make_geometry(in.mesh);
+        ba = gust::hierarchy_box_array(in.mesh);
         dm = amrex::DistributionMapping(ba);
-        z.define(amrex::convert(ba, amrex::IntVect(1)), dm, 1, ablsteady::ngrow_nodal);
+        z.define(amrex::convert(ba, amrex::IntVect(1)), dm, 1, gust::ngrow_nodal);
         z.setVal(0.0);
         mesh.define(ba, dm);
     }
@@ -60,7 +60,7 @@ struct HCase
     {
         layout();
         mesh.build(in, geom, z);
-        h = std::make_unique<ablsteady::MeshHierarchy>(in, geom, z, mesh, gather_from);
+        h = std::make_unique<gust::MeshHierarchy>(in, geom, z, mesh, gather_from);
     }
 };
 
@@ -153,7 +153,7 @@ std::vector<double> host_ground (const HCase& c, int l, int n)
         if (py) { J = (J < 0) ? J + ny : (J > ny ? J - ny : J); } else { J = std::max(0, std::min(ny, J)); }
         return a[J * (nx + 1) + I];
     };
-    const double beta = ablsteady::kHierarchyBeta;
+    const double beta = gust::kHierarchyBeta;
     for (int p = 0; p < n; ++p) {
         const std::vector<double> o = h;
         for (int J = 0; J <= ny; ++J) {
@@ -259,13 +259,13 @@ void fill_profile (amrex::MultiFab& mf, const amrex::Vector<amrex::Real>& zl, co
 // to 700 m with a lapse rate above, buoyancy, a slip top.
 struct ColumnModel
 {
-    ablsteady::CoriolisOptions cor;
-    ablsteady::ReferenceProfile ref;
-    ablsteady::BoundaryInputs bin;
-    ablsteady::SurfaceLayerOptions surf;
-    ablsteady::ClosureOptions copt;
-    ablsteady::SimplecOptions sopt;
-    ablsteady::PoissonOptions popt;
+    gust::CoriolisOptions cor;
+    gust::ReferenceProfile ref;
+    gust::BoundaryInputs bin;
+    gust::SurfaceLayerOptions surf;
+    gust::ClosureOptions copt;
+    gust::SimplecOptions sopt;
+    gust::PoissonOptions popt;
     ColumnModel ()
     {
         cor.enabled = true;
@@ -275,8 +275,8 @@ struct ColumnModel
         cor.vg = 0;
         ref.z = {0, 600, 700, 3000};
         ref.theta = {300, 300, 305, 312};
-        bin.face = {ablsteady::FaceType::periodic, ablsteady::FaceType::periodic, ablsteady::FaceType::surface_layer,
-                    ablsteady::FaceType::periodic, ablsteady::FaceType::periodic, ablsteady::FaceType::slip_wall};
+        bin.face = {gust::FaceType::periodic, gust::FaceType::periodic, gust::FaceType::surface_layer,
+                    gust::FaceType::periodic, gust::FaceType::periodic, gust::FaceType::slip_wall};
         bin.theta_ref = ref;
         bin.zhi_theta_grad = amrex::Real(0.003);
         popt.backend = "gmres_fft";   // exact column symmetry on flat ground (see test (a) below)
@@ -295,15 +295,15 @@ double k_prof (double z) { return 0.4 * std::exp(-z / 400.0) + 1e-3; }
 // On level l of c: the column state, then `iterations` SIMPLEC iterations
 // with a uniform pseudo-time step of 2 s, then the residual R of the result
 // (ghosts filled by the boundary conditions first).
-void column_level (const HCase& c, int l, const ColumnModel& cm, int iterations, ablsteady::State& q,
-                   ablsteady::ResidualFields& R)
+void column_level (const HCase& c, int l, const ColumnModel& cm, int iterations, gust::State& q,
+                   gust::ResidualFields& R)
 {
     const amrex::Geometry& g = c.h->geom(l);
-    const ablsteady::Mesh& m = c.h->mesh(l);
+    const gust::Mesh& m = c.h->mesh(l);
     const amrex::BoxArray& ba = c.h->boxArray(l);
     const amrex::DistributionMapping& dm = c.h->DistributionMap(l);
     q.define(ba, dm);
-    amrex::MultiFab::Copy(q.z_phys_nd, c.h->z_phys_nd(l), 0, 0, 1, ablsteady::ngrow_nodal);
+    amrex::MultiFab::Copy(q.z_phys_nd, c.h->z_phys_nd(l), 0, 0, 1, gust::ngrow_nodal);
     const auto& zl = m.zlevels();
     fill_profile(q.u, zl, u_prof);
     fill_profile(q.v, zl, v_prof);
@@ -312,11 +312,11 @@ void column_level (const HCase& c, int l, const ColumnModel& cm, int iterations,
     fill_profile(q.theta, zl, theta_prof);
     fill_profile(q.tke, zl, k_prof);
 
-    ablsteady::Closure closure(cm.copt);
+    gust::Closure closure(cm.copt);
     amrex::MultiFab dist;
-    ablsteady::height_above_ground(q.z_phys_nd, dist);
-    const ablsteady::BoundaryConditions bc(cm.bin, g, m, cm.cor);
-    ablsteady::ResidualInputs res_in;
+    gust::height_above_ground(q.z_phys_nd, dist);
+    const gust::BoundaryConditions bc(cm.bin, g, m, cm.cor);
+    gust::ResidualInputs res_in;
     res_in.closure = &closure;
     res_in.wall_distance = &dist;
     res_in.theta_ref = cm.ref;
@@ -324,14 +324,14 @@ void column_level (const HCase& c, int l, const ColumnModel& cm, int iterations,
     res_in.surface = &cm.surf;
     res_in.bc = &bc;
     if (iterations > 0) {
-        ablsteady::SimplecStage stage(cm.sopt, 2, res_in, &closure, cm.popt, m, g, c.h->z_phys_nd(l), cm.copt.tke_floor, ba, dm);
+        gust::SimplecStage stage(cm.sopt, 2, res_in, &closure, cm.popt, m, g, c.h->z_phys_nd(l), cm.copt.tke_floor, ba, dm);
         stage.init(q);
         amrex::MultiFab dtau(ba, dm, 1, 0);
         dtau.setVal(2.0);
         for (int it = 0; it < iterations; ++it) { stage.iterate(q, dtau); }
     }
     bc.fill_ghosts(q, &cm.surf, res_in.buoyancy, false, nullptr);
-    ablsteady::residual(q, res_in, m, g, R);
+    gust::residual(q, res_in, m, g, R);
 }
 
 } // namespace
@@ -344,7 +344,7 @@ TEST (MeshHierarchy, ZLevelsAreIdenticalOnEveryLevel)
 {
     for (const bool flat : {true, false}) {
         HCase c = hill3d(1);
-        if (flat) { c.in.terrain = ablsteady::TerrainInputs{}; c.in.terrain.hierarchy_passes = 2; }
+        if (flat) { c.in.terrain = gust::TerrainInputs{}; c.in.terrain.hierarchy_passes = 2; }
         c.make();
         const auto& z0 = c.h->mesh(0).zlevels();
         ASSERT_EQ(c.h->num_levels(), 3);
@@ -388,7 +388,7 @@ TEST (MeshHierarchy, GroundSmoothingPasses)
 {
     const int expect[4][5] = {{0, 0, 0, 0, 0}, {0, 1, 3, 7, 15}, {0, 2, 6, 14, 30}, {0, 3, 9, 21, 45}};
     for (int p = 0; p < 4; ++p) {
-        for (int l = 0; l < 5; ++l) { EXPECT_EQ(ablsteady::ground_passes(l, p), expect[p][l]) << "p " << p << " l " << l; }
+        for (int l = 0; l < 5; ++l) { EXPECT_EQ(gust::ground_passes(l, p), expect[p][l]) << "p " << p << " l " << l; }
     }
 
     for (const int p : {0, 1, 2}) {
@@ -415,14 +415,14 @@ TEST (MeshHierarchy, GroundSmoothingPasses)
 
     // Constant terrain: 37.5 m everywhere (exact in binary), non-periodic in x.
     HCase c = hill3d(1);
-    c.in.terrain = ablsteady::TerrainInputs{};
+    c.in.terrain = gust::TerrainInputs{};
     c.in.terrain.hierarchy_passes = 3;
     c.layout();
     c.z.setVal(37.5);
     c.mesh.build_from_ground(c.in, c.geom, c.z);
-    c.h = std::make_unique<ablsteady::MeshHierarchy>(c.in, c.geom, c.z, c.mesh);
+    c.h = std::make_unique<gust::MeshHierarchy>(c.in, c.geom, c.z, c.mesh);
     for (int l = 0; l < c.h->num_levels(); ++l) {
-        amrex::MultiFab ref(c.h->z_phys_nd(l).boxArray(), c.h->z_phys_nd(l).DistributionMap(), 1, ablsteady::ngrow_nodal);
+        amrex::MultiFab ref(c.h->z_phys_nd(l).boxArray(), c.h->z_phys_nd(l).DistributionMap(), 1, gust::ngrow_nodal);
         ref.setVal(37.5);
         const SlabDiff d = ground_diff(c.h->z_phys_nd(l), ref);
         EXPECT_EQ(d.bit_diffs, 0) << "level " << l << ", max diff " << d.max_abs;
@@ -440,7 +440,7 @@ TEST (MeshHierarchy, FreeStreamOnEveryLevel)
         c.make();
         for (int l = 0; l < c.h->num_levels(); ++l) {
             const double scale = 15.0 * c.h->geom(l).InvCellSize(0);
-            const double div = ablsteady::free_stream_divergence(c.h->mesh(l), c.h->geom(l), c.h->z_phys_nd(l), 10, 5);
+            const double div = gust::free_stream_divergence(c.h->mesh(l), c.h->geom(l), c.h->z_phys_nd(l), 10, 5);
             EXPECT_LT(div, tol(1e-12, 1e-4) * scale) << "smoothing " << sm << ", level " << l;
         }
         // The coarse grounds are not flat (the test is not vacuous).
@@ -488,17 +488,17 @@ TEST (MeshHierarchy, FlatTerrainColumnsAgree)
             // Back end A: its FFT preconditioner is exact on flat ground, so the
             // columns agree to round-off; MLMG's red-black smoother breaks the
             // column symmetry at its tolerance (this test is of the hierarchy).
-            ablsteady::PoissonOptions popt;
+            gust::PoissonOptions popt;
             popt.backend = "gmres_fft";
             auto solver = c.h->make_poisson(l, popt);
             amrex::MultiFab rhs(c.h->boxArray(l), c.h->DistributionMap(l), 1, 0);
             amrex::MultiFab phi(c.h->boxArray(l), c.h->DistributionMap(l), 1, 1);
             phi.setVal(0.0);
             fill_profile(rhs, c.h->mesh(l).zlevels(), [] (double z) { return std::cos(3.14159265358979 * z / 1500.0); });
-            ablsteady::PoissonBC bc;
-            bc.face = {ablsteady::PoissonFace::periodic, ablsteady::PoissonFace::periodic, ablsteady::PoissonFace::neumann,
-                       ablsteady::PoissonFace::periodic, ablsteady::PoissonFace::periodic, ablsteady::PoissonFace::neumann};
-            solver->solve(rhs, phi, ablsteady::FaceCoeffs{}, bc);
+            gust::PoissonBC bc;
+            bc.face = {gust::PoissonFace::periodic, gust::PoissonFace::periodic, gust::PoissonFace::neumann,
+                       gust::PoissonFace::periodic, gust::PoissonFace::periodic, gust::PoissonFace::neumann};
+            solver->solve(rhs, phi, gust::FaceCoeffs{}, bc);
             const std::vector<double> col = column0(phi);
             if (l == 0) { col_ref = col; ASSERT_GT(max_abs(col), 1.0); }
             EXPECT_LT(max_dev_from_column(phi, col_ref), rel * max_abs(col_ref)) << "Poisson, level " << l;
@@ -510,8 +510,8 @@ TEST (MeshHierarchy, FlatTerrainColumnsAgree)
     ColumnModel cm;
     std::vector<std::vector<double>> r_ref(6), q_ref(6);
     for (int l = 0; l < L; ++l) {
-        ablsteady::State q;
-        ablsteady::ResidualFields R;
+        gust::State q;
+        gust::ResidualFields R;
         column_level(c, l, cm, 0, q, R);
         const amrex::MultiFab* rf[6] = {&R.u, &R.v, &R.w, &R.p, &R.theta, &R.tke};
         const char* names[6] = {"u", "v", "w", "p", "theta", "k"};
@@ -531,8 +531,8 @@ TEST (MeshHierarchy, FlatTerrainColumnsAgree)
         // (c) The stage: every column of a level stays alike (the iterates of
         // different levels differ in pseudo-time, through the horizontal
         // terms of each cell's implicit diagonal, not at the fixed point).
-        ablsteady::State q10;
-        ablsteady::ResidualFields R10;
+        gust::State q10;
+        gust::ResidualFields R10;
         column_level(c, l, cm, 10, q10, R10);
         const amrex::MultiFab* f[6] = {&q10.u, &q10.v, &q10.w, &q10.p, &q10.theta, &q10.tke};
         for (int n = 0; n < 6; ++n) {
@@ -547,13 +547,13 @@ TEST (MeshHierarchy, FlatTerrainColumnsAgree)
 // UT-2.3.5. Invalid layouts and inputs abort, naming the key; valid ones pass.
 TEST (MeshHierarchy, InvalidLayoutsAbort)
 {
-    auto msgs = [] (const ablsteady::MeshInputs& m, const ablsteady::TerrainInputs& t) {
-        return ablsteady::check_hierarchy_inputs(m, t);
+    auto msgs = [] (const gust::MeshInputs& m, const gust::TerrainInputs& t) {
+        return gust::check_hierarchy_inputs(m, t);
     };
-    ablsteady::MeshInputs m;
+    gust::MeshInputs m;
     m.n_cell = amrex::IntVect(32, 16, 8);
     m.max_grid_size = {8, 8};
-    ablsteady::TerrainInputs t;
+    gust::TerrainInputs t;
     m.hierarchy_levels = 4;
     EXPECT_TRUE(msgs(m, t).empty());
     m.hierarchy_levels = 1;
@@ -574,22 +574,22 @@ TEST (MeshHierarchy, InvalidLayoutsAbort)
         {{32, 16, 8}, 8, 1, 2, true, "terrain.hierarchy_passes has no effect unless mesh.hierarchy_levels > 1"},
     };
     for (const Case& k : cases) {
-        ablsteady::MeshInputs mm = m;
+        gust::MeshInputs mm = m;
         mm.n_cell = k.n;
         mm.max_grid_size = {k.mgs, k.mgs};
         mm.hierarchy_levels = k.L;
-        ablsteady::TerrainInputs tt;
+        gust::TerrainInputs tt;
         tt.hierarchy_passes = k.p;
         if (k.given) { tt.given.emplace_back("hierarchy_passes"); }
         const auto e = msgs(mm, tt);
         ASSERT_EQ(e.size(), 1u) << k.expect;
         EXPECT_EQ(e[0].rfind(k.expect, 0), 0u) << e[0];
         // validate() reports it too.
-        ablsteady::Inputs in;
+        gust::Inputs in;
         in.mesh = mm;
         in.mesh.prob_hi = {1000, 1000, 1000};
         in.terrain = tt;
-        const auto all = ablsteady::validate(in);
+        const auto all = gust::validate(in);
         bool found = false;
         for (const auto& s : all) { found = found || s.rfind(k.expect, 0) == 0; }
         EXPECT_TRUE(found) << k.expect;
@@ -600,7 +600,7 @@ TEST (MeshHierarchy, InvalidLayoutsAbort)
     m.n_cell = amrex::IntVect(40, 24, 6);
     m.max_grid_size = {12, 8};
     m.hierarchy_levels = 3;
-    const amrex::BoxArray ba = ablsteady::hierarchy_box_array(m);
+    const amrex::BoxArray ba = gust::hierarchy_box_array(m);
     EXPECT_TRUE(ba.coarsenable(amrex::IntVect(4, 4, 1)));
     EXPECT_EQ(ba.numPts(), 40L * 24 * 6);
     EXPECT_TRUE(ba.minimalBox() == amrex::Box(amrex::IntVect(0), amrex::IntVect(39, 23, 5)));
@@ -615,16 +615,16 @@ TEST (MeshHierarchy, InvalidLayoutsAbort)
     HCase c = hill3d(1);
     c.in.mesh.n_cell = amrex::IntVect(24, 16, 12);
     c.layout();
-    ablsteady::MeshInputs six = c.in.mesh;
+    gust::MeshInputs six = c.in.mesh;
     six.max_grid_size = {6, 8};
-    c.ba = ablsteady::make_box_array(six);
+    c.ba = gust::make_box_array(six);
     c.dm = amrex::DistributionMapping(c.ba);
-    c.z.define(amrex::convert(c.ba, amrex::IntVect(1)), c.dm, 1, ablsteady::ngrow_nodal);
+    c.z.define(amrex::convert(c.ba, amrex::IntVect(1)), c.dm, 1, gust::ngrow_nodal);
     c.z.setVal(0.0);
     c.mesh.define(c.ba, c.dm);
     c.mesh.build(c.in, c.geom, c.z);
     try {
-        ablsteady::MeshHierarchy h(c.in, c.geom, c.z, c.mesh);
+        gust::MeshHierarchy h(c.in, c.geom, c.z, c.mesh);
         ADD_FAILURE() << "a layout that does not coarsen was accepted";
     } catch (const std::runtime_error& e) {
         EXPECT_NE(std::string(e.what()).find("mesh.max_grid_size: the level-0 boxes do not coarsen"), std::string::npos)
@@ -633,9 +633,9 @@ TEST (MeshHierarchy, InvalidLayoutsAbort)
     // Inputs that do not divide abort in the constructor too.
     HCase d = hill3d(1);
     d.make();
-    ablsteady::Inputs bad = d.in;
+    gust::Inputs bad = d.in;
     bad.mesh.hierarchy_levels = 6;
-    EXPECT_THROW(ablsteady::MeshHierarchy(bad, d.geom, d.z, d.mesh), std::runtime_error);
+    EXPECT_THROW(gust::MeshHierarchy(bad, d.geom, d.z, d.mesh), std::runtime_error);
 }
 
 // ---------------------------------------------------------------------------
@@ -663,20 +663,20 @@ TEST (MeshHierarchy, GatheredLevelEqualsDistributed)
                 return out;
             };
             const amrex::MultiFab& za = a.h->z_phys_nd(l);
-            EXPECT_EQ(ablsteady::test::count_bit_differences(back(b.h->z_phys_nd(l), za, 1), za, 1), 0)
+            EXPECT_EQ(gust::test::count_bit_differences(back(b.h->z_phys_nd(l), za, 1), za, 1), 0)
                 << "z_phys_nd, smoothing " << sm << ", level " << l;
-            const ablsteady::Mesh& ma = a.h->mesh(l);
-            const ablsteady::Mesh& mb = b.h->mesh(l);
+            const gust::Mesh& ma = a.h->mesh(l);
+            const gust::Mesh& mb = b.h->mesh(l);
             const std::pair<const amrex::MultiFab*, const amrex::MultiFab*> fields[] = {
                 {&ma.detJ, &mb.detJ}, {&ma.ax, &mb.ax}, {&ma.ay, &mb.ay}, {&ma.az, &mb.az}, {&ma.z_cc, &mb.z_cc}};
             const char* names[] = {"detJ", "ax", "ay", "az", "z_cc"};
             for (int n = 0; n < 5; ++n) {
-                EXPECT_EQ(ablsteady::test::count_bit_differences(back(*fields[n].second, *fields[n].first, 0),
+                EXPECT_EQ(gust::test::count_bit_differences(back(*fields[n].second, *fields[n].first, 0),
                                                                  *fields[n].first, 0), 0)
                     << names[n] << ", smoothing " << sm << ", level " << l;
             }
-            const ablsteady::MeshQuality& qa = ma.quality();
-            const ablsteady::MeshQuality& qb = mb.quality();
+            const gust::MeshQuality& qa = ma.quality();
+            const gust::MeshQuality& qb = mb.quality();
             EXPECT_EQ(qa.min_thickness_ratio, qb.min_thickness_ratio);
             EXPECT_EQ(qa.max_aspect_ratio, qb.max_aspect_ratio);
             EXPECT_EQ(qa.max_surface_slope_deg, qb.max_surface_slope_deg);

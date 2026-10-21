@@ -126,7 +126,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--erf", help="path to an ERF git clone (needed once the manifest has rows)")
     ap.add_argument("--root", default=str(pathlib.Path(__file__).resolve().parents[1]),
-                    help="ablsteady source tree (default: this script's repository)")
+                    help="GUST source tree (default: this script's repository)")
     ap.add_argument("--report-upstream", metavar="REF",
                     help="also list ERF commits touching each source since its pin, up to REF")
     args = ap.parse_args(argv)

@@ -67,7 +67,7 @@ vcpkg_installed/
 Testing/
 .cache/
 
-# ablsteady
+# GUST
 .worktrees/
 .ccache/
 

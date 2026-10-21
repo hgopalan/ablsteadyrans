@@ -10,7 +10,7 @@
 #include <cstdio>
 #include <string>
 
-namespace ablsteady {
+namespace gust {
 
 namespace {
 
@@ -30,7 +30,7 @@ std::string fmt (double x)
 
 void abort_inputs (const std::vector<std::string>& err)
 {
-    std::string all = "ablsteady: invalid inputs:";
+    std::string all = "gust: invalid inputs:";
     for (const auto& e : err) { all += "\n  " + e; }
     amrex::Abort(all);
 }
@@ -229,7 +229,7 @@ LevelSolver::LevelSolver (const RunSetup& s, const Mesh& mesh, const amrex::Geom
     if (s.copt.wall_distance == WallDistanceKind::tucker) {
         dist.define(ba, dm, 1, 1);
         const PoissonResult wd = tucker_wall_distance(mesh, geom, z_nd, dist, s.popt);
-        amrex::Print() << "ablsteady: " << label << "Tucker wall distance: " << wd.iterations << " Poisson iterations\n";
+        amrex::Print() << "gust: " << label << "Tucker wall distance: " << wd.iterations << " Poisson iterations\n";
         extend_by_zero_gradient(dist, geom);
     } else {
         height_above_ground(z_nd, dist);
@@ -256,7 +256,7 @@ void print_iteration (const Driver& driver, const SimplecStage& stage, bool last
     const IterationRecord& r = h.records.back();
     if (newton != nullptr && r.stage == 1) {
         // Every Newton step (few, and each costs many residual evaluations).
-        std::string line = "ablsteady: " + label + "it " + std::to_string(r.iteration + 1) + " newton r " + fmt(double(r.relative_residual))
+        std::string line = "gust: " + label + "it " + std::to_string(r.iteration + 1) + " newton r " + fmt(double(r.relative_residual))
                            + " res";
         for (const amrex::Real v : r.residuals) { line += " " + fmt(double(v)); }
         const auto& recs = newton->continuation().records();
@@ -278,7 +278,7 @@ void print_iteration (const Driver& driver, const SimplecStage& stage, bool last
         return;
     }
     if (!(r.iteration < 10 || r.iteration % 10 == 9 || last)) { return; }
-    std::string line = "ablsteady: " + label + "it " + std::to_string(r.iteration + 1) + " cfl " + fmt(double(r.cfl)) + " r "
+    std::string line = "gust: " + label + "it " + std::to_string(r.iteration + 1) + " cfl " + fmt(double(r.cfl)) + " r "
                      + fmt(double(r.relative_residual)) + " res";
     for (const amrex::Real v : r.residuals) { line += " " + fmt(double(v)); }
     line += " mon";
@@ -295,7 +295,7 @@ std::vector<LevelSummary> sequence_coarse_levels (const MeshHierarchy& h, const 
                                                   LevelSolver& finest, State& q)
 {
     const int L = h.num_levels();
-    if (L < 2) { amrex::Abort("ablsteady: sequence_coarse_levels needs mesh.hierarchy_levels >= 2"); }
+    if (L < 2) { amrex::Abort("gust: sequence_coarse_levels needs mesh.hierarchy_levels >= 2"); }
     std::vector<LevelSummary> out;
     std::unique_ptr<State> coarse;   // the state of level l + 1, once solved
     std::vector<amrex::Real> ref;    // the coarsest level's residual references
@@ -333,7 +333,7 @@ std::vector<LevelSummary> sequence_coarse_levels (const MeshHierarchy& h, const 
                 print_iteration(driver, ls.stage(), true, label);
                 std::string reasons;
                 for (const auto& r : v.reasons) { reasons += "\n  " + r; }
-                amrex::Abort("ablsteady: grid sequencing: level " + std::to_string(l) + " diverged" + reasons);
+                amrex::Abort("gust: grid sequencing: level " + std::to_string(l) + " diverged" + reasons);
             }
             if (v.status == SteadyStatus::Steady) { s.stop = "steady"; }
             else {
@@ -357,7 +357,7 @@ std::vector<LevelSummary> sequence_coarse_levels (const MeshHierarchy& h, const 
                            << " before the loose stop, r " << fmt(double(s.relative_residual))
                            << "; its state is prolonged as it is\n";
         } else {
-            amrex::Print() << "ablsteady: " << label << "loose stop after " << s.iterations << " iterations (" << s.stop
+            amrex::Print() << "gust: " << label << "loose stop after " << s.iterations << " iterations (" << s.stop
                            << "), r " << fmt(double(s.relative_residual)) << "\n";
         }
         out.push_back(s);
@@ -384,7 +384,7 @@ std::vector<LevelSummary> sequence_coarse_levels (const MeshHierarchy& h, const 
 std::string sequencing_report (const std::vector<LevelSummary>& levels, const DriverHistory& finest,
                                const std::string& finest_status, int ref_iterations)
 {
-    std::string os = "ablsteady: grid sequencing summary\n"
+    std::string os = "gust: grid sequencing summary\n"
                      "  level   cells (x y)  iterations   wall (s)         AU  stop\n";
     char line[256];
     for (const auto& s : levels) {
@@ -439,17 +439,17 @@ void print_initializer (const InitResult& r, const InitOptions& iopt, const Pois
         std::snprintf(line, sizeof(line), "initializer: no projection (init.projection = 0), divergence %.9e\n",
                       static_cast<double>(r.divergence_before));
     }
-    amrex::Print() << "ablsteady: " << label << line;
+    amrex::Print() << "gust: " << label << line;
     if (r.backend_fallback) {
-        amrex::Print() << "ablsteady: " << label << "initializer: init.alpha_v / init.alpha_h = " << iopt.alpha_v / iopt.alpha_h
+        amrex::Print() << "gust: " << label << "initializer: init.alpha_v / init.alpha_h = " << iopt.alpha_v / iopt.alpha_h
                        << " needs the split z-face coefficient, which only solver.poisson_backend = gmres_fft has;"
                        << " the projection used gmres_fft, the SIMPLEC stage keeps " << popt.backend << "\n";
     }
     if (iopt.obrien) {
         std::snprintf(line, sizeof(line), "initializer: O'Brien removed a top residual of %.6e m/s\n",
                       static_cast<double>(r.obrien_top_residual));
-        amrex::Print() << "ablsteady: " << label << line;
+        amrex::Print() << "gust: " << label << line;
     }
 }
 
-} // namespace ablsteady
+} // namespace gust

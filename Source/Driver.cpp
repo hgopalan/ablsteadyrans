@@ -1,5 +1,6 @@
 #include "Driver.H"
 
+#include "FileMagic.H"
 #include "PseudoTime.H"
 
 #include <AMReX_ParallelDescriptor.H>
@@ -15,7 +16,7 @@
 #include <sstream>
 #include <string>
 
-namespace ablsteady {
+namespace gust {
 
 namespace {
 
@@ -28,7 +29,7 @@ const char* const kKeys[] = {"residual_tol", "residual_drop_orders", "residual_r
 
 // 2: the reference hold; 3: the residual scale height (versions 1 and 2 still read)
 constexpr int kDriverVersion = 3;
-const char* const kDriverMagic = "ablsteady-driver";
+const char* const kDriverMagic = "gust-driver";
 
 std::string hexfloat (double x)
 {
@@ -46,7 +47,7 @@ std::string fmt (double x)
 
 void history_error (const std::string& dir, const std::string& what)   // aborts
 {
-    amrex::Abort("ablsteady: " + dir + "/Driver: " + what);
+    amrex::Abort("gust: " + dir + "/Driver: " + what);
 }
 
 } // namespace
@@ -147,7 +148,7 @@ SteadyOptions read_steady_options ()
         if (pp.countval(key) != 1) { err.emplace_back(std::string("steady.") + key + " takes exactly one value"); }
     }
     if (!err.empty()) {
-        std::string all = "ablsteady: invalid inputs:";
+        std::string all = "gust: invalid inputs:";
         for (const auto& e : err) { all += "\n  " + e; }
         amrex::Abort(all);
     }
@@ -174,26 +175,26 @@ SteadyOptions read_steady_options ()
     if (pp.query("sweep", sweep)) {
         if (sweep == "zjacobi") { opt.sweep = SweepKind::zjacobi; }
         else if (sweep == "lusgs") { opt.sweep = SweepKind::lusgs; }
-        else { amrex::Abort("ablsteady: steady.sweep = " + sweep + ": must be zjacobi or lusgs"); }
+        else { amrex::Abort("gust: steady.sweep = " + sweep + ": must be zjacobi or lusgs"); }
     }
     if (!pp.contains("cfl_max")) { opt.cfl_max = default_cfl_max(opt.sweep); }
     std::string pc;
     if (pp.query("newton_preconditioner", pc)) {
         if (pc == "identity") { opt.newton_preconditioner = NewtonPreconditionerKind::identity; }
         else if (pc == "simplec") { opt.newton_preconditioner = NewtonPreconditionerKind::simplec; }
-        else { amrex::Abort("ablsteady: steady.newton_preconditioner = " + pc + ": must be identity or simplec"); }
+        else { amrex::Abort("gust: steady.newton_preconditioner = " + pc + ": must be identity or simplec"); }
     }
     std::string word;
     if (pp.query("line_ghosts", word)) {
         if (word == "lagged") { opt.line_ghosts = LineGhosts::lagged; }
         else if (word == "zero") { opt.line_ghosts = LineGhosts::zero; }
-        else { amrex::Abort("ablsteady: steady.line_ghosts = " + word + ": must be lagged or zero"); }
+        else { amrex::Abort("gust: steady.line_ghosts = " + word + ": must be lagged or zero"); }
     }
     pp.query("line_overlap", opt.line_overlap);
     if (pp.query("line_order", word)) {
         if (word == "sequential") { opt.line_order = LineOrder::sequential; }
         else if (word == "diagonal") { opt.line_order = LineOrder::diagonal; }
-        else { amrex::Abort("ablsteady: steady.line_order = " + word + ": must be sequential or diagonal"); }
+        else { amrex::Abort("gust: steady.line_order = " + word + ": must be sequential or diagonal"); }
     }
     pp.query("line_alternate", opt.line_alternate);
     std::string stage;
@@ -201,15 +202,15 @@ SteadyOptions read_steady_options ()
         if (stage == "none") { opt.stage = StageKind::none; }
         else if (stage == "simplec") { opt.stage = StageKind::simplec; }
         else if (stage == "simplec_newton") { opt.stage = StageKind::simplec_newton; }
-        else { amrex::Abort("ablsteady: steady.stage = " + stage + ": must be none, simplec or simplec_newton"); }
+        else { amrex::Abort("gust: steady.stage = " + stage + ": must be none, simplec or simplec_newton"); }
     }
     std::string machine;
     if (pp.query("machine", machine) && !parse_machine(machine, opt.machine)) {
-        amrex::Abort("ablsteady: steady.machine = " + machine + ": must be local, kestrel-cpu or kestrel-gpu");
+        amrex::Abort("gust: steady.machine = " + machine + ": must be local, kestrel-cpu or kestrel-gpu");
     }
     err = check_steady_options(opt);
     if (!err.empty()) {
-        std::string all = "ablsteady: invalid inputs:";
+        std::string all = "gust: invalid inputs:";
         for (const auto& e : err) { all += "\n  " + e; }
         amrex::Abort(all);
     }
@@ -226,10 +227,10 @@ namespace {
 // evaluates right to left), so no argument may dereference a stage on its own.
 const Stage& first_stage (const SteadyOptions& opt, const std::vector<std::unique_ptr<Stage>>& stages)
 {
-    for (const auto& e : check_steady_options(opt)) { amrex::Abort("ablsteady: Driver: " + e); }
-    if (stages.empty()) { amrex::Abort("ablsteady: Driver: at least one stage is needed"); }
+    for (const auto& e : check_steady_options(opt)) { amrex::Abort("gust: Driver: " + e); }
+    if (stages.empty()) { amrex::Abort("gust: Driver: at least one stage is needed"); }
     for (const auto& s : stages) {
-        if (s == nullptr) { amrex::Abort("ablsteady: Driver: a stage is null"); }
+        if (s == nullptr) { amrex::Abort("gust: Driver: a stage is null"); }
     }
     return *stages.front();
 }
@@ -253,7 +254,7 @@ Driver::Driver (const SteadyOptions& opt, std::vector<std::unique_ptr<Stage>> st
             same = s->monitor_specs()[m].name == specs[m].name && s->monitor_specs()[m].scale == specs[m].scale;
         }
         if (!same) {
-            amrex::Abort("ablsteady: Driver: stage " + s->name() + " does not report the residuals and monitors of stage "
+            amrex::Abort("gust: Driver: stage " + s->name() + " does not report the residuals and monitors of stage "
                          + m_stages.front()->name());
         }
     }
@@ -265,7 +266,7 @@ Driver::Driver (const SteadyOptions& opt, std::vector<std::unique_ptr<Stage>> st
 void Driver::seed_reference (const std::vector<amrex::Real>& ref)
 {
     if (!m_h.records.empty() || m_h.criterion.count != 0) {
-        amrex::Abort("ablsteady: Driver::seed_reference: only before the first iteration");
+        amrex::Abort("gust: Driver::seed_reference: only before the first iteration");
     }
     m_criterion.seed_reference(ref);
     m_h.criterion = m_criterion.history();
@@ -274,14 +275,14 @@ void Driver::seed_reference (const std::vector<amrex::Real>& ref)
 void Driver::release_reference_hold ()
 {
     if (!m_h.records.empty() || m_h.criterion.count != 0) {
-        amrex::Abort("ablsteady: Driver::release_reference_hold: only before the first iteration");
+        amrex::Abort("gust: Driver::release_reference_hold: only before the first iteration");
     }
     bool seeded = false;
     for (const amrex::Real x : m_h.criterion.res_ref) { seeded = seeded || x > 0; }
     if (!seeded) {
         // Unseeded, the reference is still 0 and r_n would be measured
         // against residual_tol alone.
-        amrex::Abort("ablsteady: Driver::release_reference_hold: the reference is not seeded (seed_reference first)");
+        amrex::Abort("gust: Driver::release_reference_hold: the reference is not seeded (seed_reference first)");
     }
     m_h.hold = 0;
 }
@@ -289,11 +290,11 @@ void Driver::release_reference_hold ()
 void Driver::start_cfl (amrex::Real cfl)
 {
     if (!m_h.records.empty() || m_h.criterion.count != 0) {
-        amrex::Abort("ablsteady: Driver::start_cfl: only before the first iteration");
+        amrex::Abort("gust: Driver::start_cfl: only before the first iteration");
     }
-    if (hold_iterations() > 0) { amrex::Abort("ablsteady: Driver::start_cfl: the reference hold is on"); }
+    if (hold_iterations() > 0) { amrex::Abort("gust: Driver::start_cfl: the reference hold is on"); }
     if (std::isnan(cfl) || !std::isfinite(cfl) || !(cfl > 0) || cfl > m_opt.cfl_max) {
-        amrex::Abort("ablsteady: Driver::start_cfl: " + fmt(double(cfl)) + " is not finite, > 0 and <= steady.cfl_max = "
+        amrex::Abort("gust: Driver::start_cfl: " + fmt(double(cfl)) + " is not finite, > 0 and <= steady.cfl_max = "
                      + fmt(double(m_opt.cfl_max)));
     }
     // The SER law goes below cfl0 when r_n > 1 (a residual above its
@@ -365,7 +366,7 @@ void Driver::apply_switch_rules (int iteration, amrex::Real r, const std::vector
     for (std::size_t i = 0; i < residuals.size(); ++i) {
         state += (i ? ", " : "") + names[i] + " " + fmt(double(residuals[i]));
     }
-    amrex::Print() << "ablsteady: iteration " << iteration << ": switching from stage " << m_stages[e.from]->name()
+    amrex::Print() << "gust: iteration " << iteration << ": switching from stage " << m_stages[e.from]->name()
                    << " to " << m_stages[to]->name() << ": " << reason << " (scaled residuals: " << state << ")\n";
     m_stages[e.from]->leave(q);
     m_h.stage = to;
@@ -471,31 +472,31 @@ void Driver::restore (const DriverHistory& h_in, State& q)
     }
     const DriverHistory& h = pad ? h_pad : h_in;
     if (h.accounts.size() != m_stages.size()) {
-        amrex::Abort("ablsteady: Driver::restore: the history has " + std::to_string(h.accounts.size()) + " stages, this driver "
+        amrex::Abort("gust: Driver::restore: the history has " + std::to_string(h.accounts.size()) + " stages, this driver "
                      + std::to_string(m_stages.size()) + " (a steady.stage = simplec_newton checkpoint cannot continue with "
                      "steady.stage = simplec)");
     }
     if (h.stage < 0 || h.stage >= static_cast<int>(m_stages.size())) {
-        amrex::Abort("ablsteady: Driver::restore: the history's stage " + std::to_string(h.stage) + " does not exist");
+        amrex::Abort("gust: Driver::restore: the history's stage " + std::to_string(h.stage) + " does not exist");
     }
     for (const auto& r : h.records) {
         if (r.residuals.size() != m_stages.front()->residual_names().size()
             || r.monitors.size() != m_stages.front()->monitor_specs().size()) {
-            amrex::Abort("ablsteady: Driver::restore: a record's residual or monitor count does not match the stages");
+            amrex::Abort("gust: Driver::restore: a record's residual or monitor count does not match the stages");
         }
     }
     if (std::isnan(h.cfl) || !std::isfinite(h.cfl) || !(h.cfl > 0)) {
-        amrex::Abort("ablsteady: Driver::restore: the history's CFL is not finite and > 0");
+        amrex::Abort("gust: Driver::restore: the history's CFL is not finite and > 0");
     }
     if (h.below_count < 0 || h.last_switch < -1 || h.last_switch >= static_cast<int>(h.records.size())
         || h.criterion.count != static_cast<int>(h.records.size())) {
-        amrex::Abort("ablsteady: Driver::restore: the history's switch state or iteration count is inconsistent");
+        amrex::Abort("gust: Driver::restore: the history's switch state or iteration count is inconsistent");
     }
     if (h.hold != -1 && h.hold != 0) {
-        amrex::Abort("ablsteady: Driver::restore: the history's reference hold " + std::to_string(h.hold) + " is not -1 or 0");
+        amrex::Abort("gust: Driver::restore: the history's reference hold " + std::to_string(h.hold) + " is not -1 or 0");
     }
     if (std::isnan(h.scale_height) || !std::isfinite(h.scale_height) || h.scale_height < 0) {
-        amrex::Abort("ablsteady: Driver::restore: the history's residual scale height is not finite and >= 0");
+        amrex::Abort("gust: Driver::restore: the history's residual scale height is not finite and >= 0");
     }
     // The residual norms scale with H (rms / (U^2/H), ...). A history written
     // with another H (format 1 and 2: prob_hi z - prob_lo z, which on a
@@ -512,7 +513,7 @@ void Driver::restore (const DriverHistory& h_in, State& q)
         rescale(hs.criterion.res_last);
         for (auto& r : hs.records) { rescale(r.residuals); }
         for (auto& e : hs.switches) { rescale(e.residuals); }
-        amrex::Print() << "ablsteady: restart: the history's residuals were scaled with H = " << fmt(double(H_old))
+        amrex::Print() << "gust: restart: the history's residuals were scaled with H = " << fmt(double(H_old))
                        << " m; rescaled by " << fmt(double(f)) << " to H = " << fmt(double(H_new)) << " m\n";
     }
     hs.scale_height = H_new;
@@ -661,8 +662,8 @@ DriverHistory read_driver_history (const std::string& dir)
     std::string magic;
     int version = 0;
     is >> magic >> version;
-    if (!is || magic != kDriverMagic || version < 1 || version > kDriverVersion) {
-        history_error(dir, "not an ablsteady driver history of format version 1 to " + std::to_string(kDriverVersion));
+    if (!is || !is_file_magic(magic, kDriverMagic) || version < 1 || version > kDriverVersion) {
+        history_error(dir, "not a GUST driver history of format version 1 to " + std::to_string(kDriverVersion));
     }
     DriverHistory h;
     expect(is, dir, "state");
@@ -727,4 +728,4 @@ DriverHistory read_driver_history (const std::string& dir)
     return h;
 }
 
-} // namespace ablsteady
+} // namespace gust

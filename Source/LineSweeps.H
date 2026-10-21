@@ -1,5 +1,5 @@
-#ifndef ABLSTEADY_LINESWEEPS_H_
-#define ABLSTEADY_LINESWEEPS_H_
+#ifndef GUST_LINESWEEPS_H_
+#define GUST_LINESWEEPS_H_
 
 // The line LU-SGS sweeps (sub-phases 2.1 and 2.2): symmetric line
 // Gauss-Seidel passes over the columns of each box, an exact z-line (Thomas)
@@ -75,7 +75,7 @@
 #include <string>
 #include <vector>
 
-namespace ablsteady {
+namespace gust {
 
 //! The line solver of the sweeps (steady.sweep).
 enum class SweepKind : int { zjacobi = 0, lusgs = 1 };
@@ -160,6 +160,6 @@ amrex::Real zline_lusgs (Loc loc, const amrex::MultiFab& A, const amrex::MultiFa
                          int sweeps, const Mesh& mesh, const amrex::Geometry& geom, amrex::MultiFab& delta,
                          const LineSweepOptions& opt = LineSweepOptions(SweepKind::lusgs));
 
-} // namespace ablsteady
+} // namespace gust
 
 #endif

@@ -11,7 +11,7 @@
 #include <sstream>
 #include <utility>
 
-namespace ablsteady {
+namespace gust {
 
 namespace {
 
@@ -19,7 +19,7 @@ constexpr double kExactHit2 = 1.0e-12;   // (1e-6 m)^2
 
 [[noreturn]] void fail (const std::string& msg)
 {
-    amrex::Abort("ablsteady: " + msg);
+    amrex::Abort("gust: " + msg);
     std::abort();
 }
 
@@ -100,7 +100,7 @@ IdwInterpolator::IdwInterpolator (const TerrainPoints& pts, int k, double power)
 {
     const auto n = static_cast<long>(pts.x.size());
     if (k < 1 || k > n) {
-        amrex::Abort("ablsteady: terrain.idw_neighbors = " + std::to_string(k) + " must be between 1 and the "
+        amrex::Abort("gust: terrain.idw_neighbors = " + std::to_string(k) + " must be between 1 and the "
                      "number of points in terrain.file (" + std::to_string(n) + ")");
     }
     const auto [xmin, xmax] = std::minmax_element(pts.x.begin(), pts.x.end());
@@ -405,4 +405,4 @@ void fill_terrain_surface (amrex::MultiFab& z_phys_nd, const amrex::Geometry& ge
     }
 }
 
-} // namespace ablsteady
+} // namespace gust

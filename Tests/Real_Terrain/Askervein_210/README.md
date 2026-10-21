@@ -19,7 +19,7 @@ stretched by 1.08).
 ## The ERF reference
 ERF at the pinned commit ran `inputs_anel` with the overrides of `tools/kestrel/erf_references.sh`
 (`stop_time=4800 erf.plot_per_1=100 erf.plot_int_1=-1 erf.plot2d_int_1=-1`) on 8 ranks of one workstation
-(10 378 steps, 8.6 h), was archived with `ablsteady_refavg` (25 snapshots, 2400–4800 s; the half-window averages
+(10 378 steps, 8.6 h), was archived with `gust_refavg` (25 snapshots, 2400–4800 s; the half-window averages
 differ by at most 7.6e-4 m/s) and sampled with `tools/askervein_lines.py sample`. The archive itself is not in the
 repository (100 MB).
 

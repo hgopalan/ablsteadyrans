@@ -1,5 +1,5 @@
-#ifndef ABLSTEADY_TRANSFER_H_
-#define ABLSTEADY_TRANSFER_H_
+#ifndef GUST_TRANSFER_H_
+#define GUST_TRANSFER_H_
 
 // Transfer operators between the levels of the horizontal grid hierarchy
 // (sub-phase 2.4; MeshHierarchy.H). Level lc is coarser than level lf by
@@ -86,7 +86,7 @@
 
 #include <AMReX_MultiFab.H>
 
-namespace ablsteady {
+namespace gust {
 
 //! Restrict fine (on level lf's layout) to coarse (on level lc's, lc > lf;
 //! both States defined with State::define). theta, k, p', u, v and w of
@@ -126,6 +126,6 @@ ProlongResult prolong_state (const MeshHierarchy& h, int lc, const State& coarse
                              const BoundaryConditions& bc, const SurfaceLayerOptions* surface,
                              const BuoyancyOptions& buoyancy, PoissonSolver& solver, amrex::Real tke_floor);
 
-} // namespace ablsteady
+} // namespace gust
 
 #endif

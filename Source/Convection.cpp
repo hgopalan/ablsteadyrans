@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-namespace ablsteady {
+namespace gust {
 
 namespace {
 
@@ -121,7 +121,7 @@ void convective_fluxes (Loc loc, const amrex::MultiFab& q, const amrex::Array<co
                         amrex::Array<amrex::MultiFab, AMREX_SPACEDIM>& G)
 {
     const auto err = check_convection_options(opt);
-    if (!err.empty()) { amrex::Abort("ablsteady: convective_fluxes: " + err.front()); }
+    if (!err.empty()) { amrex::Abort("gust: convective_fluxes: " + err.front()); }
     check_inputs("convective_fluxes", loc, q, F, mesh, 2);
     if (G[0].empty()) { define_cv_fluxes(loc, mesh.detJ.boxArray(), mesh.detJ.DistributionMap(), G); }
     check_cv_fluxes("convective_fluxes", loc, G, mesh);
@@ -192,11 +192,11 @@ ConvectionInputs read_convection_options ()
         }
     }
     if (!err.empty()) {
-        std::string all = "ablsteady: invalid inputs:";
+        std::string all = "gust: invalid inputs:";
         for (const auto& e : err) { all += "\n  " + e; }
         amrex::Abort(all);
     }
     return in;
 }
 
-} // namespace ablsteady
+} // namespace gust

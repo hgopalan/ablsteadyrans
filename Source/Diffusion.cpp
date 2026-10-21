@@ -3,7 +3,7 @@
 #include "Diffusion_K.H"
 #include "Stencil_K.H"
 
-namespace ablsteady {
+namespace gust {
 
 namespace {
 
@@ -125,4 +125,4 @@ void momentum_diffusion (const amrex::Array<const amrex::MultiFab*, AMREX_SPACED
     for (int c = 0; c < 3; ++c) { flux_divergence(velocity_loc(c), G[c], mesh, geom, *out[c]); }
 }
 
-} // namespace ablsteady
+} // namespace gust

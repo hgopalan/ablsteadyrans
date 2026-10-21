@@ -1,7 +1,7 @@
 # Tests
 
 ## Overview
-The ablsteady tests. Each case has its own folder with a `README.md`, its input decks, its check script and its
+The GUST tests. Each case has its own folder with a `README.md`, its input decks, its check script and its
 gold files (`Gold/`). The layout follows ERF's `Exec/CanonicalTests/<group>/<case>/`. `CMakeLists.txt` in this
 folder registers every case with CTest; each test runs in its own directory under `<build>/Tests/run/<name>`, so
 nothing is written into the source tree.
@@ -26,6 +26,6 @@ README lists its CTest names.
 
 ## Notes
 - Gold files change only in a reviewed commit that says why. The ERF golds (`Unit_Tests/Gold/erf_hill2d_*`) come
-  from ERF; the others are change detectors written by ablsteady itself.
+  from ERF; the others are change detectors written by GUST itself.
 - `Gold/` folders are exempt from the whitespace and spelling checks (`.gitattributes`, `.codespellrc`).
 - The full list of tests and what each checks is in `docs/testing.rst`.

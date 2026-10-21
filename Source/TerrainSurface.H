@@ -1,5 +1,5 @@
-#ifndef ABLSTEADY_TERRAIN_SURFACE_H_
-#define ABLSTEADY_TERRAIN_SURFACE_H_
+#ifndef GUST_TERRAIN_SURFACE_H_
+#define GUST_TERRAIN_SURFACE_H_
 
 #include "Inputs.H"
 
@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-namespace ablsteady {
+namespace gust {
 
 //! Terrain points from a file, on every rank. Double precision in every
 //! build: map coordinates (UTM, about 5e6 m) need it.
@@ -75,6 +75,6 @@ double erf_bilinear (const TerrainGrid& g, double x, double y);
 void fill_terrain_surface (amrex::MultiFab& z_phys_nd, const amrex::Geometry& geom,
                            const TerrainInputs& t);
 
-} // namespace ablsteady
+} // namespace gust
 
 #endif

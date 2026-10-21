@@ -11,7 +11,7 @@
 #include <limits>
 #include <string>
 
-namespace ablsteady {
+namespace gust {
 
 namespace {
 
@@ -171,7 +171,7 @@ PassFn pass_of (LineOrder order, bool forward, bool jrev)
 void abort_on (const std::vector<std::string>& err)
 {
     if (err.empty()) { return; }
-    std::string all = "ablsteady: zline_lusgs: invalid options:";
+    std::string all = "gust: zline_lusgs: invalid options:";
     for (const auto& e : err) { all += "\n  " + e; }
     amrex::Abort(all);
 }
@@ -392,7 +392,7 @@ void check_line_system (const char* op, Loc loc, const amrex::MultiFab& A, const
                         const amrex::MultiFab& rhs, int sweeps, const Mesh& mesh, const amrex::Geometry& geom,
                         amrex::MultiFab& delta)
 {
-    if (sweeps < 1) { amrex::Abort(std::string("ablsteady: ") + op + ": sweeps must be >= 1 (got " + std::to_string(sweeps) + ")"); }
+    if (sweeps < 1) { amrex::Abort(std::string("gust: ") + op + ": sweeps must be >= 1 (got " + std::to_string(sweeps) + ")"); }
     check_operator_field(op, "A", A, loc, mesh, 0);
     {
         // Every box must span the column, or the line solve would be a block
@@ -400,11 +400,11 @@ void check_line_system (const char* op, Loc loc, const amrex::MultiFab& A, const
         const amrex::Box dom = amrex::convert(geom.Domain(), loc_type(loc));
         for (int b = 0; b < A.boxArray().size(); ++b) {
             if (A.boxArray()[b].smallEnd(2) != dom.smallEnd(2) || A.boxArray()[b].bigEnd(2) != dom.bigEnd(2)) {
-                amrex::Abort(std::string("ablsteady: ") + op + ": every box must span the whole column (mesh.max_grid_size is horizontal)");
+                amrex::Abort(std::string("gust: ") + op + ": every box must span the whole column (mesh.max_grid_size is horizontal)");
             }
         }
     }
-    if (A.nComp() != n_implicit_coefs) { amrex::Abort(std::string("ablsteady: ") + op + ": A needs the implicit operator's components"); }
+    if (A.nComp() != n_implicit_coefs) { amrex::Abort(std::string("gust: ") + op + ": A needs the implicit operator's components"); }
     check_operator_field(op, "ap", ap, loc, mesh, 0);
     check_operator_field(op, "rhs", rhs, loc, mesh, 0);
     if (delta.empty()) { delta.define(A.boxArray(), A.DistributionMap(), 1, 1); }
@@ -427,4 +427,4 @@ amrex::Real zline_lusgs (Loc loc, const amrex::MultiFab& A, const amrex::MultiFa
     return lusgs_lagged(A, ap, rhs, sweeps, opt.order, opt.alternate != 0, geom, delta);
 }
 
-} // namespace ablsteady
+} // namespace gust

@@ -3,7 +3,7 @@
 # 1000 m x 1000 m domain, the same hill (Tests/Initialization/Bump_Speedup_Trend/terrain_bump_fwt.txt,
 # given on the command line), the same power-law inflow (8, 6) m/s at 10 m
 # with exponent 0.14, alpha_h = 1; alpha_v is given on the command line.
-# ablsteady's mesh is terrain-following (FastWindTerrain's is a Cartesian
+# GUST's mesh is terrain-following (FastWindTerrain's is a Cartesian
 # immersed-boundary one): 40 x 40 cells of 25 m, 48 layers from 2.5 m
 # growing by 1.07 (physical top 883.2 m; FastWindTerrain's is 961 m). The wind enters
 # through xlo and ylo and leaves through xhi and yhi; lambda = 0 on all four.

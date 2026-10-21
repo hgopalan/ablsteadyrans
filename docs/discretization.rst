@@ -10,7 +10,7 @@ Cartesian form. The operators are in ``Source/Convection``, ``Source/Diffusion``
 Staggered grid
 --------------
 
-ablsteady uses ERF's staggered (Arakawa C) grid:
+GUST uses ERF's staggered (Arakawa C) grid:
 
 - :math:`u, v, w` sit on the x-, y- and z-faces of the cells;
 - :math:`p, \theta, k` sit at the cell centres;
@@ -120,7 +120,7 @@ Approximate Jacobian
 --------------------
 
 The implicit solvers (:doc:`solution_algorithm`) need a cheap approximation of the Jacobian
-:math:`\partial R/\partial q`. ablsteady uses the first-order operator
+:math:`\partial R/\partial q`. GUST uses the first-order operator
 
 .. math::
 

@@ -1,9 +1,9 @@
-#ifndef ABLSTEADY_REDUCTIONS_H_
-#define ABLSTEADY_REDUCTIONS_H_
+#ifndef GUST_REDUCTIONS_H_
+#define GUST_REDUCTIONS_H_
 
 #include <AMReX_MultiFab.H>
 
-namespace ablsteady {
+namespace gust {
 
 //! Sum of component comp (cell-centred data only) over the valid region, identical to the last bit for
 //! any number of MPI ranks and any DistributionMapping of a fixed BoxArray.
@@ -23,6 +23,6 @@ amrex::Real deterministic_sum (const amrex::MultiFab& mf, int comp);
 //! fixed, the maximum does not depend on the order of evaluation.
 amrex::Real global_max (const amrex::MultiFab& mf, int comp);
 
-} // namespace ablsteady
+} // namespace gust
 
 #endif

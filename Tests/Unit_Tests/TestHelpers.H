@@ -1,5 +1,5 @@
-#ifndef ABLSTEADY_TEST_HELPERS_H_
-#define ABLSTEADY_TEST_HELPERS_H_
+#ifndef GUST_TEST_HELPERS_H_
+#define GUST_TEST_HELPERS_H_
 
 #include <AMReX.H>
 #include <AMReX_MultiFab.H>
@@ -9,7 +9,7 @@
 #include <cstring>
 #include <limits>
 
-namespace ablsteady::test {
+namespace gust::test {
 
 //! Number of points in the region grown by ng where a and b differ in any
 //! bit (a and b must share BoxArray and DistributionMapping). Points are
@@ -107,6 +107,6 @@ private:
     amrex::FPExcept m_prev;
 };
 
-} // namespace ablsteady::test
+} // namespace gust::test
 
 #endif

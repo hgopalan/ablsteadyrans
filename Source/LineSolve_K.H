@@ -1,5 +1,5 @@
-#ifndef ABLSTEADY_LINESOLVE_K_H_
-#define ABLSTEADY_LINESOLVE_K_H_
+#ifndef GUST_LINESOLVE_K_H_
+#define GUST_LINESOLVE_K_H_
 
 // The exact z-line solve of one column, shared by the z-line Jacobi sweeps
 // (Predictor.cpp) and the line LU-SGS sweeps (LineSweeps.cpp).
@@ -11,7 +11,7 @@
 #include <AMReX_GpuQualifiers.H>
 #include <AMReX_REAL.H>
 
-namespace ablsteady {
+namespace gust {
 
 //! The exact z-line solve of column (i, j): the tridiagonal (-a_zm, dg,
 //! -a_zp) with the x/y neighbour terms of d on the right-hand side, the
@@ -44,6 +44,6 @@ void solve_column (amrex::Array4<amrex::Real const> const& a, amrex::Array4<amre
     for (int k = khi - 1; k >= klo; --k) { out(i, j, k) = e(i, j, k) - c(i, j, k) * out(i, j, k + 1); }
 }
 
-} // namespace ablsteady
+} // namespace gust
 
 #endif
