@@ -55,7 +55,8 @@
 // steady.zline_sweeps. The residual norms the stage reports are RMS values
 // per unit volume scaled by U^2/H (momentum), U/H (continuity), U theta_s/H
 // and U k_s/H (theta, k) with U, theta_s, k_s the jvp scales of the residual
-// inputs and H the domain height. The monitors are the largest face speed,
+// inputs and H the depth of the layers (the mesh's top level; prob_hi z on a
+// uniform mesh). The monitors are the largest face speed,
 // the mean k and, with a surface layer, the mean u*.
 
 #include "BoundaryConditions.H"

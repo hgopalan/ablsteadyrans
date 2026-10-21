@@ -790,7 +790,8 @@ writes them and stops; the other ``steady.*`` keys are then refused.
      - ≥ 1. Iteration limit over the whole run, restarts included. With grid sequencing it applies to each level.
    * - ``steady.residual_tol``
      - ``5e-5``
-     - Finite, > 0. Every scaled residual must be below it.
+     - Finite, > 0. Every scaled residual must be below it. The scales divide by the depth of the layers, not
+       ``mesh.prob_hi`` z (:ref:`convergence-criteria`).
    * - ``steady.residual_drop_orders``
      - ``4``
      - ≥ 0 and ≤ the largest decimal exponent of the precision (308 double, 38 single). Every residual must also

@@ -317,7 +317,9 @@ SimplecStage::SimplecStage (const SimplecOptions& opt, int sweeps, const Residua
     m_R.define(ba, dm);
     m_cf.define(ba, dm);
     m_cf.nu.setVal(0.0);
-    m_height = geom.ProbHi(2) - geom.ProbLo(2);
+    // The depth of the layers, not prob_hi z (the same top as the Rayleigh
+    // layer's, BoundaryConditions.cpp); the driver checkpoints it.
+    m_height = residual_scale_height(mesh, geom);
     m_names = stage_residual_names();
     m_specs = stage_monitor_specs(in);
     m_res.assign(m_names.size(), 0);

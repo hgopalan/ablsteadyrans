@@ -190,6 +190,10 @@ struct DriverHistory
     //! 0: none (release_reference_hold, a seeded level of grid sequencing).
     //! No other value is written or read.
     int hold{-1};
+    //! The height H of the residual scales the residuals were recorded with
+    //! (residual_scale_height). 0: not recorded (format 1 and 2, written with
+    //! prob_hi z - prob_lo z).
+    amrex::Real scale_height{0};
 };
 
 //! <dir>/Driver, text, hex floats. Aborts, naming the directory, on a file

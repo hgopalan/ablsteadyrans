@@ -329,6 +329,16 @@ std::string Mesh::quality_report () const
     return os.str();
 }
 
+amrex::Real residual_scale_height (const Mesh& mesh, const amrex::Geometry& geom)
+{
+    const auto& z = mesh.zlevels();
+    if (z.empty()) { amrex::Abort("ablsteady: residual_scale_height: the mesh has no levels (not built)"); }
+    const amrex::Real depth = z.back() - z.front();
+    const amrex::Real box = geom.ProbHi(2) - geom.ProbLo(2);
+    const amrex::Real tol = amrex::Real(1000) * std::numeric_limits<amrex::Real>::epsilon() * box;
+    return (std::abs(depth - box) <= tol) ? box : depth;
+}
+
 amrex::Real free_stream_divergence (const Mesh& mesh, const amrex::Geometry& geom,
                                     const amrex::MultiFab& z_phys_nd, amrex::Real U, amrex::Real V)
 {
