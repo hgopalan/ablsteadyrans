@@ -17,8 +17,8 @@ Quick start
 
 .. code-block:: bash
 
-   git clone --recursive https://github.com/hgopalan/ablsteadyrans.git
-   cd ablsteadyrans
+   git clone --recursive https://github.com/hgopalan/gust-abl.git
+   cd gust-abl
    cmake -S . -B build-rel -DCMAKE_BUILD_TYPE=Release
    cmake --build build-rel -j 8
    ctest --test-dir build-rel --output-on-failure
@@ -89,8 +89,8 @@ clone. From a "Developer PowerShell for VS":
    $env:VCPKG_ROOT = "$HOME/vcpkg"
    & $env:VCPKG_ROOT/vcpkg install fftw3:x64-windows
 
-   git clone --recursive https://github.com/hgopalan/ablsteadyrans.git
-   cd ablsteadyrans
+   git clone --recursive https://github.com/hgopalan/gust-abl.git
+   cd gust-abl
    cmake -S . -B build-rel -G Ninja -DCMAKE_BUILD_TYPE=Release `
      -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" `
      -DVCPKG_TARGET_TRIPLET=x64-windows -DGUST_MPI=OFF
