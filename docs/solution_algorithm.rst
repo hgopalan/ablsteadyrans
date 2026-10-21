@@ -458,14 +458,14 @@ during the stage. The module's state (active, the frozen decisions) goes to the 
 
 **Variation from the plan.** Plan rev. 6 also freezes the stability branch. In a neutral layer :math:`N^2` is
 round-off and its sign flips: on the 2-D hill 286–507 of 512 cells changed branch during Newton. With the branch
-frozen at the switch state Newton was 64 times further from convergence after 8 steps on the inversion and failed
-at 5.7e-9 on the neutral van Albada run; without it both reach round-off (:doc:`results`).
+frozen at the switch state Newton was at 6.0e-6 after 8 steps on the inversion (van Leer), against 9.4e-8 without
+it, and failed at 5.7e-9 on the neutral van Albada run, against 1.4e-13 (:doc:`results`).
 
 **Cost.** The two limiters give different discrete solutions (0.4–0.6 % of the largest :math:`u` on the 2-D hill),
-so the verification pass is not short: 3650–4316 SIMPLEC iterations, about as many as SIMPLEC needs from 1e-4 to
-1e-9 on its own. On a van Leer run the swap therefore does not save work; with ``convection.limiter = van_albada``
-for the whole run Newton solves the run's own equations, reaches round-off in about 8 steps, and needs no
-verification pass (:doc:`results`). The application does not run the Newton stage yet (sub-phase 3.5).
+so the verification pass is not short: 3650–4316 SIMPLEC iterations, 44–74 % of what SIMPLEC needs from 1e-4 to
+1e-9 on its own, on top of the Newton stage. On a van Leer run the swap therefore saves little; with ``convection.limiter = van_albada``
+for the whole run Newton solves the run's own equations, reaches 4e-11 in 5 steps, and needs no verification
+pass, at the cost of a 0.4–0.6 % different answer (:doc:`results`). The application does not run the Newton stage yet (sub-phase 3.5).
 
 .. _convergence-criteria:
 

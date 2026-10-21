@@ -106,6 +106,8 @@ void NewtonSmoothness::write_checkpoint (const std::string& dir, const Closure* 
     }
     amrex::ParallelDescriptor::Bcast(&ok, 1, amrex::ParallelDescriptor::IOProcessorNumber());
     if (ok == 0) { file_error(dir, "could not be written"); }
+    // amrex::Write's header may come from another rank: every file is closed before anyone reads.
+    amrex::ParallelDescriptor::Barrier();
 }
 
 void NewtonSmoothness::read_checkpoint (const std::string& dir, Closure* closure, const amrex::BoxArray& ba,

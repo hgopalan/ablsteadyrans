@@ -688,6 +688,10 @@ TEST(Smoothness, DISABLED_Sweep)
                            << "|R0| " << nr.r0 << " |R|_4 " << at(4) << " |R|_8 " << at(8) << " |R| " << nr.r_abs << " steps "
                            << nr.steps << " GMRES " << nr.gmres << (nr.failed ? " FAILED" : "") << " moved " << moved
                            << " |q_N - q_S|/max u " << diff(q, qs, 0) / umax;
+            amrex::Print() << "\n    per attempt (|R| after accepted steps, GMRES):";
+            for (std::size_t n = 0; n < nr.gmres_per.size(); ++n) {
+                amrex::Print() << " (" << (n < nr.hist.size() ? nr.hist[n] : -1.0) << " " << nr.gmres_per[n] << ")";
+            }
             if (mode == smooth) {
                 copy_state(hr.q, q);
                 amrex::Print() << " verification to 1e-9: " << hr.simplec_to(1e-9, 40000);

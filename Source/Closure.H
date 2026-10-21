@@ -171,7 +171,8 @@ public:
     [[nodiscard]] bool frozen () const { return !m_switches.empty(); }
     //! The valid cells (all ranks) whose held decisions at q differ from the
     //! frozen ones (every rank gets the same count); aborts when not frozen.
-    //! 0 means the frozen evaluation at q is the thawed one, bit for bit.
+    //! 0 means the frozen and thawed evaluations at q agree on every valid
+    //! cell (the lateral ghosts outside the domain are not counted).
     [[nodiscard]] amrex::Long changed_switches (const State& q, const amrex::MultiFab& dist, amrex::Real z0,
                                                 const BuoyancyOptions& buoyancy, const Mesh& mesh,
                                                 const amrex::Geometry& geom) const;
