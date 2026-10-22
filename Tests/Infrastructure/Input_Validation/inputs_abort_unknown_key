@@ -1,6 +1,6 @@
-# Must abort: a typo in an owned namespace, a key in a namespace with no
-# inputs yet, an unknown namespace, and a steady.* key (read only with the
-# steady stage). All are reported in one message.
+# Must abort: a typo in an owned namespace, a turb.* and a steady.* key
+# without the steady stage, an unknown namespace, and a key the solver
+# namespace does not have. All are reported in one message.
 mesh.n_cell        = 16 12 8
 mesh.prob_lo       = 0. 0. 0.
 mesh.prob_hi       = 1600. 1200. 800.
@@ -11,6 +11,6 @@ steady.residual_tol = 1e-6
 mehs.n_cell        = 4 4 4
 io.write_plotfile   = 0
 io.write_checkpoint = 0
-# The Poisson options belong to the Poisson layer; the application has no
-# Poisson solve yet, so it refuses them.
+# solver.poisson_reltol is not an input of the solver namespace, so the
+# application refuses it.
 solver.poisson_reltol = 1.e-8

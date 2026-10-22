@@ -395,7 +395,7 @@ Switching and fallback
   0.08 at 128, 0.75 at 256, 0.97–0.99 at infinite :math:`\Delta\tau`); those steps are still accepted, and
   :math:`|R|` falls from 1.8e-4 to 7.8e-5 over 11 steps. The SIMPLEC preconditioner holds GMRES(30) to about CFL 64
   on that grid (the measurement used a cap of 1000; the default is now 128). The cap, the restart length and the
-  switch residual are chosen from an Askervein study.
+  switch residual are provisional: a Newton study on Askervein has not been run yet.
 - The stage's continuation takes its momentum diffusivity from the closure at its own state, not from the SIMPLEC
   stage (whose is not restored by a restart inside the Newton stage).
 

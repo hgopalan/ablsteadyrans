@@ -489,8 +489,7 @@ TEST(NewtonPreconditioner, ConstantPressureShiftLeavesTheSolveUnchanged)
 }
 
 // ---------------------------------------------------------------------------
-// From the numerics review: the default preconditioner is
-// linear in r. On the stratified periodic hill (gravity 9.81, theta 290 to
+// The default preconditioner is linear in r. On the stratified periodic hill (gravity 9.81, theta 290 to
 // 350 K, so theta's convection couples to du), apply(s r) = s apply(r) for
 // s = 2, -1 and 1e3, to the inner Poisson tolerance. The mutant check: the
 // stage's denominators (step 3 with du itself and the corrected transport)

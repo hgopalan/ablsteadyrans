@@ -1152,7 +1152,7 @@ struct HillU3 : HillCase { HillU3 () : HillCase(4, FaceType::surface_layer, 30) 
 
 // ---------------------------------------------------------------------------
 // steady.newton_ptc_growth on the Ekman column with steady.ser_exponent =
-// 0.5 (review finding P1): without it the step at a finite
+// 0.5: without it the step at a finite
 // CFL whose direction raises |R| for every lambda is rejected until the
 // retries run out (|R|/|R_0| 3.5e-2); with 1.5 those full steps are accepted
 // by the growth bound, only at a finite dtau, and the run reaches 1e-8 |R_0|.

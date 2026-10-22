@@ -1,8 +1,10 @@
 // The Poisson layer, back end A (ERF's TerrainPoisson + GMRES
 // + FFT preconditioner).
 //   manufactured phi, all BC combinations, order >= 1.9
-//   variable coefficients        coefficient 1 = plain operator
-//   Neumann faces carry no flux  projected divergence
+//   variable coefficients
+//   coefficient 1 = plain operator
+//   Neumann faces carry no flux
+//   projected divergence
 //   mirror symmetry
 // Also: preconditioner effect, singular problems, input and BC checks.
 //

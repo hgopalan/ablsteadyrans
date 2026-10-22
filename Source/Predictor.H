@@ -11,8 +11,8 @@
 // wall model, the damping, the Dirichlet identity rows and the ghost
 // couplings), R the full residual (Residual.H) at the state, dtau the local
 // pseudo-time step on the component's faces (face_dtau: the mean of the two
-// cells sharing the face), everything per unit volume (V/dtau and the
-// volume-integrated a_P are these times the cell volume). a_P = 1/dtau +
+// cells sharing the face), everything per unit volume (the volume-integrated
+// forms are V/dtau and V a_P). a_P = 1/dtau +
 // diag(A1) takes the place of the classic under-relaxation a_P/alpha_u (dtau =
 // alpha_u / (1 - alpha_u) / diag(A1) gives the same system). a_P is kept on
 // the faces for the pressure correction (Simplec.H).
@@ -61,8 +61,8 @@
 // linearised coupling of the backward Euler step, with tau_theta = 1 /
 // (1/dtau + a_P,theta) the step theta's own implicit rows allow (the face
 // mean of theta's diagonal: with dtau alone the coupling loses its damping
-// where theta's operator is stiff, the diffusion of a kink; the review's
-// 2 x 2 analysis gives |G| = 0.32 at N tau = 3 against 0.91, and with that
+// where theta's operator is stiff, the diffusion of a kink; a 2 x 2
+// analysis of the coupling gives |G| = 0.32 at N tau = 3 against 0.91, and with that
 // loss the first iterations of Neutral_ABL_Flat diverged): the diagonal
 // gains (g/theta_0) max(dtheta/dz, 0) tau_theta (the stiffness; into the
 // SIMPLEC denominator d as well, so the pressure correction of w is reduced
@@ -93,7 +93,7 @@
 // fixed point. Why the split: a horizontally varying residual (an internal
 // gravity wave of an inviscid inversion, the flow over a ridge) injected
 // with tau_c grew by 1.4 per iteration until the SER ramp collapsed (the
-// Neutral_ABL_Flat and Neutral_Hill_2D bursts of the review); the mean
+// Neutral_ABL_Flat and Neutral_Hill_2D bursts); the mean
 // carries no such mode. Why this tau_c: the backward Euler
 // step of the rotation alone (tau_c = dtau) damps the mode by
 // (1 + f^2 dtau^2)^(-1/2), i.e. (f dtau)^2 / 2 per iteration, and the
@@ -107,7 +107,7 @@
 // in an inversion) that is a fraction r of a residual that holds internal
 // gravity waves and pressure, and at r = 1 the injection makes a
 // horizontally varying wave grow by 1.4 per iteration until the SER ramp
-// collapses (the Neutral_ABL_Flat bursts of the review); r = 0.1 to 0.5
+// collapses (the Neutral_ABL_Flat bursts); r = 0.1 to 0.5
 // converge on every path tried and r = 1 bursts; 0.3 converges in half the
 // iterations of 0.2 on every path, so it is the default. Where a drag
 // dominates
@@ -115,8 +115,8 @@
 // the wall-drag fold of the first cell, a damping layer) tau_c = 1/(net
 // diagonal) keeps the cross term from carrying the other component's drag
 // residual at many times its strength, which would slow that relaxation
-// from 1/(1 + a dtau) to about 0.9 per iteration (the review's 2 x 2
-// analysis); with the net diagonal the step is a pure contraction. The full
+// from 1/(1 + a dtau) to about 0.9 per iteration (a 2 x 2 analysis
+// of the coupling); with the net diagonal the step is a pure contraction. The full
 // a_P would not do: its upwind advection weights (|u|/dx, 300 f aloft) are
 // transport, not drag, and with them tau_c fell back to dtau and the
 // inertial oscillation returned. The terms are a preconditioner of the

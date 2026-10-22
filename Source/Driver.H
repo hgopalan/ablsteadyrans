@@ -50,10 +50,9 @@
 namespace gust {
 
 //! The solver stage the application runs (steady.stage): none writes the
-//! state and stops; simplec runs the
-//! SIMPLEC stage (Simplec.H) under the driver; simplec_newton runs SIMPLEC,
-//! then the Newton stage (NewtonStage.H) once the switch rules allow it
-//! (NewtonStage.H), with the fallback to SIMPLEC.
+//! state and stops; simplec runs the SIMPLEC stage (Simplec.H) under the
+//! driver; simplec_newton runs SIMPLEC, then the Newton stage (NewtonStage.H)
+//! once the switch rules allow it, with the fallback to SIMPLEC.
 enum class StageKind { none, simplec, simplec_newton };
 
 struct SteadyOptions
@@ -109,15 +108,16 @@ struct SteadyOptions
     std::vector<std::string> given;      //!< the steady.* keys given (for the application's has-no-effect checks)
 };
 
-//! The application's default steady.sweep (from the Askervein comparison with
-//! ERF): lusgs on a CPU build (the sweep and CFL-cap study: fewer iterations
-//! at a higher CFL cap than zjacobi); zjacobi on a GPU build until the sweeps
+//! The application's default steady.sweep (from the sweep and CFL-cap study on
+//! Askervein): lusgs on a CPU build (fewer iterations at a higher CFL cap than
+//! zjacobi); zjacobi on a GPU build until the sweeps
 //! are measured on H100. The SteadyOptions member keeps zjacobi, so options
 //! built in code are unchanged; read_steady_options applies this default.
 SweepKind default_sweep () noexcept;
 //! The application's default steady.cfl_max for a sweep: 8 for lusgs (the
 //! cap with the fewest iterations in the sweep and CFL-cap study), 10 for
-//! zjacobi (the z-line Jacobi configuration's).
+//! zjacobi (kept from before the sweep and CFL-cap study, not a result of
+//! it).
 amrex::Real default_cfl_max (SweepKind s) noexcept;
 
 //! The line solver options of opt (steady.sweep and steady.line_*).

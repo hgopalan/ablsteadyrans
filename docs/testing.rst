@@ -228,7 +228,7 @@ The one-line mutants of the Newton stage (``Source/NewtonStage.cpp`` and the swi
 each run against ``Driver.*`` and ``NewtonStage.*`` on two ranks with the unit-test flags by
 ``tools/newton_stage_mutants.py`` (macOS arm64, AppleClang). 13 of 15 are killed. N14 and N15 survive: they matter only
 where the SIMPLEC preconditioner loses GMRES at a large CFL (the full-size 2-D hill), which no unit test reaches in
-seconds; the Askervein study measures them.
+seconds; a Newton study on Askervein (not yet run) would measure them.
 
 .. list-table::
    :header-rows: 1
@@ -782,7 +782,7 @@ Current tests
        ``rt_askervein_210_level_history``
      - Askervein with ERF's setup (``inputs_steady_askervein_210``: 300 × 300 ×
        18, the 210° inflow through xlo and ylo, outflow through xhi and yhi, Rayleigh damping of w in the top 250 m)
-       with the default configuration (``steady.sweep = lusgs`` with its default CFL cap, the default reference window,
+       with the line LU-SGS configuration (``steady.sweep = lusgs`` with its default CFL cap, the default reference window,
        grid sequencing over two levels, the last three on the command line) to the steady verdict; measured: 95 level-0 iterations and 34 on level 1 (four
        ranks). The 10 m speeds on lines A and AA (``tools/askervein_lines.py check``) must be within 5 % of ERF's
        URANS average (``Gold/erf_urans_lines_10m.csv``) up to 300 m past the hilltop, and within 10 % at the four
@@ -793,12 +793,12 @@ Current tests
        10 %) and the stage switches must match ``Gold/askervein_210_level_history.json``. Label ``nightly``; double
        only.
    * - ``rt_steady_askervein_210_unbounded``, ``rt_askervein_210_unbounded_matches``
-     - Old against new for ``bc.inflow_tke_length``: the default run of ``rt_steady_askervein_210`` with the inflow
+     - Old against new for ``bc.inflow_tke_length``: the line LU-SGS run of ``rt_steady_askervein_210`` with the inflow
        length of before (``unbounded``) reaches that run's lines (``Gold/askervein_210_lines_unbounded.csv``) to 1e-4
        (measured: identical to the six digits written, on the same machine). Label ``nightly``; double only.
    * - ``rt_steady_askervein_210_zjacobi``, ``rt_askervein_210_zjacobi_matches``
      - Old against new: the same deck with the z-line Jacobi configuration of ``rt_steady_askervein`` (``zjacobi``, four sweeps, cap 2, a
-       100-iteration reference, one level; measured: 533 iterations, 565 with ``bc.inflow_tke_length = unbounded``) reaches the default run's lines to 0.1 % (measured:
+       100-iteration reference, one level; measured: 533 iterations, 565 with ``bc.inflow_tke_length = unbounded``) reaches the line LU-SGS run's lines to 0.1 % (measured:
        1e-4 %). Label ``nightly``; double only.
    * - ``drift_check_selftest``
      - The ``extern_erf`` drift check on a throw-away ERF repository (:doc:`extraction`).
@@ -810,7 +810,8 @@ Current tests
      - ``gust_refavg`` end to end: three copies of the smoke plotfile at 0, 5 and 10 s are archived on 2
        ranks with two inputs files; the archive verifies on 3 ranks with the expected metadata, AU and a zero
        half-window change; the average equals the smoke plotfile at zero tolerance. This checks the round trip;
-       identical snapshots cannot check the weights, which ``Reference.AverageIsTheTrapezoidTimeAverage`` does.
+       identical snapshots cannot check the weights, which ``Reference.TrapezoidWeights`` and
+       ``Reference.AverageIsTheTrapezoidTimeAverage`` do.
    * - ``refavg_damage``, ``abort_refavg_damaged``, ``abort_refavg_inputs``, ``abort_refavg_verify_keys``
      - A copy of the archive with one bit flipped is refused, naming the file; bad tool inputs stop the tool with
        each input named; a build key given with ``refavg.verify`` is reported.
@@ -1256,7 +1257,8 @@ GoogleTest suite
      - Poiseuille flow between no-slip walls (uniform mesh, 16 layers, :math:`\nu` = 10 m²/s, F = 1e-4 m/s²): the stage
        at CFL 10 reaches the discrete closed form :math:`u_k = (F/2\nu)(z_k(H - z_k) + \Delta z^2/4)` (the odd mirror of
        the walls) to 1e-13 of :math:`u_{\max}` (single 1e-5) in under 400 iterations; w, v exactly 0, :math:`p'` at
-       round-off, θ and k untouched; one more iteration changes u by less than 1e-14 (as in ``Simplec.AUniformStateIsAFixedPoint``).
+       round-off, θ and k untouched; one more iteration changes u by less than 1e-14 (the fixed-point check, also run on a uniform state in
+       ``Simplec.AUniformStateIsAFixedPoint``).
    * - ``Simplec.LidDrivenCavityRe100``
      - The lid-driven cavity at Re 100 (64 × 64 in x–z, two periodic cells in y, no-slip walls, the lid at U = 1,
        :math:`\nu` = 0.01) run by the driver (four sweeps, CFL 1 → 4) to its verdict: u on the vertical centreline and
@@ -1491,7 +1493,7 @@ GoogleTest suite
        re-derived by an independent Python script. Mutants: 21 one-line mutants of the driver, the checkpoint
        format, ``loose_stop`` and the checks, all killed; 4 more of the application wiring are killed by the
        ``rt_sequencing_hold_*``, ``rt_sequencing_cfl_previous`` and ``rt_sequencing_restart`` tests.
-   * - ``Simplec.PointImplicitCouplingsArePinned`` (rotation)
+   * - ``Simplec.PointImplicitCouplingsArePinned`` (the planar-mean split)
      - The rotation's pin holds the planar-mean split: :math:`a_P` with :math:`f^2\max(\tau_c, \tau_{\mathrm{own}})`
        and the right-hand side with the unique-face horizontal mean of the other residual per level at :math:`\tau_c`
        and the fluctuation at :math:`\tau_{\mathrm{own}}`.
@@ -1568,7 +1570,7 @@ GoogleTest suite
        per GMRES iteration, and its output is used; restart and tolerance reach GMRES.
        ``Newton.ColumnRestartAndToleranceSweep``: GMRES iterations against the restart length (:doc:`results`).
    * - ``Newton.*`` (``test_NewtonCoverage.cpp``)
-     - From the post-merge review of #19. ``Newton.TerrainWallLawOperatorMatchesCentralDifference``: on a 30 m hill
+     - Added after #19. ``Newton.TerrainWallLawOperatorMatchesCentralDifference``: on a 30 m hill
        under the wall law, where one ghost fill is not a fixed point, the operator matches a central difference of
        :math:`q \mapsto R(\mathrm{fill}(q))` to 1e-5 on one and six boxes (2.6e-8 to 4.8e-8 measured), and is off by
        more than 1 with the base point :math:`R(q)`. ``Newton.TerrainWallLawStepsReduceResidual``: four default steps

@@ -2,7 +2,7 @@
 
 ## Purpose
 The GoogleTest suite (`unit_tests`), deterministic and seconds long, run on every commit. Each `test_*.cpp` covers
-one layer of `Source/`; the tests (GoogleTest names `Suite.Test`) and what each checks are listed in
+one layer of `Source/`; the tests (GoogleTest names `Suite.Test`) and what each checks are described in
 `docs/testing.rst`.
 
 ## Files

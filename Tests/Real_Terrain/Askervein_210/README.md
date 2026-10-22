@@ -10,11 +10,11 @@ stretched by 1.08).
 ## Files
 | File | Role |
 |---|---|
-| `inputs_steady_askervein_210` | The deck. Terrain and inflow on the command line: `terrain.file=extern_erf/askervein.txt`, `bc.inflow_file=Tests/Real_Terrain/Askervein_210/askervein_210_inflow.txt`. The deck sets no sweep, CFL cap or sequencing; `rt_steady_askervein_210` adds `steady.sweep=lusgs steady.sequencing=1 mesh.hierarchy_levels=2`, the old-vs-new run (`rt_steady_askervein_210_zjacobi`) the z-line Jacobi settings. |
+| `inputs_steady_askervein_210` | The deck. Terrain and inflow on the command line: `terrain.file=extern_erf/askervein.txt`, `bc.inflow_file=Tests/Real_Terrain/Askervein_210/askervein_210_inflow.txt`. The deck sets no sweep, CFL cap or sequencing; `rt_steady_askervein_210` adds `steady.sweep=lusgs steady.sequencing=1 mesh.hierarchy_levels=2`, and the old-vs-new run `rt_steady_askervein_210_zjacobi` adds the z-line Jacobi settings. |
 | `askervein_210_inflow.txt` | z u v θ rows from `extern_erf/inflow_powerlaw.txt` (`tools/erf_inflow_table.py --theta 300`). |
 | `askervein_lines.csv` | The masts of lines A and AA (Taylor and Teunissen 1987): positions in the frame of the terrain file, as tabulated in N. Wagenbrenner's windninja-tools. |
 | `Gold/erf_urans_lines_10m.csv` | ERF's 10 m speeds at the masts, averaged over 2400–4800 s. |
-| `Gold/askervein_210_level_history.json` | The grid-sequencing history of the default run (`rt_askervein_210_level_history`). |
+| `Gold/askervein_210_level_history.json` | The grid-sequencing history of the line LU-SGS run (`rt_askervein_210_level_history`). |
 
 ## The ERF reference
 ERF at the pinned commit ran `inputs_anel` with the overrides of `tools/kestrel/erf_references.sh`
@@ -29,12 +29,12 @@ repository (100 MB).
 double precision only).
 
 ## Expected Results
-- Default configuration (`lusgs` and its default cap 8, the default reference window, two levels): steady after 95
-  level-0 iterations (34 on level 1; 97 and 42 with `bc.inflow_tke_length = unbounded`). z-line Jacobi configuration (`zjacobi`, four sweeps, cap 2, a 100-iteration
-  reference): 533 (565 with `unbounded`). The two agree on the lines to 1e-4 %.
+- Line LU-SGS configuration (`lusgs` and its default cap 8, the default reference window, two levels): steady after 95
+  level-0 iterations (34 on level 1; 97 and 42 with `bc.inflow_tke_length = unbounded`). z-line Jacobi configuration
+  (`zjacobi`, four sweeps, cap 2, a 100-iteration reference): 533 (565 with `unbounded`). The two agree on the lines to 1e-4 %.
 - Against ERF: within 4.00 % up to 300 m past the hilltop; the lee masts beyond are 6.6–9.2 % slower (second-order
   against ERF's fifth-order advection, and less inflow turbulence mixing into the wake than with the unbounded
-  inflow length, which gave 4.48 % and 4.9–7.5 %). See `docs/results.rst`, "Askervein against ERF (210°)".
+  inflow length, which gave 4.48 % and 4.9–7.5 %). See `docs/results.rst`, "Askervein on ERF's mesh".
 
 ## How to run
 ```bash

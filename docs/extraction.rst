@@ -14,7 +14,7 @@ file, its ERF source path, the ERF commit it was copied from, its status, and no
 - Status ``modified``: the local changes are recorded in ``extern_erf/patches/<file>.patch``, a unified diff from
   the ERF file to the local file.
 
-Copied so far: the mesh and terrain-metric code (``ERF_GridUtils.H``, ``ERF_TerrainMetrics.{H,cpp}``,
+Copied: the mesh and terrain-metric code (``ERF_GridUtils.H``, ``ERF_TerrainMetrics.{H,cpp}``,
 ``ERF_ChopGrids.cpp`` and the small headers they include), ERF's Python plotfile reader for the check scripts, and
 the Askervein terrain file. ``ERF_TerrainMetrics.{H,cpp}`` are modified: the coordinate builders take the smoothing
 choice and :math:`\gamma_m` as arguments instead of reading ERF's inputs, return the number of STF levels capped,

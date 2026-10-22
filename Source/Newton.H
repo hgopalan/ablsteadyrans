@@ -81,7 +81,8 @@
 
 namespace gust {
 
-//! The Newton–Krylov inputs. The defaults are provisional.
+//! The Newton–Krylov inputs. The defaults are provisional until a Newton
+//! study on Askervein.
 struct NewtonOptions
 {
     int gmres_restart{30};                    //!< steady.newton_gmres_restart (5..200)

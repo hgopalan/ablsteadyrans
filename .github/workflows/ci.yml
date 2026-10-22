@@ -102,7 +102,7 @@ jobs:
         run: ccache -s
 
   # ---------------------------------------------------------------------
-  # Single precision: compile only. The solver runs in double precision
+  # Single precision: compile only. The tests run in double precision
   # (bit-reproducible residual histories, Newton finish to 1e-8);
   # single is kept compiling (literals, Real vs double) but not run here.
   # ---------------------------------------------------------------------

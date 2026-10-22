@@ -1,7 +1,10 @@
 // The stretched terrain-following mesh.
-//   vertical levels      flat terrain = Cartesian mesh
-//   free-stream (GCL)    cell volumes sum to the domain
-//   smoothing kernel     terrain interpolation
+//   vertical levels
+//   flat terrain = Cartesian mesh
+//   free-stream (GCL)
+//   cell volumes sum to the domain
+//   smoothing kernel
+//   terrain interpolation
 //   metrics equal ERF's (gold from ERF at the pinned commit)
 // IDW against brute force, restart check, steep-ridge report.
 #include "Mesh.H"

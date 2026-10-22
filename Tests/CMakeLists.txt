@@ -59,7 +59,7 @@ target_link_libraries(unit_tests PRIVATE gust_core GTest::gtest)
 target_compile_definitions(unit_tests PRIVATE GUST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 
 # The projection tests project a fixed wind with the Poisson layer: a
-# test-only tool, since the application has no Poisson solve yet.
+# test-only tool.
 add_executable(poisson_projection Supporting_Files/Tools/poisson_projection.cpp)
 target_link_libraries(poisson_projection PRIVATE gust_core)
 # The Tucker wall distance test (rt_walldist_hill2d): another test-only tool.
@@ -866,10 +866,10 @@ if(GUST_PRECISION STREQUAL "DOUBLE")
     # The same deck with grid sequencing over three levels (8 x 8,
     # 16 x 16, then 32 x 32 to round-off); the loose stops of levels 2 and 1
     # (by the residual branch) and the strict stop of level 0 are checked in
-    # the log, level 0 in fewer than 3000 iterations (the z-line Jacobi run
-    # takes 3495; sequencing 2688 (2773 with steady.sequencing_hold = 1), so a
+    # the log, level 0 in fewer than 3000 iterations
+    # (rt_steady_hill3d_neutral_zjacobi takes 3495; sequencing 2688 (2773 with steady.sequencing_hold = 1), so a
     # lost coarse start or reference shows), and the steady state must match
-    # the z-line Jacobi run's to 1e-8;
+    # rt_steady_hill3d_neutral_zjacobi's to 1e-8;
     # p after subtracting each run's mean (no face fixes its level: the
     # prolonged start carries another constant, -1.8e-3 here).
     gust_add_test(NAME rt_steady_hill3d_neutral_sequencing NP 4 LABELS "nightly" RUN_DIR ${RT221_DIR}/sequencing
@@ -973,7 +973,7 @@ if(GUST_PRECISION STREQUAL "DOUBLE")
                 --check ${ASKERVEIN_210_CASE}/askervein_210_inflow.txt)
     set_tests_properties(rt_askervein_210_inflow_table PROPERTIES LABELS "regression;smoke"
                     ENVIRONMENT PYTHONDONTWRITEBYTECODE=1)
-    # The default configuration: the CPU default sweep (lusgs, given here so
+    # The line LU-SGS configuration: the CPU default sweep (lusgs, given here so
     # the gold holds on a GPU build too) with its default CFL cap, the default
     # reference window, grid sequencing over two levels (about 140
     # iterations, 2-3 min on four ranks). Its log is kept for
@@ -982,11 +982,11 @@ if(GUST_PRECISION STREQUAL "DOUBLE")
     set(ASK210_DIR ${CMAKE_CURRENT_BINARY_DIR}/run/rt_askervein_210)
     add_test(NAME rt_askervein_210_clean
              COMMAND ${Python3_EXECUTABLE} -c "import os, shutil, sys; [ (shutil.rmtree(d, ignore_errors=True), os.makedirs(d)) for d in sys.argv[1:] ]"
-                ${ASK210_DIR}/default ${ASK210_DIR}/zjacobi ${ASK210_DIR}/unbounded)
+                ${ASK210_DIR}/lusgs ${ASK210_DIR}/zjacobi ${ASK210_DIR}/unbounded)
     set_tests_properties(rt_askervein_210_clean PROPERTIES LABELS "nightly" FIXTURES_SETUP askervein_210_clean)
-    gust_add_test(NAME rt_steady_askervein_210 NP 4 LABELS "nightly" RUN_DIR ${ASK210_DIR}/default
-                  FIXTURES_SETUP askervein_210_default FIXTURES_REQUIRED askervein_210_clean
-                  PREFIX ${EXPECT_ABORT} --success --log ${ASK210_DIR}/default/run.log --timeout 3600
+    gust_add_test(NAME rt_steady_askervein_210 NP 4 LABELS "nightly" RUN_DIR ${ASK210_DIR}/lusgs
+                  FIXTURES_SETUP askervein_210_lusgs FIXTURES_REQUIRED askervein_210_clean
+                  PREFIX ${EXPECT_ABORT} --success --log ${ASK210_DIR}/lusgs/run.log --timeout 3600
                          "gust: steady after" "grid sequencing summary" --
                   COMMAND $<TARGET_FILE:gust> ${ASKERVEIN_210_CASE}/inputs_steady_askervein_210
                           terrain.file=${PROJECT_SOURCE_DIR}/extern_erf/askervein.txt
@@ -1001,25 +1001,25 @@ if(GUST_PRECISION STREQUAL "DOUBLE")
                 steady_askervein_210_plt ${ASKERVEIN_210_CASE}/Gold/erf_urans_lines_10m.csv
                 --terrain ${PROJECT_SOURCE_DIR}/extern_erf/askervein.txt
                 --lines ${ASKERVEIN_210_CASE}/askervein_lines.csv --out lines.csv --lee_d 300 --lee_rel_tol 0.10
-             WORKING_DIRECTORY ${ASK210_DIR}/default)
+             WORKING_DIRECTORY ${ASK210_DIR}/lusgs)
     set_tests_properties(rt_askervein_210_erf_lines PROPERTIES LABELS "nightly"
-                    FIXTURES_REQUIRED askervein_210_default FIXTURES_SETUP askervein_210_lines
+                    FIXTURES_REQUIRED askervein_210_lusgs FIXTURES_SETUP askervein_210_lines
                     ENVIRONMENT PYTHONDONTWRITEBYTECODE=1)
     # The same lines against their own gold to 1e-4 (Gold/askervein_210_lines.csv):
     # the ERF tolerances alone would pass the run with the inflow k of before.
     add_test(NAME rt_askervein_210_lines_gold
              COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/askervein_lines.py compare lines.csv
                 ${ASKERVEIN_210_CASE}/Gold/askervein_210_lines.csv --rel_tol 1e-4
-             WORKING_DIRECTORY ${ASK210_DIR}/default)
+             WORKING_DIRECTORY ${ASK210_DIR}/lusgs)
     set_tests_properties(rt_askervein_210_lines_gold PROPERTIES LABELS "nightly"
                     FIXTURES_REQUIRED askervein_210_lines ENVIRONMENT PYTHONDONTWRITEBYTECODE=1)
     # The level history (cells, stop reasons, iterations within
     # 10 %) and the stage switches against the gold sequence.
     add_test(NAME rt_askervein_210_level_history
-             COMMAND ${Python3_EXECUTABLE} ${SUPPORT}/check_sequencing_log.py ${ASK210_DIR}/default/run.log
+             COMMAND ${Python3_EXECUTABLE} ${SUPPORT}/check_sequencing_log.py ${ASK210_DIR}/lusgs/run.log
                 ${ASKERVEIN_210_CASE}/Gold/askervein_210_level_history.json --iter_rel_tol 0.1)
     set_tests_properties(rt_askervein_210_level_history PROPERTIES LABELS "nightly"
-                    FIXTURES_REQUIRED askervein_210_default ENVIRONMENT PYTHONDONTWRITEBYTECODE=1)
+                    FIXTURES_REQUIRED askervein_210_lusgs ENVIRONMENT PYTHONDONTWRITEBYTECODE=1)
     # Old vs new: the z-line Jacobi configuration of rt_steady_askervein
     # (zjacobi, four sweeps, CFL cap 2, a 100-iteration reference, one level;
     # about 540 iterations) reaches the same lines as the default to 0.1 %.
@@ -1034,14 +1034,14 @@ if(GUST_PRECISION STREQUAL "DOUBLE")
                           steady.residual_ref_iterations=100 ${GUST_TEST_AMREX_FLAGS})
     add_test(NAME rt_askervein_210_zjacobi_matches
              COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/askervein_lines.py check
-                steady_askervein_210_plt ${ASK210_DIR}/default/lines.csv
+                steady_askervein_210_plt ${ASK210_DIR}/lusgs/lines.csv
                 --terrain ${PROJECT_SOURCE_DIR}/extern_erf/askervein.txt
                 --lines ${ASKERVEIN_210_CASE}/askervein_lines.csv --out lines.csv --rel_tol 1e-3
              WORKING_DIRECTORY ${ASK210_DIR}/zjacobi)
     set_tests_properties(rt_askervein_210_zjacobi_matches PROPERTIES LABELS "nightly"
                     FIXTURES_REQUIRED "askervein_210_zjacobi;askervein_210_lines"
                     ENVIRONMENT PYTHONDONTWRITEBYTECODE=1)
-    # Old against new for bc.inflow_tke_length: the default run with the
+    # Old against new for bc.inflow_tke_length: the line LU-SGS run with the
     # inflow k of before (unbounded length) reaches the lines of that run
     # (Gold/askervein_210_lines_unbounded.csv, #43) to 1e-4.
     gust_add_test(NAME rt_steady_askervein_210_unbounded NP 4 LABELS "nightly" RUN_DIR ${ASK210_DIR}/unbounded

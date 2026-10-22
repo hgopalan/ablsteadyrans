@@ -1045,7 +1045,7 @@ TEST(Newton, PreconditionerHookAndOptionsReachTheSolver)
 }
 
 // ---------------------------------------------------------------------------
-// The review's sweep. GMRES iterations per Newton step on the column of
+// A sweep of the restart length. GMRES iterations per Newton step on the column of
 // Newton.ColumnConvergesQuadratically against the restart length (5, 10, 20,
 // 30, 60, 100, 200) at rtol 1e-2 and 1e-6 (1e-4 in single precision), three
 // plain Newton steps each, printed as a table. At rtol 1e-2 every

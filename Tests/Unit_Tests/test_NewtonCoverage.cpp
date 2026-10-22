@@ -1,4 +1,4 @@
-// Tests of the Newton–Krylov core added by the post-merge review of #19. The
+// Tests of the Newton–Krylov core added after #19. The
 // operator on terrain under the wall law (where one ghost fill is not a fixed
 // point) against a central difference of q -> R(fill(q)), and Newton steps
 // there; the rule that skips an update whose Krylov residual is above |b| or

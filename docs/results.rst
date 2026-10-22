@@ -178,7 +178,7 @@ steady state to the convergence tolerance, and ERF's checks pass for both (`Line
 the verdict after 175 iterations (2 s on two ranks; 156 with the inflow length of before,
 ``bc.inflow_tke_length = unbounded``). The residual is largest in the two columns next to the outflow,
 but keeps falling there with a tighter tolerance (1e-9 after 706 iterations), so the outflow needs no sponge. The
-comparison with ERF's unsteady RANS on lines A and AA uses ERF's own setup on the full mesh (:ref:`askervein-erf-comparison`).
+comparison with ERF's unsteady RANS on lines A and AA uses ERF's own setup on the full mesh (:ref:`askervein-erf-mesh`).
 
 Cost compared with ERF
 ^^^^^^^^^^^^^^^^^^^^^^
@@ -696,10 +696,10 @@ hold on every level (``steady.sequencing_hold = 1``), 54 s with the default.
 - Equal verdicts do not mean equal end states: each run stops at the first iteration that meets the criteria, so
   final residuals can differ by up to an order of magnitude within the same criteria.
 
-.. _askervein-erf-comparison:
+.. _askervein-erf-mesh:
 
-Askervein against ERF (210°)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Askervein on ERF's mesh
+^^^^^^^^^^^^^^^^^^^^^^^
 
 *Setup.* Askervein on ERF's mesh (300 × 300 × 18 cells, 20 m, a 20 m first layer stretched by 1.08), the neutral
 deck of ``rt_steady_askervein`` (``inputs_steady_askervein``, wind along x) unless noted, 8 ranks, 25 boxes of 64 × 64 columns.
@@ -785,8 +785,8 @@ close: ``zjacobi`` with 4 sweeps 220 (cap 2) and 209 (cap 8), with 16 sweeps 208
 - The best ``lusgs`` cap lies between 4 and 16; 8 is the only cap measured in between.
 - ``zjacobi`` with its default two sweeps does not reach steady on Askervein at a cap of 4. A GPU build keeps
   that default (``zjacobi``, two sweeps, cap 10) until the sweeps are measured on H100; give
-  ``steady.zline_sweeps`` and ``steady.cfl_max`` there. The ``zjacobi`` cap of 10 is the earlier default, not a
-  result of this study.
+  ``steady.zline_sweeps`` and ``steady.cfl_max`` there. The ``zjacobi`` cap of 10 is kept from before this study,
+  not a result of it.
 
 .. list-table:: Reference window :math:`K` (``steady.residual_ref_iterations``; cap 8; iterations in the hold,
    the CFL ramp and at the cap)

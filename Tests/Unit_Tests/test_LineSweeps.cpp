@@ -295,7 +295,8 @@ std::pair<double, double> replay_error (Loc loc, const amrex::MultiFab& A, const
 // result equals the host replay of the box-local sweeps of the header's
 // rule (one and two sweeps, n_o = 0 and 2): a face swept by two boxes, or
 // a ghost delta taken from a neighbour, changes the result next to the box
-// face. On one non-periodic box the box-local sweep is the line LU-SGS sweep.
+// face. On one non-periodic box the box-local sweep is the lagged sweep, bit for
+// bit.
 TEST (LineSweeps, EveryFaceIsOwnedAndSweptOnce)
 {
     struct Layout { int nx, ny, mx, my, boxes; };
@@ -525,10 +526,6 @@ TEST (LineSweeps, DiagonalOrderingEqualsTheSequentialSweep)
     }
 }
 
-// The refusals: an overlap outside [0, max_line_overlap], an overlap with
-// the lagged ghosts, an overlap wider than the narrowest box; each message
-// names steady.line_overlap. No overlap along a one-cell axis (a 2-D deck).
-// The names of the options.
 // The alternating ordering (steady.line_alternate).
 // (a) On a system coupled only to the (i - 1) and (j + 1) neighbours (the
 // upwind couplings of u > 0, v < 0) the j-reversed forward pass is an exact
@@ -614,6 +611,10 @@ TEST (LineSweeps, AlternatingOrderingSweepsBothDiagonals)
     }
 }
 
+// The refusals: an overlap outside [0, max_line_overlap], an overlap with
+// the lagged ghosts, an overlap wider than the narrowest box; each message
+// names steady.line_overlap. No overlap along a one-cell axis (a 2-D deck).
+// The names of the options.
 TEST (LineSweeps, RefusalsAndNames)
 {
     PCase c = box_mesh(8, 8, 4, true, 4, 4);

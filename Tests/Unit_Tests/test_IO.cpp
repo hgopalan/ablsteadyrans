@@ -170,8 +170,8 @@ TEST (IO, CheckpointRestartIsBitIdenticalOnANewLayout)
 }
 
 // A checkpoint written before the solution fields had two ghost cells (one,
-// before the Tucker wall distance) restarts bit for bit: only valid data is
-// restored.
+// before the MUSCL convection operators) restarts bit for bit: only valid
+// data is restored.
 TEST (IO, CheckpointWithOneGhostCellRestarts)
 {
     const auto mesh = test_mesh();
