@@ -14,7 +14,7 @@ file, its ERF source path, the ERF commit it was copied from, its status, and no
 - Status ``modified``: the local changes are recorded in ``extern_erf/patches/<file>.patch``, a unified diff from
   the ERF file to the local file.
 
-Copied so far (sub-phase 1.4): the mesh and terrain-metric code (``ERF_GridUtils.H``, ``ERF_TerrainMetrics.{H,cpp}``,
+Copied so far: the mesh and terrain-metric code (``ERF_GridUtils.H``, ``ERF_TerrainMetrics.{H,cpp}``,
 ``ERF_ChopGrids.cpp`` and the small headers they include), ERF's Python plotfile reader for the check scripts, and
 the Askervein terrain file. ``ERF_TerrainMetrics.{H,cpp}`` are modified: the coordinate builders take the smoothing
 choice and :math:`\gamma_m` as arguments instead of reading ERF's inputs, return the number of STF levels capped,
@@ -23,14 +23,14 @@ writes :math:`h\,z_\mathrm{top}/z_\mathrm{top}` there (within 1 ulp of :math:`h`
 same nodes, so the result depended on thread order. Its ghost columns outside non-periodic sides take the clamped
 domain node's height there instead (ERF's builder first sets every node outside the domain to
 ``bogus_large_value``; skipping the whole ground layer, as the first version of this change did, left those nodes at
-1e150 and the extrapolation below the ground at 2e150, which a Dirichlet-ground solve read, sub-phase 1.11).
+1e150 and the extrapolation below the ground at 2e150, which a Dirichlet-ground solve read).
 
 ``erf_plotfile.py`` is modified (follow-up of #43): it takes a FAB's size and byte order from the byte-order
 descriptor, one entry per byte, and refuses any descriptor other than a plain little- or big-endian float or
 double. The upstream reader takes the floating-point format's field count as the size, which is 8 for float data
 too, so it read single-precision plotfiles as byte-swapped doubles.
 
-Copied in sub-phase 1.10, unchanged: ERF's terrain Poisson operator (``ERF_TerrainPoisson.{H,cpp}``,
+Copied unchanged for the Poisson solve: ERF's terrain Poisson operator (``ERF_TerrainPoisson.{H,cpp}``,
 ``ERF_TerrainPoisson_3D_K.H``) and ``ERF_SolverUtils.H``, whose ``get_fft_bc`` maps the domain boundary names to
 the FFT preconditioner's boundaries (``Outflow``/``Open``: odd, periodic: periodic, any other name: even). The copy
 includes the zero total flux through Neumann faces, terrain cross term included (ERF#4272, merged as ERF#4279).
@@ -38,10 +38,10 @@ includes the zero total flux through Neumann faces, terrain cross term included 
 way (:doc:`solution_algorithm`). Two shim headers in ``Source/erf_shims/`` stand
 in for ERF headers the copies include.
 
-Copied in sub-phase 1.7, unchanged: ``ERF_MOSTUtils.H``, whose ``similarity_funs`` give the surface layer's
+Copied unchanged for the surface layer: ``ERF_MOSTUtils.H``, whose ``similarity_funs`` give the surface layer's
 stability functions (:doc:`boundary_conditions`). ERF's MOST kernels (``ERF_MOSTStress.H``, ``ERF_MOSTAverage.cpp``) are not
 copied: they are tied to ERF's state layout and plane averaging, and ``Source/SurfaceLayer.cpp`` follows their
-formulas per column. The reference-height lookup fix the plan names (ERF#3982) is already in the pinned ERF.
+formulas per column. The reference-height lookup fix ERF#3982 is already in the pinned ERF.
 
 The drift check
 ---------------
@@ -84,7 +84,7 @@ Licences and attribution
        re-implemented. No code is copied.
      - —
    * - Kynema-SGF (formerly AMR-Wind)
-     - Cross-check of the Axell–Liungman closure in unit tests (sub-phase 1.9). No code is copied.
+     - Cross-check of the Axell–Liungman closure in unit tests. No code is copied.
      - —
 
 GUST itself is distributed under the BSD 2-Clause licence (``LICENSE``).

@@ -68,7 +68,7 @@ endif()
 add_executable(gust main.cpp)
 target_link_libraries(gust PRIVATE gust_core)
 
-# Builds and verifies ERF reference archives (sub-phase 1.1).
+# Builds and verifies ERF reference archives.
 add_executable(gust_refavg RefAvgTool.cpp)
 target_link_libraries(gust_refavg PRIVATE gust_core)
 

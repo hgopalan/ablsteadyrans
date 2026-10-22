@@ -6,7 +6,7 @@ with two inputs files. The archive must verify on three ranks, and its trapezoid
 must reproduce the smoke plotfile bit for bit. A damaged archive and bad tool inputs must be refused.
 
 This checks the archive round trip. Identical snapshots cannot tell weights apart; the weights are tested in the
-unit tests (UT-1.1.2).
+unit tests (`Reference.TrapezoidWeights`).
 
 ## Files
 | File | Role |

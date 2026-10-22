@@ -1,8 +1,8 @@
-// Pseudo-transient continuation around the Newton step (plan sub-phase
-// 3.2): UT-3.2.1 (the line search rejects an overshoot), UT-3.2.2 (the dtau
-// ramp follows SER), and beyond the numbered tests: a skipped step, the
-// Armijo test on a known quadratic, the readers and range checks of the new
-// keys, the hill on any rank count, the restart and the true linear residual.
+// Pseudo-transient continuation around the Newton step: the line search
+// rejects an overshoot, the dtau ramp follows SER, and also a skipped step,
+// the Armijo test on a known quadratic, the readers and range checks of the
+// new keys, the hill on any rank count, the restart and the true linear
+// residual.
 #include "BoundaryConditions.H"
 #include "Continuation.H"
 #include "Inputs.H"
@@ -200,7 +200,7 @@ public:
 
 
 // ---------------------------------------------------------------------------
-// UT-3.2.1. The line search rejects an overshoot. The 30 m hill of #25 (one
+// The line search rejects an overshoot. The 30 m hill of #25 (one
 // box) with u three times larger, |R_0| = 99.5, under plain Newton (infinite
 // dtau throughout: cfl0 = cfl_max and the state restored at the cap), with
 // GMRES(30) stopped at 200 iterations. Those solves end at the iteration
@@ -265,7 +265,7 @@ TEST(Continuation, LineSearchRejectsOvershoot)
         EXPECT_GE(hc.q.tke.min(0), 0) << "the trial points keep k at its floor, " << n;
     }
     const auto& rec = pt.records();
-    amrex::Print() << std::setprecision(6) << "UT-3.2.1: NewtonKrylov::step |R_1| / |R_0| = " << full
+    amrex::Print() << std::setprecision(6) << "NewtonKrylov::step |R_1| / |R_0| = " << full
                    << " (Krylov relative " << eta << "); the continuation: step, |R|, lambda, ratio\n";
     for (const auto& r : rec) {
         amrex::Print() << "  " << r.step << "  " << r.residual << "  " << r.lambda << "  " << r.residual_new / r.residual << "\n";
@@ -316,7 +316,7 @@ TEST(Continuation, LineSearchRejectsOvershoot)
     EXPECT_EQ(r1.cfl, amrex::Real(2.5));
     // Either outcome of the retry is valid; SkippedStepCutsCflAndKeepsState
     // covers q unchanged after a failed step on every platform.
-    amrex::Print() << "UT-3.2.1: lambda_min 0.9 from step " << first_backtrack << ": the retry at CFL 2.5 was "
+    amrex::Print() << "lambda_min 0.9 from step " << first_backtrack << ": the retry at CFL 2.5 was "
                    << (st == ContinuationStatus::failed ? "rejected (step failed)" : "accepted") << "\n";
     if (st == ContinuationStatus::failed) {
         EXPECT_EQ(r1.outcome, AttemptOutcome::rejected);
@@ -329,7 +329,7 @@ TEST(Continuation, LineSearchRejectsOvershoot)
 }
 
 // ---------------------------------------------------------------------------
-// UT-3.2.2. The dtau ramp follows SER: given a sequence of |R|, the CFL after
+// The dtau ramp follows SER: given a sequence of |R|, the CFL after
 // each accepted step is min(cfl_max, g CFL_n, cfl0 (|R_0| / |R_n|)^p) (the
 // closed form, computed here in double), the growth limit and the cap bind
 // where they should, and with steady.newton_dtau_inf_at_cap = 1 the step
@@ -916,11 +916,11 @@ TEST(Continuation, RestartIsBitIdentical)
 // the hill with a uniform dtau of 20 s. They agree to 1e-6 of |b| (the
 // forward difference's error in the extra product), and both meet rtol.
 // ---------------------------------------------------------------------------
-// The caller's |R_0| (set_reference_residual, for the handover of sub-phase
-// 3.5): with |R_0| ten times the first step's |R|, that |R_0| stays, the
-// first CFL is the SER law with that |R_0| (not the one of the step's own
-// |R_0|), and run()'s rel_tol is relative to it.
-// A non-finite or non-positive |R_0| is refused.
+// The caller's |R_0| (set_reference_residual, for the handover from the
+// SIMPLEC stage): with |R_0| ten times the first step's |R|, that |R_0| stays,
+// the first CFL is the SER law with that |R_0| (not the one of the step's own
+// |R_0|), and run()'s rel_tol is relative to it. A non-finite or non-positive
+// |R_0| is refused.
 TEST(Continuation, ReferenceResidualFromCaller)
 {
     // The law binds (no growth limit, a high cap): the two CFLs differ by 10.
@@ -956,7 +956,7 @@ TEST(Continuation, ReferenceResidualFromCaller)
 }
 
 // ---------------------------------------------------------------------------
-// beyond the plan: restore lowers a checkpointed CFL above the run's
+// restore lowers a checkpointed CFL above the run's
 // cfl_max to the cap (the options may change across a restart), and the
 // constructor refuses a NaN, infinite or negative tke_floor, naming
 // turb.tke_floor.
@@ -1028,7 +1028,7 @@ TEST(Newton, TrueLinearResidualMatchesEstimate)
 }
 
 // ---------------------------------------------------------------------------
-// Beyond the plan, run on request (--gtest_also_run_disabled_tests): the
+// Run on request (--gtest_also_run_disabled_tests): the
 // sweep of docs/results.rst. One input at a time away from the defaults
 // (newton_armijo_c, newton_backtrack, ser_exponent, cfl_max, the infinite-dtau
 // switch, and newton_lambda_min = 0.99, which leaves only lambda = 1) on the
@@ -1152,7 +1152,7 @@ struct HillU3 : HillCase { HillU3 () : HillCase(4, FaceType::surface_layer, 30) 
 
 // ---------------------------------------------------------------------------
 // steady.newton_ptc_growth on the Ekman column with steady.ser_exponent =
-// 0.5 (beyond the plan; review finding P1): without it the step at a finite
+// 0.5 (review finding P1): without it the step at a finite
 // CFL whose direction raises |R| for every lambda is rejected until the
 // retries run out (|R|/|R_0| 3.5e-2); with 1.5 those full steps are accepted
 // by the growth bound, only at a finite dtau, and the run reaches 1e-8 |R_0|.

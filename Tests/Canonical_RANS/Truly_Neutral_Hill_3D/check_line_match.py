@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare the steady states of two runs of one deck (RT-2.2.1).
+"""Compare the steady states of two runs of one deck (rt_steady_hill3d_neutral_matches).
 
     check_line_match.py DIR_A DIR_B PREFIX [--rel_tol 1e-8] [--mean_free p[,...]]
 

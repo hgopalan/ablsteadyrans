@@ -1,7 +1,7 @@
 # WindNinja2019
 
 ## Purpose
-Beyond the plan: GUST on the three sites of Wagenbrenner, Forthofer, Page and Butler (2019), "Development and
+GUST on the three sites of Wagenbrenner, Forthofer, Page and Butler (2019), "Development and
 evaluation of a Reynolds-averaged Navier–Stokes solver in WindNinja for operational wildland fire applications",
 *Atmosphere* 10, 672. The transect plots of the paper (Figures 8, 12 and 15) are redrawn with GUST - Fast (mass
 consistent) and GUST - CFD (steady RANS) next to the observations and the paper's WindNinja curves.

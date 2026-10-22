@@ -1,4 +1,4 @@
-# 10 m speeds of rt_steady_askervein_210 (the Phase 2 configuration, bc.inflow_tke_length = closure; steady after 95 level-0 iterations)
+# 10 m speeds of rt_steady_askervein_210 (the default configuration, bc.inflow_tke_length = closure; steady after 95 level-0 iterations)
 line,d,x,y,speed
 A,-841,-869.80,-338.90,8.800164
 A,-608,-710.90,-168.50,7.979020

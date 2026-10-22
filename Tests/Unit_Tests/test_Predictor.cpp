@@ -1,9 +1,7 @@
-// The SIMPLEC momentum predictor (sub-phase 1.14): UT-1.14.1 (a_P = 1/dtau +
-// diag(A1)), UT-1.14.2 (the z-line solve against a dense solve), UT-1.14.3
-// (alpha_u relaxation = pseudo-time with the matching dtau), UT-1.14.4
-// (z-line Jacobi converges to the direct solution), UT-1.14.5 (a converged
-// state is a fixed point), and face_dtau, the refusals and the rank
-// independence beyond the plan.
+// The SIMPLEC momentum predictor: a_P = 1/dtau + diag(A1), the z-line solve
+// against a dense solve, alpha_u relaxation = pseudo-time with the matching
+// dtau, z-line Jacobi converges to the direct solution, a converged state is a
+// fixed point, and face_dtau, the refusals and the rank independence.
 #include "BoundaryConditions.H"
 #include "ImplicitOperator.H"
 #include "MassFlux.H"
@@ -128,7 +126,7 @@ struct Coefficients
         in.theta_ref.theta = {300, 300};
         // No gravity: these tests pin the plain delta form (1/dtau + A1) du =
         // -R; the point-implicit buoyancy and rotation of the w, u and v rows
-        // (sub-phase 1.15) are pinned by test_Simplec.cpp.
+        // (the SIMPLEC stage) are pinned by test_Simplec.cpp.
         in.buoyancy.gravity = 0;
     }
 };
@@ -256,13 +254,13 @@ struct Problem
 };
 
 // ---------------------------------------------------------------------------
-// UT-1.14.1. a_P on every face equals 1/dtau + the diagonal of line_jacobian
-// exactly, for u, v and w, with a random dtau field; and the predictor
-// applies exactly the correction the z-line solve gives. Both diagonals come
-// from implicit_rows (the coefficients themselves are pinned by UT-1.6.x):
-// what this pins is the 1/dtau addition, the face step, the diagonal's
-// positivity, the identity of the two copies of a periodic seam face and the
-// correction applied.
+// a_P on every face equals 1/dtau + the diagonal of line_jacobian exactly, for
+// u, v and w, with a random dtau field; and the predictor applies exactly the
+// correction the z-line solve gives. Both diagonals come from implicit_rows
+// (the coefficients themselves are pinned by test_Residual.cpp): what this
+// pins is the 1/dtau addition, the face step, the diagonal's positivity, the
+// identity of the two copies of a periodic seam face and the correction
+// applied.
 TEST (Predictor, APIsTheDiagonalPlusThePseudoTimeTerm)
 {
     PCase c = make_mesh(8, 4, 6, 60);
@@ -288,7 +286,7 @@ TEST (Predictor, APIsTheDiagonalPlusThePseudoTimeTerm)
     gust::PredictorFields ap;
     const auto r = gust::momentum_predictor(q1, pr.R, {&pr.F[0], &pr.F[1], &pr.F[2]}, co.in, df, c.mesh, c.geom, 3, ap);
     {
-        // Sub-phase 2.2: the line options reach the sweeps of u, v and w (the
+        // The line options reach the sweeps of u, v and w (the
         // diagonal ordering's launches, one per wavefront plane of the owned
         // region with the zero ghosts), not only steady.sweep.
         gust::State q2;
@@ -369,7 +367,7 @@ TEST (Predictor, APIsTheDiagonalPlusThePseudoTimeTerm)
 }
 
 // ---------------------------------------------------------------------------
-// UT-1.14.2 and UT-1.14.4. The z-line Jacobi iteration converges to the
+// The z-line Jacobi iteration converges to the
 // direct (dense) solution of (1/dtau + A1) delta = -R: on a single column
 // (1 x 1 x 12, periodic sides: the lagged neighbours are the column itself)
 // the system with the vertical upwind weights of A1 (the implicit vertical
@@ -439,7 +437,7 @@ TEST (Predictor, ZLineJacobiConvergesToTheDenseSolution)
 }
 
 // ---------------------------------------------------------------------------
-// UT-1.14.3. Classic under-relaxation (a_P / alpha_u) delta - sum a_nb
+// Classic under-relaxation (a_P / alpha_u) delta - sum a_nb
 // delta_nb = -R equals pseudo-time relaxation with dtau = alpha_u / (1 -
 // alpha_u) / diag(A1) on every face: the converged z-line Jacobi solution
 // with that dtau equals the dense solve of the relaxed system to 1e-12.
@@ -510,7 +508,7 @@ TEST (Predictor, UnderRelaxationIsAPseudoTimeStep)
 }
 
 // ---------------------------------------------------------------------------
-// UT-1.14.5. A converged state is a fixed point: a uniform wind over flat
+// A converged state is a fixed point: a uniform wind over flat
 // ground with uniform pressure has a residual of exactly zero (the
 // conservative fluxes telescope), so the predictor changes nothing; with
 // rhs = 0 the Thomas recurrences give 0 for any coefficients, so the second
@@ -577,7 +575,7 @@ TEST (Predictor, AConvergedStateIsAFixedPoint)
 }
 
 // ---------------------------------------------------------------------------
-// Beyond the plan: face_dtau is the mean of the two cells (one cell on a
+// face_dtau is the mean of the two cells (one cell on a
 // non-periodic face, the ground and the top; the periodic image across the
 // seam); the predictor's result is identical on every rank; sweeps < 1 and
 // wrong layouts are refused; one sweep's change equals the correction.
@@ -653,7 +651,7 @@ TEST (Predictor, FaceStepRefusalsAndRankIndependence)
 }
 
 // ---------------------------------------------------------------------------
-// Beyond the plan: with boundary conditions, the Dirichlet rows of the normal
+// With boundary conditions, the Dirichlet rows of the normal
 // velocity (the inflow face of u at xlo; the slip ground and top of w; the
 // outflow face is an even mirror, not a Dirichlet point) get no pseudo-time
 // term: a_P = 1, d = 0 there, and one predictor step sets the face to the
@@ -756,7 +754,7 @@ TEST (Predictor, DirichletRowsAreSetExactly)
 }
 
 // ---------------------------------------------------------------------------
-// Beyond the plan: the w rows' VNN cap (simplec.w_vnn_cap, Predictor.H). With
+// The w rows' VNN cap (simplec.w_vnn_cap, Predictor.H). With
 // the cap V on, the w rows get a_P = 1/dtau + (a_ZM + a_ZP)/V + diag(A1) and
 // d = a_P - sum a_nb (so d gains the same (a_ZM + a_ZP)/V), on every row but
 // the Dirichlet ground and top rows (a_P = 1, d = 0 as without the cap); the
@@ -884,7 +882,7 @@ TEST (Predictor, WVnnCapAddsToTheWDiagonalAndD)
 }
 
 // ---------------------------------------------------------------------------
-// Beyond the plan: the slope-aware cap (simplec.w_vnn_cap_slope_margin,
+// The slope-aware cap (simplec.w_vnn_cap_slope_margin,
 // Predictor.H). On each w row the cap's term is min(K/V, max(0, 1/(s r_c) -
 // 1)/dtau), K = a_ZM + a_ZP, r_c = a/(sqrt(1 + a) + 1)^2 and a = h_x^2 + h_y^2
 // the slope of the face's node heights, in a_P and d; so the row keeps
@@ -1026,7 +1024,7 @@ TEST (Predictor, WVnnCapSlopeMarginKeepsThePressureOperatorDefinite)
 }
 
 // ---------------------------------------------------------------------------
-// Beyond the plan: on flat ground the slope margin of the w rows' cap changes
+// On flat ground the slope margin of the w rows' cap changes
 // nothing: margin 4 and margin 0 (#32's cap) give the same rows and the same
 // update, bit for bit.
 TEST (Predictor, WVnnCapSlopeMarginIsBitIdenticalOnFlatGround)
@@ -1083,7 +1081,7 @@ TEST (Predictor, WVnnCapSlopeMarginIsBitIdenticalOnFlatGround)
 }
 
 // ---------------------------------------------------------------------------
-// Beyond the plan: the predictor's result does not depend on the box layout:
+// The predictor's result does not depend on the box layout:
 // the same state and inputs on one box and on 2 x 2 boxes (the lagged
 // neighbours then cross box seams through the ghost exchange) give the same
 // correction to round-off.
@@ -1172,7 +1170,7 @@ TEST (Predictor, IndependentOfTheBoxLayout)
 }
 
 // ---------------------------------------------------------------------------
-// Sub-phase 2.1: the line LU-SGS sweeps (zline_lusgs).
+// The line LU-SGS sweeps (zline_lusgs).
 //
 // Dense reference of one symmetric line Gauss-Seidel sweep on one box: with
 // the unknowns ordered column by column (j outer, i inner, k innermost) and
@@ -1356,7 +1354,7 @@ void random_system (const PCase& c, Loc loc, unsigned seed, double extra, amrex:
     rhs.OverrideSync(c.geom.periodicity());
 }
 
-// UT-2.1.1. One and two symmetric sweeps on a 6 x 3 x 4 box (cells, and the
+// One and two symmetric sweeps on a 6 x 3 x 4 box (cells, and the
 // x faces) equal the dense block-triangular reference to 1e-12 (relative),
 // on a non-periodic box and on a periodic one (where the seam couplings are
 // the previous pass's values; cells only there: the two copies of a seam
@@ -1388,12 +1386,12 @@ TEST (Predictor, LusgsSweepMatchesTheDenseReference)
     }
 }
 
-// UT-2.1.1 on two boxes (mesh.max_grid_size 3 in x): the couplings across
-// the box face are the previous pass's, so one sweep differs from the
+// The symmetric sweeps on two boxes (mesh.max_grid_size 3 in x): the couplings
+// across the box face are the previous pass's, so one sweep differs from the
 // one-box sweep, but 40 sweeps still reach the dense solution of the full
 // system to 1e-11, the shared x face is single-valued after the solve
-// (OverrideSync), and the result on two ranks equals the one on one rank
-// (the same BoxArray; the block Jacobi across boxes is rank-independent).
+// (OverrideSync), and the result on two ranks equals the one on one rank (the
+// same BoxArray; the block Jacobi across boxes is rank-independent).
 TEST (Predictor, LusgsOnTwoBoxesConvergesAndIsRankIndependent)
 {
     PCase c = make_mesh(6, 3, 4, 40, false, false, 3);
@@ -1491,7 +1489,7 @@ TEST (Predictor, LusgsOnTwoBoxesConvergesAndIsRankIndependent)
     }
 }
 
-// UT-2.1.2. Pure first-order upwind convection along x (a_xm = c for a wind
+// Pure first-order upwind convection along x (a_xm = c for a wind
 // in +x, a_xp = c for -x, nothing else) on a non-periodic box: the pass in
 // the wind's direction solves the system exactly, so one symmetric sweep
 // equals the dense solution to 1e-12 for either sign; with the wind in +x
@@ -1527,7 +1525,7 @@ TEST (Predictor, LusgsOnePassIsExactAlongTheWind)
     }
 }
 
-// UT-2.1.3. The real first-order operator A1 of u (the implicit upwind
+// The real first-order operator A1 of u (the implicit upwind
 // advection and the principal diffusion) on a periodic 4 x 4 x 6 hill mesh
 // with a uniform wind of either sign at dtau = 20 s: the LU-SGS sweeps
 // converge to the dense solution to 1e-10 (40 sweeps), the error falls with
@@ -1586,10 +1584,10 @@ TEST (Predictor, LusgsConvergesForEitherWindSign)
     }
 }
 
-// UT-2.1.5 and the refusals. A zero right-hand side (a fixed point: R = 0)
-// gives delta = 0 exactly for any number of sweeps; the dispatcher routes by
-// kind; sweeps < 1 and a bad A are refused as for zline_jacobi; the kinds
-// have their names.
+// The fixed point and the refusals. A zero right-hand side (a fixed point:
+// R = 0) gives delta = 0 exactly for any number of sweeps; the dispatcher
+// routes by kind; sweeps < 1 and a bad A are refused as for zline_jacobi; the
+// kinds have their names.
 TEST (Predictor, LusgsFixedPointAndRefusals)
 {
     PCase c = make_mesh(5, 3, 4, 30);

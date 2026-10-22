@@ -1,4 +1,4 @@
-# RT-2.2.1 (line LU-SGS half): inputs_steady_hill3d_neutral with the box-local
+# The line LU-SGS deck: inputs_steady_hill3d_neutral with the box-local
 # line LU-SGS sweeps (zero ghosts, overlap 2, diagonal ordering, cap 16).
 # The original header follows. A truly neutral variant of ERF's Neutral_Hill_3D
 # (inputs_steady_hill3d) with a true fixed point, so that two sweeps can be

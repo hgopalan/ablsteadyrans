@@ -40,7 +40,7 @@ struct MeshQuality
     int nz{0};
 };
 
-//! The terrain-following mesh (sub-phase 1.4): node heights z_phys_nd (held
+//! The terrain-following mesh: node heights z_phys_nd (held
 //! by the State, which checkpoints them) and the metric terms derived from
 //! them with ERF's kernels (extern_erf/ERF_TerrainMetrics.cpp):
 //!   detJ  cell volume factor, (cell volume) / (dx dy dzeta);

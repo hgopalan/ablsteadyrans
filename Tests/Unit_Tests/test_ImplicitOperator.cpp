@@ -1,8 +1,7 @@
-// The first-order implicit-side operator (sub-phase 1.5): UT-1.5.4 (diagonal
-// dominance), and its consistency with the explicit operators (beyond the
-// plan): first-order upwind convection in the bounded form is A1 exactly, and
-// on a flat mesh the diffusion operators have no cross terms, so their
-// principal part is all of them.
+// The first-order implicit-side operator: diagonal dominance, and its
+// consistency with the explicit operators: first-order upwind convection in
+// the bounded form is A1 exactly, and on a flat mesh the diffusion operators
+// have no cross terms, so their principal part is all of them.
 #include "Convection.H"
 #include "Diffusion.H"
 #include "ImplicitOperator.H"
@@ -88,7 +87,7 @@ Fields random_fields (const PCase& c, double fmax, double numax, unsigned seed)
     return f;
 }
 
-// UT-1.5.4. For random transport fluxes (+-20 m/s, not divergence-free) and a
+// For random transport fluxes (+-20 m/s, not divergence-free) and a
 // random diffusivity (0 to 50 m^2/s, a fifth of the cells 0) on the hill mesh,
 // every row of A1 has non-negative neighbour weights and a_P equal to their
 // sum: weakly diagonally dominant with non-positive off-diagonals.

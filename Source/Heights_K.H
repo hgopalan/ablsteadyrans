@@ -2,7 +2,7 @@
 #define GUST_HEIGHTS_K_H_
 
 // Heights of the points of the terrain-following mesh from its nodes
-// (sub-phase 1.8, shared by the boundary fills and the initializer): the
+// (shared by the boundary fills and the initializer): the
 // node heights with the lateral indices clamped to the stored ghost node and
 // the vertical ones extrapolated, a point's height above its column's ground
 // and its vertical height, for every location type of Stencil_K.H.

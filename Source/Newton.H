@@ -1,14 +1,14 @@
 #ifndef GUST_NEWTON_H_
 #define GUST_NEWTON_H_
 
-// The Newton–Krylov core (plan sub-phase 3.1): one Newton step
+// The Newton–Krylov core: one Newton step
 //
 //   (D + J) dq = -R(q),    D = 1/dtau on the rows with a pseudo-time term,
 //
 // solved by flexible GMRES (amrex::GMRES, setFlexible(true)) without
 // forming J: every product J v is jvp (Residual.H), a forward difference of
 // the full second-order residual with the scaled step of JvpScales. R and J
-// are per unit volume, so D = 1/dtau is the plan's V/dtau divided by the
+// are per unit volume, so D = 1/dtau is V/dtau divided by the
 // cell volume (the convention of Residual.H and Predictor.H).
 //
 // The rows of D: the momentum faces (dtau on faces from face_dtau,
@@ -45,7 +45,7 @@
 // BoxArray.
 //
 // The preconditioner is a hook (NewtonPreconditioner): the identity (a copy)
-// when none is given; sub-phase 3.3 plugs in one SIMPLEC iteration
+// when none is given; NewtonPreconditioner.H plugs in one SIMPLEC iteration
 // (SimplecPreconditioner, NewtonPreconditioner.H) through it without
 // changing NewtonKrylov.
 //
@@ -81,8 +81,7 @@
 
 namespace gust {
 
-//! The Newton–Krylov inputs. The defaults are provisional: sub-phase 3.6
-//! (the phase 3 checkpoint) tunes them.
+//! The Newton–Krylov inputs. The defaults are provisional.
 struct NewtonOptions
 {
     int gmres_restart{30};                    //!< steady.newton_gmres_restart (5..200)
@@ -127,7 +126,7 @@ struct NewtonVector
 //! from one step to the next). FGMRES lets apply change from one call to the
 //! next (an inner iteration stopped by a tolerance).
 //!
-//! The contract of apply (sub-phase 3.3):
+//! The contract of apply:
 //!  * shared faces: a face shared by two boxes, or a periodic seam face and
 //!    its image, is one unknown. r arrives with equal copies (the vector
 //!    operations act point by point and residual() syncs its face rows);
@@ -293,7 +292,7 @@ public:
     //! null for plain Newton. pc: null for the identity.
     NewtonStepInfo step (State& q, const amrex::MultiFab* dtau, NewtonPreconditioner* pc = nullptr);
 
-    //! The search direction of step without the update (sub-phase 3.2,
+    //! The search direction of step without the update (for
     //! Continuation.H): q's ghost cells are filled, then dq (a State on q's
     //! layout) gets S x on its valid points, or 0 when the update is not
     //! usable (info.applied false); its ghost cells are 0. q's valid points

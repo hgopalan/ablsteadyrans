@@ -1,7 +1,7 @@
 #ifndef GUST_PREDICTOR_H_
 #define GUST_PREDICTOR_H_
 
-// The SIMPLEC momentum predictor (sub-phase 1.14): the momentum equations in
+// The SIMPLEC momentum predictor: the momentum equations in
 // delta form with pseudo-time relaxation and defect correction,
 //
 //   (1/dtau + A1) du = -R(q),      a_P = 1/dtau + diag(A1),
@@ -11,11 +11,11 @@
 // wall model, the damping, the Dirichlet identity rows and the ghost
 // couplings), R the full residual (Residual.H) at the state, dtau the local
 // pseudo-time step on the component's faces (face_dtau: the mean of the two
-// cells sharing the face), everything per unit volume (the plan's V/dtau and
-// a_P are these times the cell volume). a_P = 1/dtau + diag(A1) takes the
-// place of the classic under-relaxation a_P/alpha_u (dtau = alpha_u / (1 -
-// alpha_u) / diag(A1) gives the same system). a_P is kept on the faces for
-// the pressure correction (sub-phase 1.15).
+// cells sharing the face), everything per unit volume (V/dtau and the
+// volume-integrated a_P are these times the cell volume). a_P = 1/dtau +
+// diag(A1) takes the place of the classic under-relaxation a_P/alpha_u (dtau =
+// alpha_u / (1 - alpha_u) / diag(A1) gives the same system). a_P is kept on
+// the faces for the pressure correction (Simplec.H).
 //
 // The system is solved by z-line Jacobi sweeps: every column (i, j) is solved
 // exactly for its tridiagonal part (-a_zm, a_P, -a_zp) with the Thomas
@@ -26,10 +26,10 @@
 // converge to the exact solution of the linear system for any dtau; the
 // outer defect-correction iteration with few sweeps per step is a different
 // matter: one lagged sweep with the second-order residual is unstable at
-// large horizontal CFL (the Fourier analysis of sub-phase 1.5), so the
+// large horizontal CFL (a Fourier analysis of the iteration), so the
 // default is 2 (steady.zline_sweeps).
 //
-// Line LU-SGS (sub-phase 2.1, steady.sweep = lusgs): the same exact z-line
+// Line LU-SGS (steady.sweep = lusgs): the same exact z-line
 // solve, but the columns of a box are visited in order, forward over (i, j)
 // with the already-updated lower x/y neighbours and then backward with the
 // updated upper ones (a symmetric line Gauss-Seidel in delta form, in
@@ -41,17 +41,17 @@
 // every CFL in 1-D (tools/sweeps_cfl_scan.py --thresholds). For u and v of
 // opposite sign each pass has one upwind neighbour lagged: the per-sweep
 // factor is cu cv / ((1 + cu)(1 + cv)), so one sweep is unstable beyond a
-// CFL of about 2.5 and two sweeps beyond about 33 (the review of 2.1).
+// CFL of about 2.5 and two sweeps beyond about 33.
 // Across box faces and the periodic seams the neighbours are the previous
 // pass's by default (a block Jacobi across boxes, whose seam error decays
 // downstream over about CFL cells, so boxes shorter than the CFL limit the
-// solve); sub-phase 2.2 adds the box-local sweeps with an overlap, the C-grid
-// face ownership and the GPU diagonal ordering (LineSweeps.H).
+// solve); LineSweeps.H also has the box-local sweeps with an overlap, the
+// C-grid face ownership and the GPU diagonal ordering.
 //
 // Dirichlet rows (the normal velocities on inflow and outflow faces: R = q
 // - V, identity in A1; BoundaryConditions::dirichlet_rows) get no 1/dtau:
 // the step sets the boundary value exactly. a_P is 1 there, which the
-// pressure correction of 1.15 must treat as "no correction on this face".
+// pressure correction (Simplec.H) must treat as "no correction on this face".
 //
 // Point-implicit buoyancy (with gravity on): the w and theta equations are
 // the oscillator dw/dtau = (g/theta_0) theta', dtheta'/dtau = -w dtheta/dz
@@ -144,7 +144,7 @@
 // (no Rhie-Chow interpolation) d enters only the pressure correction, so the
 // steady answer is unchanged. u, v, theta and k keep their rows.
 //
-// Limits (the review of the cap): the same linear model diverges for V <= 2
+// Limits: the same linear model diverges for V <= 2
 // at CFL >= 16 and for V = 4 at CFL 64 (the w rows' predictor then lags the
 // pressure correction the other way); capping d alone diverges for V <= 8
 // and capping a_P alone gains nothing, so both get the term.
@@ -200,7 +200,7 @@ void face_dtau (const amrex::MultiFab& dtau_cc, const Mesh& mesh, const amrex::G
                 amrex::Array<amrex::MultiFab, AMREX_SPACEDIM>& dtau_faces);
 
 //! Per momentum equation on its faces (per unit volume), for the pressure
-//! correction of 1.15: a_P = 1/dtau + diag(A1), and the SIMPLEC denominator
+//! correction (Simplec.H): a_P = 1/dtau + diag(A1), and the SIMPLEC denominator
 //! d = a_P - sum of the neighbour coefficients (= 1/dtau plus what the folds
 //! added to the diagonal: the wall drag, the damping, a "value" fold), which
 //! cannot be recovered from a_P alone. On the Dirichlet rows of the open
@@ -252,14 +252,14 @@ MomentumPredictorResult momentum_predictor (State& q, const ResidualFields& R,
                                             amrex::Real w_vnn_slope_margin = 0);
 
 //! zline_jacobi or, with opt.kind = lusgs, zline_lusgs (LineSweeps.H, the
-//! line LU-SGS solve of sub-phases 2.1 and 2.2) with opt's ghosts, overlap
+//! line LU-SGS solve) with opt's ghosts, overlap
 //! and ordering.
 amrex::Real line_sweeps (const LineSweepOptions& opt, Loc loc, const amrex::MultiFab& A, const amrex::MultiFab& ap,
                          const amrex::MultiFab& rhs, int sweeps, const Mesh& mesh, const amrex::Geometry& geom,
                          amrex::MultiFab& delta);
 
 //! The z-line Jacobi solve alone (for its tests and the scalar sweeps of
-//! sub-phase 1.15): sweeps of the system with the off-diagonal coefficients
+//! the SIMPLEC stage): sweeps of the system with the off-diagonal coefficients
 //! of A (n_implicit_coefs components at loc, ImplicitOperator.H) and the
 //! diagonal ap (one component at loc), right-hand side rhs (at loc, no
 //! ghosts needed), into delta (at loc, one ghost cell, defined here if

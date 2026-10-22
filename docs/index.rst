@@ -25,26 +25,21 @@ The initial field comes from a mass-consistent model in the style of WindNinja, 
 Development status
 ------------------
 
-The solver is developed in four phases. Each phase adds a faster solution method.
+Each solution method below adds speed to the one before.
 
 .. list-table::
    :header-rows: 1
-   :widths: 10 70 20
+   :widths: 75 25
 
-   * - Phase
-     - Solution method
+   * - Solution method
      - Status
-   * - 1
-     - Pseudo-time SIMPLEC with implicit vertical lines (z-line Jacobi)
+   * - Pseudo-time SIMPLEC with implicit vertical lines (z-line Jacobi)
      - Complete
-   * - 2
-     - Line LU-SGS sweeps, a horizontal grid hierarchy and grid sequencing
+   * - Line LU-SGS sweeps, a horizontal grid hierarchy and grid sequencing
      - In progress
-   * - 3
-     - Jacobian-free Newton–Krylov, preconditioned by SIMPLEC
+   * - Jacobian-free Newton–Krylov, preconditioned by SIMPLEC
      - In progress
-   * - 4
-     - Nonlinear FAS multigrid, GPU tuning, validation and release
+   * - Nonlinear FAS multigrid, GPU tuning, validation and release
      - Planned
 
 The production solver today is the SIMPLEC stage (:doc:`solution_algorithm`). The target machine is NLR Kestrel:

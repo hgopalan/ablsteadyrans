@@ -57,8 +57,8 @@ std::vector<std::string> check_column_guess (const InitOptions& iopt, const Stea
     }
     // A pressure gradient without Coriolis under a stable sounding has no
     // steady column: the stress F (H - z) above the inversion falls on a
-    // layer whose k sits at the floor, and u grows without bound (the review
-    // of 2.1b). Allowed with a neutral sounding or a Rayleigh layer on u, v.
+    // layer whose k sits at the floor, and u grows without bound. Allowed
+    // with a neutral sounding or a Rayleigh layer on u, v.
     const bool coriolis_driven = fopt.coriolis.enabled && fopt.coriolis.geostrophic;
     bool neutral = true;
     for (std::size_t i = 1; i < static_cast<std::size_t>(bin.theta_ref.theta.size()); ++i) {

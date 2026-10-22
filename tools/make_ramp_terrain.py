@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""A smooth periodic plateau for the 2-D terrain comparison (sub-phase 1.16):
+"""A smooth periodic plateau for the 2-D terrain comparison:
 
     h(x) = (H/4) [1 + tanh((x + x_r)/L)] [1 - tanh((x - x_r)/L)],
 

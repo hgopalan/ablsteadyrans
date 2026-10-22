@@ -1,4 +1,4 @@
-// RT-1.10.1: project a fixed wind on a terrain mesh with the Poisson layer and
+// Project a fixed wind on a terrain mesh with the Poisson layer and
 // write the potential. Test-only tool: the GUST application has no
 // Poisson solve yet (the initializer and SIMPLEC come later).
 //

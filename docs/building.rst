@@ -10,7 +10,7 @@ Requirements
 - An FFT library for AMReX's FFT module: FFTW on the CPU, cuFFT (CUDA), rocFFT (HIP) or oneMKL (SYCL).
 - Python 3, for the test scripts.
 
-AMReX and GoogleTest are git submodules. AMReX is pinned to the commit the development plan was checked against.
+AMReX and GoogleTest are git submodules. AMReX is pinned to a fixed commit.
 
 Quick start
 -----------

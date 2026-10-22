@@ -1,5 +1,5 @@
-// UT-1.1.1: the reference loader reads archived plotfiles and averaged
-// fields; fields and metadata match the archive checksums. Beyond the plan:
+// The reference loader reads archived plotfiles and averaged
+// fields; fields and metadata match the archive checksums. Also:
 // the trapezoid time average and its half-window stationarity measure, AU
 // accounting, and every way an archive can be damaged (changed byte, missing
 // file, extra file, edited metadata, data changed with its checksum).
@@ -227,7 +227,7 @@ TEST (Reference, AverageRejectsBadSnapshotLists)
                  std::runtime_error);
 }
 
-// UT-1.1.1: write an archive, verify it, load it; the loaded fields are the
+// Write an archive, verify it, load it; the loaded fields are the
 // average bit for bit and the metadata come back unchanged.
 TEST (Reference, ArchiveRoundTripVerifies)
 {
@@ -278,7 +278,7 @@ TEST (Reference, ArchiveRoundTripVerifies)
     on_io_rank([&] { EXPECT_FALSE(fs::exists(dir + "_2")); });
 }
 
-// UT-1.1.1: every kind of damage is found and named; load refuses.
+// Every kind of damage is found and named; load refuses.
 TEST (Reference, DamagedArchivesAreRefused)
 {
     ScopedPaths keep{write_snapshots("ut_ref_dmg", {0.0, 10.0, 20.0})};
@@ -388,7 +388,7 @@ TEST (Reference, MetadataRangeChecks)
     }
 }
 
-// Beyond the plan: the half-window stationarity measure. Fields linear in
+// The half-window stationarity measure. Fields linear in
 // time over 5 evenly spaced snapshots: the first-half average is the value at
 // s = 1 (2x), the second at s = 3 (4x), so the change is 2 max|x| and the
 // whole-window average is 3x. All values are exact in binary.

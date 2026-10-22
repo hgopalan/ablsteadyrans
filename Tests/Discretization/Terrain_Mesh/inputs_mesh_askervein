@@ -1,6 +1,6 @@
 # ERF's Askervein mesh (Real_Terrain/Askervein/inputs_anel) coarsened from
 # 300 x 300 to 60 x 60 cells: 100 m horizontal cells, 18 layers from 20 m
-# growing by 1.08, basic terrain following, ERF's terrain file. RT-1.4.1/2.
+# growing by 1.08, basic terrain following, ERF's terrain file.
 # terrain.file is given on the command line (extern_erf/askervein.txt).
 mesh.n_cell        = 60 60 18
 mesh.prob_lo       = -3000. -3000. 0.

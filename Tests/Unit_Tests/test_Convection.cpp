@@ -1,6 +1,5 @@
-// Convection operator (sub-phase 1.5): UT-1.5.1 (MMS order on a sinusoidal-
-// terrain, stretched mesh), UT-1.5.3 (k positivity with bounded upwind) and
-// UT-1.5.5 (smooth limiter).
+// Convection operator: MMS order on a sinusoidal-terrain, stretched mesh, k
+// positivity with bounded upwind and the smooth limiter.
 #include "Convection.H"
 #include "ImplicitOperator.H"
 #include "Limiter_K.H"
@@ -99,7 +98,7 @@ Norms conv_error (int m, Loc loc, const ConvectionOptions& opt, amrex::MultiFab*
 
 double order (double a, double b) { return std::log2(a / b); }
 
-// UT-1.5.1. The MUSCL reconstruction without limiting (the van Albada slope
+// The MUSCL reconstruction without limiting (the van Albada slope
 // with eps far above every difference, i.e. the central slope (a+b)/2, the
 // limit both limiters take on smooth data away from extrema): second order in
 // L2 and max norm, for the scalar (both forms) and for the three momentum
@@ -122,7 +121,7 @@ TEST(ConvectionMMS, UnlimitedMusclIsSecondOrder)
     }
 }
 
-// UT-1.5.1 with the limiters. A TVD limiter cuts the slope at smooth extrema,
+// MMS order with the limiters. A TVD limiter cuts the slope at smooth extrema,
 // so the error there is first order (max norm about 1, L2 about 1.5); the L1
 // order tends to 2. On these three meshes: L1 order >= 1.5 on the finest
 // pair, and an L1 error at most a quarter of first-order upwind's.
@@ -197,7 +196,7 @@ RandomCase make_random_case (double fmax, unsigned seed)
     return rc;
 }
 
-// UT-1.5.3. k >= 0 is kept by the bounded upwind form under strong, strongly
+// k >= 0 is kept by the bounded upwind form under strong, strongly
 // divergent advection: with random k >= 0 (a third of the points 0) and
 // random transport fluxes of +-50 m/s, the pseudo-time step
 //   k_new = k - dtau C(k),  dtau = 1 / a_P (the largest step the scheme allows),
@@ -287,7 +286,7 @@ TEST(ConvectionProperties, BoundedFormOfConstantIsZero)
 }
 
 // ---------------------------------------------------------------------------
-// UT-1.5.5. The smooth limiter.
+// The smooth limiter.
 
 template <Limiter L>
 double slope (double a, double b, double eps)

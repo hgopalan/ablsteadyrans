@@ -1,7 +1,7 @@
 # IshiharaZhou
 
 ## Purpose
-Beyond the plan: the steep two-dimensional ridge of Ishihara and Zhou (2025) at full scale (tunnel × 1000), a
+The steep two-dimensional ridge of Ishihara and Zhou (2025) at full scale (tunnel × 1000), a
 test of lee separation and reattachment, on a smooth (z0 = 0.01 m) and a rough (z0 = 0.3 m) surface. The setup
 follows H. Gopalan's Kynema-SGF cases (kynema/kynema-sgf#2031, #2036).
 

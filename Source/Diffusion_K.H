@@ -13,7 +13,7 @@
 
 namespace gust {
 
-//! How a cell-centred diffusivity is averaged to a face (sub-phase 1.9):
+//! How a cell-centred diffusivity is averaged to a face:
 //! arithmetic everywhere, or the logarithmic mean across vertical cell pairs
 //! (lateral pairs stay arithmetic). For a diffusivity linear in the vertical
 //! coordinate, the log-law's kappa u* (z + z0), the logarithmic mean gives the

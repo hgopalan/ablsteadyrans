@@ -1,4 +1,4 @@
-# RT-1.9.1: the full residual of the wall law's equilibrium state with the k-L
+# The full residual of the wall law's equilibrium state with the k-L
 # closure on ERF's Neutral_ABL_Flat mesh (8 x 8 x 64 cells, 2560 m x 2560 m x
 # 1000 m, dz = 15.625 m), periodic sides, the surface layer on the ground
 # (z0 = 0.1 m), a slip top, neutral (theta = 300 K). The state is the log law

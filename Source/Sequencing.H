@@ -2,7 +2,7 @@
 #define GUST_SEQUENCING_H_
 
 // Grid sequencing, coarse to fine, over the horizontal grid hierarchy
-// (sub-phase 2.5; MeshHierarchy.H, Transfer.H). With steady.sequencing = 1
+// (MeshHierarchy.H, Transfer.H). With steady.sequencing = 1
 // and L = mesh.hierarchy_levels >= 2 levels, a fresh run:
 //   1. on the coarsest level L-1: the initializer (init.*, Initializer.H)
 //      on that level's mesh, then the SIMPLEC stage under its own driver

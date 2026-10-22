@@ -1,7 +1,7 @@
 #ifndef GUST_SIMPLEC_H_
 #define GUST_SIMPLEC_H_
 
-// The SIMPLEC stage (sub-phase 1.15): one pseudo-time iteration of the
+// The SIMPLEC stage: one pseudo-time iteration of the
 // segregated solver, run by the driver (Driver.H).
 //
 //   1. the state's ghosts and the wall state at q (BoundaryConditions);
@@ -14,7 +14,7 @@
 //
 //      (the Poisson layer with the face coefficients beta = 1/d, Poisson.H;
 //      the boundary types of the run's faces, poisson_bc_from_faces), to the
-//      relative tolerance simplec.pressure_reltol (1e-3: the plan's 0.1
+//      relative tolerance simplec.pressure_reltol (1e-3: a tolerance of 0.1
 //      leaves a divergence that advects a stable stratification and feeds
 //      the buoyancy; Neutral_ABL_Flat diverges at 0.1 and 1e-2 and
 //      converges at 1e-3 and 1e-4, docs/solver.rst); then

@@ -1,7 +1,7 @@
 #ifndef GUST_INITIALIZER_H_
 #define GUST_INITIALIZER_H_
 
-// The mass-consistent initializer (sub-phase 1.12), WindNinja-style, with
+// The mass-consistent initializer, WindNinja-style, with
 // FastWindTerrain's semantics for the anisotropy: a first guess u0 from the
 // inflow profile by height above the ground (w_0 = 0, no flux through the ground), made divergence-free by a
 // variational correction
@@ -66,7 +66,7 @@ struct InitOptions
     FirstGuess first_guess{FirstGuess::none};
     //! init.projection (0 or 1): the mass-consistent correction of the first
     //! guess; 0 keeps the first guess as it is (the stage's own pressure
-    //! correction then removes the divergence). Sub-phase 2.1b.
+    //! correction then removes the divergence).
     bool projection{true};
     //! init.first_guess = column: the 1-D column's convergence tolerance
     //! (the largest scaled change over one backward Euler step, > 0) and its

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""RT-2.6.2: the stage switches and the grid-sequencing level history of a run log against a gold file.
+"""The stage switches and the grid-sequencing level history of a run log against a gold file.
 
     check_sequencing_log.py LOG GOLD.json [--iter_rel_tol 0.1] [--write]
 

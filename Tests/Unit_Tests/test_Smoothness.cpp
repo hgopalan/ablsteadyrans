@@ -1,9 +1,8 @@
-// Smoothness handling around the Newton stage (plan sub-phase 3.4,
-// Smoothness.H): UT-3.4.1 (the freeze/unfreeze cycle and the verification
-// pass return the SIMPLEC solution) and UT-3.4.2 (smooth vs standard limiter
-// solutions within the stated tolerance), and beyond the plan: the floor-only
-// freeze, the stratification gate turb.ri_gate, the module's inputs,
-// aborts and checkpoint, and a measurement sweep (DISABLED_).
+// Smoothness handling around the Newton stage (Smoothness.H): the
+// freeze/unfreeze cycle and the verification pass return the SIMPLEC solution,
+// smooth vs standard limiter solutions are within the stated tolerance, and
+// also the floor-only freeze, the stratification gate turb.ri_gate, the
+// module's inputs, aborts and checkpoint, and a measurement sweep (DISABLED_).
 #include "BoundaryConditions.H"
 #include "Closure.H"
 #include "Continuation.H"
@@ -177,7 +176,7 @@ NewtonResult run_newton (HillRun& hr, gust::State& q, const gust::ResidualInputs
 } // namespace
 
 // ---------------------------------------------------------------------------
-// Beyond the plan. FreezeScope::floor holds the k floor's decision alone.
+// FreezeScope::floor holds the k floor's decision alone.
 // On a stable sheared state:
 //  * frozen at that state (either scope), the evaluation is the thawed one
 //    bit for bit, and no decision has moved;
@@ -192,7 +191,7 @@ NewtonResult run_newton (HillRun& hr, gust::State& q, const gust::ResidualInputs
 //  * frozen as floored on an unstable state, then k back at 0.4: the floor
 //    scope evaluates as the live closure at k = floor (its branch and Rt
 //    smoothings decided at the k the kernel uses), bit for bit, with
-//    nu_t > 0 (deciding them at k = 0.4 gave nu_t < 0, Aaron review).
+//    nu_t > 0 (deciding them at k = 0.4 gave nu_t < 0).
 TEST(Smoothness, FloorScopeHoldsOnlyTheFloor)
 {
     ClosureBox b;
@@ -251,7 +250,7 @@ TEST(Smoothness, FloorScopeHoldsOnlyTheFloor)
 }
 
 // ---------------------------------------------------------------------------
-// Beyond the plan. The stratification gate N^2 -> N^2 N^4 / (N^4 + Ri_0^2
+// The stratification gate N^2 -> N^2 N^4 / (N^4 + Ri_0^2
 // S^4): the closed form at chosen (N^2, S^2) (sign kept, 0 at N^2 = 0 and
 // at N^2 = S^2 = 0), the limits (|Ri| = 1e3 Ri_0 kept to 1e-6, |Ri| = 1e-3
 // Ri_0 suppressed to 1e-6), the closure with ri_gate = 0 bit-identical to
@@ -336,7 +335,7 @@ TEST(Smoothness, RiGateClosedFormAndLimits)
 }
 
 // ---------------------------------------------------------------------------
-// Beyond the plan. The module: the limiter swap (van_leer -> van_albada;
+// The module: the limiter swap (van_leer -> van_albada;
 // van_albada and upwind kept; eps and every other input unchanged;
 // smooth_limiter off: no swap), turb.frozen_switch -> freeze_floor, enter
 // and leave (closure frozen with the floor scope, the count of moved floor
@@ -474,7 +473,7 @@ TEST(Smoothness, ModuleInputsAbortsAndCheckpoint)
 }
 
 // ---------------------------------------------------------------------------
-// UT-3.4.1 and UT-3.4.2 on the hill with a capping inversion (8 x 2 x 8
+// The Newton cycle on the hill with a capping inversion (8 x 2 x 8
 // cells, two boxes). From the SIMPLEC state at r = 1e-4:
 //  * the reference: SIMPLEC on to r < 1e-8 (q_S);
 //  * the Newton stage: enter, plain Newton on the smooth inputs to |R| <=
@@ -483,11 +482,11 @@ TEST(Smoothness, ModuleInputsAbortsAndCheckpoint)
 //    the floor freeze itself is ModuleInputsAbortsAndCheckpoint's). With the
 //    standard limiter Newton is still above 1e-8 |R_0| after the same 14
 //    steps (5e-3 measured: the van Leer kinks);
-//  * UT-3.4.2 (smooth vs standard limiter): the Newton solution q_N differs
+//  * smooth vs standard limiter: the Newton solution q_N differs
 //    from q_S by at most 2 % of max |u| in u and w, 0.01 K in theta and 5 %
 //    of max k in k (measured 1.1 %, 0.095 %, 7.0e-5 K, 3.2 %), and by more
 //    than 0.1 % of max |u| in u (the limiters do differ);
-//  * UT-3.4.1 (freeze/unfreeze and the verification pass): SIMPLEC with the
+//  * freeze/unfreeze and the verification pass: SIMPLEC with the
 //    run's inputs from q_N to r < 1e-8 gives q_S to 1e-5 of max |u| and max
 //    k, and theta to 1e-5 of the inversion's 2 K (5.7e-7 of max |u| measured).
 TEST(Smoothness, NewtonCycleReturnsTheSimplecSolution)
@@ -522,25 +521,25 @@ TEST(Smoothness, NewtonCycleReturnsTheSimplecSolution)
         const auto standard = run_newton(hr, qvl, hr.ls->res_in, 14, 1e-9);
         EXPECT_FALSE(standard.converged);
         EXPECT_GT(standard.rel, 1e-8);
-        amrex::Print() << "UT-3.4.x: Newton to 1e-9: smooth " << smooth.steps << " steps, " << smooth.gmres
+        amrex::Print() << "Newton to 1e-9: smooth " << smooth.steps << " steps, " << smooth.gmres
                        << " GMRES; standard after " << standard.steps << " steps |R|/|R0| " << standard.rel << "\n";
     }
 
-    // UT-3.4.2.
+    // Smooth vs standard limiter.
     const double du = diff(qn, qs, 0), dw = diff(qn, qs, 2), dth = diff(qn, qs, 4), dk = diff(qn, qs, 5);
     EXPECT_LE(du, 0.02 * umax);
     EXPECT_LE(dw, 0.02 * umax);
     EXPECT_LE(dth, 0.01);
     EXPECT_LE(dk, 0.05 * kmax);
     EXPECT_GT(du, 1e-3 * umax);
-    amrex::Print() << "UT-3.4.2: |q_N - q_S| / max: u " << du / umax << " w " << dw / umax << " theta " << dth << " K, k "
+    amrex::Print() << "|q_N - q_S| / max: u " << du / umax << " w " << dw / umax << " theta " << dth << " K, k "
                    << dk / kmax << "\n";
 
-    // UT-3.4.1: the verification pass with the run's inputs.
+    // The verification pass with the run's inputs.
     copy_state(hr.q, qn);
     const int vits = hr.simplec_to(1e-8, 10000);
     ASSERT_LT(hr.r(), 1e-8);
-    amrex::Print() << "UT-3.4.1: verification pass " << vits << " iterations, |q_V - q_S| / max u " << diff(hr.q, qs, 0) / umax
+    amrex::Print() << "verification pass " << vits << " iterations, |q_V - q_S| / max u " << diff(hr.q, qs, 0) / umax
                    << "\n";
     EXPECT_LE(diff(hr.q, qs, 0), 1e-5 * umax);
     EXPECT_LE(diff(hr.q, qs, 2), 1e-5 * umax);
@@ -549,14 +548,14 @@ TEST(Smoothness, NewtonCycleReturnsTheSimplecSolution)
 }
 
 // ---------------------------------------------------------------------------
-// Measurements for docs/results.rst (beyond the plan; run with
+// Measurements for docs/results.rst (run with
 // --gtest_also_run_disabled_tests --gtest_filter=Smoothness.DISABLED_*): the
 // 16 x 2 x 16 hill, neutral (lapse 0) and with the inversion (lapse 0.01
 // K/m), run with van Leer or van Albada; turb.ri_gate 0, 0.01, 0.1. Per case:
 // SIMPLEC iterations to r = 1e-4 and 1e-9, then from the 1e-4 state plain
 // Newton (30 steps at most, to |R| <= 1e-12 |R_0|) with the run's limiter,
 // with the smooth one (van Leer runs) and with every closure decision
-// frozen (FreezeScope::all, plan rev. 6); absolute |R| after 4 and 8 steps
+// frozen (FreezeScope::all); absolute |R| after 4 and 8 steps
 // and at the end, GMRES iterations, cells whose branch moved, the distance
 // of the Newton solution from SIMPLEC's, and the verification pass.
 TEST(Smoothness, DISABLED_Sweep)

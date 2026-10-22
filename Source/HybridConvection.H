@@ -1,7 +1,7 @@
 #ifndef GUST_HYBRIDCONVECTION_H_
 #define GUST_HYBRIDCONVECTION_H_
 
-// A near-ground blend of the convection scheme towards first-order upwind (beyond the plan). The momentum and
+// A near-ground blend of the convection scheme towards first-order upwind. The momentum and
 // theta convection terms of the residual become
 //
 //   C = C_hi + sigma (C_up - C_hi),   sigma in [0, sigma_max],

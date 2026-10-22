@@ -21,23 +21,23 @@ Steady cases
      - 1-D neutral column
      - Wall model, turbulence model and vertical diffusion. The log law and the equilibrium :math:`k` are known
        exactly.
-     - RT-1.15.1
+     - ``rt_steady_column``
    * - 2
      - Flat 3-D periodic (ERF ``Neutral_ABL_Flat``)
      - Horizontal directions, pressure, Coriolis forcing.
-     - RT-1.15.2
+     - ``rt_steady_neutral_flat``
    * - 3
      - 2-D hill (ERF ``Neutral_Hill_2D``)
      - Terrain-following mesh, metric terms, wall distance.
-     - RT-1.16.1
+     - ``rt_steady_hill2d``
    * - 4
      - 3-D hill (ERF ``Neutral_Hill_3D``)
      - Flow around as well as over a hill.
-     - RT-1.16.2
+     - ``rt_steady_hill3d``
    * - 5
      - Askervein hill
      - Real terrain and field measurements (masts on lines A and AA).
-     - RT-1.16.3
+     - ``rt_steady_askervein``
    * - 5b
      - Askervein, conventionally neutral
      - Case 5 with stratification aloft, Coriolis forcing and a Rayleigh layer (below).
@@ -46,12 +46,12 @@ Steady cases
      - Askervein, ERF's setup
      - Case 5 with ERF's own inflow (power law from 210° through two faces) and Rayleigh layer on ERF's full mesh,
        compared with ERF's URANS on lines A and AA.
-     - RT-2.6.1, RT-2.6.2
+     - ``rt_askervein_210_erf_lines``, ``rt_askervein_210_level_history``
    * - 6
      - Bolund, Perdigão
      - A steep escarpment (Bolund) and a double ridge (Perdigão). Flow separation in the lee may prevent a steady
        solution.
-     - RT-4.3.3 (planned)
+     - Planned
 
 **Case 5b.** Case 5 keeps the potential temperature, gravity, Coriolis forcing at 57.2° N and the flat case's
 sounding: an inversion from 700 m, 0.03 K/m above, the top raised to 1599 m and Rayleigh damping above 1200 m. The

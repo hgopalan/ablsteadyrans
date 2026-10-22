@@ -1,7 +1,7 @@
 #ifndef GUST_CLOSURE_H_
 #define GUST_CLOSURE_H_
 
-// The Axell–Liungman (2001) k–L closure (sub-phase 1.9): the eddy viscosity
+// The Axell–Liungman (2001) k–L closure: the eddy viscosity
 // and diffusivities from the state, and the sources of k. The point relations
 // are in Closure_K.H (ERF's AL01 relations, extern_erf/ERF_RANSClosure.H).
 //
@@ -30,7 +30,7 @@
 // (Smoothness.H, turb.frozen_switch); changed_switches() counts the cells
 // whose decisions have moved since.
 //
-// Stratification gate (turb.ri_gate = Ri_0 > 0, beyond the plan): the
+// Stratification gate (turb.ri_gate = Ri_0 > 0): the
 // length scale and Rt (and through Rt c_mu, c_mu' and the heat diffusivity)
 // take
 //   N^2_eff = N^2 Ri^2 / (Ri^2 + Ri_0^2) = N^2 N^4 / (N^4 + Ri_0^2 S^4),   Ri = N^2 / S^2,
@@ -52,9 +52,8 @@
 // its column's ground, ERF's terrain_height) or the Tucker distance of
 // WallDistance.H; turb.wall_distance names the choice for the driver.
 //
-// Inputs (turb.*, read by read_closure_options; the regression tool reads
-// them in this version, the driver of sub-phase 1.13 adds them to the
-// application):
+// Inputs (turb.*, read by read_closure_options; the application and the
+// regression tool read them):
 //   Cmu0 0.5562 (> 0)   Cb 0.35 (> 0)   Rt_crit -1 (<= 0)   Rt_min -3 (< Rt_crit, > -3.6)
 //   max_geom_lscale 30 m (> 0)   tke_floor 0 (0: machine epsilon; else >= machine epsilon)
 //   sigma_k 1 (> 0)   nu_molecular 0 (>= 0, m^2/s)   alpha_molecular 0 (>= 0, m^2/s)
@@ -104,7 +103,7 @@ struct ClosureOptions
     amrex::Real ri_gate{0};
     FaceMean face_mean{FaceMean::arithmetic};
     WallDistanceKind wall_distance{WallDistanceKind::terrain_height};
-    //! turb.realizability = C_r (0: off, or finite and > 0; beyond the plan): nu_t <= C_r k / S
+    //! turb.realizability = C_r (0: off, or finite and > 0): nu_t <= C_r k / S
     //! (ClosureWake.H), applied to the new nu_t before the nu_t relaxation.
     amrex::Real realizability{0};
 };
@@ -127,7 +126,7 @@ struct ClosureFields
     amrex::MultiFab cap_ratio;
     //! The exact d S_k / d k of the kernel (dual numbers, the relaxation
     //! weight on nu_t) and d nu_t / d k, for a Newton diagonal
-    //! (max(dSdk, -dSdk_exact) keeps the sign; the plan's task 5).
+    //! (max(dSdk, -dSdk_exact) keeps the sign).
     amrex::MultiFab dSdk_exact, dnutdk;
     void define (const amrex::BoxArray& ba, const amrex::DistributionMapping& dm);
     [[nodiscard]] bool empty () const { return nu.empty(); }

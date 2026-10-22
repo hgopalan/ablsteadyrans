@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run GUST on the 1-D neutral column deck and check the steady state (RT-1.15.1).
+"""Run GUST on the 1-D neutral column deck and check the steady state (rt_steady_column).
 
     check_steady_column.py --ustar U --z0 Z0 --force F --height H --dz DZ --orders N [--floor log_law|one]
                            [--stress-profile] [--kappa K] [--cmu0 C] -- COMMAND [ARGS ...]
@@ -28,7 +28,7 @@ Runs COMMAND (the application on Tests/Canonical_RANS/Neutral_Column/inputs_stea
     shallow column, where 1 - z/H departs from 1 in the lowest cells)
     (the stress of the force-driven column is u*^2 (1 - z/H), not constant,
     and the discrete strain overshoots the log law's in the lowest cells,
-    RT-1.9.1: both move the profile below the log law by about 1 % above the
+    rt_closure_column: both move the profile below the log law by about 1 % above the
     second cell);
   * the wall k is u*^2 / Cmu0^2 to 1e-6 relative;
   * nu_t in the second cell is kappa u* (z + z0) within 6 %;

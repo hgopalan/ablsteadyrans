@@ -1,11 +1,10 @@
-// The Newton–Krylov core (sub-phase 3.1): UT-3.1.1 (the finite-difference
-// J v against the exact J v of a quadratic residual, with an eps sweep),
-// UT-3.1.2 (Newton on a 1-D column converges quadratically), UT-3.1.3 (the
-// operator meets the amrex::GMRES interface: Poiseuille in one Newton step
-// and a non-symmetric system with a known solution on 1, 4 and uneven boxes),
-// and beyond the plan: the readers and range checks of steady.newton_*, the
-// Krylov memory estimate and its budget, the bit-identical inner products,
-// the preconditioner hook, and the restart and tolerance sweep of the column.
+// The Newton–Krylov core: the finite-difference J v against the exact J v of a
+// quadratic residual, with an eps sweep; Newton on a 1-D column converges
+// quadratically; the operator meets the amrex::GMRES interface (Poiseuille in
+// one Newton step and a non-symmetric system with a known solution on 1, 4 and
+// uneven boxes); and also the readers and range checks of steady.newton_*, the
+// Krylov memory estimate and its budget, the bit-identical inner products, the
+// preconditioner hook, and the restart and tolerance sweep of the column.
 #include "BoundaryConditions.H"
 #include "Forcing.H"
 #include "Inputs.H"
@@ -200,7 +199,8 @@ double rel_diff (const NewtonOperator& op, const NewtonVector& a, const NewtonVe
     return static_cast<double>(op.norm2(d)) / static_cast<double>(op.norm2(b));
 }
 
-// The case of UT-3.1.1 and UT-3.1.3 (b): an 8 x 6 x 8 periodic box with slip
+// The case of Newton.JvpEpsSweepAgainstQuadraticResidual and
+// Newton.GmresSolvesKnownSystemOnAnyLayout: an 8 x 6 x 8 periodic box with slip
 // walls, upwind convection, Coriolis (non-symmetric J) and fixed nu.
 struct QuadraticCase
 {
@@ -240,11 +240,12 @@ double scaled_residual_norm (gust::State& q, const gust::ResidualInputs& in, con
     return static_cast<double>(op.norm2(b));
 }
 
-// The column of UT-3.1.2: 2 x 2 x 32 cells (periodic x, y), 1600 m deep, a
-// neutral surface layer (z0 = 0.1 m, wall k) on the ground, a slip top,
-// Coriolis at 45 degrees with a 10 m/s geostrophic wind and fixed
-// diffusivities of 5 m^2/s: a laminar Ekman layer under the wall law, whose
-// nonlinearity is the wall stress u*^2 with u* = kappa |U| / ln(z1/z0).
+// The column of Newton.ColumnConvergesQuadratically: 2 x 2 x 32 cells
+// (periodic x, y), 1600 m deep, a neutral surface layer (z0 = 0.1 m, wall k)
+// on the ground, a slip top, Coriolis at 45 degrees with a 10 m/s geostrophic
+// wind and fixed diffusivities of 5 m^2/s: a laminar Ekman layer under the
+// wall law, whose nonlinearity is the wall stress u*^2 with
+// u* = kappa |U| / ln(z1/z0).
 struct Column
 {
     PCase c;
@@ -340,7 +341,8 @@ double state_diff (gust::State& a, gust::State& b)
     return diff;
 }
 
-// The vector of x* for UT-3.1.3 (b), S^-1 times a smooth physical field.
+// The vector of x* for Newton.GmresSolvesKnownSystemOnAnyLayout, S^-1 times a
+// smooth physical field.
 void known_solution (const QuadraticCase& qc, const NewtonOperator& op, NewtonVector& xs)
 {
     gust::State v;
@@ -409,7 +411,7 @@ KnownSolve solve_known (int max_grid, int nx, int ny, NewtonVector* out, const a
 } // namespace
 
 // ---------------------------------------------------------------------------
-// UT-3.1.1. With first-order upwind convection on a state whose u, v and
+// With first-order upwind convection on a state whose u, v and
 // interior w keep their sign under q +- 2 v, fixed diffusivities, Coriolis
 // and slip walls (an affine ghost fill), the residual is exactly quadratic in
 // q: R(q + h v) = R(q) + h J v + h^2 B(v, v). So J v = (R(q + v) - R(q - v)) / 2
@@ -469,7 +471,7 @@ TEST(Newton, JvpEpsSweepAgainstQuadraticResidual)
     std::vector<double> err;
     double err_def = 0;
     double ratio0 = 0;
-    amrex::Print() << "UT-3.1.1: h, eps, |FD Jv - Jv| / |Jv|, eps |B| / |Jv|\n";
+    amrex::Print() << "h, eps, |FD Jv - Jv| / |Jv|, eps |B| / |Jv|\n";
     for (std::size_t n = 0; n <= hs.size(); ++n) {
         NewtonOptions opt;
         if (n < hs.size()) { opt.fd_eps_scale = static_cast<amrex::Real>(hs[n]); }
@@ -554,7 +556,7 @@ TEST(Newton, JvpEpsSweepAgainstQuadraticResidual)
 }
 
 // ---------------------------------------------------------------------------
-// UT-3.1.2. Plain Newton (no dtau) on the Ekman column under the wall law,
+// Plain Newton (no dtau) on the Ekman column under the wall law,
 // from the geostrophic wind, GMRES(200) to a relative 1e-10 per step (in
 // practice to the forward difference's floor near 1e-8: GMRES reports
 // convergence there, see docs/solver.rst). The scaled residual |R| goes
@@ -578,7 +580,7 @@ TEST(Newton, ColumnConvergesQuadratically)
     opt.krylov_rtol = static_cast<amrex::Real>(tol(1e-10, 1e-5));
     std::vector<int> its;
     const auto r = column_newton(opt, kDouble ? 6 : 4, &its);
-    amrex::Print() << "UT-3.1.2: step, |R| before, reduction, r_{n+1} / r_n^2, GMRES iterations\n";
+    amrex::Print() << "step, |R| before, reduction, r_{n+1} / r_n^2, GMRES iterations\n";
     for (std::size_t n = 0; n + 1 < r.size(); ++n) {
         amrex::Print() << std::setprecision(4) << "  " << n << "  " << r[n] << "  " << r[n + 1] / r[n] << "  "
                        << r[n + 1] / (r[n] * r[n]) << "  " << its[n] << "\n";
@@ -605,11 +607,11 @@ TEST(Newton, ColumnConvergesQuadratically)
 }
 
 // ---------------------------------------------------------------------------
-// UT-3.1.3 (a). Laminar Poiseuille flow between no-slip walls driven by the
-// force F (the problem of UT-1.15.2): R is linear in the column, so one
-// Newton step from rest with GMRES to a relative 1e-12 gives the discrete
-// solution u_k = (F / 2 nu) (z_k (H - z_k) + dz^2 / 4), here to 1e-9 of the
-// peak (the forward difference's round-off). v, w and p stay zero.
+// Laminar Poiseuille flow between no-slip walls driven by the force F (the
+// problem of Simplec.PoiseuilleToMachinePrecision): R is linear in the column,
+// so one Newton step from rest with GMRES to a relative 1e-12 gives the
+// discrete solution u_k = (F / 2 nu) (z_k (H - z_k) + dz^2 / 4), here to 1e-9
+// of the peak (the forward difference's round-off). v, w and p stay zero.
 TEST(Newton, PoiseuilleInOneStep)
 {
     const double H = 500, F = 1e-4, nu = 10;
@@ -642,7 +644,7 @@ TEST(Newton, PoiseuilleInOneStep)
         });
     }
     amrex::ParallelDescriptor::ReduceRealMax(worst);
-    amrex::Print() << "UT-3.1.3 (a): GMRES " << info.gmres_iterations << " iterations, max |u - exact| / umax = "
+    amrex::Print() << "GMRES " << info.gmres_iterations << " iterations, max |u - exact| / umax = "
                    << worst / umax << "\n";
     EXPECT_LT(worst, tol(1e-9, 1e-3) * umax);
     EXPECT_LT(static_cast<double>(q.v.norm0()), tol(1e-12, 1e-5) * umax);
@@ -652,9 +654,10 @@ TEST(Newton, PoiseuilleInOneStep)
 }
 
 // ---------------------------------------------------------------------------
-// UT-3.1.3 (b). amrex::GMRES<NewtonVector, NewtonOperator> (flexible, the
+// amrex::GMRES<NewtonVector, NewtonOperator> (flexible, the
 // identity hook, restart 60, rtol 1e-7) on a non-symmetric system with a
-// known solution: the operator of UT-3.1.1 (upwind convection, Coriolis)
+// known solution: the operator of Newton.JvpEpsSweepAgainstQuadraticResidual
+// (upwind convection, Coriolis)
 // with a uniform dtau = 5 s, b = A x* for a smooth x* of every field. GMRES
 // converges (status 0) and recovers x* (p up to its mean, the null space of
 // the continuity rows) to 1e-5 (4e-6 measured: about 40 times rtol, the
@@ -682,7 +685,7 @@ TEST(Newton, GmresSolvesKnownSystemOnAnyLayout)
     NewtonVector y1, y9;
     const auto s1 = solve_known(64, 9, 9, &y1, &ref9.c.ba, &ref9.c.dm);
     const auto s9 = solve_known(3, 9, 9, &y9, &ref9.c.ba, &ref9.c.dm);
-    amrex::Print() << "UT-3.1.3 (b): GMRES iterations " << r1.its << " / " << r4.its << " / " << s1.its << " / " << s9.its
+    amrex::Print() << "GMRES iterations " << r1.its << " / " << r4.its << " / " << s1.its << " / " << s9.its
                    << ", |x - x*| / |x*| " << r1.err << " / " << r4.err << " / " << s1.err << " / " << s9.err << "\n";
     for (const auto& r : {r1, r4, s1, s9}) {
         EXPECT_EQ(r.status, 0);
@@ -707,7 +710,7 @@ TEST(Newton, GmresSolvesKnownSystemOnAnyLayout)
 }
 
 // ---------------------------------------------------------------------------
-// UT-3.1.3 (c), beyond the plan. The vector operations: the inner product
+// The vector operations: the inner product
 // counts every unknown once (a shared face, or a periodic image, once), so
 // dot(1, 1) is the number of unknowns, 3 N + N + N + N (N cells) on a
 // periodic-x, periodic-y box with N + nx ny z faces; linComb, increment,
@@ -767,14 +770,15 @@ TEST(Newton, VectorOperationsAndBitIdenticalInnerProduct)
 }
 
 // ---------------------------------------------------------------------------
-// Beyond the plan. jvp's step comes from sums over every owned point; they
-// are summed per box (one thread per column, the columns in storage order)
-// and the boxes added in index order, as dotProduct does. So the step and J v
-// have the same bits for any DistributionMapping of a BoxArray, and the GMRES
-// iterates of UT-3.1.3 (b) do not depend on the rank count. The second layout
-// puts every box on rank 0, so the per-rank partial sums group the boxes
-// differently (a cyclic shift would not: it moves each rank's group whole).
-// On one rank it is the identity; the CI runs the unit tests on 2 and 4 ranks.
+// jvp's step comes from sums over every owned point; they are summed per box
+// (one thread per column, the columns in storage order) and the boxes added in
+// index order, as dotProduct does. So the step and J v have the same bits for
+// any DistributionMapping of a BoxArray, and the GMRES iterates of
+// Newton.GmresSolvesKnownSystemOnAnyLayout do not depend on the rank count.
+// The second layout puts every box on rank 0, so the per-rank partial sums
+// group the boxes differently (a cyclic shift would not: it moves each rank's
+// group whole). On one rank it is the identity; the CI runs the unit tests on
+// 2 and 4 ranks.
 TEST(Newton, JvpBitIdenticalForAnyDistribution)
 {
     // Twelve boxes; rough perturbations (a hash of the position, as rough as
@@ -812,14 +816,14 @@ TEST(Newton, JvpBitIdenticalForAnyDistribution)
 }
 
 // ---------------------------------------------------------------------------
-// Beyond the plan. The readers of steady.newton_*: the defaults (the eps
+// The readers of steady.newton_*: the defaults (the eps
 // scale is sqrt(machine epsilon) of amrex::Real: 1.49e-8 in double, 3.45e-4
 // in single), every key read into its option, each range check refusing a
 // value just outside it (and NaN) with a message naming the key and the value
 // (the eps scale at least machine epsilon^(3/4), 1.8e-12 in double, below
 // which J v loses its last digits and Newton stalls),
 // the reader aborting on those, on a repeated key and on two values, and the
-// application's unknown-input message naming the sub-phase that reads the keys.
+// application's unknown-input message naming the stage that reads the keys.
 TEST(Newton, OptionReadersAndRangeChecks)
 {
     const NewtonOptions def = gust::read_newton_options();
@@ -938,7 +942,7 @@ TEST(Newton, OptionReadersAndRangeChecks)
 }
 
 // ---------------------------------------------------------------------------
-// Beyond the plan. The Krylov memory estimate against its closed form, and
+// The Krylov memory estimate against its closed form, and
 // the budget: FGMRES(m) keeps 2 m + 3 vectors; a vector of an nx x ny x nz
 // box holds 3 N cell values and (nx+1) ny nz + nx (ny+1) nz + nx ny (nz+1)
 // face values. On one 512 x 512 x 128 box (1.6 GB per vector in double)
@@ -990,7 +994,7 @@ TEST(Newton, KrylovMemoryEstimateAndBudget)
 }
 
 // ---------------------------------------------------------------------------
-// Beyond the plan. The preconditioner hook: a diagonal hook on the column
+// The preconditioner hook: a diagonal hook on the column
 // with a uniform dtau = 50 s is set up once per step and called by GMRES, and
 // the step it gives equals the identity's to the Krylov tolerance; every
 // option reaches the solver (restart and rtol change the iteration count;
@@ -1041,17 +1045,17 @@ TEST(Newton, PreconditionerHookAndOptionsReachTheSolver)
 }
 
 // ---------------------------------------------------------------------------
-// Beyond the plan (the review's sweep). GMRES iterations per Newton step on
-// the column of UT-3.1.2 against the restart length (5, 10, 20, 30, 60, 100,
-// 200) at rtol 1e-2 and 1e-6 (1e-4 in single precision), three plain Newton
-// steps each, printed as a table. At rtol 1e-2 every restart >= 10 needs
-// 3, 5, 8 iterations (restart 5 reaches the 2000-iteration cap on the third
-// step); at 1e-6 restarts 5 and 10 stall at the cap and restart >= 20
-// converges (about 620-870 iterations per step at 20 and 30, 94-96 once
-// m >= 100, the Krylov dimension of the column; the counts below m = 100
-// shift by tens between builds, as 1e-6 is near the forward difference's
-// floor). Three steps only: over ten steps restart 30 needs about four times
-// the iterations of restart 200 (docs/results.rst).
+// The review's sweep. GMRES iterations per Newton step on the column of
+// Newton.ColumnConvergesQuadratically against the restart length (5, 10, 20,
+// 30, 60, 100, 200) at rtol 1e-2 and 1e-6 (1e-4 in single precision), three
+// plain Newton steps each, printed as a table. At rtol 1e-2 every
+// restart >= 10 needs 3, 5, 8 iterations (restart 5 reaches the 2000-iteration
+// cap on the third step); at 1e-6 restarts 5 and 10 stall at the cap and
+// restart >= 20 converges (about 620-870 iterations per step at 20 and 30,
+// 94-96 once m >= 100, the Krylov dimension of the column; the counts below
+// m = 100 shift by tens between builds, as 1e-6 is near the forward
+// difference's floor). Three steps only: over ten steps restart 30 needs about
+// four times the iterations of restart 200 (docs/results.rst).
 TEST(Newton, ColumnRestartAndToleranceSweep)
 {
     amrex::Print() << "Restart sweep: rtol, restart, GMRES iterations per step (status), |R3|/|R0|\n";

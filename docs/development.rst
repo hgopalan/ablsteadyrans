@@ -1,9 +1,6 @@
 Development
 ===========
 
-The development plan (rev. 6, October 2026) splits the work into four phases and 36 sub-phases, one pull request
-each. Each phase ends at a gate, and the next phase starts only after the gate passes.
-
 Pull requests
 -------------
 

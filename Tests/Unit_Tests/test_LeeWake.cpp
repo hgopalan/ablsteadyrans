@@ -1,4 +1,4 @@
-// The lee-wake additions (beyond the plan): the realizability cap of the k-L
+// The lee-wake additions: the realizability cap of the k-L
 // closure (ClosureWake.H, turb.realizability), the lee-gated blend of the
 // convection towards upwind (HybridConvection.H, convection.hybrid_*) and
 // the confidence-percentage stop (steady.confidence, confidence_height).

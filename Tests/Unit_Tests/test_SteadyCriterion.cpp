@@ -1,8 +1,7 @@
-// UT-1.2.1: the steady-criterion evaluator on synthetic residual histories
-// (converging, stalling, oscillating). UT-1.2.2 to UT-1.2.10 go beyond the
-// plan: divergence, near-zero monitors, the window boundary, the residual
-// reference, parameter checks, slow convergence, oscillation periods, a zero
-// residual reference, and restart.
+// The steady-criterion evaluator on synthetic residual histories (converging,
+// stalling, oscillating), and divergence, near-zero monitors, the window
+// boundary, the residual reference, parameter checks, slow convergence,
+// oscillation periods, a zero residual reference, and restart.
 //
 // The pinned iterations (136, 38, 49, 50, 4602) come from an independent
 // Python implementation of the definition, not from this code.
@@ -51,7 +50,7 @@ const std::vector<Fn> kConvMon{[] (int n) { return 0.3 + 0.05 * std::pow(0.9, n)
                                [] (int n) { return 0.4 * (1 - 0.5 * std::pow(0.93, n)); }};
 const std::vector<MonitorSpec> kConvMonSpec{{"speedup", 1.0}, {"ustar", 1.0e-6}};
 
-// UT-1.2.1 (converging): steady exactly at the iteration the definition gives.
+// Converging: steady exactly at the iteration the definition gives.
 TEST (SteadyCriterion, ConvergingHistoryIsSteadyAtThePinnedIteration)
 {
     if constexpr (!std::is_same_v<amrex::Real, double>) { GTEST_SKIP() << "pinned for double"; }
@@ -59,7 +58,7 @@ TEST (SteadyCriterion, ConvergingHistoryIsSteadyAtThePinnedIteration)
     EXPECT_EQ(first_steady(c, kConvRes, kConvMon, 1000), 136);
 }
 
-// UT-1.2.1 (stalling): the residual levels off at 1e-3 and never passes.
+// Stalling: the residual levels off at 1e-3 and never passes.
 TEST (SteadyCriterion, StallingHistoryIsNeverSteady)
 {
     SteadyCriterion c(SteadyParams{}, {"u"}, {{"speedup", 1.0}});
@@ -72,7 +71,7 @@ TEST (SteadyCriterion, StallingHistoryIsNeverSteady)
     EXPECT_TRUE(mentions(v, "dropped 3 orders"));
 }
 
-// UT-1.2.1 (stalling at the tolerance): "below steady.residual_tol" is
+// Stalling at the tolerance: "below steady.residual_tol" is
 // strict; a residual stuck exactly at the tolerance is not steady.
 TEST (SteadyCriterion, ResidualAtTheToleranceIsNotBelowIt)
 {
@@ -87,7 +86,7 @@ TEST (SteadyCriterion, ResidualAtTheToleranceIsNotBelowIt)
     EXPECT_EQ(below.verdict().status, SteadyStatus::Steady);
 }
 
-// UT-1.2.1 (oscillating): residuals converge but a monitor keeps oscillating
+// Oscillating: residuals converge but a monitor keeps oscillating
 // by +-0.5 %, so the solution is not steady.
 TEST (SteadyCriterion, OscillatingMonitorIsNeverSteady)
 {
@@ -100,7 +99,7 @@ TEST (SteadyCriterion, OscillatingMonitorIsNeverSteady)
     EXPECT_TRUE(mentions(v, "monitor 'speedup' changed by"));
 }
 
-// UT-1.2.1 (oscillating residual, a limit cycle): never steady.
+// Oscillating residual, a limit cycle: never steady.
 TEST (SteadyCriterion, OscillatingResidualIsNeverSteady)
 {
     SteadyCriterion c(SteadyParams{}, {"u"}, {});
@@ -108,7 +107,7 @@ TEST (SteadyCriterion, OscillatingResidualIsNeverSteady)
     EXPECT_EQ(first_steady(c, res, {}, 2000), -1);
 }
 
-// UT-1.2.2 (beyond the plan): a NaN or infinity is reported as divergence and
+// A NaN or infinity is reported as divergence and
 // stays so, even if later values are finite.
 TEST (SteadyCriterion, NonFiniteValuesMeanDiverged)
 {
@@ -127,7 +126,7 @@ TEST (SteadyCriterion, NonFiniteValuesMeanDiverged)
     EXPECT_TRUE(mentions(d.verdict(), "monitor 'ustar'"));
 }
 
-// UT-1.2.3 (beyond the plan): a monitor near zero (speed-up over flat
+// A monitor near zero (speed-up over flat
 // terrain) is compared with its scale. Round-off noise passes with scale 1;
 // with a scale far below the noise it never would.
 TEST (SteadyCriterion, NearZeroMonitorUsesItsScale)
@@ -140,7 +139,7 @@ TEST (SteadyCriterion, NearZeroMonitorUsesItsScale)
     EXPECT_EQ(first_steady(tiny_scale, res, mon, 200), -1);
 }
 
-// UT-1.2.4 (beyond the plan): the monitor window needs monitor_window + 1
+// The monitor window needs monitor_window + 1
 // values, so a constant history is steady at iteration 50, not 49.
 TEST (SteadyCriterion, WindowNeedsAllItsValues)
 {
@@ -169,7 +168,7 @@ TEST (SteadyCriterion, WindowNeedsAllItsValues)
     EXPECT_EQ(over.verdict().status, SteadyStatus::NotSteady);
 }
 
-// UT-1.2.5 (beyond the plan): the residual drop is measured from the largest
+// The residual drop is measured from the largest
 // of the first residual_ref_iterations values.
 TEST (SteadyCriterion, DropIsMeasuredFromTheEarlyPeak)
 {
@@ -184,7 +183,7 @@ TEST (SteadyCriterion, DropIsMeasuredFromTheEarlyPeak)
     EXPECT_EQ(first_steady(first, res, {}, 500), 49);
 }
 
-// UT-1.2.6 (beyond the plan): parameter range checks name the future keys,
+// Parameter range checks name the future keys,
 // and the constructor rejects bad monitor scales and size mismatches.
 TEST (SteadyCriterion, ParameterChecks)
 {
@@ -215,7 +214,7 @@ TEST (SteadyCriterion, ParameterChecks)
     EXPECT_THROW(c.add({1.0}, {}), std::runtime_error);
 }
 
-// UT-1.2.7 (beyond the plan): a slowly converging monitor (rate 0.999) is not
+// A slowly converging monitor (rate 0.999) is not
 // declared steady while it is still far from its limit. The window test alone
 // would stop at 1615 with a 2 % error; with the extrapolation the stop is at
 // 4602 and the error there is within the tolerance.
@@ -230,7 +229,7 @@ TEST (SteadyCriterion, SlowMonitorStopsNearItsLimit)
     EXPECT_LE(A * std::pow(r, n), 1.0e-3 * (1.0 + A * std::pow(r, n)));
 }
 
-// UT-1.2.8 (beyond the plan): undamped oscillations with periods up to 4
+// Undamped oscillations with periods up to 4
 // windows are never declared steady. (Longer periods can be; see docs.)
 TEST (SteadyCriterion, OscillationsUpToFourWindowsAreNeverSteady)
 {
@@ -243,7 +242,7 @@ TEST (SteadyCriterion, OscillationsUpToFourWindowsAreNeverSteady)
     }
 }
 
-// UT-1.2.9 (beyond the plan): a residual that is exactly zero over the
+// A residual that is exactly zero over the
 // reference iterations, then at round-off, does not block the stop.
 TEST (SteadyCriterion, ZeroResidualReferenceDoesNotBlock)
 {
@@ -253,7 +252,7 @@ TEST (SteadyCriterion, ZeroResidualReferenceDoesNotBlock)
     EXPECT_EQ(n, 50);
 }
 
-// UT-1.2.10 (beyond the plan): a criterion restored from a saved history
+// A criterion restored from a saved history
 // gives the same verdict at every later iteration as one never interrupted,
 // including the reference residuals taken before the restart.
 TEST (SteadyCriterion, RestoredHistoryGivesTheSameVerdicts)
@@ -288,7 +287,7 @@ TEST (SteadyCriterion, RestoredHistoryGivesTheSameVerdicts)
     EXPECT_THROW(other.restore(saved), std::runtime_error);
 }
 
-// UT-1.2.11 (beyond the plan): a monitor that grows slowly (each half
+// A monitor that grows slowly (each half
 // window multiplies the change by about 3.4) is not converging, even while
 // its change over the window is still below the tolerance.
 TEST (SteadyCriterion, SlowlyGrowingMonitorIsNotSteady)

@@ -1,7 +1,7 @@
 # RUSHIL
 
 ## Purpose
-Beyond the plan: the RUSHIL two-dimensional hills (Khurshudyan, Snyder and Nekrasov 1981) at the full scale of
+The RUSHIL two-dimensional hills (Khurshudyan, Snyder and Nekrasov 1981) at the full scale of
 Manning, Hancock and Whiting (2010): H = 117 m, a/H = 3, 5 and 8. Hill 3 separates in the tunnel, Hill 8 stays
 attached.
 

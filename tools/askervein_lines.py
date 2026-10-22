@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Wind speed 10 m above the ground on the Askervein lines (RT-2.6.1).
+"""Wind speed 10 m above the ground on the Askervein lines.
 
     askervein_lines.py sample PLOTFILE --terrain TERRAIN --lines LINES [--height H] [--out CSV]
     askervein_lines.py compare TEST.csv REFERENCE.csv [--rel_tol 0.05] [--lines A AA]
@@ -29,8 +29,8 @@ compare: each mast of the named lines in both files; passes (exit code 0) if
 every |speed_test - speed_ref| <= rel_tol * speed_ref, and prints each
 mast's relative difference and the largest. Masts are matched by line and d.
 With --lee_d D, masts more than D m past the hilltop (d > D) are judged
-against --lee_rel_tol instead (RT-2.6.1: the lee, where the advection scheme
-sets the wake: GUST's second order against ERF's fifth).
+against --lee_rel_tol instead (rt_askervein_210_erf_lines: the lee, where the
+advection scheme sets the wake: GUST's second order against ERF's fifth).
 """
 import argparse
 import csv

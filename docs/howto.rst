@@ -144,7 +144,7 @@ Converge faster
 ---------------
 
 On a CPU build the defaults are line LU-SGS with two sweeps and a CFL cap of 8, the setting with the fewest
-iterations on Askervein (:ref:`Phase 2 checkpoint <phase2-checkpoint>`). A GPU build keeps z-line
+iterations on Askervein (:ref:`askervein-erf-comparison`). A GPU build keeps z-line
 Jacobi; give the same settings there explicitly. The hill cases were measured at a cap of 16:
 
 .. code-block:: text

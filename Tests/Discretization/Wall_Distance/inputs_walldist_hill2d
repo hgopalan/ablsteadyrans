@@ -1,4 +1,4 @@
-# RT-1.11.2: the Tucker wall distance on ERF's Neutral_Hill_2D mesh
+# The Tucker wall distance on ERF's Neutral_Hill_2D mesh
 # (Exec/CanonicalTests/Canonical_RANS/Neutral_Hill_2D/inputs_hill): a Witch of
 # Agnesi ridge, hmax = 100 m, L = 500 m, on 128 x 1 x 64 cells (40 m x 15.625 m),
 # basic terrain following, periodic in x and y (Tests/Supporting_Files/Tools/wall_distance.cpp).

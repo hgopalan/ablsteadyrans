@@ -1,4 +1,4 @@
-# RT-2.1.1 (sub-phase 2.1): ERF's Neutral_Hill_2D with the line LU-SGS
+# ERF's Neutral_Hill_2D with the line LU-SGS
 # sweeps (steady.sweep = lusgs, two symmetric sweeps, CFL cap 16): the same
 # steady state as inputs_steady_hill2d (16 z-line Jacobi sweeps at a cap of
 # 4) in fewer iterations and less time; ERF's check_hill.py --physics on the

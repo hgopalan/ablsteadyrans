@@ -1,7 +1,7 @@
 #ifndef GUST_PSEUDO_TIME_H_
 #define GUST_PSEUDO_TIME_H_
 
-// The local pseudo-time step (sub-phase 1.13, task 4): in every cell
+// The local pseudo-time step: in every cell
 //
 //   dtau = CFL / ( |u_c|/dx + |v_c|/dy + |Omega_c|/(J dzeta) + 2 nu (1/dx^2 + 1/dy^2) ),
 //
@@ -11,7 +11,7 @@
 // |Omega| / (J dzeta) is the rate at which it crosses the cell's physical
 // thickness J dzeta) and nu the momentum diffusivity (cell-centred; null: 0).
 // The vertical diffusive limit is left out: vertical diffusion is implicit in
-// every stage (z-line solves, sub-phase 1.14). The rate is floored at
+// every stage (z-line solves, Predictor.H). The rate is floored at
 // kMinRate so a cell at rest without diffusion gets a large finite step.
 
 #include "Mesh.H"

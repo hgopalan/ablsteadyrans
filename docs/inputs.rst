@@ -851,8 +851,8 @@ writes them and stops; the other ``steady.*`` keys are then refused.
      - Finite, > 0. CFL number of the first iterations.
    * - ``steady.cfl_max``
      - ``8`` with ``lusgs``, ``10`` with ``zjacobi``
-     - Finite, ≥ ``steady.cfl0``. Largest CFL number. The default depends on ``steady.sweep`` (the Phase 2
-       checkpoint, :doc:`results`); a given value is used with either sweep.
+     - Finite, ≥ ``steady.cfl0``. Largest CFL number. The default depends on ``steady.sweep`` (the Askervein
+       comparison with ERF, :doc:`results`); a given value is used with either sweep.
    * - ``steady.ser_exponent``
      - ``1``
      - Finite, ≥ 0. Exponent :math:`p` of the CFL ramp; 0 holds the CFL at ``cfl0``.
@@ -865,7 +865,7 @@ writes them and stops; the other ``steady.*`` keys are then refused.
        iterations of the last one (hysteresis), except the Newton stage's own hand-back.
    * - ``steady.switch_residual``
      - ``1e-4``
-     - > 0 and ≤ 1. Relative residual at which the Newton stage starts (plan rev. 6: 1e-4; it was ``1e-2`` and unused
+     - > 0 and ≤ 1. Relative residual at which the Newton stage starts (it was ``1e-2`` and unused
        before the Newton stage).
    * - ``steady.switch_back_growth``
      - ``10``
@@ -886,9 +886,9 @@ writes them and stops; the other ``steady.*`` keys are then refused.
        :math:`\Delta\tau` uses this CFL.
    * - ``steady.sweep``
      - ``lusgs`` (CPU build), ``zjacobi`` (GPU build)
-     - ``zjacobi`` (z-line Jacobi) or ``lusgs`` (line LU-SGS). The default depends on the build (the Phase 2
-       checkpoint, :doc:`results`): a GPU build keeps ``zjacobi`` until the sweeps are measured on H100.
-       ``zjacobi`` reproduces the solver of Phase 1. A restart takes the current default, not the sweep of the run
+     - ``zjacobi`` (z-line Jacobi) or ``lusgs`` (line LU-SGS). The default depends on the build (the Askervein
+       comparison with ERF, :doc:`results`): a GPU build keeps ``zjacobi`` until the sweeps are measured on H100.
+       ``zjacobi`` reproduces the earlier z-line Jacobi solver. A restart takes the current default, not the sweep of the run
        that wrote the checkpoint: give ``steady.sweep = zjacobi`` to continue a run that used the old default. The
        ``steady.line_*`` keys need ``lusgs``, so a deck that gives them should also give ``steady.sweep``.
    * - ``steady.zline_sweeps``
@@ -987,7 +987,7 @@ writes them and stops; the other ``steady.*`` keys are then refused.
        full step if :math:`|R|` grows by at most this factor. 1: off. Not used at infinite :math:`\Delta\tau`.
 
 The ``steady.newton_*`` and ``steady.switch_*`` keys are read with ``steady.stage = simplec_newton``; with
-``simplec`` they abort as keys with no effect. Their defaults are provisional (PR-28 tunes them). The last seven rows are the pseudo-transient
+``simplec`` they abort as keys with no effect. Their defaults are provisional. The last seven rows are the pseudo-transient
 continuation of :doc:`solution_algorithm`; its CFL ramp reuses ``steady.cfl_max`` and the SER keys, and in the
 Newton stage starts at ``steady.cfl_max``.
 
