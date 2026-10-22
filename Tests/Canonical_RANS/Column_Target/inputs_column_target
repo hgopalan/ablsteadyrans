@@ -1,0 +1,43 @@
+# The target wind of the column first guess carried into the 3-D run (init.column_target_*).
+# The 1-D column of Neutral_Column (4 x 4 x 64, 1000 m, z0 = 0.1 m, slip top, pressure-gradient forcing) started
+# from the converged column with a target of 8 m/s at 10 m: the column adjusts forcing.pressure_gradient until its
+# wind there is the target, and the 3-D run keeps it. The Rayleigh layer above 700 m acts on w and theta only (a
+# layer on u and v would hold the 3-D wind to the inflow profile and is refused with a target).
+# check_column_target.py reads the 3-D wind at 10 m. rt_column_target_mol adds L = 1000 m on the command line.
+mesh.n_cell        = 4 4 64
+mesh.prob_hi       = 2560. 2560. 1000.
+mesh.is_periodic   = 1 1 0
+mesh.max_grid_size = 4 4
+
+terrain.type = flat
+
+bc.zlo = surface_layer
+bc.zhi = slip_wall
+bc.surface_z0 = 0.1
+bc.theta_profile_z = 0.
+bc.theta_profile   = 300.
+bc.inflow_profile  = log_law
+bc.inflow_ustar    = 0.25
+bc.inflow_z0       = 0.1
+bc.inflow_direction = 0.
+bc.rayleigh_zdamp    = 700.
+bc.rayleigh_dampcoef = 0.05
+bc.rayleigh_fields   = w theta
+
+init.first_guess          = column
+init.column_target_u      = 8.
+init.column_target_height = 10.
+
+forcing.pressure_gradient = 1.225e-4 0. 0.
+
+steady.stage                = simplec
+steady.sweep                = zjacobi
+steady.cfl0                 = 1.
+steady.cfl_max              = 50.
+steady.max_iterations       = 1500
+steady.residual_drop_orders = 6
+steady.residual_tol         = 1.e-8
+
+io.plot_file      = column_target_plt
+io.turb_plot_file = column_target_turb
+io.chk_file       = column_target_chk

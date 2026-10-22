@@ -1,5 +1,7 @@
 #include "Sequencing.H"
 
+#include "ColumnGuess.H"
+
 #include "WallDistance.H"
 
 #include <AMReX_ParmParse.H>
@@ -319,7 +321,7 @@ std::vector<LevelSummary> sequence_coarse_levels (const MeshHierarchy& h, const 
             amrex::MultiFab::Copy(ql->z_phys_nd, h.z_phys_nd(l), 0, 0, 1,
                                   amrex::min(ql->z_phys_nd.nGrowVect(), h.z_phys_nd(l).nGrowVect()));
             const InitResult r = initialize_state(iopt, setup.bin, setup.popt, h.mesh(l), h.geom(l), *ql, nullptr,
-                                                  setup.fopt.coriolis, column);
+                                                  setup.fopt.coriolis, column, column_sets_theta(iopt, setup.surf));
             print_initializer(r, iopt, setup.popt, label);
         } else {
             const auto poisson = h.make_poisson(l, setup.popt);

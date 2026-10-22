@@ -1340,14 +1340,33 @@ GoogleTest suite
        sounding, and the override is required; ``init.projection = 0`` leaves the first guess untouched (no Poisson
        solve, divergence before = after) while the projection changes it over a hill; the readers of ``projection``,
        ``column_tol``, ``column_max_iterations`` (values, defaults, a bad value, no effect without the column, α
-       without the projection) and ``check_column_guess`` (no forcing, no stage, no surface layer, a heat flux, the
-       source wall k, each naming its key).
+       without the projection) and ``check_column_guess`` (no forcing, no stage, no surface layer, a heat flux with the
+       ``mol`` column mode, the source wall k, each naming its key).
    * - ``Initializer.ColumnGuessRunsTheColumn``
      - The 1-D column on 16 levels over 1000 m under the flat deck's sounding with the hill decks' Rayleigh layer on w
        and θ: converges within the limit, the ground row at z = 0, heights strictly increasing, u and v bounded, v > 0
        near the ground (the Ekman turning at latitude 90), the geostrophic wind at the top within 0.5 m/s, k at the
        floor in the inversion and largest near the ground, the first cell's k = u*²/C_μ0² (1e-12), u* in 0.2–0.6 m/s,
        the table identical on every rank.
+   * - ``ColumnStability.*``
+     - The stratified column (``init.column_stability``) on 64 × 1 m layers with a Rayleigh layer on θ above 48 m:
+       the neutral default holds θ; ``mol`` (L = 500, −100 m), ``heat_flux`` and ``surface_temperature`` each meet
+       MOST's closed forms at the first cell (1/L, q, u*, θ₁ − θ_s; Axell's wall k when unstable); ``mol`` reaches
+       L = 418 m, past the flux peak (L = 424 m at θ_s = 298.9 K) and above the smallest L, 413.7 m (both from a
+       sweep of ``surface_temperature`` columns); L = 50 m stops the run naming a smallest L of 414 m (2 %), and so
+       does a tight ``init.column_rib_max``; the iteration limit names ``init.column_max_iterations``; the target
+       wind is met between centres (linear in ln(z + z₀)) and below the first centre (MOST's profile), with a
+       pressure gradient (:math:`|F| H = u_*^2`, 1e-6) and with geostrophic forcing; the wall gradients are MOST's at
+       d/L; the surface solve against its Businger–Dyer closed form (Rib = 0.15, the 0.19 cap, a tighter
+       ``init.column_rib_max``), QNSE at Rib = 1 and the −4 bound (``SurfaceSolveMatchesTheClosedForm``); QNSE's ψ on
+       the stable side (``QnseStableColumn``); the input checks, including the Rayleigh layer on θ, the 3-D refusals
+       of a target, the flux hand-off of ``mol`` and the Rib bounds.
+   * - ``StabilityFunctions.*``, ``SurfaceLayer.QnseFrictionVelocity``, ``SurfaceLayer.StableFunctionsKeysAreRead``,
+       ``BoundaryFill.GroundGradientIsTheWallLaw``
+     - QNSE's φ and ψ against Python values at ζ = 0.1–100 (1e-14) and with distinct coefficients per function, ψ
+       against a Simpson integral of (1 − φ)/x (1e-10); the unstable side and the default equal ERF's Businger–Dyer
+       functions; the 3-D u* with QNSE matches a bisection (1e-10) and is 8 % above Businger–Dyer's at ζ = 0.087; the
+       ground ghosts take QNSE's φ; the keys are read and checked by name. Twelve one-line mutants are caught.
    * - ``LineSweeps.EveryFaceIsOwnedAndSweptOnce``
      - On 1, 2 and 4 boxes (an uneven 7 × 6 split and a 2-D 8 × 1 mesh too), periodic and not, the owned regions cover
        every cell and every x, y and z face exactly once (periodic images identified, an image owning nothing); the

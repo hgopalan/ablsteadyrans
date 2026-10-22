@@ -127,7 +127,8 @@ FaceType face_type_from_name (const std::string& name, const std::string& key)
 }
 
 const char* const kSurfaceKeys[] = {"surface_z0", "surface_zref", "surface_stability", "surface_heat_flux", "surface_wall_k",
-                                    "surface_denominator_floor"};
+                                    "surface_denominator_floor", "surface_stable_functions", "surface_qnse_am",
+                                    "surface_qnse_bm", "surface_qnse_ah", "surface_qnse_bh"};
 
 void use_closure_constants (BoundaryInputs& bin, SurfaceLayerOptions& surf, amrex::Real Cmu0, amrex::Real kappa,
                             amrex::Real max_geom_lscale)
@@ -577,6 +578,7 @@ void BoundaryConditions::fill_ghosts (State& q, const SurfaceLayerOptions* surfa
             const amrex::Real kappa = surface_opt->kappa, z0 = surface_opt->z0;
             const amrex::Real qs = (surface_opt->stability == SurfaceLayerOptions::Stability::heat_flux)
                                        ? surface_opt->heat_flux : amrex::Real(0);
+            const StableCoefficients sc = surface_opt->stable_coefficients();
             for (amrex::MFIter mfi(ground_grad, false); mfi.isValid(); ++mfi) {
                 const auto g = ground_grad.array(mfi);
                 const auto us = ss->ustar.const_array(mfi);
@@ -586,10 +588,11 @@ void BoundaryConditions::fill_ghosts (State& q, const SurfaceLayerOptions* surfa
                 amrex::ParallelFor(mfi.growntilebox(amrex::IntVect(1, 1, 0)), [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
                 {
                     // MOST's flux-gradient relations, phi_m and phi_h of
-                    // zeta = d0/L (1 when neutral), with the wall model's clamp.
+                    // zeta = d0/L (1 when neutral), with the wall model's clamp
+                    // and bc.surface_stable_functions' stable side (data, not a branch).
                     const amrex::Real zeta = amrex::max(amrex::min(d0(i, j, k) * il(i, j, k), amrex::Real(100)), -amrex::Real(100));
                     amrex::Real phi_m, phi_h;
-                    most_phi(zeta, phi_m, phi_h);
+                    most_phi(zeta, sc, phi_m, phi_h);
                     const amrex::Real s = kappa * (d0(i, j, k) + z0);
                     const amrex::Real tmag = std::sqrt(ta(i, j, k, 0) * ta(i, j, k, 0) + ta(i, j, k, 1) * ta(i, j, k, 1)
                                                        + ta(i, j, k, 2) * ta(i, j, k, 2));

@@ -591,8 +591,9 @@ TEST(BoundaryFill, RulesPerFaceType)
 // The surface-layer ground on a sloped column: after the fill the centred
 // difference of u and v across the first cell centre equals the wall law's
 // gradient u*/(kappa (d0 + z0)) along the tangential wind, and theta's equals
-// -q/(kappa u* (d0 + z0)); k is even. The homogeneous fill gives zero
-// ghosts for the gradient and value rules and keeps even and odd ones.
+// -q/(kappa u* (d0 + z0)); k is even. Both stable sides: Businger-Dyer and
+// QNSE (bc.surface_stable_functions). The homogeneous fill
+// gives zero ghosts for the gradient and value rules and keeps even and odd ones.
 TEST(BoundaryFill, GroundGradientIsTheWallLaw)
 {
     PCase c = mesh_over(1, 1, [] (double x, double y) { return 120 * 0.25 * (1 - std::cos(2 * M_PI * x / 1000)) * (1 - std::cos(2 * M_PI * y / 800)); });
@@ -603,82 +604,88 @@ TEST(BoundaryFill, GroundGradientIsTheWallLaw)
     for (int d = 0; d < 3; ++d) {
         gust::trtest::fill_loc(*vel[d], gust::velocity_loc(d), c, [&] (double x, double y, double z) { return fl.vel(d, x, y, z); });
     }
-    q.theta.setVal(300.0);
-    q.tke.setVal(0.3);
-    q.p.setVal(0.0);
-    // The ghosts the fill must write start as NaN (a missing fill shows).
-    for (auto* mf : {&q.theta, &q.tke}) { mf->setBndry(std::numeric_limits<amrex::Real>::quiet_NaN()); }
     BoundaryInputs in;
     BoundaryConditions bc(in, c.geom, c.mesh, kNoCoriolis);
-    gust::SurfaceLayerOptions so;
-    so.stability = gust::SurfaceLayerOptions::Stability::heat_flux;
-    so.heat_flux = amrex::Real(-0.004);   // weak enough that every column has a MOST solution
-    gust::SurfaceState s;
-    bc.fill_ghosts(q, &so, kBuoy, false, &s);
-    // The fill covers the two lateral ghost columns too (periodic images and
-    // the neighbouring boxes), so the check does: the surface state of the
-    // imaged columns, gathered with two ghost columns.
-    const amrex::IntVect ng2(2, 2, 0);
-    amrex::MultiFab us2(s.ustar.boxArray(), s.ustar.DistributionMap(), 1, ng2);
-    amrex::MultiFab d02(s.ustar.boxArray(), s.ustar.DistributionMap(), 1, ng2);
-    amrex::MultiFab il2(s.ustar.boxArray(), s.ustar.DistributionMap(), 1, ng2);
-    amrex::MultiFab ta2(s.ustar.boxArray(), s.ustar.DistributionMap(), 3, ng2);
-    us2.ParallelCopy(s.ustar, 0, 0, 1, amrex::IntVect(0), ng2, c.geom.periodicity());
-    d02.ParallelCopy(s.d0, 0, 0, 1, amrex::IntVect(0), ng2, c.geom.periodicity());
-    il2.ParallelCopy(s.inv_L, 0, 0, 1, amrex::IntVect(0), ng2, c.geom.periodicity());
-    ta2.ParallelCopy(s.tau, 0, 0, 3, amrex::IntVect(0), ng2, c.geom.periodicity());
-    const similarity_funs sfuns;   // MOST's phi_m, phi_h (ERF's; its branches are
-    // both evaluated by the compiler, so the invalid trap is off while they are called)
-    const auto prev_fpe = amrex::disableFPExcept(amrex::FPExcept::invalid);
-    for (amrex::MFIter mfi(q.p, false); mfi.isValid(); ++mfi) {
-        const auto z = host_copy(q.z_phys_nd, mfi);
-        const auto u = host_copy(q.u, mfi), v = host_copy(q.v, mfi), t = host_copy(q.theta, mfi), k = host_copy(q.tke, mfi);
-        const auto us = host_copy(us2, mfi), d0 = host_copy(d02, mfi), ta = host_copy(ta2, mfi), il = host_copy(il2, mfi);
-        amrex::Box gb = mfi.validbox();
-        gb.grow(ng2);
-        gb.setBig(2, 0);
-        amrex::LoopOnCpu(gb, [&] (int i, int j, int) {
-            auto grad_of = [&] (const amrex::FArrayBox& f, int tt) {
-                // centred difference across the first point: (f(1) - f(-1)) / (z(1) - z(-1)),
-                // z(-1) from the linear extrapolation of the ghost node
-                const double z1 = node_mean(z, tt, i, j, 1);
-                const double zm = node_mean(z, tt, i, j, -1);
-                return (double(f(amrex::IntVect(i, j, 1))) - f(amrex::IntVect(i, j, -1))) / (z1 - zm);
-            };
-            auto zeta = [&] (int ii, int jj) {
-                const amrex::IntVect iv(ii, jj, 0);
-                return std::max(-100.0, std::min(100.0, double(d0(iv)) * il(iv)));
-            };
-            // u*/(kappa (d0 + z0)) phi_m(d0/L): the wall law's gradient under MOST
-            auto wall = [&] (int ii, int jj) {
-                const amrex::IntVect iv(ii, jj, 0);
-                return double(us(iv)) / (0.41 * (d0(iv) + 0.1)) * sfuns.calc_phi_m(static_cast<amrex::Real>(zeta(ii, jj)));
-            };
-            auto dir = [&] (int ii, int jj, int comp) {
-                const amrex::IntVect iv(ii, jj, 0);
-                const double m = std::sqrt(double(ta(iv, 0)) * ta(iv, 0) + double(ta(iv, 1)) * ta(iv, 1) + double(ta(iv, 2)) * ta(iv, 2));
-                return ta(iv, comp) / m;
-            };
-            // u at the box's lowest ghost column needs the column before it: not stored.
-            const bool has_u = (i > gb.smallEnd(0)), has_v = (j > gb.smallEnd(1));
-            const double gu = has_u ? 0.5 * (wall(i - 1, j) * dir(i - 1, j, 0) + wall(i, j) * dir(i, j, 0)) : 0;
-            const double gv = has_v ? 0.5 * (wall(i, j - 1) * dir(i, j - 1, 1) + wall(i, j) * dir(i, j, 1)) : 0;
-            if (has_u) { EXPECT_NEAR(grad_of(u, 1), gu, tol(1e-12, 1e-4) * (1 + std::abs(gu))); }
-            if (has_v) { EXPECT_NEAR(grad_of(v, 2), gv, tol(1e-12, 1e-4) * (1 + std::abs(gv))); }
-            const double gt = 0.004 / (0.41 * us(amrex::IntVect(i, j, 0)) * (d0(amrex::IntVect(i, j, 0)) + 0.1))
-                              * sfuns.calc_phi_h(static_cast<amrex::Real>(zeta(i, j)));
-            EXPECT_GT(zeta(i, j), 0.0);   // stable: phi_h > 1 here, so the factor is tested
-            // theta ~ 300 K: a float resolves 3e-5 K, 2e-4 of this gradient over a layer.
-            EXPECT_NEAR(grad_of(t, 0), gt, tol(1e-12, 2e-3) * gt);
-            EXPECT_EQ(k(amrex::IntVect(i, j, -1)), k(amrex::IntVect(i, j, 0)));
-            EXPECT_EQ(k(amrex::IntVect(i, j, -2)), k(amrex::IntVect(i, j, 1)));
-            // The second layer continues the same slope.
-            const double z1 = node_mean(z, 1, i, j, -1), z2 = node_mean(z, 1, i, j, -2);
-            if (has_u) { EXPECT_NEAR((double(u(amrex::IntVect(i, j, -1))) - u(amrex::IntVect(i, j, -2))) / (z1 - z2), gu, tol(1e-12, 1e-4) * (1 + std::abs(gu))); }
-        });
+    for (const bool qnse : {false, true}) {
+        q.theta.setVal(300.0);
+        q.tke.setVal(0.3);
+        q.p.setVal(0.0);
+        // The ghosts the fill must write start as NaN (a missing fill shows).
+        for (auto* mf : {&q.theta, &q.tke}) { mf->setBndry(std::numeric_limits<amrex::Real>::quiet_NaN()); }
+        gust::SurfaceLayerOptions so;
+        so.stability = gust::SurfaceLayerOptions::Stability::heat_flux;
+        so.heat_flux = amrex::Real(-0.004);   // weak enough that every column has a MOST solution
+        if (qnse) { so.stable_functions = gust::SurfaceLayerOptions::StableFunctions::qnse; }
+        gust::SurfaceState s;
+        bc.fill_ghosts(q, &so, kBuoy, false, &s);
+        // The fill covers the two lateral ghost columns too (periodic images and
+        // the neighbouring boxes), so the check does: the surface state of the
+        // imaged columns, gathered with two ghost columns.
+        const amrex::IntVect ng2(2, 2, 0);
+        amrex::MultiFab us2(s.ustar.boxArray(), s.ustar.DistributionMap(), 1, ng2);
+        amrex::MultiFab d02(s.ustar.boxArray(), s.ustar.DistributionMap(), 1, ng2);
+        amrex::MultiFab il2(s.ustar.boxArray(), s.ustar.DistributionMap(), 1, ng2);
+        amrex::MultiFab ta2(s.ustar.boxArray(), s.ustar.DistributionMap(), 3, ng2);
+        us2.ParallelCopy(s.ustar, 0, 0, 1, amrex::IntVect(0), ng2, c.geom.periodicity());
+        d02.ParallelCopy(s.d0, 0, 0, 1, amrex::IntVect(0), ng2, c.geom.periodicity());
+        il2.ParallelCopy(s.inv_L, 0, 0, 1, amrex::IntVect(0), ng2, c.geom.periodicity());
+        ta2.ParallelCopy(s.tau, 0, 0, 3, amrex::IntVect(0), ng2, c.geom.periodicity());
+        const similarity_funs sfuns;   // MOST's phi_m, phi_h (ERF's; its branches are
+        // both evaluated by the compiler, so the invalid trap is off while they are called).
+        // QNSE (bc.surface_stable_functions = qnse) on this stable side: (1 + 2.5 zeta)/(1 + 0.2 zeta), written out.
+        auto phi_m = [&] (double zt) { return qnse ? (1 + 2.5 * zt) / (1 + 0.2 * zt) : double(sfuns.calc_phi_m(static_cast<amrex::Real>(zt))); };
+        auto phi_h = [&] (double zt) { return qnse ? (1 + 2.5 * zt) / (1 + 0.2 * zt) : double(sfuns.calc_phi_h(static_cast<amrex::Real>(zt))); };
+        const auto prev_fpe = amrex::disableFPExcept(amrex::FPExcept::invalid);
+        for (amrex::MFIter mfi(q.p, false); mfi.isValid(); ++mfi) {
+            const auto z = host_copy(q.z_phys_nd, mfi);
+            const auto u = host_copy(q.u, mfi), v = host_copy(q.v, mfi), t = host_copy(q.theta, mfi), k = host_copy(q.tke, mfi);
+            const auto us = host_copy(us2, mfi), d0 = host_copy(d02, mfi), ta = host_copy(ta2, mfi), il = host_copy(il2, mfi);
+            amrex::Box gb = mfi.validbox();
+            gb.grow(ng2);
+            gb.setBig(2, 0);
+            amrex::LoopOnCpu(gb, [&] (int i, int j, int) {
+                auto grad_of = [&] (const amrex::FArrayBox& f, int tt) {
+                    // centred difference across the first point: (f(1) - f(-1)) / (z(1) - z(-1)),
+                    // z(-1) from the linear extrapolation of the ghost node
+                    const double z1 = node_mean(z, tt, i, j, 1);
+                    const double zm = node_mean(z, tt, i, j, -1);
+                    return (double(f(amrex::IntVect(i, j, 1))) - f(amrex::IntVect(i, j, -1))) / (z1 - zm);
+                };
+                auto zeta = [&] (int ii, int jj) {
+                    const amrex::IntVect iv(ii, jj, 0);
+                    return std::max(-100.0, std::min(100.0, double(d0(iv)) * il(iv)));
+                };
+                // u*/(kappa (d0 + z0)) phi_m(d0/L): the wall law's gradient under MOST
+                auto wall = [&] (int ii, int jj) {
+                    const amrex::IntVect iv(ii, jj, 0);
+                    return double(us(iv)) / (0.41 * (d0(iv) + 0.1)) * phi_m(zeta(ii, jj));
+                };
+                auto dir = [&] (int ii, int jj, int comp) {
+                    const amrex::IntVect iv(ii, jj, 0);
+                    const double m = std::sqrt(double(ta(iv, 0)) * ta(iv, 0) + double(ta(iv, 1)) * ta(iv, 1) + double(ta(iv, 2)) * ta(iv, 2));
+                    return ta(iv, comp) / m;
+                };
+                // u at the box's lowest ghost column needs the column before it: not stored.
+                const bool has_u = (i > gb.smallEnd(0)), has_v = (j > gb.smallEnd(1));
+                const double gu = has_u ? 0.5 * (wall(i - 1, j) * dir(i - 1, j, 0) + wall(i, j) * dir(i, j, 0)) : 0;
+                const double gv = has_v ? 0.5 * (wall(i, j - 1) * dir(i, j - 1, 1) + wall(i, j) * dir(i, j, 1)) : 0;
+                if (has_u) { EXPECT_NEAR(grad_of(u, 1), gu, tol(1e-12, 1e-4) * (1 + std::abs(gu))); }
+                if (has_v) { EXPECT_NEAR(grad_of(v, 2), gv, tol(1e-12, 1e-4) * (1 + std::abs(gv))); }
+                const double gt = 0.004 / (0.41 * us(amrex::IntVect(i, j, 0)) * (d0(amrex::IntVect(i, j, 0)) + 0.1))
+                                  * phi_h(zeta(i, j));
+                EXPECT_GT(zeta(i, j), 0.0);   // stable: phi_h > 1 here, so the factor is tested
+                // theta ~ 300 K: a float resolves 3e-5 K, 2e-4 of this gradient over a layer.
+                EXPECT_NEAR(grad_of(t, 0), gt, tol(1e-12, 2e-3) * gt);
+                EXPECT_EQ(k(amrex::IntVect(i, j, -1)), k(amrex::IntVect(i, j, 0)));
+                EXPECT_EQ(k(amrex::IntVect(i, j, -2)), k(amrex::IntVect(i, j, 1)));
+                // The second layer continues the same slope.
+                const double z1 = node_mean(z, 1, i, j, -1), z2 = node_mean(z, 1, i, j, -2);
+                if (has_u) { EXPECT_NEAR((double(u(amrex::IntVect(i, j, -1))) - u(amrex::IntVect(i, j, -2))) / (z1 - z2), gu, tol(1e-12, 1e-4) * (1 + std::abs(gu))); }
+            });
+        }
+        std::feclearexcept(FE_ALL_EXCEPT);
+        amrex::setFPExcept(prev_fpe);
     }
-    std::feclearexcept(FE_ALL_EXCEPT);
-    amrex::setFPExcept(prev_fpe);
     // Homogeneous: gradient and value rules give zero, k stays even; the
     // ground w is the no-flux value of the (perturbation) u, v (1.16).
     bc.fill_ghosts(q, nullptr, kBuoy, true);

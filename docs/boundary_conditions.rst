@@ -72,7 +72,7 @@ similarity theory (MOST). In each column,
 - :math:`z_0`: roughness length (``bc.surface_z0``).
 - :math:`q`: kinematic surface heat flux (``bc.surface_heat_flux``).
 - :math:`L_O`: Obukhov length.
-- :math:`\psi_m`: ERF's Businger–Dyer stability function.
+- :math:`\psi_m`: ERF's Businger–Dyer stability function, or QNSE's on the stable side (below).
 - :math:`m`: a floor on the denominator (below).
 
 With ``bc.surface_stability = heat_flux``, :math:`u_*` and :math:`L_O` are solved together by Newton's method to
@@ -88,6 +88,29 @@ finite-difference Jacobian needs.)
   :math:`(e - 1)\,z_0 \approx 1.72\,z_0`, for example a 1 m first layer over :math:`z_0 = 0.5` m.
 
 The two give identical results where :math:`\ln((d + z_0)/z_0) \ge 1`.
+
+.. _stable-functions:
+
+**Stable functions.** ``bc.surface_stable_functions`` selects the stable side
+(:math:`\zeta = z/L > 0`) of the flux-gradient functions :math:`\phi_m, \phi_h` and their integrals
+:math:`\psi = \int_0^\zeta (1 - \phi(x))/x\,dx`. Both use one form,
+
+.. math::
+
+   \phi(\zeta) = \frac{1 + a\,\zeta}{1 + b\,\zeta}, \qquad
+   \psi(\zeta) = -\frac{a - b}{b}\,\ln(1 + b\,\zeta) .
+
+- ``businger_dyer`` (default): :math:`a = 5`, :math:`b = 0`, so :math:`\phi = 1 + 5\zeta` and
+  :math:`\psi = -5\zeta` (Dyer 1974, ERF's functions).
+- ``qnse``: the quasi-normal scale elimination functions (Sukoriansky, Galperin and Perov 2005), as ERF's
+  ``enable_qnse_stable_functions``: :math:`a_m, b_m` (``bc.surface_qnse_am``, ``_bm``) for momentum and
+  :math:`a_h, b_h` (``_ah``, ``_bh``) for heat, ERF's defaults 2.5 and 0.2. :math:`\phi` tends to
+  :math:`a/b = 12.5` in very stable air, so the surface stress does not collapse as fast as with
+  Businger–Dyer's linear :math:`\phi`.
+
+The unstable side is Businger–Dyer's with either choice. The selection applies to the wall model's
+:math:`u_*` (``bc.surface_stability = heat_flux``), the ground gradients of the ghost cells, and the stratified
+column (:ref:`stratified column <column-stability>`).
 
 The wall model replaces the diffusive fluxes through the ground:
 

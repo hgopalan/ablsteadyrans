@@ -207,14 +207,17 @@ TEST(SurfaceLayer, LogLawFrictionVelocityOnAStretchedColumn)
 
 // The independent MOST solve: bisection to 1e-14 on u = kappa U / den(u), the
 // same relation (z/L clamped to [-100, 100], den >= m, u >= 0.001 in L).
-double most_ustar (double U, double d, double z0, double qs, double m)
+// qnse: QNSE's stable psi_m, -11.5 ln(1 + 0.2 zeta) (ERF's coefficients), written out here.
+double most_ustar (double U, double d, double z0, double qs, double m, bool qnse = false)
 {
     const similarity_funs sf;
     const double kappa = 0.41, gq = 9.81 / 300 * qs;
     auto f = [&] (double u) {
         const double uf = std::max(u, 0.001);
         const double zeta = std::max(std::min(-d * kappa * gq / (uf * uf * uf), 100.0), -100.0);
-        return u - kappa * U / std::max(std::log((d + z0) / z0) - double(sf.calc_psi_m(static_cast<amrex::Real>(zeta))), m);
+        const double psi = (qnse && zeta > 0) ? -11.5 * std::log(1 + 0.2 * zeta)
+                                              : double(sf.calc_psi_m(static_cast<amrex::Real>(zeta)));
+        return u - kappa * U / std::max(std::log((d + z0) / z0) - psi, m);
     };
     double a = 1e-4, b = 5.0;
     for (int it = 0; it < 200; ++it) {
@@ -251,6 +254,40 @@ TEST(SurfaceLayer, MostFrictionVelocityWithAHeatFlux)
         EXPECT_NEAR(at00(s.ustar), want, tol(1e-10, 1e-4) * want) << "U " << cs.U << " q " << cs.qs;
         EXPECT_NEAR(at00(s.inv_L), -0.41 * 9.81 / 300 * cs.qs / std::pow(std::max(want, 0.001), 3),
                     tol(1e-9, 1e-3) * std::abs(at00(s.inv_L)));
+    }
+}
+
+// bc.surface_stable_functions = qnse: the stable u* (2 m/s, q = -0.01 K m/s, zeta = 0.087 at
+// the 5 m first centre) matches the bisection with QNSE's psi_m to 1e-10 (its only root, 0.198 m/s) and lies 8 %
+// above Businger-Dyer's (0.183 m/s, the upper of its three roots); the unstable u* is unchanged.
+TEST(SurfaceLayer, QnseFrictionVelocity)
+{
+    PCase c = flat_column(24);
+    gust::State q;
+    define_state(q, c);
+    q.v.setVal(0.0);
+    q.w.setVal(0.0);
+    const double z0 = 0.1;
+    const double d = centres(10, 1.1, 24)[0];
+    struct Case { double U, qs; };
+    for (const Case cs : {Case{2.0, -0.01}, Case{8.0, 0.1}}) {
+        q.u.setVal(static_cast<amrex::Real>(cs.U));
+        SurfaceLayerOptions opt;
+        opt.z0 = static_cast<amrex::Real>(z0);
+        opt.stability = SurfaceLayerOptions::Stability::heat_flux;
+        opt.heat_flux = static_cast<amrex::Real>(cs.qs);
+        gust::SurfaceState bd, qn;
+        gust::compute_surface_state(q, opt, kBuoyancy, c.mesh, c.geom, bd);
+        opt.stable_functions = SurfaceLayerOptions::StableFunctions::qnse;
+        gust::compute_surface_state(q, opt, kBuoyancy, c.mesh, c.geom, qn);
+        const double want = most_ustar(cs.U, d, z0, cs.qs, 1.0, true);
+        EXPECT_NEAR(at00(qn.ustar), want, tol(1e-10, 1e-4) * want) << "U " << cs.U << " q " << cs.qs;
+        if (cs.qs < 0) {
+            EXPECT_GT(at00(qn.inv_L) * d, 0.08);
+            EXPECT_GT(at00(qn.ustar), 1.05 * at00(bd.ustar)) << at00(bd.ustar);
+        } else {
+            EXPECT_EQ(at00(qn.ustar), at00(bd.ustar));
+        }
     }
 }
 
@@ -327,6 +364,29 @@ TEST(SurfaceLayer, DenominatorFloorKeyIsChecked)
     }
     while (pp.remove("surface_denominator_floor") > 0) {}
     EXPECT_NE(what.find("bc.surface_denominator_floor = two"), std::string::npos) << what;
+}
+
+// bc.surface_stable_functions and the QNSE coefficients are read, and checked naming the key.
+TEST(SurfaceLayer, StableFunctionsKeysAreRead)
+{
+    amrex::ParmParse pp("bc");
+    auto message = [] () {
+        try { (void) gust::read_surface_layer_options(); } catch (const std::runtime_error& e) { return std::string(e.what()); }
+        return std::string();
+    };
+    pp.add("surface_stable_functions", std::string("louis"));
+    EXPECT_NE(message().find("bc.surface_stable_functions = louis"), std::string::npos);
+    while (pp.remove("surface_stable_functions") > 0) {}
+    pp.add("surface_qnse_bh", amrex::Real(0.3));
+    EXPECT_NE(message().find("bc.surface_qnse_bh is set"), std::string::npos);
+    pp.add("surface_stable_functions", std::string("qnse"));
+    pp.add("surface_qnse_ah", amrex::Real(4));
+    const SurfaceLayerOptions o = gust::read_surface_layer_options();
+    EXPECT_EQ(o.stable_functions, SurfaceLayerOptions::StableFunctions::qnse);
+    EXPECT_EQ(o.stable_coefficients().ah, amrex::Real(4));
+    EXPECT_EQ(o.stable_coefficients().bh, amrex::Real(0.3));
+    EXPECT_EQ(o.stable_coefficients().am, amrex::Real(2.5));
+    for (const char* k : {"surface_stable_functions", "surface_qnse_ah", "surface_qnse_bh"}) { while (pp.remove(k) > 0) {} }
 }
 
 // The wall k: u*^2 / Cmu0^2 exactly for neutral; Axell's

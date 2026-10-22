@@ -73,10 +73,12 @@ void tangential_wind (amrex::Array4<amrex::Real const> const& u, amrex::Array4<a
 
 // u - kappa U / den(u): the MOST relation for u*, den = max(ln((d+z0)/z0) - psi_m(d/L), den_min),
 // den_min the floor m of bc.surface_denominator_floor.
+template <bool QNSE>
 struct MostRelation
 {
     amrex::Real kappa, U, d, lz, den_min, gq;
     amrex::Real ustar_min;   //!< kUstarMin, held by value: a namespace constant is not usable in device code
+    StableCoefficients sc;   //!< the stable side (StabilityFunctions.H)
     AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
     amrex::Real inv_L (amrex::Real u) const noexcept
     {
@@ -86,13 +88,12 @@ struct MostRelation
     AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
     amrex::Real operator() (amrex::Real u) const noexcept
     {
-        const similarity_funs sfuns;
         const amrex::Real zeta = amrex::max(amrex::min(d * inv_L(u), amrex::Real(100)), -amrex::Real(100));
-        return u - kappa * U / amrex::max(lz - sfuns.calc_psi_m(zeta), den_min);
+        return u - kappa * U / amrex::max(lz - most_psi_m<QNSE>(zeta, sc), den_min);
     }
 };
 
-template <bool HEAT, bool FIRST_CENTRE, bool FLOOR_ONE>
+template <bool HEAT, bool FIRST_CENTRE, bool FLOOR_ONE, bool QNSE = false>
 void columns (const State& q, const SurfaceLayerOptions& opt, const BuoyancyOptions& buoy,
               const amrex::Geometry& geom, SurfaceState& s)
 {
@@ -108,6 +109,7 @@ void columns (const State& q, const SurfaceLayerOptions& opt, const BuoyancyOpti
     // The floors as locals: nvcc cannot use a namespace-scope constant in
     // device code (it is odr-used through amrex::max's references).
     const amrex::Real ws_min_c = kWsMin, ustar_min_c = kUstarMin;
+    const StableCoefficients sc = opt.stable_coefficients();
     for (amrex::MFIter mfi(s.ustar, false); mfi.isValid(); ++mfi) {
         const amrex::Box bx = mfi.growntilebox(amrex::IntVect(1, 1, 0));
         const auto z = q.z_phys_nd.const_array(mfi);
@@ -129,6 +131,7 @@ void columns (const State& q, const SurfaceLayerOptions& opt, const BuoyancyOpti
             // an extended device lambda whose first capture of a variable is
             // inside an if constexpr.
             const amrex::Real gq_c = gq, hrel_c = hrel, tol_c = tol, ustar_min_l = ustar_min_c;
+            const StableCoefficients sc_l = sc;
             const Column h{z, i, j, klo};
             const amrex::Real zx = stencil::deriv<stencil::NODE, stencil::ZF, 0>(z, i, j, klo) * dxinv[0];
             const amrex::Real zy = stencil::deriv<stencil::NODE, stencil::ZF, 1>(z, i, j, klo) * dxinv[1];
@@ -158,7 +161,7 @@ void columns (const State& q, const SurfaceLayerOptions& opt, const BuoyancyOpti
             amrex::Real ustar = kappa * U / amrex::max(lz, den_min);
             amrex::Real invL = 0;
             if constexpr (HEAT) {
-                const MostRelation F{kappa, U, d, lz, den_min, gq_c, ustar_min_l};
+                const MostRelation<QNSE> F{kappa, U, d, lz, den_min, gq_c, ustar_min_l, sc_l};
                 bool converged = false;
                 for (int it = 0; it < kMaxNewton && !converged; ++it) {
                     const amrex::Real fu = F(ustar);
@@ -216,6 +219,27 @@ std::vector<std::string> check_surface_layer_options (const SurfaceLayerOptions&
     } else if (opt.stability == SurfaceLayerOptions::Stability::neutral && opt.heat_flux != 0) {
         err.emplace_back("surface layer heat_flux is set but the stability is neutral; it would be ignored");
     }
+    const amrex::Real qc[4] = {opt.qnse_am, opt.qnse_bm, opt.qnse_ah, opt.qnse_bh};
+    const char* qn[4] = {"qnse_am", "qnse_bm", "qnse_ah", "qnse_bh"};
+    const SurfaceLayerOptions dflt;
+    const amrex::Real qd[4] = {dflt.qnse_am, dflt.qnse_bm, dflt.qnse_ah, dflt.qnse_bh};
+    if (opt.stable_functions == SurfaceLayerOptions::StableFunctions::qnse) {
+        // phi = (1 + a zeta)/(1 + b zeta): b > 0 for psi, a >= b for phi >= 1.
+        for (int n = 1; n < 4; n += 2) {
+            positive(qc[n], qn[n]);
+            if (!(std::isfinite(qc[n - 1]) && qc[n - 1] >= qc[n])) {
+                err.emplace_back(std::string("surface layer ") + qn[n - 1] + " = " + std::to_string(qc[n - 1])
+                                 + ": must be finite and >= " + qn[n] + " = " + std::to_string(qc[n]));
+            }
+        }
+    } else {
+        for (int n = 0; n < 4; ++n) {
+            if (qc[n] != qd[n]) {
+                err.emplace_back(std::string("surface layer ") + qn[n]
+                                 + " is set but stable_functions is businger_dyer; it would be ignored");
+            }
+        }
+    }
     return err;
 }
 
@@ -225,7 +249,8 @@ SurfaceLayerOptions read_surface_layer_options ()
     SurfaceLayerOptions opt;
     amrex::ParmParse pp("bc");
     for (const char* key : {"surface_z0", "surface_zref", "surface_stability", "surface_heat_flux", "surface_wall_k",
-                            "surface_denominator_floor"}) {
+                            "surface_denominator_floor", "surface_stable_functions", "surface_qnse_am", "surface_qnse_bm",
+                            "surface_qnse_ah", "surface_qnse_bh"}) {
         if (pp.countname(key) > 1) { amrex::Abort(std::string("gust: bc.") + key + " is given more than once"); }
         if (pp.contains(key) && pp.countval(key) != 1) {
             amrex::Abort(std::string("gust: bc.") + key + " takes exactly one value");
@@ -234,7 +259,12 @@ SurfaceLayerOptions read_surface_layer_options ()
     pp.query("surface_z0", opt.z0);
     pp.query("surface_zref", opt.zref);
     pp.query("surface_heat_flux", opt.heat_flux);
-    std::string s = "neutral", w = "dirichlet", f = "log_law";
+    pp.query("surface_qnse_am", opt.qnse_am);
+    pp.query("surface_qnse_bm", opt.qnse_bm);
+    pp.query("surface_qnse_ah", opt.qnse_ah);
+    pp.query("surface_qnse_bh", opt.qnse_bh);
+    std::string s = "neutral", w = "dirichlet", f = "log_law", sf = "businger_dyer";
+    pp.query("surface_stable_functions", sf);
     pp.query("surface_stability", s);
     pp.query("surface_wall_k", w);
     pp.query("surface_denominator_floor", f);
@@ -247,6 +277,9 @@ SurfaceLayerOptions read_surface_layer_options ()
     if (f == "log_law") { opt.denominator_floor = SurfaceLayerOptions::DenominatorFloor::log_law; }
     else if (f == "one") { opt.denominator_floor = SurfaceLayerOptions::DenominatorFloor::one; }
     else { amrex::Abort("gust: bc.surface_denominator_floor = " + f + ": must be log_law or one"); }
+    if (sf == "businger_dyer") { opt.stable_functions = SurfaceLayerOptions::StableFunctions::businger_dyer; }
+    else if (sf == "qnse") { opt.stable_functions = SurfaceLayerOptions::StableFunctions::qnse; }
+    else { amrex::Abort("gust: bc.surface_stable_functions = " + sf + ": must be businger_dyer or qnse"); }
     const auto err = check_surface_layer_options(opt);
     if (!err.empty()) {
         // The checks say "surface layer z0"; the key is bc.surface_z0.
@@ -320,7 +353,15 @@ void compute_surface_state (const State& q, const SurfaceLayerOptions& opt, cons
     }
     const bool heat = (opt.stability == SurfaceLayerOptions::Stability::heat_flux);
     const bool first = !(opt.zref > 0);
-    if (opt.denominator_floor == SurfaceLayerOptions::DenominatorFloor::one) {
+    // QNSE changes only the stable psi_m of the heat-flux u* (its own kernels; neutral has no zeta).
+    const bool qnse = heat && opt.stable_functions == SurfaceLayerOptions::StableFunctions::qnse;
+    const bool one = opt.denominator_floor == SurfaceLayerOptions::DenominatorFloor::one;
+    if (qnse) {
+        if (first && one) { columns<true, true, true, true>(q, opt, buoyancy, geom, s); }
+        else if (first) { columns<true, true, false, true>(q, opt, buoyancy, geom, s); }
+        else if (one) { columns<true, false, true, true>(q, opt, buoyancy, geom, s); }
+        else { columns<true, false, false, true>(q, opt, buoyancy, geom, s); }
+    } else if (one) {
         if (heat && first) { columns<true, true, true>(q, opt, buoyancy, geom, s); }
         else if (heat) { columns<true, false, true>(q, opt, buoyancy, geom, s); }
         else if (first) { columns<false, true, true>(q, opt, buoyancy, geom, s); }
