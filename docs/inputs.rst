@@ -278,6 +278,9 @@ Quick reference
    * - ``turb.ri_gate``
      - ``0``
      - Stratification gate :math:`Ri_0` (0: off)
+   * - ``turb.realizability``
+     - ``0``
+     - Eddy-viscosity cap :math:`\nu_t \le C_r k/S` (0: off; recommended 0.309 for the lee)
    * - ``turb.face_mean``
      - ``arithmetic``
      - Face average of the diffusivities
@@ -293,6 +296,9 @@ Quick reference
    * - ``convection.smooth_eps_velocity``, ``convection.smooth_eps_theta``
      - ``1e-5``, ``1e-5``
      - Smoothing constants of ``van_albada``
+   * - ``convection.hybrid_sigma_max``, ``hybrid_height``, ``hybrid_relax``, ``hybrid_freeze``
+     - ``0``, —, ``0.1``, ``1e-2``
+     - Blend towards upwind near the ground where the :math:`\nu_t` cap is active (0: off)
    * - **Steady solver** (`steady`_)
      -
      -
@@ -311,6 +317,9 @@ Quick reference
    * - ``steady.residual_ref_iterations``
      - ``5``
      - Iterations over which the reference residual is taken
+   * - ``steady.confidence``, ``steady.confidence_height``
+     - ``0``, ``0``
+     - Confidence-percentage stop: share of converged cells (0: off), height limit of the others (0: anywhere)
    * - ``steady.monitor_rel_tol``, ``steady.monitor_window``
      - ``1e-3``, ``50``
      - Monitor tolerance and window
@@ -805,6 +814,11 @@ See :doc:`turbulence_model`. Read with the SIMPLEC stage only.
      - ``0``
      - 0 (off) or finite, ≥ 1e-6 and ≤ 1: :math:`Ri_0` of the stratification gate
        :math:`N^2 \to N^2\,Ri^2/(Ri^2 + Ri_0^2)` in the closure (:doc:`turbulence_model`).
+   * - ``turb.realizability``
+     - ``0``
+     - 0 (off) or finite, ≥ 0.01 and ≤ 10: :math:`C_r` of the cap :math:`\nu_t \le C_r k/S`, applied to the new
+       :math:`\nu_t` before ``turb.nut_relax`` (:ref:`nut-cap`). 0.309 is about :math:`C_{\mu 0}^2` (the log-layer
+       value) for the default ``turb.Cmu0``.
    * - ``turb.face_mean``
      - ``arithmetic``
      - ``arithmetic`` or ``logarithmic`` (:doc:`discretization`).
@@ -833,6 +847,21 @@ See :doc:`discretization`. Read with the SIMPLEC stage only. :math:`k` always us
    * - ``convection.smooth_eps_theta``
      - ``1e-5``
      - The same for θ (K).
+   * - ``convection.hybrid_sigma_max``
+     - ``0``
+     - 0 (off) or finite, > 0 and ≤ 1: the largest blend :math:`\sigma` of the momentum and θ convection towards
+       first-order upwind (:ref:`hybrid-convection`). Needs ``turb.realizability`` > 0; not with
+       ``convection.limiter = upwind``, ``steady.stage = simplec_newton`` or ``io.restart``.
+   * - ``convection.hybrid_height``
+     - none
+     - Finite, > 0 (m), required with ``hybrid_sigma_max`` > 0: the blend acts below this height above the ground
+       and tapers to 0 at 1.5 times it (recommended: 2.5 terrain heights).
+   * - ``convection.hybrid_relax``
+     - ``0.1``
+     - In (0, 1]: under-relaxation of :math:`\sigma` per iteration.
+   * - ``convection.hybrid_freeze``
+     - ``1e-2``
+     - 0 (never) or in (0, 1): :math:`\sigma` is frozen once the relative residual falls below it.
 
 ``steady``
 ----------
@@ -872,13 +901,21 @@ writes them and stops; the other ``steady.*`` keys are then refused.
    * - ``steady.monitor_window``
      - ``50``
      - ≥ 2. Monitor window (iterations).
+   * - ``steady.confidence``
+     - ``0``
+     - 0 (off) or finite, > 0 and ≤ 1: the run is also steady when this share of the cells meet the residual
+       criterion cell by cell and every monitor criterion is met (:ref:`confidence stop <confidence-stop>`). SIMPLEC stage only.
+   * - ``steady.confidence_height``
+     - ``0``
+     - 0 (anywhere) or finite, > 0 (m), only with ``steady.confidence`` > 0: every cell that does not meet the
+       criterion must also lie within this height above the ground.
    * - ``steady.cfl0``
      - ``1``
      - Finite, > 0. CFL number of the first iterations.
    * - ``steady.cfl_max``
      - ``8`` with ``lusgs``, ``10`` with ``zjacobi``
-     - Finite, ≥ ``steady.cfl0``. Largest CFL number. The default depends on ``steady.sweep`` (the Phase 2
-       checkpoint, :doc:`results`); a given value is used with either sweep.
+     - Finite, ≥ ``steady.cfl0``. Largest CFL number. The default depends on ``steady.sweep`` (the sweep and
+       CFL-cap study on Askervein, :doc:`results`); a given value is used with either sweep.
    * - ``steady.ser_exponent``
      - ``1``
      - Finite, ≥ 0. Exponent :math:`p` of the CFL ramp; 0 holds the CFL at ``cfl0``.
@@ -891,7 +928,7 @@ writes them and stops; the other ``steady.*`` keys are then refused.
        iterations of the last one (hysteresis), except the Newton stage's own hand-back.
    * - ``steady.switch_residual``
      - ``1e-4``
-     - > 0 and ≤ 1. Relative residual at which the Newton stage starts (plan rev. 6: 1e-4; it was ``1e-2`` and unused
+     - > 0 and ≤ 1. Relative residual at which the Newton stage starts (it was ``1e-2`` and unused
        before the Newton stage).
    * - ``steady.switch_back_growth``
      - ``10``
@@ -912,9 +949,9 @@ writes them and stops; the other ``steady.*`` keys are then refused.
        :math:`\Delta\tau` uses this CFL.
    * - ``steady.sweep``
      - ``lusgs`` (CPU build), ``zjacobi`` (GPU build)
-     - ``zjacobi`` (z-line Jacobi) or ``lusgs`` (line LU-SGS). The default depends on the build (the Phase 2
-       checkpoint, :doc:`results`): a GPU build keeps ``zjacobi`` until the sweeps are measured on H100.
-       ``zjacobi`` reproduces the solver of Phase 1. A restart takes the current default, not the sweep of the run
+     - ``zjacobi`` (z-line Jacobi) or ``lusgs`` (line LU-SGS). The default depends on the build (the sweep and
+       CFL-cap study on Askervein, :doc:`results`): a GPU build keeps ``zjacobi`` until the sweeps are measured on H100.
+       ``zjacobi`` reproduces the solver used before line LU-SGS became the CPU default. A restart takes the current default, not the sweep of the run
        that wrote the checkpoint: give ``steady.sweep = zjacobi`` to continue a run that used the old default. The
        ``steady.line_*`` keys need ``lusgs``, so a deck that gives them should also give ``steady.sweep``.
    * - ``steady.zline_sweeps``
@@ -1013,7 +1050,7 @@ writes them and stops; the other ``steady.*`` keys are then refused.
        full step if :math:`|R|` grows by at most this factor. 1: off. Not used at infinite :math:`\Delta\tau`.
 
 The ``steady.newton_*`` and ``steady.switch_*`` keys are read with ``steady.stage = simplec_newton``; with
-``simplec`` they abort as keys with no effect. Their defaults are provisional (PR-28 tunes them). The last seven rows are the pseudo-transient
+``simplec`` they abort as keys with no effect. Their defaults are provisional. The last seven rows are the pseudo-transient
 continuation of :doc:`solution_algorithm`; its CFL ramp reuses ``steady.cfl_max`` and the SER keys, and in the
 Newton stage starts at ``steady.cfl_max``.
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run boundary_fluxes and check the boundary fluxes of a log-law state (RT-1.8.1).
+"""Run boundary_fluxes and check the boundary fluxes of a log-law state (rt_bc_neutral_flat).
 
     check_bc.py --ustar U --z0 Z0 --direction DEG --dz DZ -- COMMAND [ARGS ...]
 

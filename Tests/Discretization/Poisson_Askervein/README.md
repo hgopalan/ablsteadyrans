@@ -2,7 +2,7 @@
 
 ## Purpose
 A fixed wind projected onto a divergence-free field on the Askervein mesh (30 x 30 x 18) by the Poisson layer.
-Back end A (RT-1.10.1) and back end B, MLMG (RT-1.11.1), solve the same discrete operator, so both potentials
+Back end A (`rt_poisson_askervein`) and back end B, MLMG (`rt_poisson_askervein_mlmg`), solve the same discrete operator, so both potentials
 match the same gold. The test-only driver is `poisson_projection` (`Supporting_Files/Tools/poisson_projection.cpp`).
 
 ## Files

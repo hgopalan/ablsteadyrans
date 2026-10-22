@@ -1,14 +1,14 @@
 #ifndef GUST_LINESWEEPS_H_
 #define GUST_LINESWEEPS_H_
 
-// The line LU-SGS sweeps (sub-phases 2.1 and 2.2): symmetric line
+// The line LU-SGS sweeps: symmetric line
 // Gauss-Seidel passes over the columns of each box, an exact z-line (Thomas)
 // solve per column with the x/y neighbours already updated in the pass's
 // direction, in place. One sweep is a forward and a backward pass.
 //
 // What a box reads across its faces (steady.line_ghosts):
 //
-//  * lagged (the default; the path of sub-phase 2.1, bit-identical to it):
+//  * lagged (the default and the original path, bit for bit):
 //    before every pass delta.FillBoundary copies the neighbouring boxes'
 //    values of the previous pass into the ghosts, a block Jacobi across
 //    boxes with one exchange per pass. Each box sweeps its whole valid box,
@@ -16,7 +16,7 @@
 //    face) are both solved; delta.OverrideSync keeps the copy of AMReX's
 //    owner (the lowest box index) at the end. No overlap.
 //
-//  * zero (sub-phase 2.2, box-local): no communication inside the sweeps.
+//  * zero (box-local): no communication inside the sweeps.
 //    Every box sweeps the region it owns, grown by n_o = steady.line_overlap
 //    cells in x and y (clipped to the domain on a non-periodic axis; not
 //    grown along an axis the domain is one cell wide, as y in a 2-D deck), with
@@ -52,10 +52,10 @@
 //    s + 1, so a forward plane reads the updated lower neighbours and the
 //    old upper ones exactly as the sequential order does: the two orderings
 //    perform the same operations on the same values and give bit-identical
-//    results (UT-2.2.4).
+//    results (LineSweeps.DiagonalOrderingEqualsTheSequentialSweep).
 //
-// Alternating ordering (steady.line_alternate = 1; beyond the plan of
-// sub-phase 2.2): the even sweeps (0, 2, ...) take the pair above, (+i, +j)
+// Alternating ordering (steady.line_alternate = 1): the even sweeps (0, 2,
+// ...) take the pair above, (+i, +j)
 // then (-i, -j); the odd sweeps take the j-reversed pair, (+i, -j) then
 // (-i, +j) (the diagonal ordering's wavefronts are then i - j = const). A
 // wind whose u and v have opposite signs is then swept exactly by one of
@@ -89,8 +89,8 @@ enum class LineOrder : int { sequential = 0, diagonal = 1 };
 inline constexpr int max_line_overlap = 8;
 
 //! The sweep options (steady.sweep, line_ghosts, line_overlap, line_order).
-//! From a SweepKind the other options keep their defaults (the path of
-//! sub-phase 2.1); explicit, so a caller that passes steady.sweep alone
+//! From a SweepKind the other options keep their defaults (the lagged
+//! sequential path); explicit, so a caller that passes steady.sweep alone
 //! cannot drop the line options silently.
 struct LineSweepOptions
 {

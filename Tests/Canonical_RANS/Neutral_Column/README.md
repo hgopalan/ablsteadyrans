@@ -13,7 +13,7 @@ A second deck runs the same column for 40 iterations, continues it to 80 from th
 |---|---|
 | `inputs_steady_column` | The column to steady. |
 | `inputs_steady_column_restart` | The restart chain (iterations and first guess on the command line). |
-| `inputs_steady_column_rough` | *Beyond the plan.* The column on rough ground: z0 = 0.5 m, 1 m layers, 64 m. |
+| `inputs_steady_column_rough` | The column on rough ground: z0 = 0.5 m, 1 m layers, 64 m. |
 | `check_steady_column.py` | Runs the application and checks the verdict, residual drop, force balance and wall law. |
 
 ## CTest

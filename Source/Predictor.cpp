@@ -337,7 +337,7 @@ MomentumPredictorResult momentum_predictor (State& q, const ResidualFields& R,
                     // The diagonal carries the larger of the two steps so that
                     // both the mean (tau_c) and the fluctuation (tau_own) are
                     // backward Euler steps of the rotation: contractions for
-                    // every f dtau (the review of 1.16). In practice tau_c =
+                    // every f dtau. In practice tau_c =
                     // r/|f| >> dtau >= tau_own and the max is tau_c.
                     const amrex::Real stiff = fs * fs * amrex::max(tau_c, tau_own);
                     p(i, j, k) += stiff;

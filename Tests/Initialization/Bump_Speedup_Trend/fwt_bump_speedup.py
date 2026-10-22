@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Write the FastWindTerrain section of the RT-1.12.2 gold (Tests/Initialization/Bump_Speedup_Trend/Gold/init_bump_trend.json).
+"""Write the FastWindTerrain section of the rt_init_bump_trend gold (Tests/Initialization/Bump_Speedup_Trend/Gold/init_bump_trend.json).
 
     fwt_bump_speedup.py GOLD.json SHA ALPHA=PLOTFILE [ALPHA=PLOTFILE ...]
 

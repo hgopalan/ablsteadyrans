@@ -1,7 +1,7 @@
 #ifndef GUST_BOUNDARYCONDITIONS_H_
 #define GUST_BOUNDARYCONDITIONS_H_
 
-// Domain boundary conditions (sub-phase 1.8): one type per domain face, the
+// Domain boundary conditions: one type per domain face, the
 // ghost-cell fills that express it, the rows of the residual and of the
 // implicit side it replaces, the pressure boundary types the Poisson layer
 // needs, and the optional Rayleigh and sponge layers.
@@ -23,7 +23,8 @@
 //                                  the Coriolis options), w = 0; theta as slip_wall
 // On the ground and the top the normal velocity's value is the one with no
 // flux through the face, Omega = 0: w = z_x u_f + z_y v_f (MassFlux_K.H), 0
-// over flat ground; the initializer's first guess uses the same (1.12).
+// over flat ground; the initializer's first guess uses the same
+// (Initializer.H).
 //
 // Ghost fills (two layers, the state's ngrow_state). Along the face normal
 // with interior values c0, c1 (first and second inside) and ghosts g1, g2:
@@ -47,7 +48,7 @@
 // (g = 2V - c0, -c0) and -a_g for zero gradient (g = c0); onto the opposite
 // neighbour for a gradient fill (g1 = c1 + ...) and for a normal velocity's
 // even mirror about its face point (outflow, g1 = n1). The ground's own
-// diffusive coupling is the wall model's (PR-09) and is already gone.
+// diffusive coupling is the wall model's (SurfaceLayer.H) and is already gone.
 //
 // Pressure: the Poisson boundary types follow ERF's get_fft_bc exactly:
 // periodic where the geometry is, odd (Dirichlet p' = 0) for outflow, even
@@ -122,7 +123,7 @@ struct BoundaryInputs
     //! The bc.* keys given (a key with no effect for the face types is an error).
     std::vector<std::string> given;
     //! Set by the caller when the inflow profile is used without an inflow
-    //! face (the initializer's first guess on a periodic domain, 1.15): the
+    //! face (the initializer's first guess on a periodic domain): the
     //! bc.inflow_* keys are then checked and not refused.
     bool profile_needed{false};
 };

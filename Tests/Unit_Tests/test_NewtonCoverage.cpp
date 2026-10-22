@@ -1,12 +1,11 @@
-// Beyond the plan: tests of the Newton–Krylov core (sub-phase 3.1) added by
-// the post-merge review of #19. The operator on terrain under the wall law
-// (where one ghost fill is not a fixed point) against a central difference
-// of q -> R(fill(q)), and Newton steps there; the rule that skips an update
-// whose Krylov residual is above |b| or whose |b| is not finite, alone and
-// inside a step; the memory budget per rank on several boxes; the inner
-// product with every box on rank 0; the step's diagnostics; and a
-// non-uniform dtau on the faces. test_Newton.cpp holds
-// UT-3.1.1 to UT-3.1.3.
+// Tests of the Newton–Krylov core added after #19. The
+// operator on terrain under the wall law (where one ghost fill is not a fixed
+// point) against a central difference of q -> R(fill(q)), and Newton steps
+// there; the rule that skips an update whose Krylov residual is above |b| or
+// whose |b| is not finite, alone and inside a step; the memory budget per rank
+// on several boxes; the inner product with every box on rank 0; the step's
+// diagnostics; and a non-uniform dtau on the faces. test_Newton.cpp holds the
+// core's own tests.
 #include "BoundaryConditions.H"
 #include "Inputs.H"
 #include "Newton.H"

@@ -25,7 +25,7 @@ const char* const kKeys[] = {"residual_tol", "residual_drop_orders", "residual_r
                              "switch_window", "switch_residual", "switch_back_growth", "zline_sweeps", "sweep", "line_ghosts", "line_overlap",
                              "line_order", "line_alternate", "machine", "nodes", "stage",
                              "newton_preconditioner", "switch_monitor_tol", "newton_fallback_failures",
-                             "newton_cfl_max"};
+                             "newton_cfl_max", "confidence", "confidence_height"};
 
 // 2: the reference hold; 3: the residual scale height (versions 1 and 2 still read)
 constexpr int kDriverVersion = 3;
@@ -63,6 +63,13 @@ std::vector<std::string> check_steady_options (const SteadyOptions& opt)
         }
     };
     if (opt.max_iterations < 1) { err.emplace_back("steady.max_iterations must be >= 1"); }
+    bad(opt.confidence, "confidence", "0 (off) or finite, > 0 and <= 1",
+        [&] { return opt.confidence == 0 || (opt.confidence > 0 && opt.confidence <= 1); });
+    bad(opt.confidence_height, "confidence_height", "0 (anywhere) or finite and > 0 (m)",
+        [&] { return std::isfinite(opt.confidence_height) && opt.confidence_height >= 0; });
+    if (opt.confidence == 0 && opt.confidence_height > 0) {
+        err.emplace_back("steady.confidence_height has no effect without steady.confidence > 0");
+    }
     bad(opt.cfl0, "cfl0", "finite and > 0", [&] { return std::isfinite(opt.cfl0) && opt.cfl0 > 0; });
     bad(opt.cfl_max, "cfl_max", "finite and >= steady.cfl0",
         [&] { return std::isfinite(opt.cfl_max) && !std::isnan(opt.cfl0) && opt.cfl_max >= opt.cfl0; });
@@ -168,6 +175,8 @@ SteadyOptions read_steady_options ()
     pp.query("switch_monitor_tol", opt.switch_monitor_tol);
     pp.query("newton_fallback_failures", opt.newton_fallback_failures);
     pp.query("newton_cfl_max", opt.newton_cfl_max);
+    pp.query("confidence", opt.confidence);
+    pp.query("confidence_height", opt.confidence_height);
     pp.query("nodes", opt.nodes);
     pp.query("zline_sweeps", opt.zline_sweeps);
     std::string sweep;
@@ -424,6 +433,7 @@ SteadyVerdict Driver::step (State& q)
             r = amrex::max(r, std::abs(res[i]) / ref);
         }
     }
+    stage.note_relative_residual(r);
     IterationRecord rec;
     rec.iteration = static_cast<int>(m_h.records.size());
     rec.stage = m_h.stage;
@@ -439,10 +449,32 @@ SteadyVerdict Driver::step (State& q)
     acc.au += allocation_units(m_opt.machine, m_opt.nodes, wall);
     m_h.criterion = ch;
 
-    const SteadyVerdict v = m_criterion.verdict();
+    SteadyVerdict v = m_criterion.verdict();
+    // The confidence stop: the residual criterion met cell by cell on the
+    // share steady.confidence of the cells (and, with confidence_height, the
+    // others near the ground), with every monitor criterion met.
+    m_conf_share = -1;
+    if (m_opt.confidence > 0 && v.status == SteadyStatus::NotSteady && m_criterion.iterations() > hold_iterations()
+        && stage.confidence(m_criterion.residual_thresholds(), m_conf_share, m_conf_height)
+        && v.monitors_met && m_conf_share >= m_opt.confidence
+        && (m_opt.confidence_height == 0 || m_conf_height <= m_opt.confidence_height)) {
+        m_conf_steady = true;
+        v = verdict();
+    }
     if (v.status == SteadyStatus::NotSteady) {
         m_h.cfl = next_cfl(r);
         apply_switch_rules(rec.iteration, r, res, q);
+    }
+    return v;
+}
+
+SteadyVerdict Driver::verdict () const
+{
+    SteadyVerdict v = m_criterion.verdict();
+    if (m_conf_steady && v.status == SteadyStatus::NotSteady) {
+        v.status = SteadyStatus::Steady;
+        v.reasons = {"confidence " + fmt(double(m_conf_share)) + " >= steady.confidence " + fmt(double(m_opt.confidence))
+                     + ", unconverged cells up to " + fmt(double(m_conf_height)) + " m above the ground"};
     }
     return v;
 }

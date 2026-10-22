@@ -1,8 +1,8 @@
-// Sub-phase 1.11: Poisson back end B (AMReX's MLTerrainPoisson with MLMG or
+// Poisson back end B (AMReX's MLTerrainPoisson with MLMG or
 // GMRES-MLMG) and the Dirichlet ground both back ends now take.
-//   UT-1.11.1 manufactured phi, homogeneous BCs, back end B: order >= 1.9
-//   UT-1.11.2 variable coefficients: back ends A and B agree to solver tolerance
-// Beyond the plan: Dirichlet ground (both back ends), back end B's fluxes,
+//   manufactured phi, homogeneous BCs, back end B: order >= 1.9
+//   variable coefficients: back ends A and B agree to solver tolerance
+// Also: Dirichlet ground (both back ends), back end B's fluxes,
 // checks on combinations back end B does not support.
 #include "PoissonTestHelpers.H"
 #include "TestHelpers.H"
@@ -37,7 +37,7 @@ void orders_2d (const std::string& backend, PoissonFace kx, PoissonFace top, boo
     order[1] = (n == 3) ? order_of(err, 1) : order[0];
 }
 
-// UT-1.11.1: back end B (MLMG and GMRES-MLMG) is second order for every
+// Back end B (MLMG and GMRES-MLMG) is second order for every
 // lateral BC with a Dirichlet or Neumann top, Neumann (zero-gradient
 // solution) and Dirichlet ground, on the stretched STF mesh over the 60 m
 // hill; and one 3-D case. The 2-D cases run with y as MLMG's hidden direction.
@@ -69,7 +69,7 @@ TEST (PoissonB, ManufacturedSecondOrder)
     EXPECT_GE(order_of(err, 0), tol(1.9, 1.8)) << "3-D: " << err[0] << " " << err[1];
 }
 
-// Beyond the plan: back end A with a Dirichlet ground (ERF's kernel with an
+// Back end A with a Dirichlet ground (ERF's kernel with an
 // odd ghost below the ground and ERF's one-sided ground flux) is second order
 // for every lateral BC and top.
 TEST (PoissonB, DirichletGroundSecondOrderBackendA)
@@ -84,7 +84,7 @@ TEST (PoissonB, DirichletGroundSecondOrderBackendA)
     }
 }
 
-// UT-1.11.2: with spatially varying coefficients (premultiplied areas, cross
+// With spatially varying coefficients (premultiplied areas, cross
 // terms included) back ends A and B give the same phi to solver tolerance
 // (both solved to reltol 1e-12; max |phi_A - phi_B| <= 1e-9 max |phi|: the
 // stencils are the same term by term), Neumann and Dirichlet ground,
@@ -133,7 +133,7 @@ TEST (PoissonB, BackendsAgreeWithVariableCoefficients)
     }
 }
 
-// Beyond the plan: the combinations back end B (or the Dirichlet ground)
+// The combinations back end B (or the Dirichlet ground)
 // does not support are refused with the input named.
 TEST (PoissonB, UnsupportedCombinationsAreRefused)
 {

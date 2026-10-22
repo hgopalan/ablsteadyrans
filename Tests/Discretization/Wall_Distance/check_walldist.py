@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run wall_distance and apply ERF's wall-distance checks (RT-1.11.2).
+"""Run wall_distance and apply ERF's wall-distance checks (rt_walldist_hill2d).
 
     check_walldist.py --hmax H --half-width L -- COMMAND [ARGS ...]
 

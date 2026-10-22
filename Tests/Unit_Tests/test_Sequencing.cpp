@@ -1,7 +1,7 @@
-// UT-2.5.1: the grid-sequencing stop logic (Sequencing.H) on synthetic
+// The grid-sequencing stop logic (Sequencing.H) on synthetic
 // histories: the loose residual branch, the loose monitor branch, the
 // iterations they need, and the strict criterion against the loose one.
-// Beyond the plan: the reference seeding sequencing carries across levels
+// Also: the reference seeding sequencing carries across levels
 // (SteadyCriterion::seed_reference) and the input checks.
 //
 // The pinned iterations (92, 88) come from an independent Python
@@ -61,7 +61,7 @@ SteadyParams params ()
 const std::vector<Fn> kNoisyMon{[] (int n) { return (n % 2 == 0) ? 1.1 : 0.9; }};
 const std::vector<MonitorSpec> kOneMon{{"speed", 1.0}};
 
-// UT-2.5.1 (a): every residual two orders below its reference (the largest
+// Every residual two orders below its reference (the largest
 // of the first five values), or below the tolerance. The second residual
 // peaks at iteration 2 (reference 3) and decays as 0.95^n, the slowest:
 // 3 * 0.95^(n-2) <= 3e-2 first at n = 92. A residual below residual_tol
@@ -88,7 +88,7 @@ TEST (Sequencing, LooseResidualBranchStopsAtThePinnedIteration)
     EXPECT_EQ(first_loose(c3, p, kOneMon, o, res, kNoisyMon, 1000), 137);
 }
 
-// UT-2.5.1 (a), the reference window: residuals far below their reference
+// The reference window: residuals far below their reference
 // from the first iteration do not stop the level before the reference is
 // taken (residual_ref_iterations = 5: the earliest stop is iteration 4).
 TEST (Sequencing, LooseResidualBranchWaitsForTheReference)
@@ -101,7 +101,7 @@ TEST (Sequencing, LooseResidualBranchWaitsForTheReference)
     EXPECT_EQ(first_loose(c, p, kOneMon, o, res, kNoisyMon, 100), 4);
 }
 
-// UT-2.5.1 (b): every monitor within 1 % of max(|value|, scale) of its
+// Every monitor within 1 % of max(|value|, scale) of its
 // latest value over a full window of 51 values. m1 = 1 + 0.5 0.9^n (scale
 // 1), m2 = 0.002 0.95^n (scale 0.1, so its test is absolute: 1e-3). The
 // residuals never drop. Python: first at n = 88. With the default
@@ -136,7 +136,7 @@ TEST (Sequencing, LooseMonitorBranchStopsAtThePinnedIteration)
     EXPECT_EQ(first_loose(cr, q, specs, o, res, flat, 200), 29);
 }
 
-// UT-2.5.1: a NaN or infinite value never stops a level loosely (the driver
+// A NaN or infinite value never stops a level loosely (the driver
 // reports Diverged), even when both branches would otherwise hold.
 TEST (Sequencing, NonFiniteHistoryNeverStops)
 {
@@ -156,7 +156,7 @@ TEST (Sequencing, NonFiniteHistoryNeverStops)
     EXPECT_EQ(c2.verdict().status, SteadyStatus::Diverged);
 }
 
-// Beyond the plan: a seeded reference is where the drop is measured from,
+// A seeded reference is where the drop is measured from,
 // and the first residual_ref_iterations values can still raise it.
 TEST (Sequencing, SeededReferenceIsTheDropOrigin)
 {
@@ -179,7 +179,7 @@ TEST (Sequencing, SeededReferenceIsTheDropOrigin)
     EXPECT_EQ(raised.history().res_ref[0], amrex::Real(5));
 }
 
-// Beyond the plan (steady.sequencing_hold = 0): on a released seeded level
+// steady.sequencing_hold = 0: on a released seeded level
 // (hold 0) the loose residual branch tests from the third iteration
 // (min(3, residual_ref_iterations)) instead of after residual_ref_iterations;
 // the monitor branch still waits residual_ref_iterations.
@@ -235,7 +235,7 @@ TEST (Sequencing, ReleasedHoldStopsFromTheFirstIteration)
     EXPECT_EQ(first_loose(m2, ps, kOneMon, om, flat, mon, 100, nullptr, 0), 4);
 }
 
-// Beyond the plan: the range checks name their keys.
+// The range checks name their keys.
 TEST (Sequencing, InputChecksNameTheirKeys)
 {
     const SteadyParams p = params();   // residual_drop_orders = 4

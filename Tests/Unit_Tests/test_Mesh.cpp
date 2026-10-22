@@ -1,9 +1,12 @@
-// Sub-phase 1.4: the stretched terrain-following mesh.
-//   UT-1.4.1 vertical levels      UT-1.4.2 flat terrain = Cartesian mesh
-//   UT-1.4.3 free-stream (GCL)    UT-1.4.4 cell volumes sum to the domain
-//   UT-1.4.5 smoothing kernel     UT-1.4.6 terrain interpolation
-//   UT-1.4.7 metrics equal ERF's (gold from ERF at the pinned commit)
-// UT-1.4.8 (beyond the plan): IDW against brute force, restart check, steep-ridge report.
+// The stretched terrain-following mesh.
+//   vertical levels
+//   flat terrain = Cartesian mesh
+//   free-stream (GCL)
+//   cell volumes sum to the domain
+//   smoothing kernel
+//   terrain interpolation
+//   metrics equal ERF's (gold from ERF at the pinned commit)
+// IDW against brute force, restart check, steep-ridge report.
 #include "Mesh.H"
 #include "SmoothSurface.H"
 #include "State.H"
@@ -185,7 +188,7 @@ constexpr double tol (double dbl, double flt) { return std::is_same_v<amrex::Rea
 
 std::string gold (const std::string& name) { return std::string(GUST_SOURCE_DIR) + "/Tests/Unit_Tests/Gold/" + name; }
 
-// UT-1.4.1: the three vertical-grid modes.
+// The three vertical-grid modes.
 TEST (Mesh, VerticalLevels)
 {
     gust::MeshInputs m;
@@ -243,7 +246,7 @@ TEST (Mesh, ZLevelsFile)
     if (amrex::ParallelDescriptor::IOProcessor()) { fs::remove("ut_zlevels.txt"); }
 }
 
-// UT-1.4.2: on flat terrain every smoothing gives the stretched Cartesian
+// On flat terrain every smoothing gives the stretched Cartesian
 // mesh, z(i, j, k) = z_k: bit for bit for STF and Sullivan; within 2 ulp for
 // BTF, whose formula reduces to z_top z_k / z_top on flat ground (ERF's, kept
 // as copied) and can round in the last place.
@@ -272,7 +275,7 @@ TEST (Mesh, FlatTerrainIsTheCartesianMesh)
     }
 }
 
-// UT-1.4.3: a uniform wind has zero discrete divergence on every mesh
+// A uniform wind has zero discrete divergence on every mesh
 // (geometric conservation law), Witch of Agnesi and Gaussian hills, BTF,
 // STF and Sullivan.
 TEST (Mesh, FreeStreamIsPreserved)
@@ -292,7 +295,7 @@ TEST (Mesh, FreeStreamIsPreserved)
     }
 }
 
-// UT-1.4.4: the cell volumes add up to the domain volume, the column sums of
+// The cell volumes add up to the domain volume, the column sums of
 // (top - ground) dx dy with the ground taken as the mean of each column's
 // four nodes (exact for the bilinear ground the mesh represents).
 TEST (Mesh, VolumesSumToTheDomain)
@@ -342,7 +345,7 @@ TEST (Mesh, VolumesSumToTheDomain)
     }
 }
 
-// UT-1.4.5: the smoothing kernel. Constant: unchanged. Fourier mode on a
+// The smoothing kernel. Constant: unchanged. Fourier mode on a
 // periodic domain: damped by 1 - beta (4 - 2 cos(kx dx) - 2 cos(ky dy)) per pass.
 TEST (Mesh, SmoothSurfaceKernel)
 {
@@ -389,7 +392,7 @@ TEST (Mesh, SmoothSurfaceKernel)
     (void)d0; (void)m0;
 }
 
-// Beyond the plan: smoothing on a non-periodic domain. One pass of a mode in x
+// Smoothing on a non-periodic domain. One pass of a mode in x
 // on a 1-node-thick strip in y: interior nodes as the stencil gives them, edge
 // nodes with the edge node as their own outside neighbour (as ERF clamps), and
 // ghost nodes outside the faces equal to the nearest domain node.
@@ -428,7 +431,7 @@ TEST (Mesh, SmoothSurfaceNonPeriodic)
     EXPECT_LT(worst, tol(1e-14, 1e-6));
 }
 
-// UT-1.4.6: terrain interpolation. IDW returns input points exactly and is
+// Terrain interpolation. IDW returns input points exactly and is
 // exact on a plane where the k nearest points are placed symmetrically; ERF's
 // bilinear form is exact on a plane anywhere inside the table.
 TEST (Mesh, TerrainInterpolation)
@@ -489,7 +492,7 @@ double idw_brute (const gust::TerrainPoints& pts, int k, double xq, double yq)
     return zs / ws;
 }
 
-// Beyond the plan: the bucket search gives the brute-force IDW answer, the
+// The bucket search gives the brute-force IDW answer, the
 // same neighbours to the last bits (double precision in every build): a random cloud with queries inside and
 // far outside; a regular grid, whose queries at bucket corners and edge
 // midpoints have exact distance ties; a transect (all y = 0) queried from a
@@ -566,7 +569,7 @@ TEST (Mesh, IdwBucketsEqualBruteForce)
     EXPECT_EQ(o(-1e9, 1e9), 12.5);
 }
 
-// Beyond the plan: map coordinates. With UTM-sized coordinates (4.6e6 m) the
+// Map coordinates. With UTM-sized coordinates (4.6e6 m) the
 // file is read and interpolated in double, so an input point is returned
 // exactly in every build (in float the coordinates alone are 0.5 m apart).
 TEST (Mesh, TerrainAtMapCoordinates)
@@ -587,7 +590,7 @@ TEST (Mesh, TerrainAtMapCoordinates)
     EXPECT_EQ(idw(4.6e6 + 0.3, 5.2e6 + 0.6), 121.0);
 }
 
-// Beyond the plan: file terrain on a periodic domain wraps, so the seam nodes
+// File terrain on a periodic domain wraps, so the seam nodes
 // 0 and n hold one height and ghosts are periodic images, although the point
 // cloud itself is not periodic.
 TEST (Mesh, FileTerrainSeamIsPeriodic)
@@ -632,7 +635,7 @@ TEST (Mesh, FileTerrainSeamIsPeriodic)
     EXPECT_EQ(worst, 0.0);
 }
 
-// UT-1.4.7: z_phys (cell centres), detJ and the nodal heights equal those
+// z_phys (cell centres), detJ and the nodal heights equal those
 // ERF writes for the same deck (ERF 92410d57, Neutral_Hill_2D on 32 x 1 x 16,
 // max_step = 0; Tests/Unit_Tests/Gold/README.md). Also the number of STF levels capped,
 // which ERF reported as 2 of 16.
@@ -666,7 +669,7 @@ TEST (Mesh, MetricsEqualErf)
     EXPECT_EQ(stf.mesh.quality().stf_capped_levels, 2);
 }
 
-// Beyond the plan: a restart with changed terrain inputs is refused.
+// A restart with changed terrain inputs is refused.
 TEST (Mesh, RestartWithOtherTerrainIsRefused)
 {
     MeshCase s = hill3d(1);
@@ -677,7 +680,7 @@ TEST (Mesh, RestartWithOtherTerrainIsRefused)
     EXPECT_THROW(s.mesh.check_restart(other, s.geom, s.z), std::runtime_error);
 }
 
-// Beyond the plan: the quality report on a steep ridge warns about STF capping.
+// The quality report on a steep ridge warns about STF capping.
 TEST (Mesh, QualityReportFlagsSteepTerrain)
 {
     MeshCase s = hill2d(1);
@@ -695,7 +698,7 @@ TEST (Mesh, QualityReportFlagsSteepTerrain)
     EXPECT_LT(s.mesh.quality().min_thickness_ratio, 0.6);
 }
 
-// Beyond the plan: the report's slope is |grad z|. A ridge along the grid
+// The report's slope is |grad z|. A ridge along the grid
 // diagonal has the slope 0.8578 H / L (max of |dh/ds|, at s = L / sqrt 2);
 // the larger of the x and y slopes would give 1/sqrt 2 of it.
 TEST (Mesh, QualitySlopeOfDiagonalRidge)
@@ -711,7 +714,7 @@ TEST (Mesh, QualitySlopeOfDiagonalRidge)
     EXPECT_NEAR(s.mesh.quality().max_ground_slope_deg, exact, 0.1) << "exact " << exact;
 }
 
-// Beyond the plan: a ground that reaches the top, and inverted cells, stop the run.
+// A ground that reaches the top, and inverted cells, stop the run.
 TEST (Mesh, TerrainThatFillsTheDomainIsRefused)
 {
     MeshCase tall = hill2d(1);
@@ -727,7 +730,7 @@ TEST (Mesh, TerrainThatFillsTheDomainIsRefused)
     EXPECT_GT(ok.mesh.quality().min_nodal_thickness_ratio, 0);
 }
 
-// Beyond the plan: every mapping keeps the ground layer exactly as the surface
+// Every mapping keeps the ground layer exactly as the surface
 // was given. ERF's BTF rewrote it as h z_top / z_top (within 1 ulp of h) while
 // other threads read it, a race on GPU; GUST's copy leaves it alone.
 TEST (Mesh, GroundLayerIsTheGivenSurface)
@@ -755,13 +758,13 @@ TEST (Mesh, GroundLayerIsTheGivenSurface)
     }
 }
 
-// Beyond the plan: every node of z_phys_nd, ghosts included, holds a height,
+// Every node of z_phys_nd, ghosts included, holds a height,
 // for all three mappings with periodic and non-periodic sides. ERF's builder
 // first sets the nodes outside the domain to bogus_large_value (1e150); the
 // BTF fix of #4 (the ground layer is not rewritten) had left the ground nodes
 // of the ghost columns outside non-periodic sides at that value, and the
 // extrapolation below the ground at 2e150, which a Dirichlet-ground Poisson
-// solve then read (sub-phase 1.11).
+// solve then read (the Tucker wall distance).
 TEST (Mesh, NoSentinelNodesLeft)
 {
     for (const int sm : {0, 1, 2}) {
@@ -809,7 +812,7 @@ TEST (Mesh, SharedNodesAgree)
     }
 }
 
-// Beyond the plan: every ghost node in x and y holds the height of the node it
+// Every ghost node in x and y holds the height of the node it
 // stands for, at every k (ghost rows in z included): its periodic image in a
 // periodic direction, the edge node in a non-periodic one. A corner ghost
 // outside a non-periodic face and a periodic one (x walls, y periodic: node

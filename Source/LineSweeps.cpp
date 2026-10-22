@@ -176,7 +176,7 @@ void abort_on (const std::vector<std::string>& err)
     amrex::Abort(all);
 }
 
-// Sub-phase 2.1's path (steady.line_ghosts = lagged): the previous pass's
+// The lagged path (steady.line_ghosts = lagged): the previous pass's
 // values across box faces and periodic seams, every valid point swept.
 amrex::Real lusgs_lagged (const amrex::MultiFab& A, const amrex::MultiFab& ap, const amrex::MultiFab& rhs, int sweeps,
                           LineOrder order, bool alternate, const amrex::Geometry& geom, amrex::MultiFab& delta)
@@ -209,8 +209,8 @@ amrex::Real lusgs_lagged (const amrex::MultiFab& A, const amrex::MultiFab& ap, c
     return change;
 }
 
-// Sub-phase 2.2 (steady.line_ghosts = zero): box-local sweeps over the owned
-// region grown by the overlap, delta = 0 outside it, no communication
+// The box-local path (steady.line_ghosts = zero): box-local sweeps over the
+// owned region grown by the overlap, delta = 0 outside it, no communication
 // between the passes.
 amrex::Real lusgs_zero (Loc loc, const amrex::MultiFab& A, const amrex::MultiFab& ap, const amrex::MultiFab& rhs,
                         int sweeps, LineOrder order, bool alternate, int overlap, const amrex::Geometry& geom,

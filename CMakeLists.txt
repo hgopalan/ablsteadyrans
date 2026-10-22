@@ -6,8 +6,8 @@
 #   cmake --build build-rel -j 8
 #   ctest --test-dir build-rel --output-on-failure
 #
-# AMReX comes from the submodule in external/amrex, pinned to the SHA the
-# development plan was checked against. To use an installed AMReX instead:
+# AMReX comes from the submodule in external/amrex, pinned to a fixed SHA.
+# To use an installed AMReX instead:
 #
 #   cmake -S . -B build-rel -DGUST_USE_INTERNAL_AMREX=OFF -DAMReX_ROOT=/path
 # ---------------------------------------------------------------------------
@@ -65,7 +65,7 @@ foreach(opt MPI OMP FFT HYPRE TESTING USE_INTERNAL_AMREX ENABLE_TESTS
     endif()
 endforeach()
 
-# The Poisson layer (sub-phase 1.10) uses AMReX's FFT module for its
+# The Poisson layer uses AMReX's FFT module for its
 # preconditioner; stop before AMReX is configured without it.
 if(NOT GUST_FFT)
     message(FATAL_ERROR "GUST needs GUST_FFT=ON: the Poisson layer uses AMReX's FFT module")

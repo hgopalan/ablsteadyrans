@@ -1,4 +1,4 @@
-# RT-1.10.1: projection of a fixed wind on ERF's Askervein terrain with the
+# Projection of a fixed wind on ERF's Askervein terrain with the
 # Poisson layer (Tests/Supporting_Files/Tools/poisson_projection.cpp). ERF's Askervein mesh
 # (Real_Terrain/Askervein/inputs_anel) coarsened to 30 x 30 cells of 200 m,
 # 18 layers from 20 m growing by 1.08, basic terrain following.

@@ -1,7 +1,6 @@
-// Surface layer and wall treatment (sub-phase 1.7): UT-1.7.1 (similarity
-// functions), UT-1.7.2 (reference-height lookup), UT-1.7.3 (u* from the log
-// law at z_ref on a stretched column), UT-1.7.4 (wall k), and the wall model
-// in the residual.
+// Surface layer and wall treatment: similarity functions, reference-height
+// lookup, u* from the log law at z_ref on a stretched column, wall k, and the
+// wall model in the residual.
 #include "Diffusion.H"
 #include "ERF_MOSTUtils.H"
 #include "MassFlux.H"
@@ -29,7 +28,7 @@ using gust::SurfaceLayerOptions;
 using gust::ptest::PCase;
 using gust::trtest::tol;
 
-// UT-1.7.1. ERF's similarity functions (the copied ERF_MOSTUtils.H; the drift
+// ERF's similarity functions (the copied ERF_MOSTUtils.H; the drift
 // check keeps the file byte-identical to ERF's) against a table computed
 // independently in Python from the same formulas (Businger-Dyer psi and phi,
 // Jimenez psi), across stable, neutral and unstable z/L. Agreement to 1e-14
@@ -107,7 +106,7 @@ std::vector<double> centres (double dz0, double r, int n)
     return h;
 }
 
-// UT-1.7.2. The lookup on the ERF#3982 column (dz0 = 10 m, ratio 1.1): a
+// The lookup on the ERF#3982 column (dz0 = 10 m, ratio 1.1): a
 // height on a cell centre belongs to the interval above it, a height on a
 // face (10 m, the default ERF query that used to abort) to the interval that
 // contains it, the last centre to the last interval; below the first centre
@@ -177,7 +176,7 @@ double at00 (const amrex::MultiFab& mf)
 
 const gust::BuoyancyOptions kBuoyancy{};
 
-// UT-1.7.3. u* from the log law at z_ref on the stretched column (dz0 = 10 m,
+// u* from the log law at z_ref on the stretched column (dz0 = 10 m,
 // ratio 1.1, 24 layers): the state carries u = (u*/kappa) ln((z + z0)/z0) at
 // its cell-centre heights (u* = 0.45, z0 = 0.1 m, the wind along x + y), and
 // the surface layer recovers u* to 2e-5 at the first centre (the default), on
@@ -258,7 +257,7 @@ TEST(SurfaceLayer, MostFrictionVelocityWithAHeatFlux)
     }
 }
 
-// Beyond the plan. bc.surface_stable_functions = qnse: the stable u* (2 m/s, q = -0.01 K m/s, zeta = 0.087 at
+// bc.surface_stable_functions = qnse: the stable u* (2 m/s, q = -0.01 K m/s, zeta = 0.087 at
 // the 5 m first centre) matches the bisection with QNSE's psi_m to 1e-10 (its only root, 0.198 m/s) and lies 8 %
 // above Businger-Dyer's (0.183 m/s, the upper of its three roots); the unstable u* is unchanged.
 TEST(SurfaceLayer, QnseFrictionVelocity)
@@ -292,15 +291,16 @@ TEST(SurfaceLayer, QnseFrictionVelocity)
     }
 }
 
-// Beyond the plan. A rough wall below (e - 1) z0: z0 = 0.5 m over a 1 m first
-// layer (first centre 0.5 m, ln((d + z0)/z0) = ln 2 = 0.69), the log-law state
-// of UT-1.7.3 with u* = 0.45. bc.surface_denominator_floor = log_law (the
-// default) recovers u* to 2e-5 at the first centre and at 0.8 m, between the
-// first two centres (ln 2.6 = 0.96 < 1): the neutral wall law is the inflow
-// profile's log law at every height. With one, u* = kappa U / 1 = 0.45 ln 2 at
-// the first centre (sub-phase 1.7's form, 31 % low). With a heat flux at the
-// first centre, both floors match the bisection with their m (min(ln 2, 1) and
-// 1) to 1e-10, for the unstable, stable and low-wind convective cases.
+// A rough wall below (e - 1) z0: z0 = 0.5 m over a 1 m first layer (first
+// centre 0.5 m, ln((d + z0)/z0) = ln 2 = 0.69), the log-law state of
+// SurfaceLayer.LogLawFrictionVelocityOnAStretchedColumn with u* = 0.45.
+// bc.surface_denominator_floor = log_law (the default) recovers u* to 2e-5 at
+// the first centre and at 0.8 m, between the first two centres
+// (ln 2.6 = 0.96 < 1): the neutral wall law is the inflow profile's log law at
+// every height. With one, u* = kappa U / 1 = 0.45 ln 2 at the first centre
+// (the earlier form, 31 % low). With a heat flux at the first centre, both
+// floors match the bisection with their m (min(ln 2, 1) and 1) to 1e-10, for
+// the unstable, stable and low-wind convective cases.
 TEST(SurfaceLayer, RoughWallFollowsTheLogLaw)
 {
     PCase c = flat_column(24, 4, 1.0);
@@ -366,7 +366,7 @@ TEST(SurfaceLayer, DenominatorFloorKeyIsChecked)
     EXPECT_NE(what.find("bc.surface_denominator_floor = two"), std::string::npos) << what;
 }
 
-// Beyond the plan: bc.surface_stable_functions and the QNSE coefficients are read, and checked naming the key.
+// bc.surface_stable_functions and the QNSE coefficients are read, and checked naming the key.
 TEST(SurfaceLayer, StableFunctionsKeysAreRead)
 {
     amrex::ParmParse pp("bc");
@@ -389,7 +389,7 @@ TEST(SurfaceLayer, StableFunctionsKeysAreRead)
     for (const char* k : {"surface_stable_functions", "surface_qnse_ah", "surface_qnse_bh"}) { while (pp.remove(k) > 0) {} }
 }
 
-// UT-1.7.4. The wall k: u*^2 / Cmu0^2 exactly for neutral; Axell's
+// The wall k: u*^2 / Cmu0^2 exactly for neutral; Axell's
 // (u*^3 + kappa B d0)^(2/3) / Cmu0^2 with a heat flux (B = 0 for a stable
 // flux). The wall eddy viscosity kappa u* (d + z0) equals Cmu0 sqrt(k_w) kappa
 // (d + z0) for neutral.

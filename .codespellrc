@@ -1,4 +1,4 @@
 [codespell]
-# ABL: atmospheric boundary layer; SER: switched evolution relaxation.
+# ABL: atmospheric boundary layer; SER: switched evolution relaxation; MAPE: mean absolute percentage error.
 skip = ./external,./.git,./build-*,./docs/_build,./Tests/*/Gold
-ignore-words-list = abl,ser
+ignore-words-list = abl,ser,mape

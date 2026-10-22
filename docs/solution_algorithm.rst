@@ -395,7 +395,7 @@ Switching and fallback
   0.08 at 128, 0.75 at 256, 0.97–0.99 at infinite :math:`\Delta\tau`); those steps are still accepted, and
   :math:`|R|` falls from 1.8e-4 to 7.8e-5 over 11 steps. The SIMPLEC preconditioner holds GMRES(30) to about CFL 64
   on that grid (the measurement used a cap of 1000; the default is now 128). The cap, the restart length and the
-  switch residual are chosen from the Askervein study that replaces the Phase 3 checkpoint (PR-28).
+  switch residual are provisional: a Newton study on Askervein has not been run yet.
 - The stage's continuation takes its momentum diffusivity from the closure at its own state, not from the SIMPLEC
   stage (whose is not restored by a restart inside the Newton stage).
 
@@ -437,9 +437,10 @@ that is every attempt. At infinite :math:`\Delta\tau` the preconditioner uses th
 
 **The denominator.** The SIMPLEC stage divides by :math:`d = a_P - \sum a_{nb}`. In the interior that is about
 :math:`1/\Delta\tau`, so the pressure increment vanishes as :math:`\Delta\tau` grows. The preconditioner
-therefore uses the SIMPLE denominator :math:`a_P`. On the 3-D hill of UT-3.3.3 the GMRES iterations per Newton step
-then stay near 10 from CFL 10 to 1e4; with :math:`d` they grow from 18 to more than 350 (:doc:`results`). With :math:`d` the
-preconditioner is exactly one iteration of the stage (UT-3.3.1).
+therefore uses the SIMPLE denominator :math:`a_P`. On the 3-D hill of
+``NewtonPreconditioner.IterationsBoundedOverCfl`` the GMRES iterations per Newton step then stay near 10 from CFL 10
+to 1e4; with :math:`d` they grow from 18 to more than 350 (:doc:`results`). With :math:`d` the preconditioner is
+exactly one iteration of the stage (``NewtonPreconditioner.ApplyIsOneSimplecIteration``).
 
 **Shared faces.** A face shared by two boxes, or a periodic seam face and its image, is one unknown. :math:`r`
 arrives with equal copies, and :math:`\delta q` is returned with every copy equal to the owner's.
@@ -447,7 +448,8 @@ arrives with equal copies, and :math:`\delta q` is returned with every copy equa
 **The pressure gauge.** Without a Dirichlet pressure face, a constant pressure is the null space of
 :math:`D + J`. The preconditioner removes the net source of :math:`r_p` that the boundaries cannot carry, and
 returns :math:`\delta p` with zero :math:`J`-weighted mean. The Newton update then keeps the mean of :math:`p`, and
-a constant added to :math:`p` changes neither the preconditioner nor the solve (UT-3.3.2).
+a constant added to :math:`p` changes neither the preconditioner nor the solve
+(``NewtonPreconditioner.ConstantPressureShiftLeavesTheSolveUnchanged``).
 
 **Limits.**
 
@@ -538,7 +540,7 @@ converges the run's discrete equations from the Newton solution. ``leave`` repor
 during the stage. The module's state (active, the frozen decisions) goes to the checkpoint
 (``<checkpoint>/Smoothness``, ``Level_0/closure_switches``) and is restored on any layout.
 
-**Variation from the plan.** Plan rev. 6 also freezes the stability branch. In a neutral layer :math:`N^2` is
+**The stability branch stays live.** It is not frozen with the other decisions. In a neutral layer :math:`N^2` is
 round-off and its sign flips: on the 2-D hill 286–507 of 512 cells changed branch during Newton. With the branch
 frozen at the switch state Newton was at 6.0e-6 after 8 steps on the inversion (van Leer), against 9.4e-8 without
 it, and failed at 5.7e-9 on the neutral van Albada run, against 1.4e-13 (:doc:`results`).
@@ -602,6 +604,27 @@ a slowly converging monitor, a small change over the window alone can stop 10 % 
 
 The outcome is ``Steady``, ``NotSteady`` (listing what has not converged) or ``Diverged`` (a NaN or infinity).
 Oscillations with a period up to :math:`4W` are never declared steady.
+
+.. _confidence-stop:
+
+**Confidence stop.** A run can sit at a fixed state where most of the field has converged
+and a few cells (often in a separated lee) have not. With ``steady.confidence`` :math:`= c > 0` the run is also
+steady when
+
+- the share of cells that meet the residual criterion cell by cell is at least :math:`c`. A cell meets it when
+  :math:`|r_{q,i}|/s_q \le \min\bigl(\tau_R,\ 10^{-N} \max(R_q^\mathrm{ref}, \tau_R)\bigr)` for :math:`p, \theta, k` at
+  the cell and :math:`u, v, w` on both of its faces: the threshold of the root-mean-square criterion, applied to
+  each cell (if every cell meets it, so does the norm);
+- every monitor criterion above is met; and
+- with ``steady.confidence_height`` :math:`> 0`, every cell that does not meet it lies within that height above
+  the ground.
+
+The stop is not tried during the reference hold. Its limits: the residual of the cells that do not meet the
+threshold is not bounded (1 % of cells at 100 times the threshold give a norm 10 times the threshold), and the
+monitors are global, so a limit cycle confined to a few cells that does not move them can be declared steady. The
+iteration line prints the share and the height of the highest unconverged cell, and a run stopped this way names
+the stop in its verdict. The SIMPLEC stage computes it; the stop does not act during the Newton stage. A stop by
+confidence is not recorded in the checkpoint (a restart from it iterates again).
 
 Stage switching, restart and reproducibility
 --------------------------------------------

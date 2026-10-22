@@ -8,9 +8,9 @@ with different solver settings and first guesses.
 ## Files
 | File | Role |
 |---|---|
-| `inputs_steady_hill2d` | RT-1.16.1: Jacobi sweeps (16 sweeps, CFL cap 4), log-law first guess. |
-| `inputs_steady_hill2d_lusgs` | RT-2.1.1: line LU-SGS sweeps (two symmetric sweeps, CFL cap 16). |
-| `inputs_steady_hill2d_column` | RT-2.1b.1: the LU-SGS deck started from the converged column (`init.first_guess = column`). |
+| `inputs_steady_hill2d` | Jacobi sweeps (16 sweeps, CFL cap 4), log-law first guess. |
+| `inputs_steady_hill2d_lusgs` | Line LU-SGS sweeps (two symmetric sweeps, CFL cap 16). |
+| `inputs_steady_hill2d_column` | The LU-SGS deck started from the converged column (`init.first_guess = column`). |
 | `check_column_guess.py` | Compares the Driver histories of the LU-SGS profile run and the column run. |
 
 The three runs use `Supporting_Files/check_steady_hill.py --erf-check check_hill.py --orders 2` (shared with

@@ -11,7 +11,7 @@ namespace gust {
 
 //! Tucker's (2003, J. Comput. Phys. 190:229-248, Eq. 2) differential wall
 //! distance, the algorithm of ERF's ERF::poisson_wall_dist lifted into a free
-//! function (sub-phase 1.11). Solves
+//! function. Solves
 //!   laplacian(phi) = -1,  phi = 0 on the ground,
 //! with zero flux through the top and through non-periodic side faces
 //! (periodic directions stay periodic), on the terrain-following mesh with

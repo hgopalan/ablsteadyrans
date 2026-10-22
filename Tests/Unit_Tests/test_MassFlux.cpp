@@ -1,6 +1,6 @@
-// Divergence, pressure gradient and contravariant flux (sub-phase 1.6):
-// UT-1.6.1 (MMS order; adjointness <Gp, U> = -<p, D U>) and UT-1.6.2 (the
-// divergence is the one the Poisson layer inverts).
+// Divergence, pressure gradient and contravariant flux: MMS order, adjointness
+// <Gp, U> = -<p, D U>, and the divergence is the one the Poisson layer
+// inverts.
 #include "MassFlux.H"
 #include "Poisson.H"
 #include "TransportTestHelpers.H"
@@ -83,7 +83,7 @@ MassFluxErrors errors (int m)
     return e;
 }
 
-// UT-1.6.1. The divergence (through Omega) and the three components of the
+// The divergence (through Omega) and the three components of the
 // pressure gradient converge at second order over the 21-degree hill (BTF,
 // geometric layers, 16 x 12 x 8 to 64 x 48 x 32 cells): L2 order >= 1.9 on
 // both pairs, max-norm order >= 1.9 on the finest (single precision 1.8).
@@ -194,7 +194,7 @@ double weighted_dot (const amrex::MultiFab& a, const amrex::MultiFab& b, const P
     return s;
 }
 
-// UT-1.6.1. G is minus the adjoint of D: for random p and a random velocity
+// G is minus the adjoint of D: for random p and a random velocity
 // that vanishes within two faces of the ground and the top (so no boundary
 // term), <G p, U> = -<p, D U> to round-off, on the hill mesh with periodic
 // sides. The two sides are each about 3e4 here; the identity holds to 1e-12 of
@@ -224,7 +224,7 @@ TEST(MassFlux, GradientIsMinusTheAdjointOfTheDivergence)
     EXPECT_LE(std::abs(gu + pd), tol(1e-12, 1e-4) * scale) << "<Gp,U> " << gu << " <p,DU> " << pd;
 }
 
-// UT-1.6.2. The continuity residual is the Poisson layer's divergence: bit for
+// The continuity residual is the Poisson layer's divergence: bit for
 // bit face_divergence of (u, v, Omega); and after a projection (Poisson
 // fluxes added to u, v and Omega, w recovered with w_from_omega) the
 // divergence of the corrected velocity is the solve's own residual, so a

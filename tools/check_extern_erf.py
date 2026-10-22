@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Drift check for code copied from ERF (RT-1.3.1).
+"""Drift check for code copied from ERF.
 
     check_extern_erf.py --erf PATH [--root DIR] [--report-upstream REF]
 

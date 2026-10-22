@@ -1,4 +1,4 @@
-// UT-1.3.4: deterministic sum and max, identical to the last bit on 1, 2 and
+// Deterministic sum and max, identical to the last bit on 1, 2 and
 // 4 ranks. CTest runs this file's tests at each rank count; every run must
 // reproduce the same pinned bits.
 #include "Reductions.H"

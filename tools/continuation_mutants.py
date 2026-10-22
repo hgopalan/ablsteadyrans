@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Sub-phase 3.2: the one-line mutants of the pseudo-transient continuation
+The one-line mutants of the pseudo-transient continuation
 (Source/Continuation.cpp, the SER law in Source/PseudoTime.cpp and the GMRES
 limit in Source/Newton.cpp).
 

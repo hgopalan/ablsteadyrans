@@ -1,0 +1,43 @@
+# Precursor column for the Big Southern Butte setup (inputs_bsb_wn): the same vertical grid (68 m first layer,
+# stretched by 1.0706 to 2806 m), z0 = 0.01 m, truly neutral, a slip top, doubly periodic, driven by a
+# pressure gradient u*^2 / H (u* = 0.5963 m/s, H = 2806 m), so that the ground stress balances the driving
+# force at steady state. Its planar means are the inflow table of the consistent setup (Richards and Hoxey
+# 1993; Gopalan 2018, JWEIA 182, 322): the inflow is then the closure's own equilibrium.
+mesh.n_cell        = 4 4 20
+mesh.prob_lo       = 0. 0. 0.
+mesh.prob_hi       = 272. 272. 2806.
+mesh.is_periodic   = 1 1 0
+mesh.max_grid_size = 4 4
+mesh.dz0           = 68.
+mesh.stretch_ratio = 1.0706
+
+terrain.type = flat
+
+bc.zlo = surface_layer
+bc.zhi = slip_wall
+bc.surface_z0       = 0.01
+bc.inflow_profile   = log_law
+bc.inflow_ustar     = 0.5963
+bc.inflow_z0        = 0.01
+bc.inflow_direction = 0.
+bc.theta_profile_z  = 0.
+bc.theta_profile    = 300.
+
+forcing.gravity           = 0.
+forcing.pressure_gradient = -1.267e-4 0. 0.
+
+init.first_guess = column   # the steady single-column solution (ColumnGuess); a spin-up from the log profile takes > 50000 iterations
+
+turb.tke_floor = 1.e-6
+
+steady.stage                   = simplec
+steady.sweep                   = lusgs
+steady.zline_sweeps            = 2
+steady.cfl_max                 = 16
+steady.residual_drop_orders    = 6
+steady.max_iterations          = 50000
+
+io.plot_file      = plt
+io.turb_plot_file = turb
+io.chk_file       = chk
+io.write_checkpoint = 0

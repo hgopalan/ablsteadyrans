@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Sub-phase 3.4: the one-line mutants of the smoothness handling
+The one-line mutants of the smoothness handling
 (Source/Smoothness.cpp) and of the closure's floor freeze and stratification
 gate (Source/Closure.cpp).
 

@@ -1,7 +1,7 @@
 # Askervein
 
 ## Purpose
-The convergence half of RT-1.16.3: Askervein on the ERF grid of RT-1.12.1 (30 x 30 x 18), the log-law inflow,
+Askervein on the ERF grid of `Initialization/Mass_Consistent_Askervein` (30 x 30 x 18), the log-law inflow,
 outflow, slip sides, no Coriolis, four sweeps, CFL cap 2, to the steady verdict.
 
 ## Files

@@ -1,13 +1,13 @@
 #ifndef GUST_NEWTON_STAGE_H_
 #define GUST_NEWTON_STAGE_H_
 
-// The Newton stage (plan sub-phase 3.5): the driver's second stage with
+// The Newton stage: the driver's second stage with
 // steady.stage = simplec_newton (Driver.H). The driver switches to it from
 // SIMPLEC after steady.switch_window iterations with the relative residual
 // at or below steady.switch_residual and the monitors settled
 // (steady.switch_monitor_tol).
 //
-// init (on the switch): the smoothness handling of sub-phase 3.4 enters
+// init (on the switch): the smoothness handling enters
 // (Smoothness.H: the k-floor decisions frozen at q, the smooth limiter in
 // the Newton residual), and the pseudo-transient continuation (Continuation.H)
 // starts afresh at steady.cfl_max, which is also its SER law's start (its

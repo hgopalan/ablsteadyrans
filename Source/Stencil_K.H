@@ -2,7 +2,7 @@
 #define GUST_STENCIL_K_H_
 
 // Second-order interpolation and differences between the staggered locations
-// of ERF's Arakawa C-grid on the terrain-following mesh (sub-phase 1.5).
+// of ERF's Arakawa C-grid on the terrain-following mesh.
 //
 // A location type is a bit mask: bit d set means nodal in direction d. Cell
 // centres are CC, the x-, y- and z-faces XF, YF, ZF, the edges XF|YF (xy),

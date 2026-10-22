@@ -1,4 +1,4 @@
-# Sub-phase 3.5 (CTest rt_steady_hill2d_newton): the 2-D hill of
+# CTest rt_steady_hill2d_newton: the 2-D hill of
 # inputs_steady_hill2d_lusgs, coarsened to 32 x 1 x 16 and driven by a
 # pressure gradient instead of Coriolis, with steady.stage = simplec_newton:
 # SIMPLEC (line LU-SGS, CFL cap 16), then the Newton stage. A regression
@@ -50,7 +50,7 @@ io.plot_file      = steady_hill2d_newton_plt
 io.turb_plot_file = steady_hill2d_newton_turb
 io.chk_file       = steady_hill2d_newton_chk
 
-# Sub-phase 3.5: SIMPLEC, then the Newton stage once r <= 1e-3 for 20
+# SIMPLEC, then the Newton stage once r <= 1e-3 for 20
 # iterations with the monitors settled; van Albada for the whole run, so the
 # Newton stage solves the run's own equations (no final SIMPLEC pass).
 convection.limiter             = van_albada

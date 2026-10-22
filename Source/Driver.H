@@ -1,7 +1,7 @@
 #ifndef GUST_DRIVER_H_
 #define GUST_DRIVER_H_
 
-// The steady driver framework (sub-phase 1.13): stages, switch rules with
+// The steady driver framework: stages, switch rules with
 // hysteresis, residual and monitor histories, wall-time and AU accounting,
 // the local pseudo-time step (PseudoTime.H) and the SER ramp of its CFL.
 //
@@ -26,12 +26,12 @@
 //      is recorded with its reason and the residuals, and printed. A stage
 //      that always grows the residual the previous stage lowered gives a
 //      forward/back cycle of period >= 2 switch_window; the history shows it.
-// Phase 1 has one stage (SIMPLEC, sub-phase 1.14); Newton and FAS plug in
-// later. The history (DriverHistory) goes to the checkpoint as the text file
+// The stages are SIMPLEC (Simplec.H) and Newton (NewtonStage.H). The
+// history (DriverHistory) goes to the checkpoint as the text file
 // <checkpoint>/Driver with hex floats, so a restart continues bit for bit.
 //
-// Inputs (steady.*): see SteadyOptions. The application reads them from
-// sub-phase 1.15, when it has a stage to run.
+// Inputs (steady.*): see SteadyOptions; the application reads them with
+// read_steady_options.
 
 #include "Predictor.H"
 #include "Mesh.H"
@@ -50,10 +50,9 @@
 namespace gust {
 
 //! The solver stage the application runs (steady.stage): none writes the
-//! state and stops (the behaviour before sub-phase 1.15); simplec runs the
-//! SIMPLEC stage (Simplec.H) under the driver; simplec_newton runs SIMPLEC,
-//! then the Newton stage (NewtonStage.H) once the switch rules allow it
-//! (sub-phase 3.5), with the fallback to SIMPLEC.
+//! state and stops; simplec runs the SIMPLEC stage (Simplec.H) under the
+//! driver; simplec_newton runs SIMPLEC, then the Newton stage (NewtonStage.H)
+//! once the switch rules allow it, with the fallback to SIMPLEC.
 enum class StageKind { none, simplec, simplec_newton };
 
 struct SteadyOptions
@@ -66,15 +65,15 @@ struct SteadyOptions
     amrex::Real ser_exponent{1};         //!< steady.ser_exponent p (>= 0): CFL = cfl0 r^-p
     amrex::Real ser_max_growth{2};       //!< steady.ser_max_growth (>= 1): CFL_{n+1} <= growth CFL_n
     int switch_window{20};               //!< steady.switch_window (>= 1): hysteresis window, iterations
-    amrex::Real switch_residual{amrex::Real(1.0e-4)};  //!< steady.switch_residual (> 0, <= 1): r_n at which to go forward (plan 3.5: 1e-4)
+    amrex::Real switch_residual{amrex::Real(1.0e-4)};  //!< steady.switch_residual (> 0, <= 1): r_n at which to go forward
     amrex::Real switch_back_growth{10};  //!< steady.switch_back_growth (> 1): growth of r_n over a window that sends back
     //! steady.switch_monitor_tol (0: off, or > 0 and < 1): a forward switch
     //! also needs every monitor's change over the window at most this
-    //! fraction of max(|value|, scale) (plan 3.5: settled to < 1 %).
+    //! fraction of max(|value|, scale).
     amrex::Real switch_monitor_tol{amrex::Real(1.0e-2)};
     //! steady.newton_fallback_failures (>= 1): consecutive failed Newton
     //! steps (Continuation::step returned failed, every retry used) after
-    //! which the Newton stage asks to go back to SIMPLEC (plan 3.5: 2).
+    //! which the Newton stage asks to go back to SIMPLEC.
     int newton_fallback_failures{2};
     //! steady.newton_cfl_max (finite, >= steady.cfl_max; 128): the Newton
     //! stage's CFL cap. Its continuation ramps from steady.cfl_max to it by
@@ -82,33 +81,43 @@ struct SteadyOptions
     //! (NewtonStage.H). With steady.newton_dtau_inf_at_cap = 1 dtau becomes
     //! infinite once the CFL reaches it.
     amrex::Real newton_cfl_max{amrex::Real(128)};
-    int zline_sweeps{2};                 //!< steady.zline_sweeps (zjacobi 2..100, lusgs 1..100): line sweeps per predictor step, for the SIMPLEC stage of 1.15 (Predictor.H)
-    SweepKind sweep{SweepKind::zjacobi}; //!< steady.sweep (zjacobi | lusgs): the line solver of the sweeps (sub-phase 2.1, Predictor.H)
+    //! steady.confidence (0: off, or in (0, 1]): the run is
+    //! also steady when this share of the cells meet the residual criterion
+    //! cell by cell and every monitor criterion is met (the confidence
+    //! percentage of Meteodyn WT). steady.confidence_height (0: anywhere, or
+    //! > 0, m): and every cell that does not lies within this height above
+    //! the ground.
+    amrex::Real confidence{0};
+    amrex::Real confidence_height{0};
+    int zline_sweeps{2};                 //!< steady.zline_sweeps (zjacobi 2..100, lusgs 1..100): line sweeps per predictor step, for the SIMPLEC stage (Predictor.H)
+    SweepKind sweep{SweepKind::zjacobi}; //!< steady.sweep (zjacobi | lusgs): the line solver of the sweeps (Predictor.H)
     //! steady.newton_preconditioner (identity | simplec): the Newton step's
-    //! preconditioner (sub-phase 3.3, NewtonPreconditioner.H); used by the
+    //! preconditioner (NewtonPreconditioner.H); used by the
     //! Newton stage (steady.stage = simplec_newton, NewtonStage.H).
     NewtonPreconditionerKind newton_preconditioner{NewtonPreconditionerKind::simplec};
     //! steady.line_ghosts (lagged | zero), line_overlap (0..max_line_overlap,
     //! 0 unless zero) and line_order (sequential | diagonal): the LU-SGS
-    //! sweeps' box coupling, overlap and column ordering (sub-phase 2.2,
-    //! LineSweeps.H); lusgs only.
+    //! sweeps' box coupling, overlap and column ordering (LineSweeps.H);
+    //! lusgs only.
     LineGhosts line_ghosts{LineGhosts::lagged};
     int line_overlap{0};
     LineOrder line_order{LineOrder::sequential};
-    int line_alternate{0};   //!< steady.line_alternate (0 | 1): odd sweeps j-reversed (beyond the plan, LineSweeps.H); lusgs only
+    int line_alternate{0};   //!< steady.line_alternate (0 | 1): odd sweeps j-reversed (LineSweeps.H); lusgs only
     Machine machine{Machine::Local};     //!< steady.machine (local | kestrel-cpu | kestrel-gpu): the AU rate
     int nodes{1};                        //!< steady.nodes (>= 1): for the AU
-    std::vector<std::string> given;      //!< the steady.* keys given (for the application's has-no-effect checks, 1.15)
+    std::vector<std::string> given;      //!< the steady.* keys given (for the application's has-no-effect checks)
 };
 
-//! The application's default steady.sweep (sub-phase 2.6, the Phase 2
-//! checkpoint): lusgs on a CPU build (PT-2.6.1: fewer iterations at a
-//! higher CFL cap than zjacobi); zjacobi on a GPU build until PR-32 measures
-//! the sweeps on H100. The SteadyOptions member keeps zjacobi, so options
+//! The application's default steady.sweep (from the sweep and CFL-cap study on
+//! Askervein): lusgs on a CPU build (fewer iterations at a higher CFL cap than
+//! zjacobi); zjacobi on a GPU build until the sweeps
+//! are measured on H100. The SteadyOptions member keeps zjacobi, so options
 //! built in code are unchanged; read_steady_options applies this default.
 SweepKind default_sweep () noexcept;
 //! The application's default steady.cfl_max for a sweep: 8 for lusgs (the
-//! cap with the fewest iterations in PT-2.6.1), 10 for zjacobi (Phase 1's).
+//! cap with the fewest iterations in the sweep and CFL-cap study), 10 for
+//! zjacobi (kept from before the sweep and CFL-cap study, not a result of
+//! it).
 amrex::Real default_cfl_max (SweepKind s) noexcept;
 
 //! The line solver options of opt (steady.sweep and steady.line_*).
@@ -151,6 +160,18 @@ public:
     //! false: the driver does not switch forward into the stage (a stage
     //! that has handed the run back for a final pass).
     [[nodiscard]] virtual bool accepts_switch () const { return true; }
+    //! The confidence of the last iterate (steady.confidence): the share of
+    //! the valid cells whose scaled residuals are all below threshold (one
+    //! per residual_names(), in the units of residual_norms()), and the
+    //! largest height above the ground of a cell that is not. Collective;
+    //! false (nothing computed) for a stage without cell residuals.
+    //! The driver's relative residual r_n after the iterate (Driver::step), for a stage that adapts to it.
+    virtual void note_relative_residual (amrex::Real /*r*/) {}
+    [[nodiscard]] virtual bool confidence (const std::vector<amrex::Real>& /*threshold*/, amrex::Real& /*share*/,
+                                           amrex::Real& /*height*/) const
+    {
+        return false;
+    }
 };
 
 struct IterationRecord
@@ -232,7 +253,13 @@ public:
     DriverResult run (State& q);
 
     [[nodiscard]] const DriverHistory& history () const { return m_h; }
-    [[nodiscard]] SteadyVerdict verdict () const { return m_criterion.verdict(); }
+    //! The criterion's verdict, Steady also after a confidence stop.
+    [[nodiscard]] SteadyVerdict verdict () const;
+    //! The confidence of the last iteration (steady.confidence > 0 and a stage
+    //! that computes it; else share -1) and the height of its highest
+    //! unconverged cell.
+    [[nodiscard]] amrex::Real confidence_share () const { return m_conf_share; }
+    [[nodiscard]] amrex::Real confidence_height () const { return m_conf_height; }
     [[nodiscard]] int stage () const { return m_h.stage; }
     [[nodiscard]] amrex::Real cfl () const { return m_h.cfl; }
     //! Continue from a saved history: the criterion, the SER state (the CFL,
@@ -280,6 +307,9 @@ private:
     DriverHistory m_h;
     amrex::MultiFab m_dtau;
     bool m_need_init{true};
+    amrex::Real m_conf_share{-1};
+    amrex::Real m_conf_height{0};
+    bool m_conf_steady{false};
 };
 
 } // namespace gust
