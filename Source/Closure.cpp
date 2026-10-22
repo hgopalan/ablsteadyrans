@@ -1,6 +1,7 @@
 #include "Closure.H"
 
 #include "CVFluxes.H"
+#include "ClosureWake.H"
 #include "Stencil_K.H"
 
 #include <AMReX_ParallelDescriptor.H>
@@ -19,7 +20,7 @@ namespace {
 
 const char* const kKeys[] = {"Cmu0", "Cb", "Rt_crit", "Rt_min", "max_geom_lscale", "tke_floor", "sigma_k",
                              "nu_molecular", "alpha_molecular", "kappa", "nut_relax", "frozen_switch", "face_mean",
-                             "wall_distance", "ri_gate"};
+                             "wall_distance", "ri_gate", "realizability"};
 
 //! The bits of encode() that FreezeScope holds.
 constexpr int kFloorBit = 16;
@@ -148,6 +149,8 @@ std::vector<std::string> check_closure_options (const ClosureOptions& opt)
     bad(opt.nut_relax, "nut_relax", "finite, > 0 and <= 1", [&] { return opt.nut_relax > 0 && opt.nut_relax <= 1; });
     bad(opt.ri_gate, "ri_gate", "0 (off) or finite, >= 1e-6 and <= 1",
         [&] { return opt.ri_gate == 0 || (opt.ri_gate >= amrex::Real(1e-6) && opt.ri_gate <= 1); });
+    bad(opt.realizability, "realizability", "0 (off) or finite, >= 0.01 and <= 10",
+        [&] { return opt.realizability == 0 || (opt.realizability >= amrex::Real(0.01) && opt.realizability <= 10); });
     return err;
 }
 
@@ -173,6 +176,7 @@ ClosureOptions read_closure_options ()
     pp.query("kappa", opt.kappa);
     pp.query("nut_relax", opt.nut_relax);
     pp.query("ri_gate", opt.ri_gate);
+    pp.query("realizability", opt.realizability);
     int frozen = opt.frozen_switch ? 1 : 0;
     pp.query("frozen_switch", frozen);
     if (frozen != 0 && frozen != 1) { amrex::Abort("gust: turb.frozen_switch must be 0 or 1"); }
@@ -208,7 +212,7 @@ ClosureConstants closure_constants (const ClosureOptions& opt)
 void ClosureFields::define (const amrex::BoxArray& ba, const amrex::DistributionMapping& dm)
 {
     for (auto* mf : {&nu, &gamma_theta, &gamma_tke, &nut}) { mf->define(ba, dm, 1, 1); }
-    for (auto* mf : {&length, &Rt, &Ps, &Pb, &eps, &dSdk, &dSdk_exact, &dnutdk}) { mf->define(ba, dm, 1, 0); }
+    for (auto* mf : {&length, &Rt, &Ps, &Pb, &eps, &dSdk, &dSdk_exact, &dnutdk, &cap_ratio}) { mf->define(ba, dm, 1, 0); }
 }
 
 void height_above_ground (const amrex::MultiFab& z_nd, amrex::MultiFab& dist)
@@ -349,6 +353,9 @@ void Closure::evaluate (const State& q, const amrex::MultiFab& dist, amrex::Real
         gate_stratification(N2g, S2, m_opt.ri_gate);
     }
     const amrex::MultiFab& N2c = (m_opt.ri_gate > 0) ? N2g : N2;
+    // The nu_t cap (ClosureWake.H): the largest Real without turb.realizability, so min(nu_t, cap) = nu_t.
+    amrex::MultiFab cap;
+    nut_cap_field(q, S2, m_opt, m_c, cap);
     amrex::iMultiFab dec;
     decide(q, N2c, dist, z0, dec);
     const ClosureConstants c = m_c;
@@ -363,6 +370,9 @@ void Closure::evaluate (const State& q, const amrex::MultiFab& dist, amrex::Real
         const auto n2r = N2.const_array(mfi);
         const auto s2 = S2.const_array(mfi);
         const auto d = dist.const_array(mfi);
+        const auto cp = cap.const_array(mfi);
+        const auto cr = f.cap_ratio.array(mfi);
+        const amrex::Real cap_none = std::numeric_limits<amrex::Real>::max();
         // A valid, finite array in every case: the history when there is one,
         // else k itself with the weight 1 - w = 0 (0 times a finite value is
         // 0 exactly; a fresh field could hold signalling NaNs).
@@ -377,12 +387,15 @@ void Closure::evaluate (const State& q, const amrex::MultiFab& dist, amrex::Real
             const Switches s = decode(dc(i, j, k));
             const auto p = closure::closure_point<amrex::Real>(kk(i, j, k), n2(i, j, k), s2(i, j, k), l_g, c, s);
             const amrex::Real ratio = p.cmu_prime / p.cmu;   // 1/Pr_t(Rt)
-            const amrex::Real nt = w * p.nut + (1 - w) * prev(i, j, k);
+            // The cap acts on the new nu_t before the relaxation, so turb.nut_relax < 1 also damps
+            // its changes between iterations; with w = 1 this is min(nu_t, cap).
+            const amrex::Real nt = w * amrex::min(p.nut, cp(i, j, k)) + (1 - w) * prev(i, j, k);
             nut(i, j, k) = nt;
             nu(i, j, k) = nu_mol + nt;
             gth(i, j, k) = alpha_mol + ratio * nt;
             gk(i, j, k) = nu_mol + nt * inv_sigma;
             if (vb.contains(amrex::IntVect(i, j, k))) {
+                cr(i, j, k) = (cp(i, j, k) < cap_none) ? p.nut / cp(i, j, k) : amrex::Real(0);
                 // The sources with the relaxed nu_t: P_s = nu_t S^2, P_b = -nu_t' N^2
                 // (N^2 not gated: the sink of the heat flux nu_t' dtheta/dz).
                 const amrex::Real Ps = nt * s2(i, j, k), Pb = -ratio * nt * n2r(i, j, k);
@@ -397,7 +410,10 @@ void Closure::evaluate (const State& q, const amrex::MultiFab& dist, amrex::Real
                 dsf(i, j, k) = closure::patankar_diagonal(pr);
                 // The exact derivative on dual numbers: nu_t relaxed by w, eps as is.
                 const auto pd = closure::closure_point<Dual>(Dual{kk(i, j, k), 1}, n2(i, j, k), s2(i, j, k), l_g, c, s);
-                const amrex::Real dnut = w * pd.nut.d;
+                // d min(nu_t, cap)/dk: where the cap holds, cap = C_r max(k, floor)/S gives cap/k (0 at the floor).
+                const amrex::Real dnut_new = (p.nut <= cp(i, j, k)) ? pd.nut.d
+                                           : ((kk(i, j, k) > c.tke_floor) ? cp(i, j, k) / kk(i, j, k) : amrex::Real(0));
+                const amrex::Real dnut = w * dnut_new;
                 dnf(i, j, k) = dnut;
                 dse(i, j, k) = dnut * s2(i, j, k) - ratio * dnut * n2r(i, j, k) - pd.eps.d;
             }

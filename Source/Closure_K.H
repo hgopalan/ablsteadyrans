@@ -1,10 +1,10 @@
 #ifndef GUST_CLOSURE_K_H_
 #define GUST_CLOSURE_K_H_
 
-// Point kernels of the Axell–Liungman (2001) k–L closure (sub-phase 1.9),
-// the relations of ERF's ERF_RANSClosure.H (extern_erf/, the reference of
-// UT-1.9.1) composed as ERF's ComputeTurbulentViscosityRANS composes them,
-// with rho = 1:
+// Point kernels of the Axell–Liungman (2001) k–L closure, the relations of
+// ERF's ERF_RANSClosure.H (extern_erf/, the reference of
+// Closure.KernelsMatchErfBitForBit) composed as ERF's
+// ComputeTurbulentViscosityRANS composes them, with rho = 1:
 //
 //   l_g  = kappa (d + z0),  capped: l_max l_g / (l_max + l_g)          (AL01 Eq. 22)
 //   L    = l_g                                   |N^2| <= eps (neutral)
@@ -23,8 +23,8 @@
 //
 // The branch decisions (neutral/stable/unstable, the two Rt smoothings, the
 // floor) are taken once from the primal values (switches_for) and passed in,
-// so a Jacobian can hold them fixed (the plan's frozen-switch mode) and the
-// kernel has no data-dependent branch of its own.
+// so a Jacobian can hold them fixed (the frozen-switch mode,
+// turb.frozen_switch) and the kernel has no data-dependent branch of its own.
 //
 // Trap safety: the compiler evaluates both arms of a select, so every arm's
 // argument is valid for every input. The stable arm uses max(N^2, 0) and the

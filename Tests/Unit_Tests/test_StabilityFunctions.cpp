@@ -1,4 +1,4 @@
-// Beyond the plan: the stable side of MOST's stability functions (StabilityFunctions.H, bc.surface_stable_functions).
+// The stable side of MOST's stability functions (StabilityFunctions.H, bc.surface_stable_functions).
 // Businger-Dyer (the default) is ERF's calc_phi/calc_psi exactly; QNSE (Sukoriansky et al. 2005, ERF's
 // enable_qnse_stable_functions) is pinned to values computed independently in Python, its psi to a numerical
 // integral of (1 - phi)/x, and its unstable side is Businger-Dyer's.

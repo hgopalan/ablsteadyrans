@@ -1,4 +1,4 @@
-// RT-1.9.1: the full residual of the neutral log-law column with the k–L
+// The full residual of the neutral log-law column with the k–L
 // closure on ERF's Neutral_ABL_Flat mesh (test-only tool; the application has
 // no solver yet).
 //

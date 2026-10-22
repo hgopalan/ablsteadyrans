@@ -1,4 +1,4 @@
-# RT-2.1b.1: ERF's Neutral_Hill_2D with the line LU-SGS sweeps of
+# ERF's Neutral_Hill_2D with the line LU-SGS sweeps of
 # inputs_steady_hill2d_lusgs started from the converged column
 # (init.first_guess = column: the deck's horizontally uniform column, solved
 # as a 1-D problem to init.column_tol first, is broadcast as the first guess

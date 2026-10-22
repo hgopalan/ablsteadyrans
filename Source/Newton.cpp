@@ -175,8 +175,8 @@ std::vector<std::string> check_newton_options (const NewtonOptions& opt)
     // 6.4e-6 in single): there J v keeps about three digits (relative error
     // near 1e-3). Below it the round-off grows as 1/h: at machine epsilon J v
     // has no correct digits and Newton stalls or diverges on the column of
-    // UT-3.1.2, and further down q + eps v rounds back to q until J v is 0
-    // and GMRES reports a converged zero step.
+    // Newton.ColumnConvergesQuadratically, and further down q + eps v rounds
+    // back to q until J v is 0 and GMRES reports a converged zero step.
     const auto e = static_cast<double>(opt.fd_eps_scale);
     const double e_min = newton_fd_eps_scale_min();
     if (std::isnan(e) || !(e >= e_min) || !(e <= 1.0e-2)) {

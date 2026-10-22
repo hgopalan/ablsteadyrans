@@ -1,4 +1,4 @@
-// Beyond the plan: the column's surface (init.column_stability, ColumnGuess.H). The force-driven column of
+// The column's surface (init.column_stability, ColumnGuess.H). The force-driven column of
 // 64 x 1 m layers over flat ground (z0 = 0.1 m, the first centre at 0.5 m), buoyancy on (g = 9.81, theta0 = 300 K),
 // a neutral sounding of 300 K, a Rayleigh layer on u, v, w and theta above 48 m. Each surface mode is checked
 // against MOST's closed forms at the first cell, with the column's own u*, theta_1 and speed.

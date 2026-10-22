@@ -178,7 +178,7 @@ steady state to the convergence tolerance, and ERF's checks pass for both (`Line
 the verdict after 175 iterations (2 s on two ranks; 156 with the inflow length of before,
 ``bc.inflow_tke_length = unbounded``). The residual is largest in the two columns next to the outflow,
 but keeps falling there with a tighter tolerance (1e-9 after 706 iterations), so the outflow needs no sponge. The
-comparison with ERF's unsteady RANS on lines A and AA uses ERF's own setup on the full mesh (:ref:`phase2-checkpoint`).
+comparison with ERF's unsteady RANS on lines A and AA uses ERF's own setup on the full mesh (:ref:`askervein-erf-mesh`).
 
 Cost compared with ERF
 ^^^^^^^^^^^^^^^^^^^^^^
@@ -696,19 +696,19 @@ hold on every level (``steady.sequencing_hold = 1``), 54 s with the default.
 - Equal verdicts do not mean equal end states: each run stops at the first iteration that meets the criteria, so
   final residuals can differ by up to an order of magnitude within the same criteria.
 
-.. _phase2-checkpoint:
+.. _askervein-erf-mesh:
 
-Phase 2 checkpoint
-^^^^^^^^^^^^^^^^^^
+Askervein on ERF's mesh
+^^^^^^^^^^^^^^^^^^^^^^^
 
 *Setup.* Askervein on ERF's mesh (300 × 300 × 18 cells, 20 m, a 20 m first layer stretched by 1.08), the neutral
-deck of RT-1.16.3 (``inputs_steady_askervein``, wind along x) unless noted, 8 ranks, 25 boxes of 64 × 64 columns.
+deck of ``rt_steady_askervein`` (``inputs_steady_askervein``, wind along x) unless noted, 8 ranks, 25 boxes of 64 × 64 columns.
 The tables were measured with the inflow length of before (``bc.inflow_tke_length = unbounded``); the comparison
 with ERF below gives both.
 Iterations to the steady verdict, measured on one CPU (Apple M2 Pro) with other jobs running; wall times and
 allocation units are left for Kestrel. "Not steady" means no verdict within the iteration limit (1000 or 2000).
 
-.. list-table:: Sweep and CFL cap (PT-2.6.1; the deck's 100-iteration reference)
+.. list-table:: Sweep and CFL cap (the deck's 100-iteration reference)
    :header-rows: 1
    :widths: 30 10 10 10 10 10 10
 
@@ -780,13 +780,13 @@ close: ``zjacobi`` with 4 sweeps 220 (cap 2) and 209 (cap 8), with 16 sweeps 208
   fewer per iteration. ``zjacobi`` matches it only with 16 sweeps per iteration.
 - Each sweep has a cap with the fewest iterations; above it the count rises, and ``zjacobi`` stops reaching a
   verdict within the limit (which does not by itself show an instability). ``lusgs`` still reaches steady at a cap
-  of 64 (611 iterations), so no limit was found for it. The plan's measure, the highest CFL that still reaches
-  steady, would choose a slower setting.
+  of 64 (611 iterations), so no limit was found for it. Choosing the highest CFL that still reaches steady
+  would give a slower setting.
 - The best ``lusgs`` cap lies between 4 and 16; 8 is the only cap measured in between.
 - ``zjacobi`` with its default two sweeps does not reach steady on Askervein at a cap of 4. A GPU build keeps
   that default (``zjacobi``, two sweeps, cap 10) until the sweeps are measured on H100; give
-  ``steady.zline_sweeps`` and ``steady.cfl_max`` there. The ``zjacobi`` cap of 10 is Phase 1's, not a PT-2.6.1
-  result.
+  ``steady.zline_sweeps`` and ``steady.cfl_max`` there. The ``zjacobi`` cap of 10 is kept from before this study,
+  not a result of it.
 
 .. list-table:: Reference window :math:`K` (``steady.residual_ref_iterations``; cap 8; iterations in the hold,
    the CFL ramp and at the cap)
@@ -887,7 +887,7 @@ needs 1087 iterations on one level and 299 (306, 37) on three, against 2091 and 
   fine one. A third level adds nothing on level 0.
 - With :math:`K` = 5 the coarse level needs 44 iterations instead of 111; the level-0 count is the same.
 
-.. list-table:: Box count (PT-2.6.3; ``lusgs``, two sweeps, cap 8; iterations)
+.. list-table:: Box count (``lusgs``, two sweeps, cap 8; iterations)
    :header-rows: 1
    :widths: 20 20 20 20 20
 
@@ -921,9 +921,9 @@ needs 1087 iterations on one level and 299 (306, 37) on three, against 2091 and 
 
 - With the lagged ghosts (the default) the box count changes the iterations by at most 1 %.
 - Without communication (``zero``) 64 boxes cost 8 % more iterations; an overlap of 4 columns recovers half of it.
-  The overlap default stays 0 with lagged ghosts; on a GPU the choice depends on the cost of the exchange (PR-32).
+  The overlap default stays 0 with lagged ghosts; on a GPU the choice depends on the cost of the exchange.
 
-**Comparison with ERF (RT-2.6.1).** ERF's Askervein deck at the pinned commit (``inputs_anel``: anelastic URANS,
+**Comparison with ERF** (``rt_askervein_210_erf_lines``). ERF's Askervein deck at the pinned commit (``inputs_anel``: anelastic URANS,
 the k-equation closure, fifth-order horizontal and third-order vertical upwind advection, the power-law inflow from
 210° through the west and south faces) ran to 4800 s on the same mesh (10 378 steps, 8 ranks) and was averaged over
 2400–4800 s (``gust_refavg``; the two half-window averages differ by at most 7.6e-4 m/s). The 10 m speeds on
@@ -939,12 +939,12 @@ GUST runs the same setup (``Tests/Real_Terrain/Askervein_210``):
      - Hilltop A / AA
      - Upwind masts (d ≤ −480 m)
      - Lee masts (d > 300 m)
-   * - Phase 1 (``zjacobi``, 4 sweeps, cap 2, :math:`K` = 100), ``bc.inflow_tke_length = unbounded``
+   * - z-line Jacobi (``zjacobi``, 4 sweeps, cap 2, :math:`K` = 100), ``bc.inflow_tke_length = unbounded``
      - 565 (533 with the closure's length)
      - +3.0 % / +1.5 %
      - +0.9 to +1.5 %
      - −4.9 to −7.5 %
-   * - Phase 2 (``lusgs`` and its default cap 8, the default :math:`K` = 5, ``steady.sequencing = 1`` on 2 levels),
+   * - Line LU-SGS (``lusgs`` and its default cap 8, the default :math:`K` = 5, ``steady.sequencing = 1`` on 2 levels),
        ``bc.inflow_tke_length = unbounded``
      - 97 (42)
      - +3.0 % / +1.5 %
@@ -958,8 +958,8 @@ GUST runs the same setup (``Tests/Real_Terrain/Askervein_210``):
 
 *Findings.*
 
-- The two configurations reach the same lines (to 1e-4 %); the Phase 2 configuration needs 5.6 times fewer
-  level-0 iterations.
+- The two configurations reach the same lines (to 1e-4 %); the line LU-SGS configuration needs 5.6 times
+  fewer level-0 iterations.
 - Up to 300 m past the hilltop every mast is within 4.5 % of ERF (4.0 % with the closure's inflow length); the four
   lee masts beyond are 4.9–7.5 % slower (6.6–9.2 %).
   GUST's second-order advection (MUSCL with van Leer) against ERF's fifth order sets the wake there; the
@@ -993,7 +993,7 @@ residual scale is left for later.
 Newton–Krylov
 -------------
 
-*Setup.* The Ekman column of UT-3.1.2 with plain Newton steps.
+*Setup.* The Ekman column of ``Newton.ColumnConvergesQuadratically`` with plain Newton steps.
 
 - The scaled residual falls by 0.403, 0.171, 0.0131, 2.09e-4 and 8.26e-8 in the first five steps, with
   :math:`r_{n+1}/r_n^2` between 0.25 and 0.57: quadratic convergence.
@@ -1113,8 +1113,8 @@ leaving infinite :math:`\Delta\tau` after a damped or unconverged step fails ear
 finite CFL into convergence (:math:`p` = 0.5: 26 steps) or slow progress (no line search). With :math:`p` = 0.5 it
 converges on all three cases; it is the recommended setting until the defaults are tuned.
 
-In UT-3.2.1 (one box, GMRES(30) stopped at 200 iterations, :math:`u \times 3`, plain Newton throughout)
-``NewtonKrylov::step`` raises :math:`|R|` 3.56-fold on the first step, where :math:`k` goes negative, although its
+In ``Continuation.LineSearchRejectsOvershoot`` (one box, GMRES(30) stopped at 200 iterations, :math:`u \times 3`,
+plain Newton throughout) ``NewtonKrylov::step`` raises :math:`|R|` 3.56-fold on the first step, where :math:`k` goes negative, although its
 Krylov relative residual is 0.013: the rise is nonlinear. The continuation keeps :math:`k` at its floor; on macOS
 arm64 it takes full steps 0–2 and 4 and backtracks on steps 3 (:math:`\lambda = 1/2`) and 5 (:math:`\lambda = 1/4`).
 These solves stop at their iteration limit, so the sequence depends on the platform's rounding. With the former
@@ -1125,8 +1125,9 @@ monotone :math:`|R|`, the :math:`k` floor, at least one backtrack), not the sequ
 The Newton preconditioner
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
-*Setup.* UT-3.3.3: the open hill (9 × 6 × 8 cells, six boxes, a 30 m hill, inflow and outflow, the wall law), four
-Newton steps at a fixed CFL, Krylov tolerance 1e-3, GMRES(200). Mean GMRES iterations per Newton step:
+*Setup.* ``NewtonPreconditioner.IterationsBoundedOverCfl``: the open hill (9 × 6 × 8 cells, six boxes, a 30 m hill,
+inflow and outflow, the wall law), four Newton steps at a fixed CFL, Krylov tolerance 1e-3, GMRES(200). Mean GMRES
+iterations per Newton step:
 
 .. list-table::
    :header-rows: 1
@@ -1152,15 +1153,15 @@ Newton steps at a fixed CFL, Krylov tolerance 1e-3, GMRES(200). Mean GMRES itera
      - —
      - 360–381
 
-UT-3.3.3 runs ``identity`` and the stage's denominator only at CFL 10 and 1e4 (—: not run). In the continuation
-loop on the same hill (UT-3.3 (a)) both preconditioners converge in 8 steps; ``simplec`` needs 54 GMRES iterations
+The test runs ``identity`` and the stage's denominator only at CFL 10 and 1e4 (—: not run). In the continuation
+loop on the same hill (``NewtonPreconditioner.ContinuationIdentityVersusSimplec``) both preconditioners converge in 8 steps; ``simplec`` needs 54 GMRES iterations
 in all and ``identity`` 976. The stage's denominator varies between runs at large CFL (359 and 381 measured at 1e4)
 because GMRES at the 200-vector restart is sensitive to rounding; the bound fails either way.
 
 Smoothness handling before Newton
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-*Setup.* ``Smoothness.DISABLED_Sweep`` (sub-phase 3.4, :doc:`solution_algorithm`): a 2-D periodic hill (16 × 2 × 16
+*Setup.* ``Smoothness.DISABLED_Sweep`` (:doc:`solution_algorithm`): a 2-D periodic hill (16 × 2 × 16
 cells on 1000 × 125 × 500 m, a cosine hill of 40 m) driven by :math:`dp/dx` = −2e-4 m/s², the k–L closure, the
 wall law, ``lusgs`` at ``steady.cfl_max = 8``. Neutral, or θ = 300 K below 300 m with 0.01 K/m above and
 ``bc.zhi_theta_grad`` = 0.01 K/m, with Rayleigh damping of w and θ over the top 150 m as in the hill decks. From
@@ -1316,11 +1317,11 @@ Findings:
   largest :math:`u` (first order at extrema, where van Leer clips the slope), so the verification pass back to van
   Leer takes 3650–4316 SIMPLEC iterations, 44–74 % of SIMPLEC's own iterations from 1e-4 to 1e-9, on top of the
   Newton stage.
-- **Freezing the branch slows or stops Newton.** With every decision frozen (plan rev. 6), 168–507 of 512 cells
+- **Freezing the branch slows or stops Newton.** With every decision frozen, 168–507 of 512 cells
   have changed branch by the end. After 8 steps the frozen run is 64 times further from convergence on the
   inversion (van Leer) and 1e5 times on the neutral van Albada run, which then fails at 5.7e-9. On the neutral van
   Leer run it is ahead after 8 steps (8.0e-8 against 1.5e-7) but ends 3.6e3 times higher after 30 (1.8e-10 against
-  4.8e-14). Freezing only the floor, as this sub-phase does, keeps the van Albada rate.
+  4.8e-14). Freezing only the floor, as the code does, keeps the van Albada rate.
 - **The stratification gate.** ``turb.ri_gate = 0.01`` changes the inversion solution by 0.03 % of the largest
   :math:`u` (3.6e-5 K in θ) and cuts SIMPLEC's iterations to 1e-9 by 6 % (van Leer); 0.1 cuts them by 16 % but changes
   :math:`u` by 1.8 %. It does not speed up Newton (with van Albada and 0.01, :math:`|R|` is 6.3e-8 after 8 steps
@@ -1330,4 +1331,4 @@ Findings:
   equations and no verification pass is needed. Its costs: the answer differs from van Leer's by 0.4–0.6 % of the
   largest :math:`u` here, and van Albada does not clip extrema (a face value can overshoot by up to 0.10 of the
   larger difference). It also helps SIMPLEC on the inversion (8430 iterations to 1e-9 against 11637). A Newton
-  finish on the van Leer answer needs a smooth limiter that tends to van Leer (not in this sub-phase).
+  finish on the van Leer answer needs a smooth limiter that tends to van Leer (not implemented).

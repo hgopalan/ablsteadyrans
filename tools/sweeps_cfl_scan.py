@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Sub-phase 1.16 (Pressel lens): the stability of the lagged z-line sweeps.
+The stability of the lagged z-line sweeps.
 
 Von Neumann analysis of one SIMPLEC pseudo-time outer iteration on a 2-D
 staggered (x-z) grid, uniform advection U in x, periodic.
@@ -128,10 +128,10 @@ def table(title, cfls, ms, schemes, **kw):
 def thresholds(schemes=('LUD', 'central'), ms=(2, 4, 8, 16), step=0.05):
     """The first CFL (step 0.05) at which the scalar lagged-sweep factor
     1 - S a exceeds 1 in modulus over theta in (0, pi]: the table of
-    docs/solver.rst (sub-phase 1.16)."""
+    docs/solver.rst."""
     th = np.linspace(0.0, np.pi, 721)[1:]
     print("first CFL with an amplification above 1 (scalar factor, pure advection)")
-    # The line LU-SGS of sub-phase 2.1 solves the first-order upwind coupling
+    # The line LU-SGS solves the first-order upwind coupling
     # exactly along the wind (a lower-triangular system in 1-D), so its
     # factor is 1 - A1^-1 A2 whatever the sweep count: printed first.
     th = np.linspace(0.0, np.pi, 721)[1:]

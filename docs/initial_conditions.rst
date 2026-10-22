@@ -103,7 +103,7 @@ An inflow face keeps the case's inflow profile; the solver reconciles the two.
 
 .. _column-stability:
 
-**Stratified column.** *Beyond the plan.* With a non-neutral surface (``init.column_stability``, the forms of
+**Stratified column.** With a non-neutral surface (``init.column_stability``, the forms of
 amrTerrain's 1-D column solver) the column also solves for :math:`\theta`,
 
 .. math::

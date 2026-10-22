@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Run GUST with the mass-consistent initializer and check the result (RT-1.12.1, RT-1.12.2).
+"""Run GUST with the mass-consistent initializer and check the result (rt_init_askervein, rt_init_bump_trend).
 
     check_init.py askervein GOLD.json [--write] -- COMMAND [ARGS ...]
     check_init.py trend GOLD.json [--write] -- COMMAND [ARGS ...]
 
-askervein (RT-1.12.1) runs COMMAND once and checks
+askervein (rt_init_askervein) runs COMMAND once and checks
   * the Poisson iterations, at most 10 % above the gold count;
   * the divergence after the correction, at most 10 x solver.poisson_reltol
     (as the run prints it) times the divergence before;
@@ -15,7 +15,7 @@ askervein (RT-1.12.1) runs COMMAND once and checks
     exactly 0 (theta is the reference itself), k positive everywhere.
 The plotfile itself is compared with amrex_fcompare in a separate test.
 
-trend (RT-1.12.2) runs COMMAND once per alpha_v of the gold (appending
+trend (rt_init_bump_trend) runs COMMAND once per alpha_v of the gold (appending
 init.alpha_v) and compares the hilltop speed-up with
 FastWindTerrain's on the same hill, profile and alpha set (the gold's "fwt"
 section, written by Tests/Initialization/Bump_Speedup_Trend/fwt_bump_speedup.py from FastWindTerrain's
@@ -82,7 +82,7 @@ def report(rows):
     return ok
 
 
-# --- RT-1.12.1 -------------------------------------------------------------
+# --- askervein (rt_init_askervein) -----------------------------------------
 def askervein_fields(plotfile):
     _, d = erf_plotfile.read_fields(plotfile, ["u", "v", "w", "theta", "p", "tke"])
     wmax = speed = 0.0
@@ -123,7 +123,7 @@ def askervein(gold, write, cmd):
     return 0 if report(rows) else 1
 
 
-# --- RT-1.12.2 -------------------------------------------------------------
+# --- trend (rt_init_bump_trend) --------------------------------------------
 def speedup_column(plotfile, mesh, heights):
     """Speed-up |u_h| / S_0(h) at the gold's heights above the ground in the hilltop column."""
     _, d = erf_plotfile.read_fields(plotfile, ["u", "v", "z"])

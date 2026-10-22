@@ -1,7 +1,7 @@
 #ifndef GUST_STABILITYFUNCTIONS_H_
 #define GUST_STABILITYFUNCTIONS_H_
 
-// MOST's stability functions of zeta = z/L, selected by bc.surface_stable_functions (beyond the plan).
+// MOST's stability functions of zeta = z/L, selected by bc.surface_stable_functions.
 //
 // Unstable side (zeta < 0): Businger-Dyer, ERF's similarity_funs (extern_erf/ERF_MOSTUtils.H), always.
 // Stable side (zeta >= 0), one form with two coefficients per function:

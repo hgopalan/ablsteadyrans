@@ -1,6 +1,6 @@
-// The residual and its linearisations (sub-phase 1.6): UT-1.6.3
-// (line_jacobian against a finite-difference Jacobian), UT-1.6.4 (rest over
-// steep terrain), UT-1.6.5 (jvp on a column problem), and the sources.
+// The residual and its linearisations: line_jacobian against a
+// finite-difference Jacobian, rest over steep terrain, jvp on a column
+// problem, and the sources.
 #include "Convection.H"
 #include "Diffusion.H"
 #include "MassFlux.H"
@@ -227,7 +227,7 @@ double line_jacobian_error (const PCase& c, double numax, Equation eq, int dir)
     return worst;
 }
 
-// UT-1.6.3. line_jacobian (x, y, z) against the finite-difference Jacobian of
+// line_jacobian (x, y, z) against the finite-difference Jacobian of
 // the first-order operator, transport frozen, for u, v, w, theta and k:
 // relative difference < 1e-6. Over the hill with convection alone (the
 // metric cross terms of diffusion stay on the right-hand side), and on a flat
@@ -264,7 +264,7 @@ double max_residual (const gust::ResidualFields& R, std::string* which = nullptr
     return m;
 }
 
-// UT-1.6.4. Rest over steep terrain (a 300 m hill on a 1000 m domain, slopes up
+// Rest over steep terrain (a 300 m hill on a 1000 m domain, slopes up
 // to 0.94): u = v = w = 0, p' = 0, theta = theta_ref(z) stably stratified
 // (3 K/km), with Coriolis on: the momentum, continuity and k residuals are
 // zero to round-off. The counter-example: with a constant reference theta_0
@@ -327,7 +327,7 @@ TEST(Residual, RestOverSteepTerrainIsBalanced)
     EXPECT_LT(rw_inner, 1e-2 * buoyancy);
 }
 
-// UT-1.6.5. jvp against the exact Jacobian on a column problem: a flat,
+// jvp against the exact Jacobian on a column problem: a flat,
 // laterally uniform column (4 x 4 x 32 cells, periodic sides) with u(z), v(z),
 // theta(z), k(z), p(z) and w = 0, perturbed in the same subspace. There
 // convection vanishes and the residual is affine (diffusion, the pressure

@@ -1,10 +1,10 @@
 #ifndef GUST_IMPLICIT_OPERATOR_H_
 #define GUST_IMPLICIT_OPERATOR_H_
 
-// The first-order implicit-side operator A1 (sub-phase 1.5), the left-hand
+// The first-order implicit-side operator A1, the left-hand
 // side of the defect-correction iteration (1/dtau + A1) dq = -R(q) (A1 and R
-// per unit volume; the plan writes V/dtau for the same term integrated over
-// a cell of volume V):
+// per unit volume; V/dtau is the same term integrated over a cell of
+// volume V):
 //
 //   A1 q = a_P q_P - sum over the six neighbours nb of a_nb q_nb,
 //
@@ -38,10 +38,11 @@
 //    differ by q C(1), which vanishes as the transport becomes divergence-
 //    free; defect correction converges to the residual's solution either way.
 //  * The vertical upwind weights in coef_ZM/coef_ZP are the implicit vertical
-//    advection of sub-phase 1.14 (plan task 1.14.2): do not add it again.
-//  * An independent reference for A1 (sub-phase 1.6, UT-1.6.3) is
-//    convection(upwind, bounded) plus the principal diffusion fluxes; on a
-//    flat mesh the latter are the full diffusion operators (the tests use both).
+//    advection of the momentum predictor (Predictor.H): do not add it again.
+//  * An independent reference for A1
+//    (LineJacobian.MatchesFiniteDifferenceJacobian) is convection(upwind,
+//    bounded) plus the principal diffusion fluxes; on a flat mesh the latter
+//    are the full diffusion operators (the tests use both).
 
 #include "CVFluxes.H"
 #include "Diffusion_K.H"

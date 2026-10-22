@@ -1,7 +1,5 @@
 # Column_Target
 
-*Beyond the plan.*
-
 ## Purpose
 The target wind of the column first guess (`init.column_target_u`, `init.column_target_height`) carried into the
 3-D run. The 1-D column of `Neutral_Column` (4 x 4 x 64, 1000 m, z0 = 0.1 m, slip top, pressure-gradient forcing)

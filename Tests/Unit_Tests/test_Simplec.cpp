@@ -1,10 +1,9 @@
-// The SIMPLEC stage (sub-phase 1.15): UT-1.15.1 (one correction removes the
-// divergence), UT-1.15.2 (Poiseuille to machine precision), UT-1.15.3 (the
-// lid-driven cavity at Re 100 against Ghia et al.), UT-1.15.4 (the correction
-// tends to the projection as dtau grows), UT-1.15.5 (k stays above the
-// floor), UT-1.15.6 (a converged state is a fixed point), and beyond the plan
-// the input readers of the stage, the forcing and the convection, the moving
-// lid and lateral walls of the boundary conditions, and the refusals.
+// The SIMPLEC stage: one correction removes the divergence, Poiseuille to
+// machine precision, the lid-driven cavity at Re 100 against Ghia et al., the
+// correction tends to the projection as dtau grows, k stays above the floor, a
+// converged state is a fixed point, and also the input readers of the stage,
+// the forcing and the convection, the moving lid and lateral walls of the
+// boundary conditions, and the refusals.
 #include "BoundaryConditions.H"
 #include "Closure.H"
 #include "Convection.H"
@@ -167,7 +166,7 @@ void predictor_fields (const gust::State& q, const gust::ResidualInputs& in, con
 } // namespace
 
 // ---------------------------------------------------------------------------
-// UT-1.15.1. One pressure correction of a predicted velocity leaves a
+// One pressure correction of a predicted velocity leaves a
 // divergence below the solver's relative tolerance of the predicted one
 // (0.1, then 1e-10), with the Dirichlet rows of w (the ground and the top)
 // untouched, and the stage's iterate reports the same two divergences.
@@ -335,7 +334,7 @@ TEST (Simplec, ResidualScalesUseTheDepthOfTheLayers)
 }
 
 // ---------------------------------------------------------------------------
-// UT-1.15.2. Laminar Poiseuille flow between no-slip walls (the ground and
+// Laminar Poiseuille flow between no-slip walls (the ground and
 // the top), driven by the constant force F with viscosity nu on a uniform
 // mesh: the discrete steady solution with the odd mirror of the walls is the
 // closed form u_k = (F / 2 nu) (z_k (H - z_k) + dz^2 / 4) at the cell-centre
@@ -384,7 +383,7 @@ TEST (Simplec, PoiseuilleToMachinePrecision)
     EXPECT_EQ(q.theta.min(0), amrex::Real(300));
     EXPECT_EQ(q.theta.max(0), amrex::Real(300));
     EXPECT_EQ(q.tke.min(0), amrex::Real(0.5));
-    // UT-1.15.6 (b): the converged state is a fixed point of one more iteration.
+    // The converged state is a fixed point of one more iteration.
     gust::State q0;
     define_state(q0, c);
     copy_state(q0, q);
@@ -397,7 +396,7 @@ TEST (Simplec, PoiseuilleToMachinePrecision)
 }
 
 // ---------------------------------------------------------------------------
-// UT-1.15.4. As dtau grows, the correction with d = 1/dtau on every interior
+// As dtau grows, the correction with d = 1/dtau on every interior
 // face (no Dirichlet rows except the ground and top of w) tends to the plain
 // projection: the corrected velocity equals u* + the projection's fluxes to
 // the solver tolerance for dtau = 1e3, 1e6 and 1e9 (the velocities stay
@@ -477,7 +476,7 @@ TEST (Simplec, CorrectionTendsToTheProjectionAsDtauGrows)
 }
 
 // ---------------------------------------------------------------------------
-// UT-1.15.6 (a). A uniform state with slip walls has R = 0 exactly: a full
+// A uniform state with slip walls has R = 0 exactly: a full
 // iteration leaves every field unchanged (|dq| = 0 to 1e-14 of its scale) and
 // reports zero residual norms.
 TEST (Simplec, AUniformStateIsAFixedPoint)
@@ -518,7 +517,7 @@ TEST (Simplec, AUniformStateIsAFixedPoint)
 }
 
 // ---------------------------------------------------------------------------
-// UT-1.15.5. k stays above the floor after every iteration: with the closure
+// k stays above the floor after every iteration: with the closure
 // and a strong random wind (a) a floor above most of the initial k, so the
 // clip must act (the count is reported; the sweeps alone would leave values
 // below it), and (b) a
@@ -572,7 +571,7 @@ TEST (Simplec, KStaysAboveTheFloor)
 }
 
 // ---------------------------------------------------------------------------
-// UT-1.15.3. The lid-driven cavity at Re = 100 (Ghia, Ghia and Shin 1982,
+// The lid-driven cavity at Re = 100 (Ghia, Ghia and Shin 1982,
 // Tables I and II): a unit square in x-z (64 x 64 cells, two periodic cells
 // in y), no-slip walls, the top moving at U = 1, nu = 0.01, run to steady by
 // the driver. u on the vertical centreline and w on the horizontal one are
@@ -661,7 +660,7 @@ TEST (Simplec, LidDrivenCavityRe100)
 }
 
 // ---------------------------------------------------------------------------
-// Beyond the plan: the point-implicit buoyancy and rotation of the predictor
+// The point-implicit buoyancy and rotation of the predictor
 // (Predictor.H), pinned against the formulas on a random state with a
 // stratified theta and Coriolis on: with tau_q = 1 / (1/dtau + a_P,q),
 //   a_P,w = 1/dtau + A_P + (g/theta_0) max(dtheta/dz, 0) tau_theta (face mean of theta's diagonal),
@@ -915,7 +914,7 @@ TEST (Simplec, PointImplicitCouplingsArePinned)
 }
 
 // ---------------------------------------------------------------------------
-// Beyond the plan: the wall-k rows folded into the implicit rows
+// The wall-k rows folded into the implicit rows
 // (apply_wall_k_to_implicit, which replaced the tridiagonal-only
 // apply_wall_k_line): with a surface layer, the first cells' k rows are
 // (dirichlet) the diagonal a = max(u*, u*_min)/d0 alone, every neighbour
@@ -1014,7 +1013,7 @@ TEST (Simplec, WallKRowsAreFolded)
             amrex::MultiFab::Subtract(dk, q.tke, 0, 0, 1, 0);
             EXPECT_GT(res.max_dq, 0);
             EXPECT_LT(max_abs_diff(dk, delta), tol(1e-13, 1e-4) * max_abs(q.tke));
-            // UT-2.1.4 (sub-phase 2.1): the same sweep with the line LU-SGS
+            // The same sweep with the line LU-SGS
             // solver is the zline_lusgs solve of the same rows, differs from
             // the Jacobi one, and with a floor above the smallest result the
             // clip holds k >= floor everywhere.
@@ -1040,7 +1039,7 @@ TEST (Simplec, WallKRowsAreFolded)
                                                         c.mesh, c.geom, 2, floor_v, &ss, &cf, w3, gust::LineSweepOptions(gust::SweepKind::lusgs));
                 EXPECT_GT(rf.clipped, 0);
                 EXPECT_GE(k3.min(0), floor_v);
-                // Sub-phase 2.2: the line options reach the sweep (the zero
+                // The line options reach the sweep (the zero
                 // ghosts and the diagonal ordering: zline_lusgs's result with the
                 // same options, one launch per wavefront plane).
                 gust::LineSweepOptions opt(gust::SweepKind::lusgs);
@@ -1069,7 +1068,7 @@ TEST (Simplec, WallKRowsAreFolded)
 }
 
 // ---------------------------------------------------------------------------
-// Beyond the plan: the moving lid and the lateral walls of the boundary
+// The moving lid and the lateral walls of the boundary
 // conditions. On a mesh with no-slip x walls and a no-slip top moving at
 // (U, 0, 0): the ghost of u above the top is 2U - u (an odd mirror about the
 // wall velocity), the ghost of w beyond an x wall is -w, u on the x walls is
@@ -1149,7 +1148,7 @@ TEST (Simplec, MovingLidAndLateralWalls)
 }
 
 // ---------------------------------------------------------------------------
-// Beyond the plan: the readers of simplec.*, forcing.* and convection.*
+// The readers of simplec.*, forcing.* and convection.*
 // (values, defaults, range checks naming the key, repeated keys, keys with
 // no effect) and the stage's refusals.
 TEST (Simplec, InputReadersAndRefusals)

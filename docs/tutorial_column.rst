@@ -81,7 +81,7 @@ Three settings are worth noting:
 
 - The initial profile uses :math:`u_* = 0.25` m/s, not 0.35 m/s. The solver has to find the right answer itself.
 - ``steady.sweep = zjacobi`` keeps the z-line Jacobi sweeps of the iteration counts below. Without it a CPU build
-  uses line LU-SGS (the default since the Phase 2 checkpoint, :doc:`results`).
+  uses line LU-SGS (the default since the sweep and CFL-cap study on Askervein, :doc:`results`).
 - ``steady.cfl_max = 50`` is large. It works here because every column is identical; 3-D cases need smaller values
   (:doc:`howto`).
 

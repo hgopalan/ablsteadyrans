@@ -1,10 +1,8 @@
-// The k–L closure (sub-phase 1.9): UT-1.9.1 (ERF's composition, bit for bit),
-// UT-1.9.2 (Kynema's KLAxell where the formulations coincide), UT-1.9.3
-// (smoothing limits), UT-1.9.4 (positivity of the point-implicit update),
-// UT-1.9.5 (the analytic source Jacobian against finite differences),
-// UT-1.9.6 (inputs), and beyond the plan: the logarithmic face mean, the
-// residual with the closure, relaxation with its checkpoint, frozen switches
-// and the wall distance.
+// The k–L closure: ERF's composition, bit for bit; Kynema's KLAxell where the
+// formulations coincide; smoothing limits; positivity of the point-implicit
+// update; the analytic source Jacobian against finite differences; the inputs;
+// and also the logarithmic face mean, the residual with the closure,
+// relaxation with its checkpoint, frozen switches and the wall distance.
 #include "Closure.H"
 #include "Diffusion.H"
 #include "ERF_RANSClosure.H"
@@ -86,7 +84,7 @@ amrex::FArrayBox host_copy (const amrex::MultiFab& mf, const amrex::MFIter& mfi)
 }
 
 // ERF's composition (ComputeTurbulentViscosityRANS, rho = 1), from the copied
-// AL01 relations: the reference of UT-1.9.1.
+// AL01 relations: the reference of Closure.KernelsMatchErfBitForBit.
 struct ErfPoint { amrex::Real L, eps, Rt, cmu, cmu_prime, nut, nut_prime; };
 ErfPoint erf_point (amrex::Real k, amrex::Real N2, amrex::Real d, amrex::Real z0, const ClosureConstants& c)
 {
@@ -107,7 +105,7 @@ ErfPoint erf_point (amrex::Real k, amrex::Real N2, amrex::Real d, amrex::Real z0
 }
 
 // ---------------------------------------------------------------------------
-// UT-1.9.1. closure_point<Real> equals ERF's composition bit for bit on random
+// closure_point<Real> equals ERF's composition bit for bit on random
 // inputs across the neutral, stable, unstable, smoothed and floored cases.
 TEST(Closure, KernelsMatchErfBitForBit)
 {
@@ -151,7 +149,7 @@ TEST(Closure, KernelsMatchErfBitForBit)
 }
 
 // ---------------------------------------------------------------------------
-// UT-1.9.2. Kynema's KLAxell (src/turbulence/RANS/KLAxell.cpp, transcribed)
+// Kynema's KLAxell (src/turbulence/RANS/KLAxell.cpp, transcribed)
 // where the formulations coincide: neutral, z = d, lambda = 30 m, kappa 0.41,
 // no roughness in the length, rho = 1: the length lambda kappa z/(lambda +
 // kappa z), nu_t = Cmu sqrt(k) l, eps = Cmu^3 k^1.5 / l, P = nu_t S^2.
@@ -187,7 +185,7 @@ TEST(Closure, MatchesKynemaKLAxellWhereTheyCoincide)
 }
 
 // ---------------------------------------------------------------------------
-// UT-1.9.3. smooth_Rt: identity above Rt_crit, continuous at it, bounded by
+// smooth_Rt: identity above Rt_crit, continuous at it, bounded by
 // Rt_min however large |Rt| (1e15 and beyond); the unstable length stays
 // finite and below its bound for tiny k under strong convection.
 TEST(Closure, SmoothingLimitsAndLargeRichardsonNumbers)
@@ -224,7 +222,7 @@ TEST(Closure, SmoothingLimitsAndLargeRichardsonNumbers)
 }
 
 // ---------------------------------------------------------------------------
-// UT-1.9.4. The point-implicit update k + S_k / (1/dtau + dSdk), with the
+// The point-implicit update k + S_k / (1/dtau + dSdk), with the
 // Patankar diagonal dSdk = (eps + max(-P_b, 0))/k, keeps k > 0 for dtau ->
 // infinity on random states (stable, unstable, strong shear or none).
 TEST(Closure, PointImplicitUpdateStaysPositive)
@@ -259,7 +257,7 @@ TEST(Closure, PointImplicitUpdateStaysPositive)
 }
 
 // ---------------------------------------------------------------------------
-// UT-1.9.5. The analytic d S_k / dk (the kernel on dual numbers, switches
+// The analytic d S_k / dk (the kernel on dual numbers, switches
 // held) against central finite differences, relative 1e-6, and d nu_t / dk.
 TEST(Closure, SourceJacobianMatchesFiniteDifferences)
 {
@@ -309,7 +307,7 @@ TEST(Closure, SourceJacobianMatchesFiniteDifferences)
 }
 
 // ---------------------------------------------------------------------------
-// UT-1.9.6. Inputs: every turb key is read into its field, and every invalid
+// Inputs: every turb key is read into its field, and every invalid
 // value is refused with its key named.
 TEST(Closure, InputsAreReadAndChecked)
 {
@@ -416,7 +414,7 @@ TEST(Closure, InputsAreReadAndChecked)
 }
 
 // ---------------------------------------------------------------------------
-// Beyond the plan. The assembled fields against closed forms on a flat
+// The assembled fields against closed forms on a flat
 // periodic mesh: u = a z + b sin(2 pi y/Ly), v = c sin(2 pi x/Lx), w = 0,
 // theta = 300 + gamma z, k uniform, sigma_k = 1.3 and molecular parts: N^2 =
 // g gamma/300 exactly, S^2 = a^2 + (D_y u + D_x v)^2 with D the centred
@@ -442,7 +440,8 @@ TEST(Closure, FieldsMatchClosedForms)
     EXPECT_EQ(cst.kappa, amrex::Real(0.39));
     EXPECT_EQ(cst.l_g_max, 30);
     const gust::BuoyancyOptions buoy;
-    const auto prev_fpe = amrex::disableFPExcept(amrex::FPExcept::invalid);   // erf_point's branches (see UT-1.9.1)
+    // erf_point's branches (see Closure.KernelsMatchErfBitForBit)
+    const auto prev_fpe = amrex::disableFPExcept(amrex::FPExcept::invalid);
     for (double gamma : {0.004, -0.004}) {
         gust::State q;
         define_state(q, c);
@@ -510,7 +509,7 @@ TEST(Closure, FieldsMatchClosedForms)
 }
 
 // ---------------------------------------------------------------------------
-// Beyond the plan. face_gamma: the logarithmic option changes vertical pairs
+// face_gamma: the logarithmic option changes vertical pairs
 // only; with a laterally varying field the x and y faces equal the arithmetic
 // interpolation bit for bit, and a z face is the logarithmic mean of the two
 // cells (averaged arithmetically over the lateral footprint of an edge).
@@ -538,7 +537,7 @@ TEST(Closure, FaceMeanIsLogarithmicAcrossVerticalPairsOnly)
 }
 
 // ---------------------------------------------------------------------------
-// Beyond the plan. The logarithmic mean: (a - b)/ln(a/b) to 1e-14 for random
+// The logarithmic mean: (a - b)/ln(a/b) to 1e-14 for random
 // pairs, a for equal values, continuous through the series range; and the
 // face flux of the log law with nu = kappa u* (z + z0): logarithmic face mean
 // gives the wall flux u*^2 at every interior face to 1e-12, arithmetic misses
@@ -621,7 +620,7 @@ TEST(Closure, LogarithmicFaceMeanReproducesTheLogLawFlux)
 }
 
 // ---------------------------------------------------------------------------
-// Beyond the plan. On a hill: the residual with the closure equals the
+// On a hill: the residual with the closure equals the
 // residual with the closure's own fields given, minus the sources, bit for
 // bit (the plumbing); the k line Jacobian's diagonal gains dSdk exactly; the
 // fields are finite with filled ghosts; height_above_ground is the node-mean
@@ -759,7 +758,7 @@ TEST(Closure, ResidualWithClosureIsTheResidualWithItsFields)
 }
 
 // ---------------------------------------------------------------------------
-// Beyond the plan. Relaxation: with nut_relax = 0.6 and a stored history,
+// Relaxation: with nut_relax = 0.6 and a stored history,
 // nu_t = 0.6 new + 0.4 stored exactly; the first evaluation (no history) is
 // unrelaxed; the history survives a checkpoint round trip on another box
 // layout. Frozen switches hold the floor decision after k drops below it.

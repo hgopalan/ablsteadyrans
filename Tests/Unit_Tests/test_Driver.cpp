@@ -1,7 +1,6 @@
-// The steady driver framework (sub-phase 1.13): UT-1.13.1 (the local
-// pseudo-time step against its analytic limits), UT-1.13.2 (the SER ramp
-// and its caps), UT-1.13.3 (switch rules with hysteresis), UT-1.13.4 (the
-// history written, read and continued bit for bit), and the inputs.
+// The steady driver framework: the local pseudo-time step against its analytic
+// limits, the SER ramp and its caps, switch rules with hysteresis, the history
+// written, read and continued bit for bit, and the inputs.
 #include "Driver.H"
 #include "MassFlux.H"
 #include "PseudoTime.H"
@@ -166,7 +165,7 @@ std::vector<std::unique_ptr<gust::Stage>> one_stage (A&&... a)
 }
 
 // ---------------------------------------------------------------------------
-// UT-1.13.1. The local pseudo-time step on known fields: uniform (u, v, w)
+// The local pseudo-time step on known fields: uniform (u, v, w)
 // on a flat uniform mesh gives CFL / (|u|/dx + |v|/dy + |w|/dz + 2 nu
 // (1/dx^2 + 1/dy^2)) in every cell; without nu the diffusive term is gone; a
 // terrain-following field (Omega = 0) over a hill has no vertical term; a
@@ -256,7 +255,7 @@ TEST (PseudoTime, LocalStepMatchesTheAnalyticLimits)
 }
 
 // ---------------------------------------------------------------------------
-// UT-1.13.2. The SER ramp on a geometric residual history (rate 1/4): cfl0
+// The SER ramp on a geometric residual history (rate 1/4): cfl0
 // through the reference iterations, then cfl0 r^-p capped by the growth per
 // iteration and by cfl_max; p = 2 doubles the exponent; a growth cap of 1.5
 // binds; the dtau the stage receives follows the CFL.
@@ -359,7 +358,7 @@ TEST (Driver, SerRampFollowsTheLawAndItsCaps)
 }
 
 // ---------------------------------------------------------------------------
-// UT-1.13.3. Switch rules with hysteresis on scripted residual histories
+// Switch rules with hysteresis on scripted residual histories
 // (relative to a reference of 1): a residual alternating about the switch
 // threshold never switches; W iterations below it switch forward once, with
 // the reason, the residuals and the stage's init recorded; a growth by the
@@ -484,7 +483,7 @@ private:
 };
 
 // ---------------------------------------------------------------------------
-// UT-3.5.1. The forward switch to the Newton stage on synthetic histories
+// The forward switch to the Newton stage on synthetic histories
 // (steady.switch_residual 1e-4, switch_window 5): r_n crosses 1e-4 at
 // iteration 3 and stays below; the switch happens once, at iteration 7 (the
 // fifth iteration below), with every monitor flat. With the monitor still
@@ -494,7 +493,7 @@ private:
 // switches at iteration 7 again. A stage that refuses (accepts_switch false)
 // is never entered.
 //
-// UT-3.5.2. The fallback: the second stage asks to go back from its second
+// The fallback: the second stage asks to go back from its second
 // iterate on (the Newton stage's two failed steps, NewtonStage.H): the
 // driver switches back at once (inside the hysteresis window), calls its
 // leave once, logs the stage's reason, and switches forward again only after
@@ -557,7 +556,7 @@ TEST (Driver, NewtonSwitchOnceAndFallback)
         EXPECT_TRUE(d->history().switches.empty());
         EXPECT_EQ(second->inits, 0);
     }
-    // UT-3.5.2
+    // the fallback
     {
         auto [d, first, second] = run(o, flat, 2, true, 40);
         const auto& sw = d->history().switches;
@@ -576,7 +575,7 @@ TEST (Driver, NewtonSwitchOnceAndFallback)
 }
 
 // ---------------------------------------------------------------------------
-// Beyond the plan (Ann review of PR-27). A one-stage history (a steady.stage =
+// A one-stage history (a steady.stage =
 // simplec checkpoint) continues in a two-stage driver (simplec_newton): the
 // records, the CFL and the stage are kept and the Newton stage starts with an
 // empty account; a two-stage history cannot continue in a one-stage driver,
@@ -617,7 +616,7 @@ TEST (Driver, OneStageHistoryContinuesWithTwoStages)
 }
 
 // ---------------------------------------------------------------------------
-// UT-1.13.4. The history: written and read back bit for bit (every field,
+// The history: written and read back bit for bit (every field,
 // strings with spaces included); a run interrupted after K iterations and
 // continued from the written history by a new driver on the saved state
 // gives the same records (but wall times) and the same verdict as an
@@ -772,7 +771,7 @@ TEST (Driver, HistoryIsRestartableBitForBit)
 }
 
 // ---------------------------------------------------------------------------
-// Beyond the plan: the Diverged verdict stops the run; the stage receives
+// The Diverged verdict stops the run; the stage receives
 // init once at the start; a driver refuses no stages, a null stage and
 // stages that disagree on residual names; the options reader takes every key
 // and refuses bad values, repeated keys and unknown machines, naming them.
@@ -885,7 +884,7 @@ TEST (Driver, DivergenceStopsAndTheChecksNameTheirInput)
         {"steady.zline_sweeps", [] (SteadyOptions& b) { b.zline_sweeps = 101; }},
         {"steady.zline_sweeps", [] (SteadyOptions& b) { b.sweep = gust::SweepKind::lusgs; b.zline_sweeps = 0; }},
         {"steady.zline_sweeps", [] (SteadyOptions& b) { b.sweep = gust::SweepKind::lusgs; b.zline_sweeps = 101; }},
-        // sub-phase 2.2: the overlap's range, and the line keys without lusgs
+        // the line-sweep variants: the overlap's range, and the line keys without lusgs
         {"steady.line_overlap", [] (SteadyOptions& b) { b.sweep = gust::SweepKind::lusgs; b.line_ghosts = gust::LineGhosts::zero; b.line_overlap = -1; }},
         {"steady.line_overlap", [] (SteadyOptions& b) { b.sweep = gust::SweepKind::lusgs; b.line_ghosts = gust::LineGhosts::zero; b.line_overlap = gust::max_line_overlap + 1; }},
         {"steady.line_overlap", [] (SteadyOptions& b) { b.sweep = gust::SweepKind::lusgs; b.line_overlap = 2; }},   // lagged ghosts
@@ -911,7 +910,7 @@ TEST (Driver, DivergenceStopsAndTheChecksNameTheirInput)
                      std::runtime_error);
     }
     EXPECT_TRUE(gust::check_steady_options(o).empty());
-    {   // one sweep is allowed with lusgs (sub-phase 2.1), not with zjacobi
+    {   // one sweep is allowed with lusgs, not with zjacobi
         SteadyOptions x = o;
         x.sweep = gust::SweepKind::lusgs;
         x.zline_sweeps = 1;
@@ -919,7 +918,7 @@ TEST (Driver, DivergenceStopsAndTheChecksNameTheirInput)
         x.sweep = gust::SweepKind::zjacobi;
         EXPECT_FALSE(gust::check_steady_options(x).empty());
     }
-    {   // the overlap's bounds are accepted with the zero ghosts (sub-phase 2.2)
+    {   // the overlap's bounds are accepted with the zero ghosts
         SteadyOptions x = o;
         x.sweep = gust::SweepKind::lusgs;
         x.line_ghosts = gust::LineGhosts::zero;
@@ -1007,13 +1006,13 @@ TEST (Driver, DivergenceStopsAndTheChecksNameTheirInput)
         clear();
         const SteadyOptions d = gust::read_steady_options();
         EXPECT_EQ(d.cfl0, 1);
-        // The switch rules of sub-phase 3.5 (plan rev. 6: 1e-4, monitors within 1 %, two failures).
+        // The Newton stage's switch rules (1e-4, monitors within 1 %, two failures).
         EXPECT_EQ(d.switch_residual, amrex::Real(1e-4));
         EXPECT_EQ(d.switch_monitor_tol, amrex::Real(1e-2));
         EXPECT_EQ(d.newton_fallback_failures, 2);
         EXPECT_EQ(d.newton_cfl_max, amrex::Real(128));
         EXPECT_EQ(d.switch_window, 20);
-        // The application defaults of sub-phase 2.6: the build's sweep and
+        // The application defaults: the build's sweep and
         // that sweep's CFL cap (lusgs and 8 on a CPU build).
         EXPECT_EQ(d.sweep, gust::default_sweep());
         EXPECT_EQ(d.cfl_max, gust::default_cfl_max(d.sweep));
@@ -1061,11 +1060,11 @@ TEST (Driver, DivergenceStopsAndTheChecksNameTheirInput)
         clear();
         pp.add("sweep", std::string("zjacobi"));
         EXPECT_EQ(gust::read_steady_options().sweep, gust::SweepKind::zjacobi);
-        EXPECT_EQ(gust::read_steady_options().cfl_max, 10);   // zjacobi keeps Phase 1's cap
+        EXPECT_EQ(gust::read_steady_options().cfl_max, 10);   // zjacobi keeps its own cap
         pp.add("sweep", std::string("lusgs"));   // repeated key
         EXPECT_THROW(gust::read_steady_options(), std::runtime_error);
-        // The Phase 2 defaults (PT-2.6.1): lusgs at a cap of 8 on a CPU build,
-        // zjacobi on a GPU build until PR-32; a given cap is kept with either.
+        // The defaults: lusgs at a cap of 8 on a CPU build,
+        // zjacobi on a GPU build; a given cap is kept with either.
 #ifdef AMREX_USE_GPU
         EXPECT_EQ(gust::default_sweep(), gust::SweepKind::zjacobi);
 #else
@@ -1116,7 +1115,7 @@ TEST (Driver, DivergenceStopsAndTheChecksNameTheirInput)
 }
 
 // ---------------------------------------------------------------------------
-// Beyond the plan (grid sequencing, steady.sequencing_hold = 0): a seeded
+// Grid sequencing, steady.sequencing_hold = 0: a seeded
 // driver whose reference hold is released measures r_n against the seed
 // from the first iteration and starts the SER ramp at once, the growth cap
 // still binding; the first residual_ref_iterations residuals still raise the

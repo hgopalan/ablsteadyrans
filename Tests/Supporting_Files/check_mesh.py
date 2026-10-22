@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Run GUST and check its mesh against a gold file (RT-1.4.1, RT-1.4.2,
-RT-2.3.2).
+"""Run GUST and check its mesh against a gold file (rt_askervein_mesh,
+rt_steep_ridge_quality and the grid-hierarchy tests).
 
     check_mesh.py GOLD.json [--write] [--rtol R] -- COMMAND [ARGS ...]
 

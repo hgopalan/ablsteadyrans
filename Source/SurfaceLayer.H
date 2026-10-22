@@ -1,7 +1,7 @@
 #ifndef GUST_SURFACELAYER_H_
 #define GUST_SURFACELAYER_H_
 
-// Surface layer and wall treatment (sub-phase 1.7).
+// Surface layer and wall treatment.
 //
 // Each ground column gets a friction velocity u* from Monin-Obukhov
 // similarity (MOST) at a reference height above the ground:
@@ -13,7 +13,7 @@
 // - d = h / |A| the distance normal to the ground of a point at vertical
 //   height h above it, |A| = sqrt(1 + z_x^2 + z_y^2) from the column's ground
 //   slopes; the log law in d + z0 matches the closure's l_g = kappa (d + z0)
-//   (plan 1.9) and ERF's neutral check, u = (u*/kappa) ln((z + z0)/z0);
+//   (Closure.H) and ERF's neutral check, u = (u*/kappa) ln((z + z0)/z0);
 // - z0 the roughness, q the kinematic surface heat flux (K m/s, upward > 0),
 //   g and theta_0 the buoyancy options' (Forcing.H), psi_m the Businger-Dyer
 //   function of ERF (extern_erf/ERF_MOSTUtils.H, unchanged), z/L clamped to
@@ -21,8 +21,8 @@
 //   would otherwise give u* < 0). bc.surface_denominator_floor sets m:
 //   log_law (default) m = min(ln((d + z0)/z0), 1), so the neutral u* is the
 //   log law's at every height, as in the inflow profile and the column guess;
-//   one, m = 1 (sub-phase 1.7): the neutral u* is then below the log law's when
-//   the reference point is below (e - 1) z0 = 1.72 z0. Both are the same
+//   one, m = 1 (the earlier form): the neutral u* is then below the log law's
+//   when the reference point is below (e - 1) z0 = 1.72 z0. Both are the same
 //   where ln((d + z0)/z0) >= 1. Below that, with either floor, an unstable
 //   psi_m > 0 meets the floor at once and u* stays at its floor value, and
 //   on the stable side m = 1 also bound weakly stable cases that log_law
@@ -61,7 +61,7 @@
 // The wall model replaces only the ground faces' diffusive fluxes. MUSCL
 // convection and the cross-metric and transposed-stress terms of the first
 // cells still read the ghost cells below the ground, which the boundary
-// conditions (sub-phase 1.8) fill. The state's z-column must be whole in
+// conditions (BoundaryConditions.H) fill. The state's z-column must be whole in
 // every box (the mesh's BoxArray), with the ground at the domain's low z.
 
 #include "CVFluxes.H"
@@ -79,13 +79,14 @@
 namespace gust {
 
 //! MOST's gradient functions phi_m and phi_h of zeta = d/L (Businger-Dyer, as
-//! ERF's similarity_funs::calc_phi_m/calc_phi_h, which UT-1.7.1 pins). Written
-//! without a select on the sign of zeta, and with the clamps as arithmetic
-//! (|zeta| forms), not as min/max: the compiler evaluates both arms of a
-//! select, moves a select past a sqrt or a division (they cannot fail in its
-//! model), and drops a clamp inside an arm where it knows the sign; the sqrt
-//! of 1 - 16 zeta for a stable zeta > 1/16 then raises the invalid-operation
-//! trap although its value is unused. Here the argument of the sqrt is
+//! ERF's similarity_funs::calc_phi_m/calc_phi_h, which
+//! SimilarityFunctions.MatchTheReferenceTable pins). Written without a select
+//! on the sign of zeta, and with the clamps as arithmetic (|zeta| forms), not
+//! as min/max: the compiler evaluates both arms of a select, moves a select
+//! past a sqrt or a division (they cannot fail in its model), and drops a
+//! clamp inside an arm where it knows the sign; the sqrt of 1 - 16 zeta for a
+//! stable zeta > 1/16 then raises the invalid-operation trap although its
+//! value is unused. Here the argument of the sqrt is
 //! 1 + 8 (|zeta| - zeta) >= 1 for every zeta, in every form.
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
 void most_phi (amrex::Real zeta, amrex::Real& phi_m, amrex::Real& phi_h) noexcept
@@ -138,7 +139,7 @@ std::vector<std::string> check_surface_layer_options (const SurfaceLayerOptions&
 //! bc.surface_wall_k (dirichlet | source), bc.surface_denominator_floor
 //! (log_law | one), bc.surface_stable_functions (businger_dyer | qnse) and
 //! bc.surface_qnse_am, _bm, _ah, _bh, and range-check them; aborts
-//! naming the key. Cmu0 and kappa stay the closure's (sub-phase 1.9).
+//! naming the key. Cmu0 and kappa stay the closure's (Closure.H).
 SurfaceLayerOptions read_surface_layer_options ();
 
 //! The surface layer of every ground column, on a one-cell-thick BoxArray

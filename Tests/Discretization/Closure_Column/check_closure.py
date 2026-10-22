@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run closure_column and check the full residual of the equilibrium log-law state (RT-1.9.1).
+"""Run closure_column and check the full residual of the equilibrium log-law state (rt_closure_column).
 
     check_closure.py --ustar U --z0 Z0 --direction DEG --dz DZ -- COMMAND [ARGS ...]
 

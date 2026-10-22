@@ -1,5 +1,5 @@
-// Diffusion operators (sub-phase 1.5): UT-1.5.2 (MMS order with the metric
-// cross terms and a variable diffusivity).
+// Diffusion operators: MMS order with the metric cross terms and a variable
+// diffusivity.
 #include "Diffusion.H"
 #include "TransportTestHelpers.H"
 
@@ -92,7 +92,7 @@ std::array<gust::trtest::Norms, 3> momentum_error (int m, int smoothing)
 
 double order (double a, double b) { return std::log2(a / b); }
 
-// UT-1.5.2. Scalar diffusion div(gamma grad q) with a variable gamma, on the
+// Scalar diffusion div(gamma grad q) with a variable gamma, on the
 // 21-degree hill (BTF, geometric layers): second order in L2 on both pairs of
 // the three meshes and in the max norm on the finest pair.
 TEST(DiffusionMMS, ScalarIsSecondOrder)
@@ -104,7 +104,7 @@ TEST(DiffusionMMS, ScalarIsSecondOrder)
     EXPECT_GE(order(e[1].linf, e[2].linf), 1.9) << e[1].linf << " " << e[2].linf;
 }
 
-// UT-1.5.2. Momentum diffusion d_j (nu (d_j u_c + d_c u_j)) with the full
+// Momentum diffusion d_j (nu (d_j u_c + d_c u_j)) with the full
 // stress tensor, the metric cross terms and a variable nu, for u, v and w.
 TEST(DiffusionMMS, MomentumIsSecondOrder)
 {

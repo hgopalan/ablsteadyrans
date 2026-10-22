@@ -1,9 +1,7 @@
-// The mass-consistent initializer (sub-phase 1.12): UT-1.12.1 (alpha_h =
-// alpha_v = 1 is the plain projection bit for bit, alpha = 2 the same field),
-// UT-1.12.2 (the divergence after), UT-1.12.3 (flat terrain leaves the
-// profile), UT-1.12.4 (D4 symmetry), UT-1.12.5 (w monotone in
-// alpha_v/alpha_h), UT-1.12.6 (the first guess by height above the ground,
-// theta, k, p', O'Brien, the inputs).
+// The mass-consistent initializer: alpha_h = alpha_v = 1 is the plain
+// projection bit for bit, alpha = 2 the same field; the divergence after; flat
+// terrain leaves the profile; D4 symmetry; w monotone in alpha_v/alpha_h; the
+// first guess by height above the ground, theta, k, p', O'Brien, the inputs.
 #include "BoundaryConditions.H"
 #include "ColumnGuess.H"
 #include "Initializer.H"
@@ -177,7 +175,7 @@ TEST(Initializer, ProjectionBackEndFollowsTheAlphaRatio)
     EXPECT_LT(rb.divergence_after, 10 * popt.reltol * rb.divergence_before);
 }
 
-// UT-1.12.1 and UT-1.12.2. With alpha_h = alpha_v = 1 the initial field is the
+// With alpha_h = alpha_v = 1 the initial field is the
 // plain projection of the first guess bit for bit (the Poisson layer's solve
 // without coefficients on the same first guess, applied the same way); with
 // alpha_h = alpha_v = 2 it is the same field to 1e-9 (the operator and the
@@ -322,7 +320,7 @@ TEST(Initializer, EqualAlphasAreThePlainProjection)
 }
 
 // ---------------------------------------------------------------------------
-// UT-1.12.3. Flat terrain: the profile is divergence-free, so the
+// Flat terrain: the profile is divergence-free, so the
 // correction leaves it (lambda, w and the change of u below 1e-12), open or
 // periodic sides, and u is the profile at every x face's height.
 TEST(Initializer, FlatTerrainLeavesTheProfile)
@@ -356,7 +354,7 @@ TEST(Initializer, FlatTerrainLeavesTheProfile)
 }
 
 // ---------------------------------------------------------------------------
-// UT-1.12.4. D4 symmetry: on the square domain with the round hill, the
+// D4 symmetry: on the square domain with the round hill, the
 // eight transforms of the square (rotations by 90 degrees and reflections)
 // applied to the wind give fields that are the transforms of each other: the
 // cell-centred velocity vector maps with the transform's matrix, w and lambda
@@ -435,7 +433,7 @@ TEST(Initializer, D4SymmetryOnTheRoundHill)
 }
 
 // ---------------------------------------------------------------------------
-// UT-1.12.5. Over the hill, the speed-up above the summit (the horizontal
+// Over the hill, the speed-up above the summit (the horizontal
 // speed of the four central cells a quarter of the depth up, gathered to
 // rank 0, over the profile's value at that height above the ground) falls
 // by more than 0.01 at each step of alpha_v/alpha_h = 1, 0.7, 0.5, 0.3, 0.1
@@ -508,7 +506,7 @@ TEST(Initializer, SummitSpeedUpDecreasesWithAlphaRatio)
 }
 
 // ---------------------------------------------------------------------------
-// UT-1.12.6. The first guess over sloping terrain is the profile at each face
+// The first guess over sloping terrain is the profile at each face
 // point's height above its column's ground (z_agl_min floor), ghosts
 // included; theta is the sounding by absolute height; k the profile's value
 // with the decay above z_i; p' = 0 (theta is the reference itself).
@@ -762,7 +760,7 @@ TEST(Initializer, InputsAndPoissonTypes)
         {"init.z_agl_min", [] (InitOptions& b) { b.z_agl_min = std::numeric_limits<amrex::Real>::infinity(); }},
         {"init.alpha_v", [] (InitOptions& b) { b.first_guess = InitOptions::FirstGuess::none; b.given = {"alpha_v"}; }},
         {"init.obrien", [] (InitOptions& b) { b.first_guess = InitOptions::FirstGuess::none; b.given = {"first_guess", "obrien"}; }},
-        // sub-phase 2.1b: the column keys without the column guess, alpha without the projection, the column ranges
+        // the column keys without the column guess, alpha without the projection, the column ranges
         {"init.column_tol", [] (InitOptions& b) { b.given = {"first_guess", "column_tol"}; }},
         {"init.column_max_iterations", [] (InitOptions& b) { b.given = {"first_guess", "column_max_iterations"}; }},
         {"init.alpha_v", [] (InitOptions& b) { b.projection = false; b.given = {"first_guess", "projection", "alpha_v"}; }},
@@ -879,7 +877,7 @@ TEST(Initializer, InputsAndPoissonTypes)
 }
 
 // ---------------------------------------------------------------------------
-// Sub-phase 2.1b: the converged-column first guess and the projection switch.
+// The converged-column first guess and the projection switch.
 // (a) The in-memory table profile evaluates the table (exact at its heights,
 // linear between, constant beyond) and refuses a bad table; (b) with
 // init.first_guess = column the first guess takes u, v and k from the table at
@@ -1082,7 +1080,7 @@ TEST(Initializer, ColumnGuessAndProjectionSwitch)
     }
 }
 
-// Beyond the plan. The column guess on rough ground takes the wall law's
+// The column guess on rough ground takes the wall law's
 // denominator floor (bc.surface_denominator_floor): the force-driven neutral
 // column of rt_steady_column_rough (64 x 1 m layers, z0 = 0.5 m, F = 0.125/64,
 // first centre 0.5 m, ln((d + z0)/z0) = ln 2 < 1). At the end the friction
@@ -1132,7 +1130,7 @@ TEST(Initializer, ColumnGuessTakesTheDenominatorFloor)
 }
 
 // ---------------------------------------------------------------------------
-// Sub-phase 2.1b: the 1-D column itself (run_column_guess) on a
+// The 1-D column itself (run_column_guess) on a
 // Coriolis-driven column of 16 levels over 1000 m under the flat deck's
 // sounding (neutral to 700 m, 0.03 K/m above: k collapses to its floor in the
 // inversion, so the convergence measure must take the floor into account):

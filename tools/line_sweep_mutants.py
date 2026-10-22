@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Sub-phase 2.2: the one-line mutants of the box-local line sweeps
+The one-line mutants of the box-local line sweeps
 (Source/LineSweeps.cpp) and of their input reader (Source/Driver.cpp).
 
 Each mutant replaces one line (the old text must occur exactly once), rebuilds
@@ -54,7 +54,7 @@ M = [
   "narrowest < std::numeric_limits<int>::max() && overlap > narrowest) {", "narrowest < std::numeric_limits<int>::max() && overlap > narrowest + 1) {"),
  ("M16", "line key given with zjacobi accepted", "Source/Driver.cpp",
   "if (opt.sweep != SweepKind::lusgs) {\n        for (const char* key", "if (false) {\n        for (const char* key"),
- # beyond the plan: the alternating ordering (steady.line_alternate)
+ # the alternating ordering (steady.line_alternate)
  ("M17", "odd sweeps not reversed (alternation ignored)", "Source/LineSweeps.cpp",
   "    if (jrev) {", "    if (false) {"),
  ("M18", "reversed forward wavefront skips its last plane", "Source/LineSweeps.cpp",

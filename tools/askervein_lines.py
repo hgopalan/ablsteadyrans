@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Wind speed 10 m above the ground on the Askervein lines (RT-2.6.1).
+"""Wind speed 10 m above the ground on the Askervein lines.
 
     askervein_lines.py sample PLOTFILE --terrain TERRAIN --lines LINES [--height H] [--out CSV]
     askervein_lines.py compare TEST.csv REFERENCE.csv [--rel_tol 0.05] [--lines A AA]
@@ -29,8 +29,8 @@ compare: each mast of the named lines in both files; passes (exit code 0) if
 every |speed_test - speed_ref| <= rel_tol * speed_ref, and prints each
 mast's relative difference and the largest. Masts are matched by line and d.
 With --lee_d D, masts more than D m past the hilltop (d > D) are judged
-against --lee_rel_tol instead (RT-2.6.1: the lee, where the advection scheme
-sets the wake: GUST's second order against ERF's fifth).
+against --lee_rel_tol instead (rt_askervein_210_erf_lines: the lee, where the
+advection scheme sets the wake: GUST's second order against ERF's fifth).
 """
 import argparse
 import csv
@@ -153,7 +153,9 @@ def speed_at(cols, terrain, x, y, height, z0):
     for di, dj, w in ((0, 0, (1 - a) * (1 - b)), (1, 0, a * (1 - b)), (0, 1, (1 - a) * b), (1, 1, a * b)):
         i, j = i0 + di, j0 + dj
         u, v, z = cols.column(i, j)
-        zg = ground(terrain, lo[0] + (i + 0.5) * dx[0], lo[1] + (j + 0.5) * dx[1])
+        xc, yc = lo[0] + (i + 0.5) * dx[0], lo[1] + (j + 0.5) * dx[1]
+        # TERRAIN: ERF's grid (read_terrain), or a callable ground(x, y) (windninja2019.py's xyz terrain).
+        zg = terrain(xc, yc) if callable(terrain) else ground(terrain, xc, yc)
         agl = [zz - zg for zz in z]
         if height > agl[-1] or agl[0] <= 0:
             sys.exit(f"height {height} m is outside the column ({agl[0]:.2f} to {agl[-1]:.2f} m above the ground)")

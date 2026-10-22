@@ -316,6 +316,15 @@ SimplecStage::SimplecStage (const SimplecOptions& opt, int sweeps, const Residua
     }
     m_R.define(ba, dm);
     m_cf.define(ba, dm);
+    if (in.hybrid.active()) {
+        for (const auto& e : check_hybrid_options(in.hybrid)) { amrex::Abort("gust: SimplecStage: " + e); }
+        if (closure == nullptr || !(closure->options().realizability > 0)) {
+            amrex::Abort("gust: SimplecStage: convection.hybrid_sigma_max needs the closure's cap (turb.realizability > 0)");
+        }
+        m_sigma.define(ba, dm, 1, 1);
+        m_sigma.setVal(0);
+        m_in.hybrid_sigma = &m_sigma;
+    }
     m_cf.nu.setVal(0.0);
     // The depth of the layers, not prob_hi z (the same top as the Rayleigh
     // layer's, BoundaryConditions.cpp); the driver checkpoints it.
@@ -352,14 +361,26 @@ std::vector<MonitorSpec> stage_monitor_specs (const ResidualInputs& in)
     return specs;
 }
 
+namespace {
+//! The scales s_q of the scaled residual norms (u, v, w, p, theta, k), shared by stage_norms and the confidence.
+void residual_scales (const JvpScales& s, amrex::Real H, amrex::Real scale[6])
+{
+    const amrex::Real U = s.velocity;
+    scale[0] = scale[1] = scale[2] = U * U / H;
+    scale[3] = U / H;
+    scale[4] = U * s.theta / H;
+    scale[5] = U * s.tke / H;
+}
+} // namespace
+
 void stage_norms (const ResidualFields& Rf, const State& q, const SurfaceState* ss, const JvpScales& s, amrex::Real height,
                   const amrex::Geometry& geom, std::vector<amrex::Real>& res, std::vector<amrex::Real>& mon)
 {
-    const amrex::Real U = s.velocity, H = height;
     res.assign(6, 0);
     mon.assign(ss != nullptr ? 3 : 2, 0);
     const amrex::MultiFab* R[6] = {&Rf.u, &Rf.v, &Rf.w, &Rf.p, &Rf.theta, &Rf.tke};
-    const amrex::Real scale[6] = {U * U / H, U * U / H, U * U / H, U / H, U * s.theta / H, U * s.tke / H};
+    amrex::Real scale[6];
+    residual_scales(s, height, scale);
     for (int n = 0; n < 6; ++n) {
         // Dot, not norm2 (which asserts cell-centred data); collective. The
         // face fields count a box-seam face twice and both periodic copies,
@@ -378,6 +399,42 @@ void stage_norms (const ResidualFields& Rf, const State& q, const SurfaceState* 
     }
 }
 
+bool SimplecStage::confidence (const std::vector<amrex::Real>& threshold, amrex::Real& share, amrex::Real& height) const
+{
+    if (threshold.size() != 6) { return false; }
+    amrex::Real scale[6];
+    residual_scales(m_in.jvp_scales, m_height, scale);
+    amrex::GpuArray<amrex::Real, 6> t;
+    for (int n = 0; n < 6; ++n) { t[n] = threshold[static_cast<std::size_t>(n)] * scale[n]; }
+    if (m_agl.empty()) { height_above_ground(m_z, m_agl); }   // the mesh is fixed: once
+    const amrex::MultiFab& dist = m_agl;
+    amrex::ReduceOps<amrex::ReduceOpSum, amrex::ReduceOpMax> ops;
+    amrex::ReduceData<amrex::Long, amrex::Real> data(ops);
+    for (amrex::MFIter mfi(m_R.p, false); mfi.isValid(); ++mfi) {
+        const amrex::Box bx = mfi.validbox();
+        const auto ru = m_R.u.const_array(mfi), rv = m_R.v.const_array(mfi), rw = m_R.w.const_array(mfi);
+        const auto rp = m_R.p.const_array(mfi), rt = m_R.theta.const_array(mfi), rk = m_R.tke.const_array(mfi);
+        const auto d = dist.const_array(mfi);
+        ops.eval(bx, data, [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept -> amrex::GpuTuple<amrex::Long, amrex::Real>
+        {
+            using std::abs;
+            const bool ok = amrex::max(abs(ru(i, j, k)), abs(ru(i + 1, j, k))) <= t[0]
+                            && amrex::max(abs(rv(i, j, k)), abs(rv(i, j + 1, k))) <= t[1]
+                            && amrex::max(abs(rw(i, j, k)), abs(rw(i, j, k + 1))) <= t[2]
+                            && abs(rp(i, j, k)) <= t[3] && abs(rt(i, j, k)) <= t[4] && abs(rk(i, j, k)) <= t[5];
+            return {ok ? amrex::Long(0) : amrex::Long(1), ok ? amrex::Real(0) : d(i, j, k)};
+        });
+    }
+    auto hv = data.value(ops);
+    amrex::Long bad = amrex::get<0>(hv);
+    amrex::Real top = amrex::get<1>(hv);
+    amrex::ParallelDescriptor::ReduceLongSum(bad);
+    amrex::ParallelDescriptor::ReduceRealMax(top);
+    share = static_cast<amrex::Real>(1.0 - double(bad) / double(m_R.p.boxArray().numPts()));
+    height = top;
+    return true;
+}
+
 void SimplecStage::compute_norms (const State& q)
 {
     stage_norms(m_R, q, m_in.surface != nullptr ? &m_ss : nullptr, m_in.jvp_scales, m_height, m_geom, m_res, m_mon);
@@ -391,6 +448,20 @@ void SimplecStage::iterate (State& q, const amrex::MultiFab& dtau)
     // 2. The residual (the closure's fields at q).
     residual(q, m_in, m_mesh, m_geom, m_R, m_in.closure != nullptr ? &m_cf : nullptr);
     compute_norms(q);
+    // The upwind blend for the next residual, from the cap at q (frozen once r < hybrid_freeze).
+    if (!m_sigma.empty() && !m_sigma_frozen) {
+        // At least 2/relax updates on this level first (each level's stage starts from sigma = 0, and a seeded level
+        // can start below the freeze).
+        const int min_updates = static_cast<int>(std::ceil(2 / m_in.hybrid.relax));
+        if (m_in.hybrid.freeze > 0 && m_r < m_in.hybrid.freeze && m_sigma_updates >= min_updates) {
+            m_sigma_frozen = true;
+            amrex::Print() << "gust: convection.hybrid_sigma frozen (relative residual " << double(m_r)
+                           << " < convection.hybrid_freeze " << double(m_in.hybrid.freeze) << ")\n";
+        } else {
+            update_hybrid_sigma(m_in.hybrid, m_cf.cap_ratio, *m_in.wall_distance, m_geom, m_sigma);
+            ++m_sigma_updates;
+        }
+    }
     // 3. The momentum predictor.
     transport_fluxes(q.u, q.v, q.w, m_z, m_mesh, m_geom, m_w.transport);
     const amrex::Array<const amrex::MultiFab*, 3> F{&m_w.transport[0], &m_w.transport[1], &m_w.transport[2]};

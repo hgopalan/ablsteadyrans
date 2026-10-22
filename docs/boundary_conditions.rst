@@ -91,7 +91,7 @@ The two give identical results where :math:`\ln((d + z_0)/z_0) \ge 1`.
 
 .. _stable-functions:
 
-**Stable functions.** *Beyond the plan.* ``bc.surface_stable_functions`` selects the stable side
+**Stable functions.** ``bc.surface_stable_functions`` selects the stable side
 (:math:`\zeta = z/L > 0`) of the flux-gradient functions :math:`\phi_m, \phi_h` and their integrals
 :math:`\psi = \int_0^\zeta (1 - \phi(x))/x\,dx`. Both use one form,
 

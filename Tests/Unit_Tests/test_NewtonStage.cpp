@@ -1,9 +1,9 @@
-// The SIMPLEC <-> Newton switching of plan sub-phase 3.5 (NewtonStage.H and
-// the driver's switch rules, Driver.H) on the 2-D hill with a capping
-// inversion (HillTestHelpers.H), run as the application runs it
-// (LevelSolver with steady.stage = simplec_newton). UT-3.5.1 and UT-3.5.2 on
-// synthetic histories are Driver.NewtonSwitchOnceAndFallback (test_Driver.cpp);
-// these are the stage's own tests, beyond the plan.
+// The SIMPLEC <-> Newton switching (NewtonStage.H and the driver's switch
+// rules, Driver.H) on the 2-D hill with a capping inversion
+// (HillTestHelpers.H), run as the application runs it (LevelSolver with
+// steady.stage = simplec_newton). The switch and fallback on synthetic
+// histories are Driver.NewtonSwitchOnceAndFallback (test_Driver.cpp); these
+// are the stage's own tests.
 #include "Driver.H"
 #include "HillTestHelpers.H"
 #include "NewtonStage.H"
@@ -164,7 +164,7 @@ TEST(NewtonStage, HandsBackForTheFinalPassAfterTheSwap)
 }
 
 // ---------------------------------------------------------------------------
-// Beyond the plan (Pressel review). With a steady.residual_tol no run can
+// With a steady.residual_tol no run can
 // reach (1e-30), the Newton stage converges on its equations, idles for
 // steady.monitor_window iterations without a steady verdict, then hands the
 // run back to SIMPLEC (the reason names steady.monitor_window) and refuses
@@ -187,10 +187,10 @@ TEST(NewtonStage, HandsBackWhenConvergedWithoutAVerdict)
 }
 
 // ---------------------------------------------------------------------------
-// UT-3.5.2 on the stage itself: with a preconditioner that returns zero every
-// continuation step fails (every retry rejected); the stage asks to go back
-// after steady.newton_fallback_failures (2) failed steps, not after one, and
-// with the key at 1 after the first; leave thaws the closure; after three
+// The fallback on the stage itself: with a preconditioner that returns zero
+// every continuation step fails (every retry rejected); the stage asks to go
+// back after steady.newton_fallback_failures (2) failed steps, not after one,
+// and with the key at 1 after the first; leave thaws the closure; after three
 // failed visits the stage refuses later switches.
 TEST(NewtonStage, FallsBackAfterFailedSteps)
 {

@@ -1,6 +1,6 @@
 # Restart of inputs_hierarchy_restart_first with a three-level hierarchy, on
 # another box layout: the coarse levels, rebuilt from the checkpoint's node
-# heights, must equal the golds of a fresh run (RT-2.3.1).
+# heights, must equal the golds of a fresh run (rt_askervein_hierarchy).
 # terrain.file is given on the command line (extern_erf/askervein.txt).
 mesh.n_cell           = 60 60 18
 mesh.prob_lo          = -3000. -3000. 0.

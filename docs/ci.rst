@@ -59,4 +59,4 @@ Kestrel
 -------
 
 The regression tests labelled ``physics`` (``ctest -L physics``) and the performance tests will run nightly on
-Kestrel CPU nodes and H100s once they exist (from sub-phase 1.1).
+Kestrel CPU nodes and H100s once they exist.

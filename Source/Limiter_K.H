@@ -1,7 +1,7 @@
 #ifndef GUST_LIMITER_K_H_
 #define GUST_LIMITER_K_H_
 
-// Slope limiters for the MUSCL reconstruction (sub-phase 1.5). Each takes the
+// Slope limiters for the MUSCL reconstruction. Each takes the
 // backward and forward differences a = q_i - q_{i-1}, b = q_{i+1} - q_i of a
 // cell (in index space) and returns its limited slope; the face values are
 // q_i -/+ slope / 2.
@@ -13,7 +13,7 @@ namespace gust {
 
 //! van_leer: the standard limiter, 2ab/(a+b) where a and b have the same
 //! sign and 0 otherwise (TVD; continuous, with kinks where a or b is zero).
-//! van_albada: the smooth limiter for Newton (Phase 3), the van Albada slope
+//! van_albada: the smooth limiter for Newton, the van Albada slope
 //!   ((b^2 + eps^2) a + (a^2 + eps^2) b) / (a^2 + b^2 + 2 eps^2),
 //! infinitely differentiable for eps > 0; it tends to the central slope
 //! (a+b)/2 where |a|, |b| << eps.

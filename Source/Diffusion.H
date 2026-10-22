@@ -1,7 +1,7 @@
 #ifndef GUST_DIFFUSION_H_
 #define GUST_DIFFUSION_H_
 
-// Diffusion operators on the terrain-following C-grid (sub-phase 1.5), as
+// Diffusion operators on the terrain-following C-grid, as
 // the divergence of fluxes through the faces of each control volume
 // (CVFluxes.H):
 //
@@ -17,7 +17,7 @@
 // (Stencil_K.H), including the cross-metric terms; diffusivities are cell-
 // centred and averaged to each face. All of it is second order on a smooth
 // mesh. gamma is the caller's: nu_t / Pr_t(Rt) for theta (the closure,
-// sub-phase 1.9), nu_t / sigma_k for k.
+// Closure.H), nu_t / sigma_k for k.
 //
 // Boundaries: interior operators. They read the ghost cells of every field
 // (one for scalars and the diffusivity, two for the velocities, whose control

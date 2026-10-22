@@ -1,5 +1,5 @@
 # ---------------------------------------------------------------------------
-# Tests. Labels follow the development plan:
+# Tests. Labels:
 #   unit        GoogleTest and script self-tests, seconds, every commit
 #   regression  whole-application runs
 #   smoke       the regression runs CI does on every pull request
@@ -53,22 +53,23 @@ add_executable(unit_tests
     Unit_Tests/test_Sequencing.cpp
     Unit_Tests/test_Smoothness.cpp
     Unit_Tests/test_NewtonStage.cpp
+    Unit_Tests/test_LeeWake.cpp
 )
 target_include_directories(unit_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Unit_Tests)
 target_link_libraries(unit_tests PRIVATE gust_core GTest::gtest)
 # Gold files (Tests/Unit_Tests/Gold) are read from the source tree.
 target_compile_definitions(unit_tests PRIVATE GUST_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 
-# RT-1.10.1 projects a fixed wind with the Poisson layer: a test-only tool,
-# since the application has no Poisson solve yet.
+# The projection tests project a fixed wind with the Poisson layer: a
+# test-only tool.
 add_executable(poisson_projection Supporting_Files/Tools/poisson_projection.cpp)
 target_link_libraries(poisson_projection PRIVATE gust_core)
-# RT-1.11.2 computes the Tucker wall distance: another test-only tool.
+# The Tucker wall distance test (rt_walldist_hill2d): another test-only tool.
 add_executable(wall_distance Supporting_Files/Tools/wall_distance.cpp)
 target_link_libraries(wall_distance PRIVATE gust_core)
 add_executable(boundary_fluxes Supporting_Files/Tools/boundary_fluxes.cpp)
 target_link_libraries(boundary_fluxes PRIVATE gust_core)
-# RT-1.9.1: the full residual of the equilibrium log-law column with the closure.
+# The full residual of the equilibrium log-law column with the closure.
 add_executable(closure_column Supporting_Files/Tools/closure_column.cpp)
 target_link_libraries(closure_column PRIVATE gust_core)
 if(GUST_GPU_BACKEND STREQUAL "CUDA")
@@ -162,7 +163,7 @@ else()
 endif()
 set(EXPECT_ABORT ${Python3_EXECUTABLE} ${SUPPORT}/expect_abort.py)
 
-# --- Unit tests: UT-1.3.1 to UT-1.3.4 on 1, 2 and 4 ranks ---------------------
+# --- Unit tests on 1, 2 and 4 ranks -------------------------------------------
 if(GUST_MPI)
     set(_unit_nps 1 2 4)
 else()
@@ -283,7 +284,7 @@ gust_add_test(NAME abort_sequencing_no_stage NP 1 LABELS "regression;smoke"
               PREFIX ${EXPECT_ABORT} "steady\\.sequencing has no effect without steady\\.stage = simplec" --
               COMMAND $<TARGET_FILE:gust> ${VALIDATION_CASE}/inputs_abort_no_stage steady.sequencing=1
                       ${GUST_TEST_AMREX_FLAGS})
-# steady.newton_preconditioner (sub-phase 3.3): a bad value aborts naming the
+# steady.newton_preconditioner: a bad value aborts naming the
 # key; a good one aborts without the Newton stage (steady.stage = simplec).
 gust_add_test(NAME abort_newton_preconditioner_value NP 1 LABELS "regression;smoke"
               PREFIX ${EXPECT_ABORT} "steady\\.newton_preconditioner = hypre: must be identity or simplec" --
@@ -297,7 +298,7 @@ gust_add_test(NAME abort_newton_preconditioner_no_stage NP 1 LABELS "regression;
               PREFIX ${EXPECT_ABORT} "steady\\.newton_preconditioner has no effect without steady\\.stage = simplec" --
               COMMAND $<TARGET_FILE:gust> ${VALIDATION_CASE}/inputs_abort_no_stage steady.newton_preconditioner=simplec
                       ${GUST_TEST_AMREX_FLAGS})
-# turb.frozen_switch (sub-phase 3.4): a bad value aborts naming the key; a good
+# turb.frozen_switch: a bad value aborts naming the key; a good
 # one aborts without the Newton stage. turb.ri_gate out of range aborts naming
 # the key.
 gust_add_test(NAME abort_frozen_switch_value NP 1 LABELS "regression;smoke"
@@ -312,7 +313,7 @@ gust_add_test(NAME abort_ri_gate_range NP 1 LABELS "regression;smoke"
               PREFIX ${EXPECT_ABORT} "turb\\.ri_gate = 2\\.0+: must be 0 \\(off\\) or finite, >= 1e-6 and <= 1" --
               COMMAND $<TARGET_FILE:gust> ${HILL3D_NEUTRAL_CASE}/inputs_steady_hill3d_neutral
                       turb.ri_gate=2 ${GUST_TEST_AMREX_FLAGS})
-# Sub-phase 3.5: the Newton stage's keys and the switch rules have no effect
+# The Newton stage's keys and the switch rules have no effect
 # with steady.stage = simplec (one stage), so they abort there.
 gust_add_test(NAME abort_newton_keys_no_newton_stage NP 1 LABELS "regression;smoke"
               PREFIX ${EXPECT_ABORT} "steady\\.newton_gmres_restart has no effect without steady\\.stage = simplec_newton"
@@ -323,7 +324,7 @@ gust_add_test(NAME abort_newton_keys_no_stage NP 1 LABELS "regression;smoke"
               PREFIX ${EXPECT_ABORT} "steady\\.newton_gmres_restart has no effect without steady\\.stage = simplec_newton" --
               COMMAND $<TARGET_FILE:gust> ${VALIDATION_CASE}/inputs_abort_no_stage steady.newton_gmres_restart=50
                       ${GUST_TEST_AMREX_FLAGS})
-# Sub-phase 3.5: the truly neutral 2-D hill (32 x 1 x 16, no Coriolis, van
+# The truly neutral 2-D hill (32 x 1 x 16, no Coriolis, van
 # Albada) with steady.stage = simplec_newton switches to Newton once (at
 # r <= 1e-3, iteration 1812), finishes in the Newton stage without a fallback
 # and ends steady within 1800-2199 iterations (1868 measured on 1, 2 and 4
@@ -361,7 +362,7 @@ gust_add_test(NAME rt_sequencing_restart NP 2 LABELS "regression;smoke" RUN_DIR 
               COMMAND $<TARGET_FILE:gust> ${HILL3D_NEUTRAL_CASE}/inputs_sequencing_restart steady.max_iterations=6
                       io.restart=seq_chk00003 io.chk_file=seq_chk_b ${GUST_TEST_AMREX_FLAGS})
 # Old against new steady.sequencing_hold on the same two-level deck (only
-# level 0 is seeded; seconds): with the hold (1, sub-phase 2.5) level 0 runs
+# level 0 is seeded; seconds): with the hold (1, the default before) level 0 runs
 # its first iterations at steady.cfl0 with r = 1; without it (0, the
 # default) r is below 1 from the first iteration and the CFL leaves cfl0 at
 # the second; with steady.sequencing_cfl_start = previous level 0 starts at
@@ -453,7 +454,7 @@ gust_add_test(NAME abort_restart_overwrite NP 1 LABELS "regression;smoke" RUN_DI
               COMMAND $<TARGET_FILE:gust> ${SMOKE_CASE}/inputs_abort_restart_overwrite
                       ${GUST_TEST_AMREX_FLAGS})
 
-# --- Mesh (sub-phase 1.4) -----------------------------------------------------
+# --- Mesh ---------------------------------------------------------------------
 set(CHECK_MESH ${Python3_EXECUTABLE} ${SUPPORT}/check_mesh.py)
 # The mesh golds are double-precision values: a single-precision build
 # compares the plotfile at a single-precision tolerance and skips the
@@ -462,22 +463,21 @@ if(GUST_PRECISION STREQUAL "SINGLE")
     set(FCOMPARE_RTOL 1e-5)
 else()
     set(FCOMPARE_RTOL 1e-12)
-    # RT-1.4.1 and RT-1.4.2: ERF's Askervein mesh, coarsened; field
-    # statistics of z and detJ and the quality report against
+    # ERF's Askervein mesh, coarsened; field statistics of z and detJ and
+    # the quality report against
     # Gold/askervein_mesh.json.
     gust_add_test(NAME rt_askervein_mesh NP 2 LABELS "regression;smoke"
                   PREFIX ${CHECK_MESH} ${MESH_CASE}/Gold/askervein_mesh.json --
                   COMMAND $<TARGET_FILE:gust> ${MESH_CASE}/inputs_mesh_askervein
                           terrain.file=${PROJECT_SOURCE_DIR}/extern_erf/askervein.txt
                           ${GUST_TEST_AMREX_FLAGS})
-    # RT-1.4.2: the quality report of a steep ridge, with the STF warning.
+    # The quality report of a steep ridge, with the STF warning.
     gust_add_test(NAME rt_steep_ridge_quality NP 1 LABELS "regression;smoke"
                   PREFIX ${CHECK_MESH} ${MESH_CASE}/Gold/steep_ridge_mesh.json --
                   COMMAND $<TARGET_FILE:gust> ${MESH_CASE}/inputs_mesh_steep_ridge
                           ${GUST_TEST_AMREX_FLAGS})
 endif()
-# RT-2.3.1 and RT-2.3.2 (sub-phase 2.3): the Askervein mesh with STF and a
-# three-level x/y grid hierarchy (60, 30, 15 cells a side; the same 18 layers).
+# The Askervein mesh with STF and a three-level x/y grid hierarchy (60, 30, 15 cells a side; the same 18 layers).
 # In double precision, level 0's statistics and every level's quality report
 # against Gold/askervein_hierarchy_mesh.json; in both precisions, the z and
 # detJ of levels 1 and 2 against their gold plotfiles (fcompare).
@@ -517,22 +517,23 @@ foreach(lev 1 2)
                           ${HIERARCHY_CASE}/Gold/askervein_hierarchy_level${lev}_plt00000)
 endforeach()
 if(GUST_PRECISION STREQUAL "DOUBLE")
-    # RT-2.3.2: the same mesh with unsmoothed coarse grounds: the coarse
+    # The same mesh with unsmoothed coarse grounds: the coarse
     # levels cap STF more than level 0 and the report gives the hint.
     gust_add_test(NAME rt_askervein_hierarchy_hint NP 2 LABELS "regression;smoke"
                   PREFIX ${CHECK_MESH} ${HIERARCHY_CASE}/Gold/askervein_hierarchy_p0_mesh.json --
                   COMMAND $<TARGET_FILE:gust> ${HIERARCHY_CASE}/inputs_mesh_askervein_hierarchy_p0
                           terrain.file=${PROJECT_SOURCE_DIR}/extern_erf/askervein.txt
                           ${GUST_TEST_AMREX_FLAGS})
-    # RT-2.3.2: the steep ridge with a three-level hierarchy: the report of
+    # The steep ridge with a three-level hierarchy: the report of
     # every level, with the STF warnings and the coarse-level hint.
     gust_add_test(NAME rt_steep_ridge_hierarchy_quality NP 1 LABELS "regression;smoke"
                   PREFIX ${CHECK_MESH} ${HIERARCHY_CASE}/Gold/steep_ridge_hierarchy_mesh.json --
                   COMMAND $<TARGET_FILE:gust> ${HIERARCHY_CASE}/inputs_mesh_steep_ridge_hierarchy
                           ${GUST_TEST_AMREX_FLAGS})
 endif()
-# UT-2.3.5 at the application: a hierarchy that does not divide the mesh, a
-# box size below the coarsening and passes out of range abort, naming the keys.
+# The unit tests' hierarchy input checks at the application: a hierarchy that
+# does not divide the mesh, a box size below the coarsening and passes out of
+# range abort, naming the keys.
 gust_add_test(NAME abort_hierarchy NP 1 LABELS "regression;smoke"
               PREFIX ${EXPECT_ABORT}
                      "mesh\\.hierarchy_levels = 3 needs mesh\\.n_cell x and y divisible by 2\\^2 = 4 \\(got 30 32\\)"
@@ -550,7 +551,7 @@ gust_add_test(NAME abort_hierarchy_tool NP 1 LABELS "regression;smoke"
               PREFIX ${EXPECT_ABORT} "mesh\\.hierarchy_levels has no effect in wall_distance" --
               COMMAND $<TARGET_FILE:wall_distance> ${HIERARCHY_CASE}/inputs_abort_hierarchy_tool
                       ${GUST_TEST_AMREX_FLAGS})
-# RT-1.4.3: a run without a solve writes the mapped-grid plotfile of the 2-D
+# A run without a solve writes the mapped-grid plotfile of the 2-D
 # hill; it matches Gold/hill2d_plt00000 (relative tolerance 1e-12: compilers
 # that fuse multiply-adds differ from those that do not in the last bit).
 set(HILL2D_DIR ${CMAKE_CURRENT_BINARY_DIR}/run/rt_hill2d)
@@ -561,8 +562,8 @@ gust_add_test(NAME rt_hill2d_matches NP 1 LABELS "regression;smoke" RUN_DIR ${HI
               FIXTURES_REQUIRED hill2d
               COMMAND ${FCOMPARE} --rel_tol ${FCOMPARE_RTOL} hill2d_plt00000 ${MESH_CASE}/Gold/hill2d_plt00000)
 
-# --- Poisson layer (sub-phase 1.10) ---------------------------------------------
-# RT-1.10.1: a fixed wind projected on the Askervein mesh; iterations and
+# --- Poisson layer ------------------------------------------------------------
+# A fixed wind projected on the Askervein mesh; iterations and
 # divergence against Gold/poisson_askervein.json, the potential against
 # Gold/poisson_askervein_plt00000. The golds are double-precision runs, so a
 # single-precision build skips both (its unit tests cover the layer).
@@ -590,7 +591,7 @@ if(GUST_PRECISION STREQUAL "DOUBLE")
                   FIXTURES_REQUIRED poisson_askervein
                   COMMAND ${FCOMPARE} --rel_tol 1e-8 poisson_askervein_plt00000
                           ${POISSON_CASE}/Gold/poisson_askervein_plt00000)
-    # RT-1.11.1: the same projection with back end B (MLMG). It solves the same
+    # The same projection with back end B (MLMG). It solves the same
     # discrete operator, so its potential matches back end A's gold.
     set(POISSON_B_DIR ${CMAKE_CURRENT_BINARY_DIR}/run/rt_poisson_askervein_mlmg)
     gust_add_test(NAME rt_poisson_askervein_mlmg NP 2 LABELS "regression;smoke" RUN_DIR ${POISSON_B_DIR}
@@ -604,7 +605,7 @@ if(GUST_PRECISION STREQUAL "DOUBLE")
                   RUN_DIR ${POISSON_B_DIR} FIXTURES_REQUIRED poisson_askervein_mlmg
                   COMMAND ${FCOMPARE} --rel_tol 1e-8 poisson_askervein_mlmg_plt00000
                           ${POISSON_CASE}/Gold/poisson_askervein_plt00000)
-    # RT-1.12.1: the mass-consistent initial field on the Askervein mesh (log-law
+    # The mass-consistent initial field on the Askervein mesh (log-law
     # first guess, alpha_v = 0.5): iterations, divergence and field extrema
     # against Gold/init_askervein.json, the state against
     # Gold/init_askervein_plt00000 (1e-8 as the Poisson golds). The gold is a
@@ -621,7 +622,7 @@ if(GUST_PRECISION STREQUAL "DOUBLE")
                   FIXTURES_REQUIRED init_askervein
                   COMMAND ${FCOMPARE} --rel_tol 1e-8 init_askervein_plt00000
                           ${INIT_CASE}/Gold/init_askervein_plt00000)
-    # RT-1.12.2: the hilltop speed-up over FastWindTerrain's bump for alpha_v =
+    # The hilltop speed-up over FastWindTerrain's bump for alpha_v =
     # 1, 0.7, 0.5, 0.3, 0.1 (five runs) against FastWindTerrain's own on the
     # same hill and profile (Gold/init_bump_trend.json: ranking, sign, spread).
     gust_add_test(NAME rt_init_bump_trend NP 2 LABELS "regression;smoke"
@@ -629,7 +630,7 @@ if(GUST_PRECISION STREQUAL "DOUBLE")
                          ${BUMP_CASE}/Gold/init_bump_trend.json --
                   COMMAND $<TARGET_FILE:gust> ${BUMP_CASE}/inputs_init_bump
                           terrain.file=${BUMP_CASE}/terrain_bump_fwt.txt ${GUST_TEST_AMREX_FLAGS})
-    # RT-1.11.2: the Tucker wall distance on ERF's Neutral_Hill_2D mesh: ERF's
+    # The Tucker wall distance on ERF's Neutral_Hill_2D mesh: ERF's
     # wall-distance checks (Tests/Discretization/Wall_Distance/check_walldist.py), and the field against
     # Gold/walldist_hill2d_plt00000, at double-precision tolerances (double
     # builds only).
@@ -646,7 +647,7 @@ if(GUST_PRECISION STREQUAL "DOUBLE")
                           ${WALLDIST_CASE}/Gold/walldist_hill2d_plt00000)
 endif()
 
-# --- RT-1.8.1: boundary fluxes of a fixed log-law state (sub-phase 1.8) ------
+# --- Boundary fluxes of a fixed log-law state ---------------------------------
 # Double precision only (the gold is double).
 if(GUST_PRECISION STREQUAL "DOUBLE")
     set(BC_DIR ${CMAKE_CURRENT_BINARY_DIR}/run/rt_bc_neutral_flat)
@@ -662,7 +663,7 @@ if(GUST_PRECISION STREQUAL "DOUBLE")
                           ${BC_CASE}/Gold/bc_neutral_flat_plt00000)
 endif()
 
-# --- RT-1.9.1: the neutral log-law column with the k-L closure (sub-phase 1.9)
+# --- The neutral log-law column with the k-L closure --------------------------
 # Double precision only (the gold is double).
 if(GUST_PRECISION STREQUAL "DOUBLE")
     set(CL_DIR ${CMAKE_CURRENT_BINARY_DIR}/run/rt_closure_column)
@@ -678,7 +679,7 @@ if(GUST_PRECISION STREQUAL "DOUBLE")
                           ${CLOSURE_CASE}/Gold/closure_column_plt00000)
 endif()
 
-# --- RT-1.15.1 / RT-1.15.2: the SIMPLEC stage to steady (sub-phase 1.15) -----
+# --- The SIMPLEC stage to steady ----------------------------------------------
 # The 1-D neutral column driven by a pressure-gradient force: the steady
 # verdict, u* = sqrt(F H) exactly, the wall law in the first cell, the log law
 # within 1 % (second cell) and 2 % (lowest eight), the wall k, nu_t, a residual
@@ -703,10 +704,10 @@ if(GUST_PRECISION STREQUAL "DOUBLE")
                          --kappa 0.40 --cmu0 0.55 --
                   COMMAND $<TARGET_FILE:gust> ${COLUMN_CASE}/inputs_steady_column turb.kappa=0.40
                           turb.Cmu0=0.55 ${GUST_TEST_AMREX_FLAGS})
-    # Beyond the plan: the rough column (z0 = 0.5 m, 1 m layers, the first
+    # The rough column (z0 = 0.5 m, 1 m layers, the first
     # centre below (e - 1) z0). The default floor follows the log law in the
     # first cell, and the profile of the shallow column's stress u*^2 (1 - z/H)
-    # above it; the floor one (sub-phase 1.7's form) gives 1/ln 2 = 1.44 times
+    # above it; the floor one (the earlier form, m = 1) gives 1/ln 2 = 1.44 times
     # the log law's speed in the first cell.
     gust_add_test(NAME rt_steady_column_rough NP 2 LABELS "regression;smoke"
                   PREFIX ${Python3_EXECUTABLE} ${COLUMN_CASE}/check_steady_column.py
@@ -739,7 +740,7 @@ gust_add_test(NAME rt_steady_column_restart_matches NP 1 LABELS "regression;smok
               FIXTURES_REQUIRED steady_column_continued steady_column_straight
               COMMAND ${FCOMPARE} --rel_tol 1e-14 --abs_tol 1e-300 steady_column_restart_plt00080
                       straight/steady_column_restart_plt00080)
-# Beyond the plan: the column's target wind carried into the 3-D run (init.column_target_*), neutral and with a
+# The column's target wind carried into the 3-D run (init.column_target_*), neutral and with a
 # stable column (L = 1000 m) whose flux and theta the run takes (bc.surface_stability = heat_flux). The 3-D wind at
 # 10 m is the target to 0.5 % and, stable, the 3-D surface's L is 1000 m to 2 %.
 # Tests/Canonical_RANS/Column_Target/check_column_target.py.
@@ -759,7 +760,7 @@ if(GUST_PRECISION STREQUAL "DOUBLE")
     gust_add_test(NAME rt_steady_neutral_flat NP 2 LABELS "regression"
                   PREFIX ${Python3_EXECUTABLE} ${FLAT_CASE}/check_steady_neutral.py --
                   COMMAND $<TARGET_FILE:gust> ${FLAT_CASE}/inputs_steady_neutral_flat ${GUST_TEST_AMREX_FLAGS})
-    # Beyond the plan: the w rows' VNN cap (simplec.w_vnn_cap = 16) on a flat
+    # The w rows' VNN cap (simplec.w_vnn_cap = 16) on a flat
     # strip with a 0.7 m first cell (about 50 s on two ranks): the verdict
     # with and without the cap, at least 5 times fewer iterations with it,
     # u, v, w of the two steady states within 2e-4 m/s, and a restart of the
@@ -769,7 +770,7 @@ if(GUST_PRECISION STREQUAL "DOUBLE")
                          --cap 16 --min-ratio 5 --tol 2e-4 --
                   COMMAND $<TARGET_FILE:gust> ${THIN_CELL_CASE}/inputs_thin_cell_flat ${GUST_TEST_AMREX_FLAGS})
     set_tests_properties(rt_thin_cell_w_vnn_cap PROPERTIES ENVIRONMENT PYTHONDONTWRITEBYTECODE=1 TIMEOUT 300)
-    # Beyond the plan: the slope margin of the cap on a steep ridge with a 0.4 m
+    # The slope margin of the cap on a steep ridge with a 0.4 m
     # first cell (Canonical_RANS/Steep_Ridge_Thin_Cell). With the default margin
     # the run is steady within 3500 iterations; with the margin off (#32's cap)
     # the pressure correction stalls and it is not.
@@ -784,14 +785,14 @@ if(GUST_PRECISION STREQUAL "DOUBLE")
                   COMMAND $<TARGET_FILE:gust> ${STEEP_RIDGE_CASE}/inputs_steep_ridge_thin_cell simplec.w_vnn_cap=16
                           simplec.w_vnn_cap_slope_margin=0 steady.max_iterations=3500 ${GUST_TEST_AMREX_FLAGS})
     set_tests_properties(rt_steep_ridge_w_vnn_cap rt_steep_ridge_w_vnn_cap_margin_off PROPERTIES TIMEOUT 600)
-    # RT-1.16.1: ERF's Neutral_Hill_2D to steady (about 80 s on two ranks);
+    # ERF's Neutral_Hill_2D to steady (about 80 s on two ranks);
     # the verdict, a two-order drop of the u residual and ERF's own
     # check_hill.py --physics (extern_erf/) on the turbulence plotfile.
     gust_add_test(NAME rt_steady_hill2d NP 2 LABELS "regression"
                   PREFIX ${Python3_EXECUTABLE} ${SUPPORT}/check_steady_hill.py
                          --erf-check check_hill.py --orders 2 --
                   COMMAND $<TARGET_FILE:gust> ${HILL2D_CASE}/inputs_steady_hill2d ${GUST_TEST_AMREX_FLAGS})
-    # RT-2.1.1: the same case with the line LU-SGS sweeps (two symmetric
+    # The same case with the line LU-SGS sweeps (two symmetric
     # sweeps, CFL cap 16): the verdict, the residual drop and ERF's checks.
     set(HILL_COL_DIR ${CMAKE_CURRENT_BINARY_DIR}/run/rt_steady_hill2d_column)
     gust_add_test(NAME rt_steady_hill2d_lusgs NP 2 LABELS "regression" RUN_DIR ${HILL_COL_DIR}
@@ -799,7 +800,7 @@ if(GUST_PRECISION STREQUAL "DOUBLE")
                   PREFIX ${Python3_EXECUTABLE} ${SUPPORT}/check_steady_hill.py
                          --erf-check check_hill.py --orders 2 --
                   COMMAND $<TARGET_FILE:gust> ${HILL2D_CASE}/inputs_steady_hill2d_lusgs ${GUST_TEST_AMREX_FLAGS})
-    # RT-2.1b.1: the same case from the converged column (init.first_guess =
+    # The same case from the converged column (init.first_guess =
     # column): the verdict, the drop and ERF's checks; then the spin-up check
     # against the profile run's history (both checkpoints in HILL_COL_DIR).
     gust_add_test(NAME rt_steady_hill2d_column NP 2 LABELS "regression" RUN_DIR ${HILL_COL_DIR}
@@ -813,14 +814,14 @@ if(GUST_PRECISION STREQUAL "DOUBLE")
              WORKING_DIRECTORY ${HILL_COL_DIR})
     set_tests_properties(rt_column_guess_spinup PROPERTIES LABELS "regression"
                     FIXTURES_REQUIRED "hill2d_lusgs;hill2d_column" ENVIRONMENT PYTHONDONTWRITEBYTECODE=1)
-    # RT-1.16.2: ERF's Neutral_Hill_3D (64 x 64 x 20) to steady with
+    # ERF's Neutral_Hill_3D (64 x 64 x 20) to steady with
     # check_hill3d.py; minutes on four ranks, so label nightly (not in
     # ctest -L regression).
     gust_add_test(NAME rt_steady_hill3d NP 4 LABELS "nightly"
                   PREFIX ${Python3_EXECUTABLE} ${SUPPORT}/check_steady_hill.py
                          --erf-check check_hill3d.py --orders 2 --
                   COMMAND $<TARGET_FILE:gust> ${HILL3D_CASE}/inputs_steady_hill3d ${GUST_TEST_AMREX_FLAGS})
-    # RT-2.5.1 (the ERF half): the same deck with grid sequencing over three
+    # The same deck with grid sequencing over three
     # levels (16 x 16, 32 x 32, then 64 x 64); the same checks and the same
     # two-order drop, measured from the coarsest level's reference.
     gust_add_test(NAME rt_steady_hill3d_sequencing NP 4 LABELS "nightly"
@@ -828,7 +829,7 @@ if(GUST_PRECISION STREQUAL "DOUBLE")
                          --erf-check check_hill3d.py --orders 2 --
                   COMMAND $<TARGET_FILE:gust> ${HILL3D_CASE}/inputs_steady_hill3d mesh.hierarchy_levels=3
                           steady.sequencing=1 ${GUST_TEST_AMREX_FLAGS})
-    # RT-2.2.1: a truly neutral Hill_3D (inputs_steady_hill3d_neutral) to
+    # A truly neutral Hill_3D (inputs_steady_hill3d_neutral) to
     # round-off with the z-line Jacobi sweeps and with the box-local line
     # LU-SGS sweeps (zero ghosts, overlap 2, diagonal ordering); then
     # check_line_match.py compares the two states to 1e-8: u, v, w, p and k
@@ -877,12 +878,13 @@ if(GUST_PRECISION STREQUAL "DOUBLE")
     set_tests_properties(rt_poisson_default_matches PROPERTIES LABELS "nightly"
                     FIXTURES_REQUIRED "hill3d_neutral_lusgs;hill3d_neutral_lusgs_fft"
                     ENVIRONMENT PYTHONDONTWRITEBYTECODE=1)
-    # RT-2.5.1: the same deck with grid sequencing over three levels (8 x 8,
+    # The same deck with grid sequencing over three levels (8 x 8,
     # 16 x 16, then 32 x 32 to round-off); the loose stops of levels 2 and 1
     # (by the residual branch) and the strict stop of level 0 are checked in
-    # the log, level 0 in fewer than 3000 iterations (the z-line Jacobi run of
-    # RT-2.2.1 takes 3495; sequencing 2688 (2773 with steady.sequencing_hold = 1), so a lost coarse start or
-    # reference shows), and the steady state must match RT-2.2.1's to 1e-8;
+    # the log, level 0 in fewer than 3000 iterations
+    # (rt_steady_hill3d_neutral_zjacobi takes 3495; sequencing 2688 (2773 with steady.sequencing_hold = 1), so a
+    # lost coarse start or reference shows), and the steady state must match
+    # rt_steady_hill3d_neutral_zjacobi's to 1e-8;
     # p after subtracting each run's mean (no face fixes its level: the
     # prolonged start carries another constant, -1.8e-3 here).
     gust_add_test(NAME rt_steady_hill3d_neutral_sequencing NP 4 LABELS "nightly" RUN_DIR ${RT221_DIR}/sequencing
@@ -901,10 +903,10 @@ if(GUST_PRECISION STREQUAL "DOUBLE")
     set_tests_properties(rt_steady_hill3d_neutral_sequencing_matches PROPERTIES LABELS "nightly"
                     FIXTURES_REQUIRED "hill3d_neutral_zjacobi;hill3d_neutral_sequencing"
                     ENVIRONMENT PYTHONDONTWRITEBYTECODE=1)
-    # RT-1.16.3 (the convergence half): Askervein on the ERF grid with an
-    # inflow and an outflow face to the steady verdict (about 2 s on two
-    # ranks), the Phase 1 sweep. The comparison with ERF's URANS on lines A
-    # and AA is RT-2.6.1 (Askervein_210, below).
+    # Askervein on the ERF grid with an inflow and an outflow face to the
+    # steady verdict (about 2 s on two ranks), with the z-line Jacobi sweeps.
+    # The comparison with ERF's URANS on lines A and AA is
+    # rt_askervein_210_erf_lines (Askervein_210, below).
     # alpha_v != alpha_h: the projection falls back to gmres_fft (logged), the
     # stage keeps the default gmres_mlmg.
     gust_add_test(NAME rt_steady_askervein NP 2 LABELS "regression;smoke"
@@ -914,7 +916,7 @@ if(GUST_PRECISION STREQUAL "DOUBLE")
                   COMMAND $<TARGET_FILE:gust> ${ASKERVEIN_CASE}/inputs_steady_askervein
                           terrain.file=${PROJECT_SOURCE_DIR}/extern_erf/askervein.txt
                           ${GUST_TEST_AMREX_FLAGS})
-    # Beyond the plan: Askervein in a conventionally neutral boundary layer.
+    # Askervein in a conventionally neutral boundary layer.
     # The precursor column runs to steady; a companion run of the same deck
     # stops at the table's step, and tools/make_inflow_table.py checks its
     # 10 m wind is along +x (0.01 deg), u* = 0.6 m/s (1e-3) and the committed
@@ -977,8 +979,7 @@ if(GUST_PRECISION STREQUAL "DOUBLE")
                           terrain.file=${PROJECT_SOURCE_DIR}/extern_erf/askervein.txt
                           bc.inflow_file=${CNBL_CASE}/askervein_cnbl_inflow.txt
                           ${GUST_TEST_AMREX_FLAGS})
-    # RT-2.6.1 and RT-2.6.2 (sub-phase 2.6, the Phase 2 checkpoint): Askervein
-    # with ERF's own setup (wind from 210 degrees, ERF's 300 x 300 x 18 grid,
+    # Askervein against ERF: Askervein with ERF's own setup (wind from 210 degrees, ERF's 300 x 300 x 18 grid,
     # Tests/Real_Terrain/Askervein_210). The inflow table must be the one
     # tools/erf_inflow_table.py makes from ERF's profile (extern_erf/).
     add_test(NAME rt_askervein_210_inflow_table
@@ -987,26 +988,26 @@ if(GUST_PRECISION STREQUAL "DOUBLE")
                 --check ${ASKERVEIN_210_CASE}/askervein_210_inflow.txt)
     set_tests_properties(rt_askervein_210_inflow_table PROPERTIES LABELS "regression;smoke"
                     ENVIRONMENT PYTHONDONTWRITEBYTECODE=1)
-    # The Phase 2 configuration: the CPU default sweep (lusgs, given here so
+    # The line LU-SGS configuration: the CPU default sweep (lusgs, given here so
     # the gold holds on a GPU build too) with its default CFL cap, the default
     # reference window, grid sequencing over two levels (about 140
-    # iterations, 2-3 min on four ranks). Its log is kept for RT-2.6.2. The
-    # run directories are emptied first, so no check reads an earlier run's
-    # plotfile or lines.
+    # iterations, 2-3 min on four ranks). Its log is kept for
+    # rt_askervein_210_level_history. The run directories are emptied first,
+    # so no check reads an earlier run's plotfile or lines.
     set(ASK210_DIR ${CMAKE_CURRENT_BINARY_DIR}/run/rt_askervein_210)
     add_test(NAME rt_askervein_210_clean
              COMMAND ${Python3_EXECUTABLE} -c "import os, shutil, sys; [ (shutil.rmtree(d, ignore_errors=True), os.makedirs(d)) for d in sys.argv[1:] ]"
-                ${ASK210_DIR}/phase2 ${ASK210_DIR}/phase1 ${ASK210_DIR}/unbounded)
+                ${ASK210_DIR}/lusgs ${ASK210_DIR}/zjacobi ${ASK210_DIR}/unbounded)
     set_tests_properties(rt_askervein_210_clean PROPERTIES LABELS "nightly" FIXTURES_SETUP askervein_210_clean)
-    gust_add_test(NAME rt_steady_askervein_210 NP 4 LABELS "nightly" RUN_DIR ${ASK210_DIR}/phase2
-                  FIXTURES_SETUP askervein_210_phase2 FIXTURES_REQUIRED askervein_210_clean
-                  PREFIX ${EXPECT_ABORT} --success --log ${ASK210_DIR}/phase2/run.log --timeout 3600
+    gust_add_test(NAME rt_steady_askervein_210 NP 4 LABELS "nightly" RUN_DIR ${ASK210_DIR}/lusgs
+                  FIXTURES_SETUP askervein_210_lusgs FIXTURES_REQUIRED askervein_210_clean
+                  PREFIX ${EXPECT_ABORT} --success --log ${ASK210_DIR}/lusgs/run.log --timeout 3600
                          "gust: steady after" "grid sequencing summary" --
                   COMMAND $<TARGET_FILE:gust> ${ASKERVEIN_210_CASE}/inputs_steady_askervein_210
                           terrain.file=${PROJECT_SOURCE_DIR}/extern_erf/askervein.txt
                           bc.inflow_file=${ASKERVEIN_210_CASE}/askervein_210_inflow.txt
                           steady.sweep=lusgs steady.sequencing=1 mesh.hierarchy_levels=2 ${GUST_TEST_AMREX_FLAGS})
-    # RT-2.6.1: 10 m wind speeds on lines A and AA within 5 % of ERF's URANS
+    # 10 m wind speeds on lines A and AA within 5 % of ERF's URANS
     # average (2400-4800 s, Gold/erf_urans_lines_10m.csv), 10 % at the lee
     # masts more than 300 m past the hilltop (gust's second-order
     # advection against ERF's fifth order sets the wake there).
@@ -1015,30 +1016,30 @@ if(GUST_PRECISION STREQUAL "DOUBLE")
                 steady_askervein_210_plt ${ASKERVEIN_210_CASE}/Gold/erf_urans_lines_10m.csv
                 --terrain ${PROJECT_SOURCE_DIR}/extern_erf/askervein.txt
                 --lines ${ASKERVEIN_210_CASE}/askervein_lines.csv --out lines.csv --lee_d 300 --lee_rel_tol 0.10
-             WORKING_DIRECTORY ${ASK210_DIR}/phase2)
+             WORKING_DIRECTORY ${ASK210_DIR}/lusgs)
     set_tests_properties(rt_askervein_210_erf_lines PROPERTIES LABELS "nightly"
-                    FIXTURES_REQUIRED askervein_210_phase2 FIXTURES_SETUP askervein_210_lines
+                    FIXTURES_REQUIRED askervein_210_lusgs FIXTURES_SETUP askervein_210_lines
                     ENVIRONMENT PYTHONDONTWRITEBYTECODE=1)
     # The same lines against their own gold to 1e-4 (Gold/askervein_210_lines.csv):
     # the ERF tolerances alone would pass the run with the inflow k of before.
     add_test(NAME rt_askervein_210_lines_gold
              COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/askervein_lines.py compare lines.csv
                 ${ASKERVEIN_210_CASE}/Gold/askervein_210_lines.csv --rel_tol 1e-4
-             WORKING_DIRECTORY ${ASK210_DIR}/phase2)
+             WORKING_DIRECTORY ${ASK210_DIR}/lusgs)
     set_tests_properties(rt_askervein_210_lines_gold PROPERTIES LABELS "nightly"
                     FIXTURES_REQUIRED askervein_210_lines ENVIRONMENT PYTHONDONTWRITEBYTECODE=1)
-    # RT-2.6.2: the level history (cells, stop reasons, iterations within
+    # The level history (cells, stop reasons, iterations within
     # 10 %) and the stage switches against the gold sequence.
     add_test(NAME rt_askervein_210_level_history
-             COMMAND ${Python3_EXECUTABLE} ${SUPPORT}/check_sequencing_log.py ${ASK210_DIR}/phase2/run.log
+             COMMAND ${Python3_EXECUTABLE} ${SUPPORT}/check_sequencing_log.py ${ASK210_DIR}/lusgs/run.log
                 ${ASKERVEIN_210_CASE}/Gold/askervein_210_level_history.json --iter_rel_tol 0.1)
     set_tests_properties(rt_askervein_210_level_history PROPERTIES LABELS "nightly"
-                    FIXTURES_REQUIRED askervein_210_phase2 ENVIRONMENT PYTHONDONTWRITEBYTECODE=1)
-    # Old vs new: the Phase 1 configuration of RT-1.16.3 (zjacobi, four
-    # sweeps, CFL cap 2, a 100-iteration reference, one level; about 540
-    # iterations) reaches the same lines as the Phase 2 default to 0.1 %.
-    gust_add_test(NAME rt_steady_askervein_210_phase1 NP 4 LABELS "nightly" RUN_DIR ${ASK210_DIR}/phase1
-                  FIXTURES_SETUP askervein_210_phase1 FIXTURES_REQUIRED askervein_210_clean
+                    FIXTURES_REQUIRED askervein_210_lusgs ENVIRONMENT PYTHONDONTWRITEBYTECODE=1)
+    # Old vs new: the z-line Jacobi configuration of rt_steady_askervein
+    # (zjacobi, four sweeps, CFL cap 2, a 100-iteration reference, one level;
+    # about 540 iterations) reaches the same lines as the default to 0.1 %.
+    gust_add_test(NAME rt_steady_askervein_210_zjacobi NP 4 LABELS "nightly" RUN_DIR ${ASK210_DIR}/zjacobi
+                  FIXTURES_SETUP askervein_210_zjacobi FIXTURES_REQUIRED askervein_210_clean
                   PREFIX ${EXPECT_ABORT} --success --timeout 3600 "gust: steady after"
                          "4 zjacobi sweeps" --
                   COMMAND $<TARGET_FILE:gust> ${ASKERVEIN_210_CASE}/inputs_steady_askervein_210
@@ -1046,16 +1047,16 @@ if(GUST_PRECISION STREQUAL "DOUBLE")
                           bc.inflow_file=${ASKERVEIN_210_CASE}/askervein_210_inflow.txt
                           steady.sweep=zjacobi steady.zline_sweeps=4 steady.cfl_max=2
                           steady.residual_ref_iterations=100 ${GUST_TEST_AMREX_FLAGS})
-    add_test(NAME rt_askervein_210_phase1_matches
+    add_test(NAME rt_askervein_210_zjacobi_matches
              COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/askervein_lines.py check
-                steady_askervein_210_plt ${ASK210_DIR}/phase2/lines.csv
+                steady_askervein_210_plt ${ASK210_DIR}/lusgs/lines.csv
                 --terrain ${PROJECT_SOURCE_DIR}/extern_erf/askervein.txt
                 --lines ${ASKERVEIN_210_CASE}/askervein_lines.csv --out lines.csv --rel_tol 1e-3
-             WORKING_DIRECTORY ${ASK210_DIR}/phase1)
-    set_tests_properties(rt_askervein_210_phase1_matches PROPERTIES LABELS "nightly"
-                    FIXTURES_REQUIRED "askervein_210_phase1;askervein_210_lines"
+             WORKING_DIRECTORY ${ASK210_DIR}/zjacobi)
+    set_tests_properties(rt_askervein_210_zjacobi_matches PROPERTIES LABELS "nightly"
+                    FIXTURES_REQUIRED "askervein_210_zjacobi;askervein_210_lines"
                     ENVIRONMENT PYTHONDONTWRITEBYTECODE=1)
-    # Old against new for bc.inflow_tke_length: the Phase 2 run with the
+    # Old against new for bc.inflow_tke_length: the line LU-SGS run with the
     # inflow k of before (unbounded length) reaches the lines of that run
     # (Gold/askervein_210_lines_unbounded.csv, #43) to 1e-4.
     gust_add_test(NAME rt_steady_askervein_210_unbounded NP 4 LABELS "nightly" RUN_DIR ${ASK210_DIR}/unbounded
@@ -1076,7 +1077,7 @@ if(GUST_PRECISION STREQUAL "DOUBLE")
                     FIXTURES_REQUIRED askervein_210_unbounded ENVIRONMENT PYTHONDONTWRITEBYTECODE=1)
 endif()
 
-# --- Reference archives (sub-phase 1.1): gust_refavg end to end --------
+# --- Reference archives: gust_refavg end to end -------------------------------
 # Three copies of the smoke plotfile at t = 0, 5 and 10 s: their trapezoid
 # average (weights 1/4, 1/2, 1/4, fma) reproduces the plotfile bit for bit.
 # This checks the archive round trip; the weights themselves are tested in
@@ -1171,7 +1172,7 @@ add_test(NAME erf_plotfile_selftest
          WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/tools)
 set_tests_properties(erf_plotfile_selftest PROPERTIES LABELS unit ENVIRONMENT PYTHONDONTWRITEBYTECODE=1)
 
-# --- RT-1.3.1 helper: the extern_erf drift check's own tests -----------------
+# --- The extern_erf drift check's own tests -----------------------------------
 add_test(NAME drift_check_selftest
          COMMAND ${Python3_EXECUTABLE} -m unittest -v test_check_extern_erf
          WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/tools)

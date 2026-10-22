@@ -1,4 +1,4 @@
-// RT-1.8.1: the boundary fluxes and residual of a fixed state on ERF's
+// The boundary fluxes and residual of a fixed state on ERF's
 // Neutral_ABL_Flat mesh (test-only tool; the application has no solver yet).
 //
 //   boundary_fluxes <deck> [key=value ...]

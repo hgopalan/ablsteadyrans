@@ -1,7 +1,7 @@
 #ifndef GUST_RESIDUAL_H_
 #define GUST_RESIDUAL_H_
 
-// The steady residual and its linearisations (sub-phase 1.6):
+// The steady residual and its linearisations:
 //
 //   R_c     = C_c(u) - D_c(u) + (G p)_c - S_c      momentum, c = x, y, z
 //   R_p     = D(U)                                 continuity (the divergence)
@@ -19,11 +19,11 @@
 // SurfaceLayer.H) the ground faces carry the wall stress, the surface heat
 // flux and no k flux, and the first cells' k rows are the wall-k rows; the
 // surface layer is computed from q on every call. The closure sources of k
-// (production, buoyancy, dissipation) and the boundary conditions come in
-// sub-phases 1.9 and 1.8; the residual reads the state's ghost cells (two
-// layers), which the caller fills, and leaves the boundary rows (the ground
-// and top faces of w, faces on non-periodic sides) to the boundary-condition
-// code.
+// (production, buoyancy, dissipation) and the boundary conditions come from
+// Closure.H and BoundaryConditions.H; the residual reads the state's ghost
+// cells (two layers), which the caller fills, and leaves the boundary rows
+// (the ground and top faces of w, faces on non-periodic sides) to the
+// boundary-condition code.
 //
 // Contract for the later terms: everything that belongs to R enters inside
 // residual() (through ResidualInputs), so that jvp, which differentiates
@@ -36,8 +36,8 @@
 // coefficients of the first-order implicit-side operator A1 along lines in
 // that direction (ImplicitOperator.H), built from the state's transport.
 // A1 and R are per unit volume, so the pseudo-time term the solver adds to
-// the diagonal is 1/dtau (the plan's V/dtau is the same term integrated over
-// a cell of volume V).
+// the diagonal is 1/dtau (V/dtau is the same term integrated over a cell of
+// volume V).
 // jvp gives J v by a forward difference of the full residual.
 
 #include "Closure.H"
@@ -84,8 +84,8 @@ struct JvpScales
 
 //! What the residual needs besides the state. Diffusivities are cell-centred
 //! with one ghost cell filled. Either the three diffusivity fields are given
-//! (held fixed), or a closure computes them from the state (sub-phase 1.9,
-//! Closure.H): then nu, gamma_theta and gamma_tke must be null, wall_distance
+//! (held fixed), or a closure computes them from the state
+//! (Closure.H): then nu, gamma_theta and gamma_tke must be null, wall_distance
 //! must be set, and the residual of k gains the closure's sources.
 struct ResidualInputs
 {
@@ -104,15 +104,19 @@ struct ResidualInputs
     ReferenceProfile theta_ref;                   //!< hydrostatic reference theta_ref(z), a 1-D profile
     ConvectionOptions momentum;                   //!< momentum convection (k is always bounded upwind)
     ConvectionOptions theta;                      //!< theta convection
+    //! The upwind blend of the momentum and theta convection (HybridConvection.H; null: none): a cell field
+    //! with one ghost cell, owned by the SIMPLEC stage.
+    const amrex::MultiFab* hybrid_sigma{nullptr};
+    HybridOptions hybrid;                         //!< convection.hybrid_* (the stage reads them)
     BuoyancyOptions buoyancy;
     CoriolisOptions coriolis;
     //! The constant kinematic pressure-gradient force (m/s^2) on u, v, w (Forcing.H).
     amrex::Array<amrex::Real, 3> pressure_gradient{0, 0, 0};
     JvpScales jvp_scales;
-    //! The wall model (sub-phase 1.7) on the ground; null: none, and the
+    //! The wall model (SurfaceLayer.H) on the ground; null: none, and the
     //! ground fluxes come from the ghost cells like any interior face.
     const SurfaceLayerOptions* surface{nullptr};
-    //! The domain boundary conditions (sub-phase 1.8, BoundaryConditions.H);
+    //! The domain boundary conditions (BoundaryConditions.H);
     //! null: none. With them the residual sets the Dirichlet rows of the
     //! normal velocities and adds the damping layers, and line_jacobian
     //! gives those rows the identity and folds the ghost couplings. The

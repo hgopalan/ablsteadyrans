@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run poisson_projection and check it against a gold file (RT-1.10.1).
+"""Run poisson_projection and check it against a gold file (rt_poisson_askervein).
 
     check_poisson.py GOLD.json [--write] -- COMMAND [ARGS ...]
 

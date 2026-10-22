@@ -1,7 +1,7 @@
 # Askervein_CNBL
 
 ## Purpose
-Askervein in a conventionally neutral boundary layer, beyond the plan. A precursor column runs to steady and
+Askervein in a conventionally neutral boundary layer. A precursor column runs to steady and
 supplies the inflow table; the 3-D case then runs on that table to the steady verdict.
 
 ## Files

@@ -1,4 +1,4 @@
-# RT-1.8.1: boundary fluxes of a fixed log-law state on ERF's Neutral_ABL_Flat
+# Boundary fluxes of a fixed log-law state on ERF's Neutral_ABL_Flat
 # mesh (Exec/CanonicalTests/Canonical_RANS/Neutral_ABL_Flat/inputs_neutral):
 # 8 x 8 x 64 cells on 2560 m x 2560 m x 1000 m (dz = 15.625 m), periodic
 # sides, the surface layer on the ground (z0 = 0.1 m) and a slip top with

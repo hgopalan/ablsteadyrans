@@ -1,7 +1,7 @@
 #ifndef GUST_MESH_HIERARCHY_H_
 #define GUST_MESH_HIERARCHY_H_
 
-// The horizontal-only grid hierarchy (sub-phase 2.3). Levels l = 0 ... L-1
+// The horizontal-only grid hierarchy. Levels l = 0 ... L-1
 // (L = mesh.hierarchy_levels); level 0 is the run's mesh and level l has
 // 2^l times fewer cells in x and in y. z is never coarsened: every level has
 // the same z-levels, so the wall treatment is the same on all of them.

@@ -4,7 +4,7 @@
 // Shared by the convection, diffusion and implicit-operator tests
 // (test_Convection.cpp, test_Diffusion.cpp, test_ImplicitOperator.cpp): fills
 // of analytic fields at the points of any C-grid location, ghost cells
-// included, and the manufactured solution for UT-1.5.1 and UT-1.5.2.
+// included, and the manufactured solution for the MMS order tests.
 //
 // Meshes come from PoissonTestHelpers.H (make_case: cosine hill, geometric
 // layers that refine consistently, periodic in x and y here). Exact operator
@@ -54,8 +54,8 @@ struct HostNodes
 // Replace the ghost nodes below the ground and above the top (ERF's linear
 // extrapolation z_{-1} = 2 z_0 - z_1, a kink in the mapping on a stretched
 // mesh) with the quadratic extrapolation z_{-1} = 3 z_0 - 3 z_1 + z_2, which
-// continues the layers smoothly. The interior operators then see a smooth
-// mesh on both sides of the ground; the ground closure itself is PR-09's.
+// continues the layers smoothly. The interior operators then see a smooth mesh
+// on both sides of the ground; the ground closure itself is the wall model's.
 inline void smooth_vertical_ghost_nodes (PCase& c)
 {
     const int nz = c.geom.Domain().length(2);

@@ -2,7 +2,7 @@
 #define GUST_CVFLUXES_H_
 
 // Control volumes of the C-grid and the divergence of fluxes through their
-// faces (sub-phase 1.5), shared by the convection and diffusion operators.
+// faces, shared by the convection and diffusion operators.
 //
 // A field at location Loc owns the control volume centred on its points:
 // cells for p', theta and k; for a velocity component c the volume spans the

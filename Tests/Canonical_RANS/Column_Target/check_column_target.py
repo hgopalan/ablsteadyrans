@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run GUST with a column target wind and check that the 3-D run keeps it (beyond the plan).
+"""Run GUST with a column target wind and check that the 3-D run keeps it.
 
     check_column_target.py --target U --height Z --z0 Z0 [--mol L] -- COMMAND [ARGS ...]
 

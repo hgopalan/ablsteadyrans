@@ -1,4 +1,4 @@
-# RT-1.12.1: the mass-consistent initial field on ERF's Askervein terrain
+# The mass-consistent initial field on ERF's Askervein terrain
 # (the mesh of inputs_poisson_askervein: 30 x 30 cells of 200 m, 18 layers
 # from 20 m growing by 1.08 to a physical top of 749 m (mesh.prob_hi's 440 m
 # is the computational top), basic terrain following; terrain.file is given

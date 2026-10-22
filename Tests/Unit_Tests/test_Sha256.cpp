@@ -1,5 +1,5 @@
-// Beyond the plan: SHA-256 against the FIPS 180-4 / NIST example vectors.
-// The reference archives (UT-1.1.1) rest on it.
+// SHA-256 against the FIPS 180-4 / NIST example vectors.
+// The reference archives (test_Reference.cpp) rest on it.
 #include "Sha256.H"
 
 #include <AMReX_ParallelDescriptor.H>

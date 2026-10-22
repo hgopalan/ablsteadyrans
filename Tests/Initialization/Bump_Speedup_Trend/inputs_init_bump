@@ -1,4 +1,4 @@
-# RT-1.12.2: the mass-consistent initial field over FastWindTerrain's bump
+# The mass-consistent initial field over FastWindTerrain's bump
 # (regtests/phase6_solve_correction/inputs_bump at commit 648f8f1): the same
 # 1000 m x 1000 m domain, the same hill (Tests/Initialization/Bump_Speedup_Trend/terrain_bump_fwt.txt,
 # given on the command line), the same power-law inflow (8, 6) m/s at 10 m

@@ -1,12 +1,11 @@
-// Sub-phase 2.2: the box-local line LU-SGS sweeps (LineSweeps.H).
-// UT-2.2.1 (every C-grid face is swept by exactly one box, on 1, 2 and 4
-// boxes, against a host replay of the box-local sweeps), UT-2.2.2 (the
-// overlaps 0, 2 and 4 reach the same converged state; a wider overlap needs
-// fewer outer iterations; an overlap that covers the domain reproduces the
-// one-box sweep bit for bit), UT-2.2.3 (the converged state does not depend
-// on the layout: 1, 4 and 16 boxes; the iterates do), UT-2.2.4 (the
-// diagonal wavefront ordering equals the sequential sweep bit for bit),
-// UT-2.2.6 (beyond the plan: the alternating ordering) and the refusals.
+// The box-local line LU-SGS sweeps (LineSweeps.H).
+// Every C-grid face is swept by exactly one box, on 1, 2 and 4 boxes, against
+// a host replay of the box-local sweeps; the overlaps 0, 2 and 4 reach the
+// same converged state, a wider overlap needs fewer outer iterations, and an
+// overlap that covers the domain reproduces the one-box sweep bit for bit; the
+// converged state does not depend on the layout (1, 4 and 16 boxes; the
+// iterates do); the diagonal wavefront ordering equals the sequential sweep
+// bit for bit; the alternating ordering; and the refusals.
 #include "ImplicitOperator.H"
 #include "LineSweeps.H"
 #include "Predictor.H"
@@ -288,7 +287,7 @@ std::pair<double, double> replay_error (Loc loc, const amrex::MultiFab& A, const
 
 } // namespace
 
-// UT-2.2.1. The owned regions (line_owned_box, which the sweep uses) cover
+// The owned regions (line_owned_box, which the sweep uses) cover
 // every unknown of the domain exactly once, periodic images identified, for
 // cells and the three face locations on 1, 2 and 4 boxes (and an uneven
 // 7 x 6 split into 4 x 3 columns at most, and a 2-D 8 x 1 mesh in two
@@ -296,7 +295,8 @@ std::pair<double, double> replay_error (Loc loc, const amrex::MultiFab& A, const
 // result equals the host replay of the box-local sweeps of the header's
 // rule (one and two sweeps, n_o = 0 and 2): a face swept by two boxes, or
 // a ghost delta taken from a neighbour, changes the result next to the box
-// face. On one non-periodic box the box-local sweep is sub-phase 2.1's.
+// face. On one non-periodic box the box-local sweep is the lagged sweep, bit for
+// bit.
 TEST (LineSweeps, EveryFaceIsOwnedAndSweptOnce)
 {
     struct Layout { int nx, ny, mx, my, boxes; };
@@ -364,7 +364,7 @@ TEST (LineSweeps, EveryFaceIsOwnedAndSweptOnce)
     }
 }
 
-// UT-2.2.2. On a 16 x 8 mesh in 4 x 2 boxes of 4 x 4 columns with a strong
+// On a 16 x 8 mesh in 4 x 2 boxes of 4 x 4 columns with a strong
 // x coupling: the outer defect correction with the box-local sweeps (two per
 // step) reaches |rhs - N x| <= 1e-12 |rhs| for n_o = 0, 2 and 4, the three
 // states agree to 1e-10 (relative), and the overlap cuts the outer
@@ -385,7 +385,7 @@ TEST (LineSweeps, OverlapsReachTheSameState)
                 amrex::MultiFab x;
                 const int its = outer_solve(loc, A, ap, rhs, lusgs(LineGhosts::zero, n_o), 2, c, tol(1e-12, 1e-5), x);
                 ASSERT_GT(its, 0) << loc_name(loc) << " n_o " << n_o;
-                amrex::Print() << "UT-2.2.2 " << loc_name(loc) << " periodic " << periodic << " n_o " << n_o << ": " << its
+                amrex::Print() << loc_name(loc) << " periodic " << periodic << " n_o " << n_o << ": " << its
                                << " outer iterations\n";
                 if (n_o == 0) {
                     x0.define(x.boxArray(), x.DistributionMap(), 1, 0);
@@ -429,11 +429,11 @@ TEST (LineSweeps, OverlapsReachTheSameState)
     }
 }
 
-// UT-2.2.3. A 16 x 16 mesh in 1, 4 and 16 boxes (periodic and not): the
+// A 16 x 16 mesh in 1, 4 and 16 boxes (periodic and not): the
 // box-local sweeps depend on the box shape, so one step differs between the
 // layouts (pinned below: the test is not of bit identity), but the outer
 // iteration reaches the same converged state on every layout, to 1e-10
-// (relative), for n_o = 0 and 2; the lagged ghosts of sub-phase 2.1 too.
+// (relative), for n_o = 0 and 2; the lagged ghosts too.
 TEST (LineSweeps, ConvergedStateDoesNotDependOnTheLayout)
 {
     for (const bool periodic : {false, true}) {
@@ -457,7 +457,7 @@ TEST (LineSweeps, ConvergedStateDoesNotDependOnTheLayout)
                     amrex::MultiFab x, step;
                     const int its = outer_solve(loc, A, ap, rhs, opt, 2, cm, tol(1e-12, 1e-5), x);
                     ASSERT_GT(its, 0);
-                    amrex::Print() << "UT-2.2.3 " << loc_name(loc) << " periodic " << periodic << " ghosts "
+                    amrex::Print() << loc_name(loc) << " periodic " << periodic << " ghosts "
                                    << gust::line_ghosts_name(opt.ghosts) << " n_o " << opt.overlap << " boxes "
                                    << cm.ba.size() << ": " << its << " outer iterations\n";
                     amrex::MultiFab g(xref.boxArray(), xref.DistributionMap(), 1, 0);
@@ -473,7 +473,7 @@ TEST (LineSweeps, ConvergedStateDoesNotDependOnTheLayout)
     }
 }
 
-// UT-2.2.4. The diagonal wavefront ordering gives the sequential sweep's
+// The diagonal wavefront ordering gives the sequential sweep's
 // result bit for bit: every location, 1, 2 and 4 boxes (an uneven 7 x 6
 // split too), periodic and not, one and three sweeps, the lagged ghosts and
 // the zero ghosts with n_o = 0 and 2; the reported change too. The launch
@@ -526,17 +526,14 @@ TEST (LineSweeps, DiagonalOrderingEqualsTheSequentialSweep)
     }
 }
 
-// The refusals: an overlap outside [0, max_line_overlap], an overlap with
-// the lagged ghosts, an overlap wider than the narrowest box; each message
-// names steady.line_overlap. No overlap along a one-cell axis (a 2-D deck).
-// The names of the options.
-// Beyond the plan (UT-2.2.6): the alternating ordering (steady.line_alternate).
+// The alternating ordering (steady.line_alternate).
 // (a) On a system coupled only to the (i - 1) and (j + 1) neighbours (the
 // upwind couplings of u > 0, v < 0) the j-reversed forward pass is an exact
 // solve, so two alternating sweeps reach the solution to round-off; two
 // sweeps of the ascending pairs do not. (b) The diagonal ordering equals the
 // sequential one bit for bit with the j-reversed pairs too (the wavefronts
-// i - j = const), at the launch counts of UT-2.2.4. (c) One sweep is not
+// i - j = const), at the launch counts of
+// LineSweeps.DiagonalOrderingEqualsTheSequentialSweep. (c) One sweep is not
 // changed (only the odd sweeps are reversed); two sweeps are.
 TEST (LineSweeps, AlternatingOrderingSweepsBothDiagonals)
 {
@@ -614,6 +611,10 @@ TEST (LineSweeps, AlternatingOrderingSweepsBothDiagonals)
     }
 }
 
+// The refusals: an overlap outside [0, max_line_overlap], an overlap with
+// the lagged ghosts, an overlap wider than the narrowest box; each message
+// names steady.line_overlap. No overlap along a one-cell axis (a 2-D deck).
+// The names of the options.
 TEST (LineSweeps, RefusalsAndNames)
 {
     PCase c = box_mesh(8, 8, 4, true, 4, 4);

@@ -1,0 +1,66 @@
+# Wagenbrenner et al. (2019) comparison, Askervein: 8.9 m/s from 210 degrees at 10 m
+# (towards 60 degrees counter-clockwise from x), lines A, AA and B. Terrain:
+# extern_erf/askervein.txt (terrain.file on the command line). 256 x 256 x 64 cells over
+# 6 km x 6 km (23.4 m, the terrain file's spacing; the paper's CFD had 20 m), a 1 m first
+# layer stretched by 1.065 to 850 m (the Askervein study's mesh); the log law with
+# z0 = 0.03 m and u* giving 8.9 m/s at 10 m through xlo and ylo; truly neutral (the
+# paper's CFD solver is neutral); damping of w from 600 m.
+mesh.n_cell           = 256 256 64
+mesh.prob_lo          = -3000. -3000. 0.
+mesh.prob_hi          =  3000.  3000. 850.5
+mesh.max_grid_size    = 64
+mesh.dz0              = 1.
+mesh.stretch_ratio    = 1.065
+mesh.hierarchy_levels = 3
+
+terrain.type      = erf_grid
+terrain.smoothing = 0
+
+bc.xlo = inflow
+bc.ylo = inflow
+bc.xhi = outflow
+bc.yhi = outflow
+bc.zlo = surface_layer
+bc.zhi = slip_wall
+bc.surface_z0       = 0.03
+bc.inflow_profile   = log_law
+bc.inflow_ustar     = 0.6278
+bc.inflow_z0        = 0.03
+bc.inflow_direction = 60.
+bc.theta_profile_z  = 0.
+bc.theta_profile    = 300.
+bc.rayleigh_zdamp    = 600.
+bc.rayleigh_dampcoef = 0.2
+bc.rayleigh_fields   = w
+
+init.first_guess = profile
+init.alpha_h     = 1.0
+init.alpha_v     = 0.5
+
+solver.poisson_reltol   = 1.e-10
+solver.poisson_max_iter = 200
+
+forcing.gravity  = 0.
+turb.tke_floor   = 1.e-6
+simplec.w_vnn_cap = 16
+
+# The recommended GUST - CFD setting (lee wake): the nu_t cap C_r k/S with C_r = Cmu0^2, nu_t under-
+# relaxation, a 10 % blend towards upwind where the cap holds nu_t below 2.5 terrain heights, and (except where
+# the deck sets its own) a 100 m Blackadar length.
+turb.realizability = 0.309
+turb.nut_relax     = 0.5
+turb.max_geom_lscale = 100.
+convection.hybrid_sigma_max = 0.1
+convection.hybrid_height    = 290.
+
+steady.stage          = simplec
+steady.sweep          = lusgs
+steady.zline_sweeps   = 2
+steady.cfl_max        = 16
+steady.sequencing     = 1
+steady.max_iterations = 20000
+
+io.plot_file        = plt
+io.turb_plot_file   = turb
+io.chk_file         = chk
+io.write_checkpoint = 0

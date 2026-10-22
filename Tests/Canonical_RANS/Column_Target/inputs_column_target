@@ -1,4 +1,4 @@
-# Beyond the plan: the target wind of the column first guess carried into the 3-D run (init.column_target_*).
+# The target wind of the column first guess carried into the 3-D run (init.column_target_*).
 # The 1-D column of Neutral_Column (4 x 4 x 64, 1000 m, z0 = 0.1 m, slip top, pressure-gradient forcing) started
 # from the converged column with a target of 8 m/s at 10 m: the column adjusts forcing.pressure_gradient until its
 # wind there is the target, and the 3-D run keeps it. The Rayleigh layer above 700 m acts on w and theta only (a

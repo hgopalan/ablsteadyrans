@@ -59,7 +59,7 @@ struct MeshInputs
     int hierarchy_levels{1};
 };
 
-//! The ground surface and how the mesh follows it (sub-phase 1.4).
+//! The ground surface and how the mesh follows it.
 struct TerrainInputs
 {
     //! flat, agnesi (Witch of Agnesi hill, as ERF's WoA), xyz (point cloud,
@@ -139,7 +139,7 @@ inline constexpr const char* kNewtonInputKeys[] = {"newton_gmres_restart", "newt
                                                    "newton_mem_budget_gb"};
 
 //! The pseudo-transient continuation keys of read_continuation_options
-//! (Continuation.H, sub-phase 3.2), without the "steady." prefix; read as
+//! (Continuation.H), without the "steady." prefix; read as
 //! kNewtonInputKeys.
 inline constexpr const char* kContinuationInputKeys[] = {"newton_armijo_c", "newton_backtrack", "newton_lambda_min",
                                                          "newton_cfl_cut", "newton_max_retries",
