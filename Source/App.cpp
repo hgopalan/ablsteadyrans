@@ -81,6 +81,16 @@ void run ()
         use_closure_constants(bin, surf, copt.Cmu0, copt.kappa, copt.max_geom_lscale);
         fopt = read_forcing_options();
         cin = read_convection_options();
+        if (cin.hybrid.active() && newton) {
+            err.emplace_back("convection.hybrid_sigma_max is not supported with steady.stage = simplec_newton");
+        }
+        if (cin.hybrid.active() && !(copt.realizability > 0)) {
+            err.emplace_back("convection.hybrid_sigma_max needs turb.realizability > 0 (the blend follows the nu_t cap)");
+        }
+        if (cin.hybrid.active() && !in.io.restart.empty()) {
+            err.emplace_back("convection.hybrid_sigma_max is not supported with io.restart (the blend is not in the "
+                             "checkpoint, so a restart would not continue the run)");
+        }
         simplec = read_simplec_options();
         if (newton) {
             newton_opt = read_newton_stage_options(sopt, copt);
@@ -378,7 +388,9 @@ void run ()
             SurfaceState ss;
             if (surface_layer) { compute_surface_state(state, surf, fopt.buoyancy, mesh, geom, ss); }
             ResidualFields R;
-            residual(state, res_in, mesh, geom, R);
+            ResidualInputs plot_in = res_in;   // the residual the run converged: with the stage's upwind blend
+            if (!simplec_stage.hybrid_sigma().empty()) { plot_in.hybrid_sigma = &simplec_stage.hybrid_sigma(); }
+            residual(state, plot_in, mesh, geom, R);
             const auto name = write_turbulence_plotfile(in.io.turb_plot_file, state, cf, dist, surface_layer ? &ss : nullptr,
                                                         copt, geom, &R);
             amrex::Print() << "gust: wrote " << name << "\n";

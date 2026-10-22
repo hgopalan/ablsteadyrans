@@ -187,6 +187,12 @@ void residual (const State& q, const ResidualInputs& in, const Mesh& mesh, const
     for (int c = 0; c < 3; ++c) {
         convection(velocity_loc(c), *vel[c], Fp, in.momentum, mesh, geom, *Rm[c]);
         tmp[c].define(Rm[c]->boxArray(), Rm[c]->DistributionMap(), 1, 0);
+        if (in.hybrid_sigma != nullptr) {
+            ConvectionOptions up = in.momentum;
+            up.limiter = Limiter::upwind;
+            convection(velocity_loc(c), *vel[c], Fp, up, mesh, geom, tmp[c]);
+            blend_towards_upwind(static_cast<int>(velocity_loc(c)), *in.hybrid_sigma, tmp[c], *Rm[c]);
+        }
     }
     // Diffusion as fluxes, so the wall model can set the ground fluxes.
     amrex::Array<amrex::Array<amrex::MultiFab, 3>, 3> Gm;
@@ -217,6 +223,12 @@ void residual (const State& q, const ResidualInputs& in, const Mesh& mesh, const
     // Scalars: C - D.
     amrex::MultiFab d(q.p.boxArray(), q.p.DistributionMap(), 1, 0);
     convection(Loc::cell, q.theta, Fp, in.theta, mesh, geom, R.theta);
+    if (in.hybrid_sigma != nullptr) {
+        ConvectionOptions up = in.theta;
+        up.limiter = Limiter::upwind;
+        convection(Loc::cell, q.theta, Fp, up, mesh, geom, d);
+        blend_towards_upwind(0, *in.hybrid_sigma, d, R.theta);
+    }
     flux_divergence(Loc::cell, Gt, mesh, geom, d);
     amrex::MultiFab::Subtract(R.theta, d, 0, 0, 1, 0);
     ConvectionOptions kopt;

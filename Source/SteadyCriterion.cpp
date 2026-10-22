@@ -164,6 +164,9 @@ SteadyVerdict SteadyCriterion::verdict () const
         }
     }
 
+    v.residuals_met = v.reasons.empty();
+    const std::size_t residual_reasons = v.reasons.size();
+
     // Monitors: a full window, and every value in it within the tolerance of
     // the latest value.
     const auto need = static_cast<std::size_t>(m_p.monitor_window) + 1;
@@ -214,8 +217,20 @@ SteadyVerdict SteadyCriterion::verdict () const
         }
     }
 
+    v.monitors_met = v.reasons.size() == residual_reasons;
     v.status = v.reasons.empty() ? SteadyStatus::Steady : SteadyStatus::NotSteady;
     return v;
+}
+
+std::vector<amrex::Real> SteadyCriterion::residual_thresholds () const
+{
+    const amrex::Real drop = std::pow(amrex::Real(10), -m_p.residual_drop_orders);
+    std::vector<amrex::Real> t(m_res_names.size(), m_p.residual_tol);
+    if (m_h.res_ref.size() != t.size()) { return t; }
+    for (std::size_t q = 0; q < t.size(); ++q) {
+        t[q] = std::min(m_p.residual_tol, std::max(m_h.res_ref[q], m_p.residual_tol) * drop);
+    }
+    return t;
 }
 
 } // namespace gust

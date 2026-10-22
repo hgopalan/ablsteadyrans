@@ -163,7 +163,8 @@ ConvectionInputs read_convection_options ()
     ConvectionInputs in;
     amrex::ParmParse pp("convection");
     std::vector<std::string> err;
-    for (const char* key : {"limiter", "smooth_eps_velocity", "smooth_eps_theta"}) {
+    for (const char* key : {"limiter", "smooth_eps_velocity", "smooth_eps_theta", "hybrid_sigma_max", "hybrid_height",
+                            "hybrid_relax", "hybrid_freeze"}) {
         if (!pp.contains(key)) { continue; }
         in.given.emplace_back(key);
         if (pp.countname(key) > 1) { err.emplace_back(std::string("convection.") + key + " is given more than once"); }
@@ -181,6 +182,21 @@ ConvectionInputs read_convection_options ()
         in.theta.limiter = L;
         pp.query("smooth_eps_velocity", in.momentum.smooth_eps);
         pp.query("smooth_eps_theta", in.theta.smooth_eps);
+        pp.query("hybrid_sigma_max", in.hybrid.sigma_max);
+        pp.query("hybrid_height", in.hybrid.height);
+        pp.query("hybrid_relax", in.hybrid.relax);
+        pp.query("hybrid_freeze", in.hybrid.freeze);
+        for (const auto& e : check_hybrid_options(in.hybrid)) { err.push_back(e); }
+        if (in.hybrid.active() && L == Limiter::upwind) {
+            err.emplace_back("convection.hybrid_sigma_max has no effect with convection.limiter = upwind");
+        }
+        if (!in.hybrid.active()) {
+            for (const char* k : {"hybrid_height", "hybrid_relax", "hybrid_freeze"}) {
+                if (pp.contains(k)) {
+                    err.emplace_back(std::string("convection.") + k + " has no effect without convection.hybrid_sigma_max > 0");
+                }
+            }
+        }
         for (const auto& e : check_convection_options(in.momentum)) { err.push_back("convection.smooth_eps_velocity: " + e); }
         for (const auto& e : check_convection_options(in.theta)) { err.push_back("convection.smooth_eps_theta: " + e); }
         if (L != Limiter::van_albada) {

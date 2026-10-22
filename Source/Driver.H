@@ -82,6 +82,14 @@ struct SteadyOptions
     //! (NewtonStage.H). With steady.newton_dtau_inf_at_cap = 1 dtau becomes
     //! infinite once the CFL reaches it.
     amrex::Real newton_cfl_max{amrex::Real(128)};
+    //! steady.confidence (0: off, or in (0, 1]; beyond the plan): the run is
+    //! also steady when this share of the cells meet the residual criterion
+    //! cell by cell and every monitor criterion is met (the confidence
+    //! percentage of Meteodyn WT). steady.confidence_height (0: anywhere, or
+    //! > 0, m): and every cell that does not lies within this height above
+    //! the ground.
+    amrex::Real confidence{0};
+    amrex::Real confidence_height{0};
     int zline_sweeps{2};                 //!< steady.zline_sweeps (zjacobi 2..100, lusgs 1..100): line sweeps per predictor step, for the SIMPLEC stage of 1.15 (Predictor.H)
     SweepKind sweep{SweepKind::zjacobi}; //!< steady.sweep (zjacobi | lusgs): the line solver of the sweeps (sub-phase 2.1, Predictor.H)
     //! steady.newton_preconditioner (identity | simplec): the Newton step's
@@ -151,6 +159,18 @@ public:
     //! false: the driver does not switch forward into the stage (a stage
     //! that has handed the run back for a final pass).
     [[nodiscard]] virtual bool accepts_switch () const { return true; }
+    //! The confidence of the last iterate (steady.confidence): the share of
+    //! the valid cells whose scaled residuals are all below threshold (one
+    //! per residual_names(), in the units of residual_norms()), and the
+    //! largest height above the ground of a cell that is not. Collective;
+    //! false (nothing computed) for a stage without cell residuals.
+    //! The driver's relative residual r_n after the iterate (Driver::step), for a stage that adapts to it.
+    virtual void note_relative_residual (amrex::Real /*r*/) {}
+    [[nodiscard]] virtual bool confidence (const std::vector<amrex::Real>& /*threshold*/, amrex::Real& /*share*/,
+                                           amrex::Real& /*height*/) const
+    {
+        return false;
+    }
 };
 
 struct IterationRecord
@@ -232,7 +252,13 @@ public:
     DriverResult run (State& q);
 
     [[nodiscard]] const DriverHistory& history () const { return m_h; }
-    [[nodiscard]] SteadyVerdict verdict () const { return m_criterion.verdict(); }
+    //! The criterion's verdict, Steady also after a confidence stop.
+    [[nodiscard]] SteadyVerdict verdict () const;
+    //! The confidence of the last iteration (steady.confidence > 0 and a stage
+    //! that computes it; else share -1) and the height of its highest
+    //! unconverged cell.
+    [[nodiscard]] amrex::Real confidence_share () const { return m_conf_share; }
+    [[nodiscard]] amrex::Real confidence_height () const { return m_conf_height; }
     [[nodiscard]] int stage () const { return m_h.stage; }
     [[nodiscard]] amrex::Real cfl () const { return m_h.cfl; }
     //! Continue from a saved history: the criterion, the SER state (the CFL,
@@ -280,6 +306,9 @@ private:
     DriverHistory m_h;
     amrex::MultiFab m_dtau;
     bool m_need_init{true};
+    amrex::Real m_conf_share{-1};
+    amrex::Real m_conf_height{0};
+    bool m_conf_steady{false};
 };
 
 } // namespace gust

@@ -104,6 +104,9 @@ struct ClosureOptions
     amrex::Real ri_gate{0};
     FaceMean face_mean{FaceMean::arithmetic};
     WallDistanceKind wall_distance{WallDistanceKind::terrain_height};
+    //! turb.realizability = C_r (0: off, or finite and > 0; beyond the plan): nu_t <= C_r k / S
+    //! (ClosureWake.H), applied to the new nu_t before the nu_t relaxation.
+    amrex::Real realizability{0};
 };
 
 //! Problems with the options, one message per problem, each naming turb.<key>.
@@ -119,6 +122,9 @@ struct ClosureFields
 {
     amrex::MultiFab nu, gamma_theta, gamma_tke, nut;
     amrex::MultiFab length, Rt, Ps, Pb, eps, dSdk;
+    //! nu_t,new / cap (ClosureWake.H; 0 without turb.realizability), on the closure's cells: where it is
+    //! >= 1 the cap holds nu_t (HybridConvection.H reads it).
+    amrex::MultiFab cap_ratio;
     //! The exact d S_k / d k of the kernel (dual numbers, the relaxation
     //! weight on nu_t) and d nu_t / d k, for a Newton diagonal
     //! (max(dSdk, -dSdk_exact) keeps the sign; the plan's task 5).
