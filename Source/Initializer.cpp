@@ -11,13 +11,16 @@
 #include <cmath>
 #include <limits>
 #include <string>
+#include <utility>
 
 namespace gust {
 
 namespace {
 
 const char* const kKeys[] = {"first_guess", "z_agl_min", "alpha_h", "alpha_v", "k_decay_height", "obrien", "projection",
-                             "column_tol", "column_max_iterations"};
+                             "column_tol", "column_max_iterations", "column_stability", "column_mol",
+                             "column_surface_theta", "column_target_u", "column_target_v", "column_target_height",
+                             "column_rib_max", "column_rib_min"};
 
 //! A profile component at every point (ghosts included) of a field of type
 //! T, at the point's height above its column's ground floored at h_min.
@@ -73,6 +76,19 @@ InitOptions read_init_options ()
     opt.projection = (proj == 1);
     pp.query("column_tol", opt.column_tol);
     pp.query("column_max_iterations", opt.column_max_iterations);
+    std::string cs = "mol";
+    pp.query("column_stability", cs);
+    if (cs == "mol") { opt.column_stability = InitOptions::ColumnStability::mol; }
+    else if (cs == "heat_flux") { opt.column_stability = InitOptions::ColumnStability::heat_flux; }
+    else if (cs == "surface_temperature") { opt.column_stability = InitOptions::ColumnStability::surface_temperature; }
+    else { amrex::Abort("gust: init.column_stability = " + cs + ": must be mol, heat_flux or surface_temperature"); }
+    pp.query("column_mol", opt.column_mol);
+    pp.query("column_surface_theta", opt.column_surface_theta);
+    pp.query("column_target_u", opt.column_target_u);
+    pp.query("column_target_v", opt.column_target_v);
+    pp.query("column_target_height", opt.column_target_height);
+    pp.query("column_rib_max", opt.column_rib_max);
+    pp.query("column_rib_min", opt.column_rib_min);
     pp.query("z_agl_min", opt.z_agl_min);
     pp.query("alpha_h", opt.alpha_h);
     pp.query("alpha_v", opt.alpha_v);
@@ -106,18 +122,52 @@ std::vector<std::string> check_init_options (const InitOptions& opt)
     bad(opt.k_decay_height, "k_decay_height", "finite and >= 0 (m; 0: no decay)", [&] { return opt.k_decay_height >= 0; });
     bad(opt.column_tol, "column_tol", "finite and > 0", [&] { return opt.column_tol > 0; });
     if (opt.column_max_iterations < 1) { err.emplace_back("init.column_max_iterations must be >= 1"); }
+    using CS = InitOptions::ColumnStability;
+    bad(opt.column_mol, "column_mol", "0 (neutral) or finite with |L| >= 1 (m)",
+        [&] { return opt.column_mol == 0 || std::abs(opt.column_mol) >= 1; });
+    bad(opt.column_surface_theta, "column_surface_theta", "finite and >= 0 (K; > 0 with init.column_stability = "
+        "surface_temperature)", [&] { return opt.column_surface_theta >= 0; });
+    if (opt.column_stability == CS::surface_temperature && !(opt.column_surface_theta > 0)) {
+        err.emplace_back("init.column_stability = surface_temperature needs init.column_surface_theta > 0 (K)");
+    }
+    bad(opt.column_rib_max, "column_rib_max", "finite and > 0", [&] { return opt.column_rib_max > 0; });
+    bad(opt.column_rib_min, "column_rib_min", "finite and < 0", [&] { return opt.column_rib_min < 0; });
+    bad(opt.column_target_u, "column_target_u", "finite (m/s)", [&] { return true; });
+    bad(opt.column_target_v, "column_target_v", "finite (m/s)", [&] { return true; });
+    bad(opt.column_target_height, "column_target_height", "finite and >= 0 (m; > 0 with a target wind)",
+        [&] { return opt.column_target_height >= 0; });
+    const bool target = opt.column_target_u != 0 || opt.column_target_v != 0;
+    if (target && !(opt.column_target_height > 0)) {
+        err.emplace_back("init.column_target_u, init.column_target_v need init.column_target_height > 0 (m)");
+    }
+    if (!target && opt.column_target_height > 0) {
+        err.emplace_back("init.column_target_height has no effect without init.column_target_u or init.column_target_v");
+    }
     auto given = [&] (const char* k) { for (const auto& g : opt.given) { if (g == k) { return true; } } return false; };
+    if (!target && (given("column_target_u") || given("column_target_v"))) {
+        err.emplace_back("init.column_target_u, init.column_target_v are both 0: no target wind (leave them out)");
+    }
     if (opt.first_guess == InitOptions::FirstGuess::none) {
         for (const auto& k : opt.given) {
             if (k != "first_guess") { err.emplace_back("init." + k + " has no effect without init.first_guess = profile or column"); }
         }
     } else {
         if (opt.first_guess != InitOptions::FirstGuess::column) {
-            for (const char* k : {"column_tol", "column_max_iterations"}) {
+            for (const char* k : {"column_tol", "column_max_iterations", "column_stability", "column_mol",
+                                  "column_surface_theta", "column_target_u", "column_target_v", "column_target_height",
+                                  "column_rib_max", "column_rib_min"}) {
                 if (given(k)) { err.emplace_back(std::string("init.") + k + " has no effect without init.first_guess = column"); }
             }
-        } else if (given("k_decay_height")) {
-            err.emplace_back("init.k_decay_height would decay the column's converged k again: not with init.first_guess = column");
+        } else {
+            if (given("k_decay_height")) {
+                err.emplace_back("init.k_decay_height would decay the column's converged k again: not with init.first_guess = column");
+            }
+            const std::pair<const char*, CS> own[] = {{"column_mol", CS::mol}, {"column_surface_theta", CS::surface_temperature}};
+            for (const auto& [k, mode] : own) {
+                if (given(k) && opt.column_stability != mode) {
+                    err.emplace_back(std::string("init.") + k + " has no effect with this init.column_stability");
+                }
+            }
         }
         if (!opt.projection) {
             for (const char* k : {"alpha_h", "alpha_v"}) {
@@ -218,7 +268,7 @@ amrex::Real obrien_omega (const amrex::MultiFab& u, const amrex::MultiFab& v, co
 
 amrex::Real first_guess_state (const InitOptions& opt, const BoundaryInputs& bc, const Mesh& mesh,
                                const amrex::Geometry& geom, State& q, const CoriolisOptions& coriolis,
-                               const InflowProfile* column)
+                               const InflowProfile* column, bool column_theta)
 {
     {
         const auto err = check_init_options(opt);
@@ -257,17 +307,20 @@ amrex::Real first_guess_state (const InitOptions& opt, const BoundaryInputs& bc,
     }
     // 2. theta from the sounding (absolute height; the reference itself, so
     // one ghost cell of the state is filled and the second stays 0 until the
-    // boundary fill), k from the profile with the decay, p' = 0.
+    // boundary fill), or from a stratified column by height above the ground
+    // (column_theta, ghosts included), k from the profile with the decay, p' = 0.
     fill_from_profile<stencil::CC>(q.tke, 3, prof, opt.z_agl_min, opt.k_decay_height, z, klo);
-    {
+    if (column_theta && column != nullptr) {
+        fill_from_profile<stencil::CC>(q.theta, 2, prof, opt.z_agl_min, 0, z, klo);
+    } else {
         amrex::MultiFab theta_ref(q.p.boxArray(), q.p.DistributionMap(), 1, 1);
         fill_theta_ref(bc.theta_ref, z, theta_ref);
         q.theta.setVal(0.0);
         amrex::MultiFab::Copy(q.theta, theta_ref, 0, 0, 1, 1);
     }
-    // p' = -int_z^top g (theta - theta_ref)/theta_0 dz is 0: theta is the
-    // reference itself. (The integration comes with the first guess whose
-    // theta differs from the sounding.)
+    // p' = -int_z^top g (theta - theta_ref)/theta_0 dz is 0 when theta is the
+    // reference itself. With the column's theta it is left 0 too: the stage's
+    // first pressure corrections build the hydrostatic p' of the stratification.
     q.p.setVal(0.0);
 
     // 3. O'Brien: w0 from the column continuity with the top residual removed.
@@ -290,10 +343,10 @@ PoissonOptions initializer_poisson_options (const InitOptions& opt, const Poisso
 
 InitResult initialize_state (const InitOptions& opt, const BoundaryInputs& bc, const PoissonOptions& popt, const Mesh& mesh,
                              const amrex::Geometry& geom, State& q, amrex::MultiFab* lambda, const CoriolisOptions& coriolis,
-                             const InflowProfile* column)
+                             const InflowProfile* column, bool column_theta)
 {
     InitResult res;
-    res.obrien_top_residual = first_guess_state(opt, bc, mesh, geom, q, coriolis, column);
+    res.obrien_top_residual = first_guess_state(opt, bc, mesh, geom, q, coriolis, column, column_theta);
     if (opt.first_guess == InitOptions::FirstGuess::none) { return res; }
     const amrex::MultiFab& z = q.z_phys_nd;
     if (!opt.projection) {

@@ -7,6 +7,8 @@ data and the k–ε model. *Environmental Fluid Mechanics* 1, 71–106.
 Burchard, H., Petersen, O. (1999). Models of turbulence in the marine environment — a comparative study of
 two-equation turbulence models. *Journal of Marine Systems* 21, 29–53.
 
+Dyer, A. J. (1974). A review of flux-profile relationships. *Boundary-Layer Meteorology* 7, 363–372.
+
 Forthofer, J. M., Butler, B. W., Wagenbrenner, N. S. (2014). A comparison of three approaches for simulating
 fine-scale surface winds in support of wildland fire management. Part I. Model formulation and comparison against
 measurements. *International Journal of Wildland Fire* 23, 969–981.
@@ -25,6 +27,9 @@ Meteorology* 9, 197–203.
 
 Sherman, C. A. (1978). A mass-consistent model for wind fields over complex terrain. *Journal of Applied
 Meteorology* 17, 312–319.
+
+Sukoriansky, S., Galperin, B., Perov, V. (2005). Application of a new spectral theory of stably stratified
+turbulence to the atmospheric boundary layer over sea ice. *Boundary-Layer Meteorology* 117, 231–257.
 
 Taylor, P. A., Teunissen, H. W. (1987). The Askervein Hill project: overview and background data.
 *Boundary-Layer Meteorology* 39, 15–39.

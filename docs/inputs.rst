@@ -128,6 +128,15 @@ Quick reference
    * - ``init.column_max_iterations``
      - ``5000``
      - Step limit of the single-column solve
+   * - ``init.column_stability``, ``column_mol``, ``column_surface_theta``
+     - ``mol``, ``0``, ``0``
+     - The column's surface: Obukhov length (0: neutral, θ held), heat flux or surface θ
+   * - ``init.column_target_u``, ``column_target_v``, ``column_target_height``
+     - ``0``, ``0``, ``0``
+     - Target wind of the column: the forcing is adjusted to reach it (0: off)
+   * - ``init.column_rib_max``, ``column_rib_min``
+     - ``4``, ``-4``
+     - Bounds of the bulk Richardson number at the stratified column's surface
    * - **Boundary conditions** (`bc`_)
      -
      -
@@ -197,6 +206,12 @@ Quick reference
    * - ``bc.surface_denominator_floor``
      - ``log_law``
      - Floor of the MOST denominator
+   * - ``bc.surface_stable_functions``
+     - ``businger_dyer``
+     - Stable-side MOST functions: ``businger_dyer`` or ``qnse``
+   * - ``bc.surface_qnse_am``, ``_bm``, ``_ah``, ``_bh``
+     - ``2.5``, ``0.2``, ``2.5``, ``0.2``
+     - QNSE coefficients
    * - **Forcing** (`forcing`_)
      -
      -
@@ -540,7 +555,42 @@ A restart cannot be combined with ``init.*`` keys.
        of :math:`u, v, k` over a step. Raised to 100 machine epsilon in single precision (1.2e-5).
    * - ``init.column_max_iterations``
      - ``5000``
-     - ≥ 1; ``column`` only. The run stops if the column has not converged after this many steps.
+     - ≥ 1; ``column`` only. The run stops if a column has not converged after this many steps. The limit applies
+       to each column solved: the surface search and the target wind solve several (the log gives the total).
+   * - ``init.column_stability``
+     - ``mol``
+     - ``mol``, ``heat_flux`` or ``surface_temperature``; ``column`` only. How the column's surface sets θ
+       (:ref:`stratified column <column-stability>`). ``heat_flux`` takes ``bc.surface_heat_flux`` and needs
+       ``bc.surface_stability = heat_flux``. Any non-neutral surface needs ``forcing.gravity`` > 0 and a Rayleigh
+       layer on θ (``bc.rayleigh_zdamp`` > 0, ``theta`` in ``bc.rayleigh_fields``).
+   * - ``init.column_mol``
+     - ``0``
+     - 0 (neutral: θ held at the sounding, the column before this input) or finite with \|L\| ≥ 1 (m); ``mol`` only.
+       The Obukhov length L (> 0 stable, < 0 unstable). With ``bc.surface_stability = heat_flux`` the 3-D run takes
+       the column's flux (``bc.surface_heat_flux`` is then refused).
+   * - ``init.column_surface_theta``
+     - ``0``
+     - Finite, > 0 (K), required with ``surface_temperature`` and only there: the surface potential temperature.
+   * - ``init.column_target_u``, ``init.column_target_v``
+     - ``0``, ``0``
+     - Finite (m/s); ``column`` only. A target wind at ``init.column_target_height``: the geostrophic wind and the
+       column's Rayleigh reference wind are turned and scaled by the ratio of the target to the column's wind there,
+       the pressure gradient by that ratio times its magnitude, until they agree to 1e-4; the run then uses that
+       forcing. Both 0: off (giving them as 0 is refused). Refused with what would hold the 3-D wind to the deck's
+       inflow profile: a Rayleigh layer on u and v, a sponge or an inflow face; and with a stratified column unless
+       ``bc.surface_stability = heat_flux``.
+   * - ``init.column_target_height``
+     - ``0``
+     - Finite, > 0 (m) with a target wind, and only then: its height above the ground, at most the top cell centre.
+       Below the first cell centre the wind is MOST's profile; above, linear in :math:`\ln(z + z_0)` between centres.
+   * - ``init.column_rib_max``
+     - ``4``
+     - Finite, > 0; a stratified column only. The upper bound of the bulk Richardson number of the column's surface
+       solve (ERF's value). With Businger–Dyer's stable functions the bound is also at most 0.19, below their 0.2
+       limit (:ref:`stratified column <column-stability>`).
+   * - ``init.column_rib_min``
+     - ``-4``
+     - Finite, < 0; a stratified column only. The lower bound (ERF's value).
 
 ``bc``
 ------
@@ -646,6 +696,19 @@ types, the inflow profile and the sounding; the other keys act in the SIMPLEC st
      - ``log_law``
      - ``log_law`` (:math:`m = \min(\ln((d + z_0)/z_0), 1)`) or ``one`` (:math:`m = 1`): the floor of the MOST
        denominator. They differ only where :math:`\ln((d + z_0)/z_0) < 1`.
+   * - ``bc.surface_stable_functions``
+     - ``businger_dyer``
+     - ``businger_dyer`` or ``qnse``: the stable side (:math:`z/L > 0`) of :math:`\phi_m, \phi_h, \psi_m, \psi_h`
+       (:ref:`stable functions <stable-functions>`), for the wall model and the column. *Beyond the plan.* ``qnse`` needs
+       ``bc.surface_stability = heat_flux`` or a stratified column (``init.column_stability``), otherwise the run
+       stops.
+   * - ``bc.surface_qnse_am``, ``bc.surface_qnse_bm``
+     - ``2.5``, ``0.2``
+     - :math:`a_m, b_m` of :math:`\phi_m = (1 + a_m\zeta)/(1 + b_m\zeta)`: :math:`b_m > 0`, :math:`a_m \ge b_m`,
+       finite. ``qnse`` only (otherwise the run stops).
+   * - ``bc.surface_qnse_ah``, ``bc.surface_qnse_bh``
+     - ``2.5``, ``0.2``
+     - :math:`a_h, b_h` of :math:`\phi_h`, as :math:`a_m, b_m`. ``qnse`` only.
 
 The wall model and the inflow profile's equilibrium :math:`k` and :math:`\nu_t` use the turbulence model's
 ``turb.Cmu0`` and ``turb.kappa``, and the inflow profile its ``turb.max_geom_lscale``. Without the SIMPLEC stage

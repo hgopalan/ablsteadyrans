@@ -63,6 +63,11 @@ namespace gust {
 struct InitOptions
 {
     enum class FirstGuess { none, profile, column };
+    //! init.column_stability: how the column's surface sets theta (ColumnGuess.H): a Monin-Obukhov length
+    //! (mol, the default; init.column_mol = 0 is neutral, theta held at the sounding), the surface heat
+    //! flux (heat_flux: bc.surface_heat_flux) or a surface temperature (surface_temperature). Forms of
+    //! amrTerrain's 1-D column solver.
+    enum class ColumnStability { mol, heat_flux, surface_temperature };
     FirstGuess first_guess{FirstGuess::none};
     //! init.projection (0 or 1): the mass-consistent correction of the first
     //! guess; 0 keeps the first guess as it is (the stage's own pressure
@@ -73,6 +78,16 @@ struct InitOptions
     //! iteration limit (>= 1); ColumnGuess.H.
     amrex::Real column_tol{amrex::Real(1.0e-8)};
     int column_max_iterations{5000};
+    ColumnStability column_stability{ColumnStability::mol};
+    amrex::Real column_mol{0};             //!< init.column_mol (m): 0 neutral, else |L| >= 1
+    amrex::Real column_surface_theta{0};   //!< init.column_surface_theta (K, > 0), surface_temperature only
+    //! init.column_target_u, _v (m/s; both 0: off) at init.column_target_height (m, > 0 when on): the forcing is
+    //! adjusted until the column's wind there is this one (ColumnGuess.H).
+    amrex::Real column_target_u{0}, column_target_v{0}, column_target_height{0};
+    //! init.column_rib_max (> 0), init.column_rib_min (< 0): the bounds of the bulk Richardson number of the
+    //! stratified column's surface solve (ERF's +-4, ERF_MOSTStress.H); Businger-Dyer's stable side is further
+    //! capped at 0.19, below its 0.2 limit (ColumnGuess.H column_surface_most).
+    amrex::Real column_rib_max{4}, column_rib_min{-4};
     amrex::Real z_agl_min{0};
     amrex::Real alpha_h{1};
     amrex::Real alpha_v{1};
@@ -108,14 +123,16 @@ struct InitResult
 //! and p' of q (defined on the mesh's layout, z_phys_nd built); returns the
 //! O'Brien top residual (0 without O'Brien). Nothing with first_guess = none.
 //! column, when given (first_guess = column), replaces the inflow profile for
-//! u, v and k (theta stays the sounding at the absolute height).
+//! u, v and k; theta stays the sounding at the absolute height, or with
+//! column_theta (a stratified column whose surface the run shares,
+//! ColumnGuess.H column_sets_theta) is the column's by height above the ground.
 //! The Poisson controls of the projection: popt, with backend gmres_fft when
 //! alpha_v != alpha_h (back end B has no split z-face coefficient).
 PoissonOptions initializer_poisson_options (const InitOptions& opt, const PoissonOptions& popt);
 
 amrex::Real first_guess_state (const InitOptions& opt, const BoundaryInputs& bc, const Mesh& mesh,
                                const amrex::Geometry& geom, State& q, const CoriolisOptions& coriolis = CoriolisOptions{},
-                               const InflowProfile* column = nullptr);
+                               const InflowProfile* column = nullptr, bool column_theta = false);
 
 //! Fill q (defined on the mesh's layout, z_phys_nd built) with the initial
 //! field: the first guess, theta, k and p' as above, then the correction.
@@ -128,7 +145,8 @@ amrex::Real first_guess_state (const InitOptions& opt, const BoundaryInputs& bc,
 //! both before and after). column: as for first_guess_state.
 InitResult initialize_state (const InitOptions& opt, const BoundaryInputs& bc, const PoissonOptions& popt, const Mesh& mesh,
                              const amrex::Geometry& geom, State& q, amrex::MultiFab* lambda = nullptr,
-                             const CoriolisOptions& coriolis = CoriolisOptions{}, const InflowProfile* column = nullptr);
+                             const CoriolisOptions& coriolis = CoriolisOptions{}, const InflowProfile* column = nullptr,
+                             bool column_theta = false);
 
 //! The O'Brien pass alone (for its test): Omega on the z-faces of q's layout
 //! from the column continuity of (u, v) with the top residual removed with

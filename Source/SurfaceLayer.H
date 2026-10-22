@@ -67,6 +67,7 @@
 #include "CVFluxes.H"
 #include "Forcing.H"
 #include "Mesh.H"
+#include "StabilityFunctions.H"
 #include "State.H"
 
 #include <AMReX_Geometry.H>
@@ -89,13 +90,7 @@ namespace gust {
 AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
 void most_phi (amrex::Real zeta, amrex::Real& phi_m, amrex::Real& phi_h) noexcept
 {
-    const amrex::Real one = 1, beta = 5, gamma = 16;   // Dyer 1974, ERF's values
-    const amrex::Real az = std::abs(zeta);
-    const amrex::Real zs = amrex::Real(0.5) * (az + zeta);   // max(zeta, 0)
-    const amrex::Real zu = amrex::Real(0.5) * (zeta - az);   // min(zeta, 0)
-    const amrex::Real r = std::sqrt(one - gamma * zu);       // >= 1
-    phi_m = one + beta * zs + (one / std::sqrt(r) - one);
-    phi_h = one + beta * zs + (one / r - one);
+    most_phi(zeta, StableCoefficients{}, phi_m, phi_h);   // Businger-Dyer, Dyer 1974's 5 and 16 (ERF's values)
 }
 
 struct SurfaceLayerOptions
@@ -121,6 +116,18 @@ struct SurfaceLayerOptions
     amrex::Real Cmu0{amrex::Real(0.5562)};
     //! von Karman constant (> 0), ERF's KAPPA.
     amrex::Real kappa{amrex::Real(0.41)};
+    //! The stable side of the stability functions (StabilityFunctions.H): Businger-Dyer or QNSE.
+    enum class StableFunctions { businger_dyer, qnse };
+    StableFunctions stable_functions{StableFunctions::businger_dyer};
+    //! QNSE's coefficients (qnse only): b > 0, a >= b; ERF's defaults.
+    amrex::Real qnse_am{amrex::Real(2.5)}, qnse_bm{amrex::Real(0.2)};
+    amrex::Real qnse_ah{amrex::Real(2.5)}, qnse_bh{amrex::Real(0.2)};
+    //! The coefficients of the selected stable side.
+    StableCoefficients stable_coefficients () const noexcept
+    {
+        if (stable_functions == StableFunctions::qnse) { return {qnse_am, qnse_bm, qnse_ah, qnse_bh}; }
+        return {};
+    }
 };
 
 //! Problems with the options, one message per problem, naming the option.
@@ -129,7 +136,8 @@ std::vector<std::string> check_surface_layer_options (const SurfaceLayerOptions&
 //! Read the ground's keys, bc.surface_z0, bc.surface_zref,
 //! bc.surface_stability (neutral | heat_flux), bc.surface_heat_flux and
 //! bc.surface_wall_k (dirichlet | source), bc.surface_denominator_floor
-//! (log_law | one), and range-check them; aborts
+//! (log_law | one), bc.surface_stable_functions (businger_dyer | qnse) and
+//! bc.surface_qnse_am, _bm, _ah, _bh, and range-check them; aborts
 //! naming the key. Cmu0 and kappa stay the closure's (sub-phase 1.9).
 SurfaceLayerOptions read_surface_layer_options ();
 

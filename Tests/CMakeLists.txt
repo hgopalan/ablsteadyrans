@@ -38,6 +38,8 @@ add_executable(unit_tests
     Unit_Tests/test_BoundaryConditions.cpp
     Unit_Tests/test_Closure.cpp
     Unit_Tests/test_Initializer.cpp
+    Unit_Tests/test_ColumnStability.cpp
+    Unit_Tests/test_StabilityFunctions.cpp
     Unit_Tests/test_Driver.cpp
     Unit_Tests/test_Predictor.cpp
     Unit_Tests/test_LineSweeps.cpp
@@ -737,6 +739,19 @@ gust_add_test(NAME rt_steady_column_restart_matches NP 1 LABELS "regression;smok
               FIXTURES_REQUIRED steady_column_continued steady_column_straight
               COMMAND ${FCOMPARE} --rel_tol 1e-14 --abs_tol 1e-300 steady_column_restart_plt00080
                       straight/steady_column_restart_plt00080)
+# Beyond the plan: the column's target wind carried into the 3-D run (init.column_target_*), neutral and with a
+# stable column (L = 1000 m) whose flux and theta the run takes (bc.surface_stability = heat_flux). The 3-D wind at
+# 10 m is the target to 0.5 % and, stable, the 3-D surface's L is 1000 m to 2 %.
+# Tests/Canonical_RANS/Column_Target/check_column_target.py.
+set(COLUMN_TARGET_CASE ${CMAKE_CURRENT_SOURCE_DIR}/Canonical_RANS/Column_Target)
+gust_add_test(NAME rt_column_target NP 1 LABELS "regression"
+              PREFIX ${Python3_EXECUTABLE} ${COLUMN_TARGET_CASE}/check_column_target.py --target 8 --height 10 --z0 0.1 --
+              COMMAND $<TARGET_FILE:gust> ${COLUMN_TARGET_CASE}/inputs_column_target ${GUST_TEST_AMREX_FLAGS})
+gust_add_test(NAME rt_column_target_mol NP 1 LABELS "regression"
+              PREFIX ${Python3_EXECUTABLE} ${COLUMN_TARGET_CASE}/check_column_target.py --target 8 --height 10 --z0 0.1
+                     --mol 1000 --
+              COMMAND $<TARGET_FILE:gust> ${COLUMN_TARGET_CASE}/inputs_column_target init.column_mol=1000
+                      bc.surface_stability=heat_flux ${GUST_TEST_AMREX_FLAGS})
 # ERF's Neutral_ABL_Flat to steady (about 13 s on two ranks); ERF's own
 # check_neutral.py --physics on the turbulence plotfile (extern_erf/
 # check_neutral.py). Regression label, not smoke (the run time).

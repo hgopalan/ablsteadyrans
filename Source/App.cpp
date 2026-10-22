@@ -25,6 +25,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <memory>
+#include <limits>
 #include <string>
 
 namespace gust {
@@ -145,6 +146,7 @@ void run ()
         err.emplace_back("init.first_guess and io.restart are exclusive (a restart keeps its state)");
     }
     for (const auto& e : check_column_guess(iopt, sopt, fopt, bin, surf, surface_layer)) { err.push_back(e); }
+    for (const auto& e : check_stable_functions(iopt, surf, surface_layer)) { err.push_back(e); }
     if (!err.empty()) {
         std::string all = "gust: invalid inputs:";
         for (const auto& e : err) { all += "\n  " + e; }
@@ -187,12 +189,61 @@ void run ()
             // initializer runs on the coarsest level instead.
             if (iopt.first_guess == InitOptions::FirstGuess::column) {
                 const ColumnGuessResult cg = run_column_guess(in, iopt, sopt, bin, surf, surface_layer, copt, fopt, "column_guess.dat");
-                char cl[256];
-                std::snprintf(cl, sizeof(cl), "gust: column guess: converged after %d steps (%.3f s), %d levels, "
-                              "u* %.4f m/s, u %.4f v %.4f m/s at the top\n", cg.iterations, cg.wall_seconds,
+                char cl[512];
+                std::snprintf(cl, sizeof(cl), "gust: column guess: converged after %d steps in %d columns (%.3f s), %d levels, "
+                              "u* %.4f m/s, u %.4f v %.4f m/s at the top\n", cg.iterations, cg.columns, cg.wall_seconds,
                               static_cast<int>(cg.z.size()) - 1, static_cast<double>(cg.ustar), static_cast<double>(cg.u.back()),
                               static_cast<double>(cg.v.back()));
                 amrex::Print() << cl;
+                // What a restart deck needs (init.* keys are refused there and the checkpoint holds the state only).
+                std::string restart_lines;
+                if (column_theta_evolves(iopt, surf)) {
+                    std::snprintf(cl, sizeof(cl), "gust: column guess: surface heat flux %.4e K m/s, L %.4g m, surface theta %.4f K "
+                                  "after %d surface adjustments\n", static_cast<double>(cg.heat_flux),
+                                  cg.inv_L != 0 ? 1.0 / static_cast<double>(cg.inv_L) : std::numeric_limits<double>::infinity(),
+                                  static_cast<double>(cg.theta_surface), cg.flux_iterations);
+                    amrex::Print() << cl;
+                    const bool mol = iopt.column_stability == InitOptions::ColumnStability::mol;
+                    if (surf.stability == SurfaceLayerOptions::Stability::heat_flux) {
+                        if (mol) {   // the 3-D surface takes the column's flux (check_column_guess)
+                            surf.heat_flux = cg.heat_flux;
+                            amrex::Print() << "gust: column guess: the run takes this flux as bc.surface_heat_flux\n";
+                            std::snprintf(cl, sizeof(cl), "  bc.surface_heat_flux = %.9g\n", static_cast<double>(cg.heat_flux));
+                            restart_lines += cl;
+                        }
+                    } else {
+                        amrex::Print() << "gust: column guess: the 3-D surface is neutral; for the same surface set "
+                                          "bc.surface_stability = heat_flux"
+                                       << (mol ? " (the run then takes this flux)\n"
+                                               : " and bc.surface_heat_flux to this flux with init.column_stability = heat_flux\n");
+                    }
+                }
+                if (cg.target_iterations > 0) {
+                    // The target wind: the 3-D run takes the forcing the column was adjusted to.
+                    if (fopt.coriolis.enabled && fopt.coriolis.geostrophic) {
+                        fopt.coriolis.ug = cg.ug;
+                        fopt.coriolis.vg = cg.vg;
+                        std::snprintf(cl, sizeof(cl), "  forcing.ug = %.9g\n  forcing.vg = %.9g\n", static_cast<double>(cg.ug),
+                                      static_cast<double>(cg.vg));
+                        restart_lines += cl;
+                    }
+                    fopt.pressure_gradient[0] = cg.pressure_gradient_x;
+                    fopt.pressure_gradient[1] = cg.pressure_gradient_y;
+                    if (cg.pressure_gradient_x != 0 || cg.pressure_gradient_y != 0) {
+                        std::snprintf(cl, sizeof(cl), "  forcing.pressure_gradient = %.9g %.9g\n",
+                                      static_cast<double>(cg.pressure_gradient_x), static_cast<double>(cg.pressure_gradient_y));
+                        restart_lines += cl;
+                    }
+                    std::snprintf(cl, sizeof(cl), "gust: column guess: target wind reached after %d forcing adjustments; the run "
+                                  "takes geostrophic wind (%.6g, %.6g) m/s and pressure gradient (%.6g, %.6g) m/s^2\n",
+                                  cg.target_iterations - 1, static_cast<double>(cg.ug), static_cast<double>(cg.vg),
+                                  static_cast<double>(cg.pressure_gradient_x), static_cast<double>(cg.pressure_gradient_y));
+                    amrex::Print() << cl;
+                }
+                if (!restart_lines.empty()) {
+                    amrex::Print() << "gust: column guess: a restart from this run's checkpoints needs these inputs in place of "
+                                      "the init.* keys:\n" << restart_lines;
+                }
                 if (cg.tol > static_cast<double>(iopt.column_tol)) {
                     std::snprintf(cl, sizeof(cl), "gust: column guess: init.column_tol = %.3e lifted to %.3e (100 epsilon of Real)\n",
                                   static_cast<double>(iopt.column_tol), cg.tol);
@@ -202,7 +253,8 @@ void run ()
             }
         }
         if (initialize && !sequencing) {
-            const InitResult r = initialize_state(iopt, bin, popt, mesh, geom, state, nullptr, fopt.coriolis, column.get());
+            const InitResult r = initialize_state(iopt, bin, popt, mesh, geom, state, nullptr, fopt.coriolis, column.get(),
+                                                  column_sets_theta(iopt, surf));
             print_initializer(r, iopt, popt, "");
         }
     } else {
