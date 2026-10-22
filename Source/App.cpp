@@ -230,8 +230,9 @@ void run ()
                     fopt.pressure_gradient[0] = cg.pressure_gradient_x;
                     fopt.pressure_gradient[1] = cg.pressure_gradient_y;
                     if (cg.pressure_gradient_x != 0 || cg.pressure_gradient_y != 0) {
-                        std::snprintf(cl, sizeof(cl), "  forcing.pressure_gradient = %.9g %.9g\n",
-                                      static_cast<double>(cg.pressure_gradient_x), static_cast<double>(cg.pressure_gradient_y));
+                        std::snprintf(cl, sizeof(cl), "  forcing.pressure_gradient = %.9g %.9g %.9g\n",
+                                      static_cast<double>(cg.pressure_gradient_x), static_cast<double>(cg.pressure_gradient_y),
+                                      static_cast<double>(fopt.pressure_gradient[2]));
                         restart_lines += cl;
                     }
                     std::snprintf(cl, sizeof(cl), "gust: column guess: target wind reached after %d forcing adjustments; the run "

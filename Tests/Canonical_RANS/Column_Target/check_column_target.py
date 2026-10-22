@@ -5,7 +5,8 @@
 
 Runs COMMAND (the application on Tests/Canonical_RANS/Column_Target/inputs_column_target) and checks:
   * the column reached the target ("target wind reached" in its output) and the log lists the restart inputs
-    (forcing.pressure_gradient; with --mol also bc.surface_heat_flux);
+    as input lines (forcing.pressure_gradient with its three values, the first the forcing the run took; with
+    --mol also bc.surface_heat_flux);
   * the 3-D wind at --height, the planar mean of the last plotfile interpolated linearly in ln(z + z0) between
     the cell centres (as the column does), is the target to 0.5 % (the 3-D discretization differs slightly from
     the column's), and its direction along x to 1e-3 rad;
@@ -55,8 +56,13 @@ def main(argv):
 
     out = run.stdout
     check("column reached the target", 1.0 if "target wind reached" in out else 0.0, 1.0, 0.0, "abs")
-    check("restart input forcing.pressure_gradient listed", 1.0 if "  forcing.pressure_gradient = " in out else 0.0,
-          1.0, 0.0, "abs")
+    # The restart line is an input line: three values, the first the forcing the run reports taking.
+    pg = [ln.split("=")[1].split() for ln in out.splitlines() if ln.startswith("  forcing.pressure_gradient = ")]
+    check("restart input forcing.pressure_gradient: 3 values", len(pg[0]) if pg else 0, 3, 0.0, "abs")
+    took = [ln for ln in out.splitlines() if "the run takes geostrophic wind" in ln]
+    if pg and len(pg[0]) == 3 and took:
+        fx = float(took[0].split("pressure gradient (")[1].split(",")[0])
+        check("restart input forcing.pressure_gradient x vs the forcing taken", float(pg[0][0]), fx, 1e-5, "rel")
     wrote = [ln.split()[-1] for ln in out.splitlines() if ln.startswith("gust: wrote ")]
     plt = [n for n in wrote if n.endswith(tuple("0123456789")) and "_plt" in n]
     turb = [n for n in wrote if "_turb" in n]
