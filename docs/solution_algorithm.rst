@@ -603,6 +603,27 @@ a slowly converging monitor, a small change over the window alone can stop 10 % 
 The outcome is ``Steady``, ``NotSteady`` (listing what has not converged) or ``Diverged`` (a NaN or infinity).
 Oscillations with a period up to :math:`4W` are never declared steady.
 
+.. _confidence-stop:
+
+**Confidence stop.** *Beyond the plan.* A run can sit at a fixed state where most of the field has converged
+and a few cells (often in a separated lee) have not. With ``steady.confidence`` :math:`= c > 0` the run is also
+steady when
+
+- the share of cells that meet the residual criterion cell by cell is at least :math:`c`. A cell meets it when
+  :math:`|r_{q,i}|/s_q \le \min\bigl(\tau_R,\ 10^{-N} \max(R_q^\mathrm{ref}, \tau_R)\bigr)` for :math:`p, \theta, k` at
+  the cell and :math:`u, v, w` on both of its faces: the threshold of the root-mean-square criterion, applied to
+  each cell (if every cell meets it, so does the norm);
+- every monitor criterion above is met; and
+- with ``steady.confidence_height`` :math:`> 0`, every cell that does not meet it lies within that height above
+  the ground.
+
+The stop is not tried during the reference hold. Its limits: the residual of the cells that do not meet the
+threshold is not bounded (1 % of cells at 100 times the threshold give a norm 10 times the threshold), and the
+monitors are global, so a limit cycle confined to a few cells that does not move them can be declared steady. The
+iteration line prints the share and the height of the highest unconverged cell, and a run stopped this way names
+the stop in its verdict. The SIMPLEC stage computes it; the stop does not act during the Newton stage. A stop by
+confidence is not recorded in the checkpoint (a restart from it iterates again).
+
 Stage switching, restart and reproducibility
 --------------------------------------------
 

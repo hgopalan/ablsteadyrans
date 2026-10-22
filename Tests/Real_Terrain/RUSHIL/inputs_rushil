@@ -1,0 +1,62 @@
+# RUSHIL two-dimensional hills (ERCOFTAC AC5-05; Khurshudyan, Snyder & Nekrasov 1981) at the full scale of Manning,
+# Hancock & Whiting (2010, Wind Engineering 34, 477; tunnel x1000): H = 117 m, a = 3, 5 or 8 H (terrain.file
+# = hill3.xyz, hill5.xyz or hill8.xyz from rushil.py prepare, summit at x = 4680 m), z0 = 0.157 m, the
+# measured flat-floor profile as inflow (bc.inflow_file = inflow.txt), the ceiling at 13.7 H = 1603 m (the height
+# of the measured free stream, as the ERCOFTAC computations), slip; periodic in y; truly neutral.
+#   * 936 x 8 x 64 cells over +-40 H: 10 m horizontally (Meteodyn WT's 10 m in Manning et al.), a 1 m first layer
+#     stretched by 1.0786 to 1603 m; boxes 72 x 8; grid sequencing over 3 levels.
+mesh.n_cell           = 936 8 64
+mesh.prob_lo          = 0. 0. 0.
+mesh.prob_hi          = 9360. 80. 1603.
+mesh.is_periodic      = 0 1 0
+mesh.max_grid_size    = 72 8
+mesh.dz0              = 1.
+mesh.stretch_ratio    = 1.0786
+mesh.hierarchy_levels = 3
+
+terrain.type      = xyz
+terrain.smoothing = 0
+
+bc.xlo = inflow
+bc.xhi = outflow
+bc.zlo = surface_layer
+bc.zhi = slip_wall
+bc.surface_z0      = 0.157
+bc.inflow_profile  = file
+bc.theta_profile_z = 0.
+bc.theta_profile   = 300.
+
+init.first_guess = profile
+init.alpha_h     = 1.0
+init.alpha_v     = 0.5
+
+solver.poisson_reltol   = 1.e-10
+solver.poisson_max_iter = 200
+
+forcing.gravity   = 0.
+turb.tke_floor    = 1.e-6
+# Inflow drift and the lee: U(0.1 H)/U(0.8 H) of the tunnel profile falls 12 % over the 40 H fetch with the default
+# 30 m cap, 4 % with 100 m, 0.6 % uncapped (flat-terrain test); uncapped, the Hill 3 bubble shortens to
+# 0.63a-1.27a (0.58a-1.45a with 100 m). 100 m: the l0 of Meteodyn WT's k-L model and the Blackadar length of YSU.
+turb.max_geom_lscale = 100.
+simplec.w_vnn_cap = 16
+
+# The recommended GUST - CFD setting (lee wake): the nu_t cap C_r k/S with C_r = Cmu0^2, nu_t under-
+# relaxation, a 10 % blend towards upwind where the cap holds nu_t below 2.5 terrain heights, and (except where
+# the deck sets its own) a 100 m Blackadar length.
+turb.realizability = 0.309
+turb.nut_relax     = 0.5
+convection.hybrid_sigma_max = 0.1
+convection.hybrid_height    = 292.
+
+steady.stage          = simplec
+steady.sweep          = lusgs
+steady.zline_sweeps   = 2
+steady.cfl_max        = 16
+steady.sequencing     = 1
+steady.max_iterations = 20000
+
+io.plot_file        = plt
+io.turb_plot_file   = turb
+io.chk_file         = chk
+io.write_checkpoint = 0

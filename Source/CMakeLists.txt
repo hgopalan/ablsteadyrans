@@ -26,6 +26,8 @@ set(GUST_SOURCES
     InflowProfile.cpp
     BoundaryConditions.cpp
     Closure.cpp
+    ClosureWake.cpp
+    HybridConvection.cpp
     ColumnGuess.cpp
     Initializer.cpp
     PseudoTime.cpp

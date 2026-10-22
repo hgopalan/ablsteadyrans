@@ -1,0 +1,53 @@
+# Horizontal-homogeneity test of the Big Southern Butte setup (Richards and Hoxey 1993; Gopalan 2018,
+# JWEIA 182, 322): inputs_bsb_wn on flat ground with the wind along x (inflow at xlo, outflow at xhi, slip
+# sides), the same 68 m mesh, 18.7 km fetch, log-law inflow, slip top and no driving force. A consistent
+# setup carries the inflow profile to the outflow unchanged; tools hhabl_drift.py reports the drift.
+mesh.n_cell           = 272 296 20
+mesh.prob_lo          = 0. 0. 0.
+mesh.prob_hi          = 18690. 20160. 2806.
+mesh.max_grid_size    = 64
+mesh.dz0              = 68.
+mesh.stretch_ratio    = 1.0706
+mesh.hierarchy_levels = 3
+
+terrain.type = flat
+
+bc.xlo = inflow
+bc.xhi = outflow
+bc.ylo = slip_wall
+bc.yhi = slip_wall
+bc.zlo = surface_layer
+bc.zhi = slip_wall
+bc.surface_z0       = 0.01
+bc.inflow_profile   = log_law
+bc.inflow_ustar     = 0.5963
+bc.inflow_z0        = 0.01
+bc.inflow_direction = 0.
+bc.theta_profile_z  = 0.
+bc.theta_profile    = 300.
+bc.rayleigh_zdamp    = 2000.
+bc.rayleigh_dampcoef = 0.2
+bc.rayleigh_fields   = w
+
+init.first_guess = profile
+init.alpha_h     = 1.0
+init.alpha_v     = 0.5
+
+solver.poisson_reltol   = 1.e-10
+solver.poisson_max_iter = 200
+
+forcing.gravity  = 0.
+turb.tke_floor   = 1.e-6
+simplec.w_vnn_cap = 16
+
+steady.stage          = simplec
+steady.sweep          = lusgs
+steady.zline_sweeps   = 2
+steady.cfl_max        = 16
+steady.sequencing     = 1
+steady.max_iterations = 20000
+
+io.plot_file        = plt
+io.turb_plot_file   = turb
+io.chk_file         = chk
+io.write_checkpoint = 0

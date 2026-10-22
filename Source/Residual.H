@@ -104,6 +104,10 @@ struct ResidualInputs
     ReferenceProfile theta_ref;                   //!< hydrostatic reference theta_ref(z), a 1-D profile
     ConvectionOptions momentum;                   //!< momentum convection (k is always bounded upwind)
     ConvectionOptions theta;                      //!< theta convection
+    //! The upwind blend of the momentum and theta convection (HybridConvection.H; null: none): a cell field
+    //! with one ghost cell, owned by the SIMPLEC stage.
+    const amrex::MultiFab* hybrid_sigma{nullptr};
+    HybridOptions hybrid;                         //!< convection.hybrid_* (the stage reads them)
     BuoyancyOptions buoyancy;
     CoriolisOptions coriolis;
     //! The constant kinematic pressure-gradient force (m/s^2) on u, v, w (Forcing.H).

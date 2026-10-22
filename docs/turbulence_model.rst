@@ -150,3 +150,115 @@ from 7.2 m to 17.3 m. The gate changes stratified answers: in the stable
 surface layer :math:`Ri` is about 0.05–0.2, so :math:`Ri_0` = 0.01 lowers :math:`N^2` there by 3.8 % (at
 :math:`Ri` = 0.05) to 0.25 % (at 0.2).
 It is off by default (:doc:`results`).
+
+.. _nut-cap:
+
+Eddy-viscosity cap for separated flow
+-------------------------------------
+
+*Beyond the plan.* A one-equation closure with an algebraic length keeps :math:`\nu_t` large in the shear layer
+that leaves a crest, so the flow reattaches too soon behind steep terrain (no separation behind the Bolund
+escarpment or the Ishihara–Zhou ridge with the default closure). With ``turb.realizability`` :math:`= C_r > 0` the
+new eddy viscosity is capped before the relaxation of ``turb.nut_relax``:
+
+.. math::
+
+   \nu_t = w\,\min\!\Bigl(\nu_t^\mathrm{new},\ C_r\,\frac{k}{S}\Bigr) + (1 - w)\,\nu_t^\mathrm{old},
+   \qquad S = \sqrt{2 S_{ij} S_{ij}},
+
+with :math:`w` = ``turb.nut_relax`` and :math:`\nu_t^\mathrm{old}` the stored value of the last iteration. The form
+is that of the SST limiter (Bradshaw's :math:`-\overline{uw}/k = a_1 = 0.31`); Durbin's (1996) time-scale bound gives
+:math:`\alpha/\sqrt{6} \approx 0.245` for :math:`\alpha = 0.6`. Unlike SST it acts everywhere, not only inside the
+boundary layer. With the closure's relations, :math:`\nu_t S/k = C_{\mu 0}^2 \sqrt{P/\varepsilon}` in neutral flow, so the
+cap acts where :math:`P/\varepsilon > (C_r/C_{\mu 0}^2)^2`. :math:`C_r = 0.309` is 0.1 % below :math:`C_{\mu 0}^2 = 0.30936`
+for the default :math:`C_{\mu 0}`: the cap is active in an equilibrium surface layer too, where it lowers
+:math:`\nu_t` by 0–3 % (most near the wall, where :math:`P/\varepsilon` is 1.04–1.05 in the first cells), and it limits
+:math:`\nu_t` strongly where the strain far exceeds equilibrium, as in the shear layer leaving a crest. Applying the
+cap before the relaxation lets :math:`w < 1` damp the cap's changes between iterations: an imposed two-iteration
+oscillation of the cap passes with the factor :math:`w/(2 - w)` (1/3 at :math:`w = 0.5`) instead of 1. Without the
+option the cap is the largest real number and the closure is unchanged bit for bit. The derivative the Newton stage
+reads follows the cap (:math:`\mathrm{d}\,\mathrm{cap}/\mathrm{d}k = \mathrm{cap}/k`); the column first guess
+(``init.first_guess = column``) does not apply it.
+
+.. _hybrid-convection:
+
+Near-ground blend towards upwind
+--------------------------------
+
+*Beyond the plan.* With the cap, the second-order limited convection can leave a steady run at a fixed,
+unconverged state (the rough Ishihara–Zhou ridge stalls at a relative residual of 0.17 with
+``van_leer`` and ``van_albada``; first-order upwind converges). With ``convection.hybrid_sigma_max``
+:math:`= \sigma_\mathrm{max} > 0` the momentum and θ convection of the residual become
+
+.. math::
+
+   C = C_\mathrm{hi} + \sigma\,(C_\mathrm{up} - C_\mathrm{hi}), \qquad
+   \sigma_t = \sigma_\mathrm{max}\,s\!\Bigl(\frac{a - 0.8}{0.2}\Bigr)\,
+   s\!\Bigl(\frac{1.5 H_h - d}{0.5 H_h}\Bigr), \qquad a = \frac{\nu_t^\mathrm{new}}{C_r k / S},
+
+- :math:`C_\mathrm{hi}`: the limited scheme of ``convection.limiter``; :math:`C_\mathrm{up}`: first-order upwind
+  (the scheme of the implicit side);
+- :math:`s(t) = t^2(3 - 2t)` on :math:`[0, 1]` (0 below, 1 above): a smooth step;
+- :math:`a`: the ratio of the closure's eddy viscosity to the cap (:math:`a \ge 1` where the cap acts);
+- :math:`d`: the closure's wall distance; :math:`H_h` = ``convection.hybrid_height``.
+
+:math:`\sigma` is a cell field, interpolated to the faces of :math:`u, v, w`, updated once per iteration as
+:math:`\sigma \leftarrow \sigma + \lambda(\sigma_t - \sigma)` with :math:`\lambda` = ``convection.hybrid_relax``, and
+frozen once the relative residual falls below ``convection.hybrid_freeze`` (after at least :math:`2/\lambda` updates
+on each grid level), so a converged state satisfies one fixed scheme. The blend is of the convection operators,
+not of the face fluxes: it is not conservative where :math:`\sigma` varies (in a 1-D test with :math:`\sigma` rising
+from 0 to 0.1 over a few cells, a net source of 0.2–0.4 % of the flux jump; mass is not affected). :math:`\sigma` is
+not checkpointed, so ``io.restart`` with the blend aborts.
+
+**Where it acts.** Because :math:`C_r` is at the equilibrium value, :math:`a` is 1.00–1.03 in an equilibrium surface
+layer, so :math:`\sigma` reaches :math:`\sigma_\mathrm{max}` over most of the near-ground layer below :math:`H_h`, on the
+windward side as well as in the lee; inside a recirculation, where :math:`k` is carried in (:math:`P < \varepsilon`),
+:math:`a` can fall below 0.8 and the blend switches off. With :math:`\sigma_\mathrm{max} = 0.1` the added horizontal
+numerical diffusion near the ground is of the order of the turbulent viscosity there (about 5 m²/s at 10 m on
+Askervein) and changes the approach-flow speed-up by about 0.2 %. A gate that acts only above equilibrium (for
+example :math:`a > 1.05`) is not in this version.
+
+Recommended setting
+~~~~~~~~~~~~~~~~~~~
+
+For terrain with separated lees: ``turb.realizability = 0.309``, ``turb.nut_relax = 0.5``,
+``convection.hybrid_sigma_max = 0.1``, ``convection.hybrid_height`` = 2.5 terrain heights and
+``turb.max_geom_lscale = 100`` (on Big Southern Butte the length is uncapped with a moving lid, so that the inflow
+does not drift over its 18.7 km fetch). :math:`C_r = 0.309` is :math:`C_{\mu 0}^2` for the default ``turb.Cmu0``
+only. On the benchmarks (``Tests/Real_Terrain/WindNinja2019``, ``IshiharaZhou``,
+``RUSHIL``) every case reaches the steady verdict with it:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 35 35
+
+   * - Case
+     - Default closure
+     - Recommended setting
+   * - Ishihara–Zhou ridge, smooth (tunnel reattachment 150–200 m)
+     - no reversed flow; U rms 0.80 m/s
+     - reversed 42–170 m; 0.30 m/s
+   * - Ishihara–Zhou ridge, rough (250–300 m)
+     - reversed 59–122 m; 0.70 m/s
+     - reversed 47–173 m; 0.58 m/s
+   * - RUSHIL Hill 3 (tunnel 0.27a–2.17a at 0.1 H)
+     - 0.64a–1.27a; 0.50 m/s
+     - 0.58a–1.45a; 0.48 m/s
+   * - RUSHIL Hill 5 / Hill 8
+     - not steady / attached, 0.23 m/s
+     - attached, 0.21 m/s / attached, 0.20 m/s
+   * - Askervein, all masts (RMSE)
+     - 1.24 m/s
+     - 0.97 m/s
+   * - Bolund cases 1 / 3 / 4, all masts (RMSE)
+     - 1.46 / 0.66 / 0.89 m/s
+     - 1.25 / 0.64 / 1.23 m/s
+
+Bolund case 4 (flow from the east, the lee over the escarpment) is slower than measured in the lee with the
+cap. On Big Southern Butte the lee separates only on the unsmoothed terrain with a 4 m first layer
+(``Tests/Real_Terrain/WindNinja2019/inputs_bsb_srtm``: lee RMSE 2.58 m/s against 3.53 m/s on the paper-like mesh,
+with 68 m first cells and smoothed terrain).
+
+The comparison uses data made openly available by N. Wagenbrenner (windninja-tools, the Big Southern Butte
+database and Wagenbrenner et al. 2019), T. Ishihara and Q. Zhou (the ridge wind-tunnel data) and ERCOFTAC (the
+RUSHIL data of Khurshudyan, Snyder and Nekrasov); we thank them. The case READMEs list the sources and licences.

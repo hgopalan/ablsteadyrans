@@ -1,0 +1,13 @@
+# One change each against the case's deck (the recommended GUST - CFD setting of the README: convection.limiter
+# van_leer with the blend, turb.max_geom_lscale 100 m, or uncapped on the Butte; wall distance terrain_height).
+upwind convection.limiter=upwind convection.hybrid_sigma_max=- convection.hybrid_height=-
+van_albada convection.limiter=van_albada
+lscale10 turb.max_geom_lscale=10
+lscale60 turb.max_geom_lscale=60
+lscale100 turb.max_geom_lscale=100
+lscale1000 turb.max_geom_lscale=1000
+tucker turb.wall_distance=tucker
+inflowk_unbounded bc.inflow_tke_length=unbounded
+facemean_log turb.face_mean=logarithmic
+z0_0.03 bc.surface_z0=0.03 bc.inflow_z0=0.03 bc.inflow_ustar=0.7374
+z0_0.1 bc.surface_z0=0.1 bc.inflow_z0=0.1 bc.inflow_ustar=0.9910

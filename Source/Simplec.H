@@ -219,6 +219,16 @@ public:
     [[nodiscard]] const SimplecOptions& options () const { return m_opt; }
     //! The height H of the residual scales (stage_norms).
     [[nodiscard]] amrex::Real norm_height () const { return m_height; }
+    //! The confidence of the last iterate's residual (Stage::confidence): a
+    //! cell meets the criterion when |R| / scale (the scales of stage_norms)
+    //! is below its threshold for p, theta and k at the cell and for u, v, w
+    //! on both of its faces.
+    [[nodiscard]] bool confidence (const std::vector<amrex::Real>& threshold, amrex::Real& share,
+                                   amrex::Real& height) const override;
+    //! The upwind blend (convection.hybrid_*, HybridConvection.H) freezes once r < hybrid_freeze.
+    void note_relative_residual (amrex::Real r) override { m_r = r; }
+    //! The blend field sigma (empty without convection.hybrid_sigma_max).
+    [[nodiscard]] const amrex::MultiFab& hybrid_sigma () const { return m_sigma; }
 
 private:
     void compute_norms (const State& q);
@@ -245,6 +255,11 @@ private:
     std::vector<MonitorSpec> m_specs;
     std::vector<amrex::Real> m_res, m_mon;
     amrex::Real m_height{1};
+    amrex::MultiFab m_sigma;       //!< the upwind blend (one ghost cell; empty when off)
+    amrex::Real m_r{1};            //!< the driver's last relative residual
+    bool m_sigma_frozen{false};
+    int m_sigma_updates{0};        //!< sigma updates on this level
+    mutable amrex::MultiFab m_agl; //!< the height above the ground (confidence), formed once
 };
 
 } // namespace gust

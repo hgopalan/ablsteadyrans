@@ -23,6 +23,7 @@
 // NaN): they must hold finite values.
 
 #include "CVFluxes.H"
+#include "HybridConvection.H"
 #include "Limiter_K.H"
 
 #include <AMReX_Array.H>
@@ -59,6 +60,7 @@ struct ConvectionInputs
 {
     ConvectionOptions momentum;
     ConvectionOptions theta;
+    HybridOptions hybrid;   //!< convection.hybrid_* (HybridConvection.H)
     std::vector<std::string> given;
 };
 

@@ -66,6 +66,7 @@ ResidualInputs residual_inputs (const RunSetup& s, const Closure& closure, const
     r.theta_ref = s.bin.theta_ref;
     r.momentum = s.cin.momentum;
     r.theta = s.cin.theta;
+    r.hybrid = s.cin.hybrid;
     r.buoyancy = s.fopt.buoyancy;
     r.coriolis = s.fopt.coriolis;
     r.pressure_gradient = s.fopt.pressure_gradient;
@@ -285,8 +286,11 @@ void print_iteration (const Driver& driver, const SimplecStage& stage, bool last
     for (const amrex::Real v : r.monitors) { line += " " + fmt(double(v)); }
     const SimplecIterationInfo& info = stage.last();
     line += " poisson " + std::to_string(info.pressure.poisson.iterations) + " div " + fmt(double(info.pressure.divergence_before))
-          + " -> " + fmt(double(info.pressure.divergence_after)) + " clipped " + std::to_string(info.tke.clipped) + "\n";
-    amrex::Print() << line;
+          + " -> " + fmt(double(info.pressure.divergence_after)) + " clipped " + std::to_string(info.tke.clipped);
+    if (driver.confidence_share() >= 0) {
+        line += " confidence " + fmt(double(driver.confidence_share())) + " zmax " + fmt(double(driver.confidence_height()));
+    }
+    amrex::Print() << line << "\n";
 }
 
 // ---------------------------------------------------------------------------

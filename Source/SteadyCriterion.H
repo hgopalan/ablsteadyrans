@@ -60,6 +60,8 @@ struct SteadyVerdict
     SteadyStatus status{SteadyStatus::NotSteady};
     int iteration{-1};                  //!< index of the last recorded iteration
     std::vector<std::string> reasons;   //!< one line per unmet criterion
+    bool residuals_met{false};          //!< every residual criterion met
+    bool monitors_met{false};           //!< every monitor criterion met (a full window included)
 };
 
 //! Everything a SteadyCriterion has recorded. The steady driver writes it to
@@ -102,6 +104,11 @@ public:
     [[nodiscard]] SteadyVerdict verdict () const;
 
     [[nodiscard]] int iterations () const { return m_h.count; }
+
+    //! The value each scaled residual must be below to meet the criterion:
+    //! min(residual_tol, 10^-drop_orders max(reference, residual_tol)), one
+    //! per residual (the driver's confidence stop applies it cell by cell).
+    [[nodiscard]] std::vector<amrex::Real> residual_thresholds () const;
 
     //! The recorded history, for the driver's checkpoint.
     [[nodiscard]] const SteadyHistory& history () const { return m_h; }

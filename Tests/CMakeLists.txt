@@ -51,6 +51,7 @@ add_executable(unit_tests
     Unit_Tests/test_Sequencing.cpp
     Unit_Tests/test_Smoothness.cpp
     Unit_Tests/test_NewtonStage.cpp
+    Unit_Tests/test_LeeWake.cpp
 )
 target_include_directories(unit_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Unit_Tests)
 target_link_libraries(unit_tests PRIVATE gust_core GTest::gtest)

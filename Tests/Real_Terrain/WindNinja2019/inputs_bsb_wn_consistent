@@ -1,0 +1,72 @@
+# Wagenbrenner et al. (2019) comparison, Big Southern Butte on a mesh like the paper's CFD mesh (Table 3):
+# 68 m cells near the ground horizontally and vertically, the top at 4318 m ASL (2806 m above the DEM's
+# lowest point), and the terrain smoothed like the CFD mesh's (Figure 14b,c: the summit about 200 m below
+# the DEM): terrain.file is bsb_wn.xyz, big_butte.asc after windninja2019.py smooth --sigma 120 --cap 2050 --soft 150
+# (a light smoothing and a soft cap on the elevation, fitted to Figure 14b,c: 25 m and 24 m RMS along TSW and
+# TWSW; a Gaussian alone does no better than 41-45 m, and widens the mountain). 272 x 296 x 20 cells (68.7 m x 68.1 m), a 68 m first layer stretched by
+# 1.0706 (the paper's mesh has 100 K cells because it refines only near the ground; this one has the same
+# near-ground cells everywhere, 1.6 M). Otherwise as inputs_bsb: 8.3 m/s from 222 degrees at 3 m, log law,
+# truly neutral.
+# Consistent inflow (inputs_bsb_wn_flat_consistent passes the horizontal-homogeneity test: U within 1.5 %
+# over 18.7 km, against -18.5 % with the slip top): the length scale uncapped and a no-slip lid moving at the
+# log-law speed of the top level, 18.25 m/s towards 48 degrees.
+mesh.n_cell           = 272 296 20
+mesh.prob_lo          = 0. 0. 0.
+mesh.prob_hi          = 18690. 20160. 2806.
+mesh.max_grid_size    = 64
+mesh.dz0              = 68.
+mesh.stretch_ratio    = 1.0706
+mesh.hierarchy_levels = 3
+
+terrain.type      = xyz
+terrain.smoothing = 0
+
+bc.xlo = inflow
+bc.ylo = inflow
+bc.xhi = outflow
+bc.yhi = outflow
+bc.zlo = surface_layer
+bc.zhi = no_slip_wall
+bc.zhi_wall_velocity = 12.212 13.562 0.
+bc.surface_z0       = 0.01
+bc.inflow_profile   = log_law
+bc.inflow_ustar     = 0.5963
+bc.inflow_z0        = 0.01
+bc.inflow_direction = 48.
+bc.theta_profile_z  = 0.
+bc.theta_profile    = 300.
+bc.rayleigh_zdamp    = 2000.
+bc.rayleigh_dampcoef = 0.2
+bc.rayleigh_fields   = w
+
+init.first_guess = profile
+init.alpha_h     = 1.0
+init.alpha_v     = 0.5
+
+solver.poisson_reltol   = 1.e-10
+solver.poisson_max_iter = 200
+
+forcing.gravity  = 0.
+turb.tke_floor   = 1.e-6
+simplec.w_vnn_cap = 16
+
+# The recommended GUST - CFD setting (lee wake): the nu_t cap C_r k/S with C_r = Cmu0^2, nu_t under-
+# relaxation, a 10 % blend towards upwind where the cap holds nu_t below 2.5 terrain heights, and (except where
+# the deck sets its own) a 100 m Blackadar length.
+turb.realizability = 0.309
+turb.nut_relax     = 0.5
+convection.hybrid_sigma_max = 0.1
+convection.hybrid_height    = 1260.
+
+steady.stage          = simplec
+steady.sweep          = lusgs
+steady.zline_sweeps   = 2
+steady.cfl_max        = 16
+steady.sequencing     = 1
+steady.max_iterations = 20000
+
+io.plot_file        = plt
+io.turb_plot_file   = turb
+io.chk_file         = chk
+io.write_checkpoint = 0
+turb.max_geom_lscale = 1.e6
