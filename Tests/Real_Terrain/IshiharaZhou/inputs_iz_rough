@@ -1,0 +1,59 @@
+# Ishihara & Zhou (2025) 2-D ridge, rough surface, at full scale (tunnel x1000): z = 40 cos^2(pi (x - 800) / 200)
+# for |x - 800| <= 100 m (maximum slope about 32 degrees), in 2400 m x 896 m under a slip ceiling (the tunnel's),
+# periodic in y. The inflow is the measured approach flow (ishihara_zhou.py prepare: inflow_rough.txt,
+# z u v theta k), the ground the surface layer with z0 = 0.3 m; truly neutral. Terrain file and inflow table on
+# the command line (terrain.file, bc.inflow_file). Setup after H. Gopalan's Kynema-SGF cases (kynema-sgf#2031).
+#   * 600 x 8 x 64 cells: 4 m horizontally (as the Kynema runs' 4 m grid), a 0.5 m first layer stretched by
+#     1.081 to 896 m; boxes 40 x 8; grid sequencing over 3 levels.
+mesh.n_cell           = 600 8 64
+mesh.prob_lo          = 0. 0. 0.
+mesh.prob_hi          = 2400. 32. 896.
+mesh.is_periodic      = 0 1 0
+mesh.max_grid_size    = 40 8
+mesh.dz0              = 0.5
+mesh.stretch_ratio    = 1.081
+mesh.hierarchy_levels = 3
+
+terrain.type      = xyz
+terrain.smoothing = 0
+
+bc.xlo = inflow
+bc.xhi = outflow
+bc.zlo = surface_layer
+bc.zhi = slip_wall
+bc.surface_z0      = 0.3
+bc.inflow_profile  = file
+bc.theta_profile_z = 0.
+bc.theta_profile   = 300.
+
+init.first_guess = profile
+init.alpha_h     = 1.0
+init.alpha_v     = 0.5
+
+solver.poisson_reltol   = 1.e-10
+solver.poisson_max_iter = 200
+
+forcing.gravity   = 0.
+turb.tke_floor    = 1.e-6
+simplec.w_vnn_cap = 16
+
+# The recommended GUST - CFD setting (lee wake): the nu_t cap C_r k/S with C_r = Cmu0^2, nu_t under-
+# relaxation, a 10 % blend towards upwind where the cap holds nu_t below 2.5 terrain heights, and (except where
+# the deck sets its own) a 100 m Blackadar length.
+turb.realizability = 0.309
+turb.nut_relax     = 0.5
+turb.max_geom_lscale = 100.
+convection.hybrid_sigma_max = 0.1
+convection.hybrid_height    = 100.
+
+steady.stage          = simplec
+steady.sweep          = lusgs
+steady.zline_sweeps   = 2
+steady.cfl_max        = 16
+steady.sequencing     = 1
+steady.max_iterations = 20000
+
+io.plot_file        = plt
+io.turb_plot_file   = turb
+io.chk_file         = chk
+io.write_checkpoint = 0

@@ -1,0 +1,58 @@
+# Wagenbrenner et al. (2019) comparison, Big Southern Butte: 8.3 m/s from 222 degrees at
+# 3 m (towards 48 degrees counter-clockwise from x), transects TSW and TWSW. Terrain:
+# windninja-tools' big_butte.asc (SRTM, 30 m, 18.7 km x 20.2 km, the paper's 19 x 20 km)
+# as xyz (windninja2019.py prepare; terrain.file on the command line), x and y from
+# the grid's lower-left corner (UTM 12N 326705, 4795665), z above its lowest point.
+# 256 x 256 x 64 cells (73 m x 79 m; the paper's CFD had 68 m), a 1 m first layer stretched
+# by 1.0918 to 3000 m; the log law with z0 = 0.01 m and u* giving 8.3 m/s at 3 m through
+# xlo and ylo; truly neutral; damping of w from 2000 m.
+mesh.n_cell           = 256 256 64
+mesh.prob_lo          = 0. 0. 0.
+mesh.prob_hi          = 18690. 20160. 3000.
+mesh.max_grid_size    = 64
+mesh.dz0              = 1.
+mesh.stretch_ratio    = 1.0918
+mesh.hierarchy_levels = 3
+
+terrain.type      = xyz
+terrain.smoothing = 0
+
+bc.xlo = inflow
+bc.ylo = inflow
+bc.xhi = outflow
+bc.yhi = outflow
+bc.zlo = surface_layer
+bc.zhi = slip_wall
+bc.surface_z0       = 0.01
+bc.inflow_profile   = log_law
+bc.inflow_ustar     = 0.5963
+bc.inflow_z0        = 0.01
+bc.inflow_direction = 48.
+bc.theta_profile_z  = 0.
+bc.theta_profile    = 300.
+bc.rayleigh_zdamp    = 2000.
+bc.rayleigh_dampcoef = 0.2
+bc.rayleigh_fields   = w
+
+init.first_guess = profile
+init.alpha_h     = 1.0
+init.alpha_v     = 0.5
+
+solver.poisson_reltol   = 1.e-10
+solver.poisson_max_iter = 200
+
+forcing.gravity  = 0.
+turb.tke_floor   = 1.e-6
+simplec.w_vnn_cap = 16
+
+steady.stage          = simplec
+steady.sweep          = lusgs
+steady.zline_sweeps   = 2
+steady.cfl_max        = 16
+steady.sequencing     = 1
+steady.max_iterations = 20000
+
+io.plot_file        = plt
+io.turb_plot_file   = turb
+io.chk_file         = chk
+io.write_checkpoint = 0

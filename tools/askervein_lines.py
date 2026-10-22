@@ -153,7 +153,9 @@ def speed_at(cols, terrain, x, y, height, z0):
     for di, dj, w in ((0, 0, (1 - a) * (1 - b)), (1, 0, a * (1 - b)), (0, 1, (1 - a) * b), (1, 1, a * b)):
         i, j = i0 + di, j0 + dj
         u, v, z = cols.column(i, j)
-        zg = ground(terrain, lo[0] + (i + 0.5) * dx[0], lo[1] + (j + 0.5) * dx[1])
+        xc, yc = lo[0] + (i + 0.5) * dx[0], lo[1] + (j + 0.5) * dx[1]
+        # TERRAIN: ERF's grid (read_terrain), or a callable ground(x, y) (windninja2019.py's xyz terrain).
+        zg = terrain(xc, yc) if callable(terrain) else ground(terrain, xc, yc)
         agl = [zz - zg for zz in z]
         if height > agl[-1] or agl[0] <= 0:
             sys.exit(f"height {height} m is outside the column ({agl[0]:.2f} to {agl[-1]:.2f} m above the ground)")
