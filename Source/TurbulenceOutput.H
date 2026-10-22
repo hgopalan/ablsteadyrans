@@ -1,7 +1,7 @@
 #ifndef GUST_TURBULENCE_OUTPUT_H_
 #define GUST_TURBULENCE_OUTPUT_H_
 
-// The turbulence diagnostics plotfile (sub-phase 1.15): the closure's fields
+// The turbulence diagnostics plotfile: the closure's fields
 // under ERF's variable names, so ERF's Canonical_RANS check scripts
 // (check_neutral.py and its siblings) read a GUST result unchanged:
 //   x_velocity, y_velocity, z_velocity (cell means of the face velocities),

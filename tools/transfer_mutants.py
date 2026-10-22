@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Sub-phase 2.4: the one-line mutants of the transfer operators
+The one-line mutants of the transfer operators
 (Source/Transfer.cpp).
 
 Run against Transfer.* by the shared runner tools/mutants.py (two ranks, the

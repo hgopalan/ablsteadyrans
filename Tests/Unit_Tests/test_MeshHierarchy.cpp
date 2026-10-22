@@ -1,10 +1,10 @@
-// Sub-phase 2.3: the horizontal-only grid hierarchy (MeshHierarchy.H).
-//   UT-2.3.1 z-levels bit-identical on every level
-//   UT-2.3.2 ground smoothing passes p (2^l - 1); constant terrain unchanged
-//   UT-2.3.3 free-stream preservation on every level
-//   UT-2.3.4 flat terrain: every level gives the same column (Poisson and SIMPLEC)
-//   UT-2.3.5 invalid layouts abort, naming the key
-//   UT-2.3.6 a level gathered onto one box equals the distributed level
+// The horizontal-only grid hierarchy (MeshHierarchy.H).
+//   z-levels bit-identical on every level
+//   ground smoothing passes p (2^l - 1); constant terrain unchanged
+//   free-stream preservation on every level
+//   flat terrain: every level gives the same column (Poisson and SIMPLEC)
+//   invalid layouts abort, naming the key
+//   a level gathered onto one box equals the distributed level
 #include "BoundaryConditions.H"
 #include "Closure.H"
 #include "Inputs.H"
@@ -337,7 +337,7 @@ void column_level (const HCase& c, int l, const ColumnModel& cm, int iterations,
 } // namespace
 
 // ---------------------------------------------------------------------------
-// UT-2.3.1. Every level has the z-levels of level 0, bit for bit (a stretched
+// Every level has the z-levels of level 0, bit for bit (a stretched
 // grid whose ratio is solved by Newton), the same nz and z extent, and on
 // flat terrain its node heights are those levels exactly in every column.
 TEST (MeshHierarchy, ZLevelsAreIdenticalOnEveryLevel)
@@ -378,7 +378,7 @@ TEST (MeshHierarchy, ZLevelsAreIdenticalOnEveryLevel)
 }
 
 // ---------------------------------------------------------------------------
-// UT-2.3.2. The pass counts are p (2^l - 1): 0 on level 0, pinned for p = 0
+// The pass counts are p (2^l - 1): 0 on level 0, pinned for p = 0
 // to 3 and l = 0 to 4. Each coarse ground equals an independent host
 // rebuild (injection, then that many passes of the STF stencil with beta =
 // 1/8) and differs from one pass more or fewer; level 0's ground is the
@@ -430,7 +430,7 @@ TEST (MeshHierarchy, GroundSmoothingPasses)
 }
 
 // ---------------------------------------------------------------------------
-// UT-2.3.3. Free-stream preservation on every level, for BTF, STF and
+// Free-stream preservation on every level, for BTF, STF and
 // Sullivan: the metric divergence of a uniform wind (10, 5) m/s is below
 // 1e-12 of (|U| + |V|) / dx of the level.
 TEST (MeshHierarchy, FreeStreamOnEveryLevel)
@@ -451,7 +451,7 @@ TEST (MeshHierarchy, FreeStreamOnEveryLevel)
 }
 
 // ---------------------------------------------------------------------------
-// UT-2.3.4. Flat terrain: every level gives the same column.
+// Flat terrain: every level gives the same column.
 //  (a) A Poisson problem whose right-hand side depends on z alone, solved
 //      with each level's own solver: the same phi column on every level.
 //  (b) The steady equations of a conventionally neutral column (the k-L
@@ -544,7 +544,7 @@ TEST (MeshHierarchy, FlatTerrainColumnsAgree)
 }
 
 // ---------------------------------------------------------------------------
-// UT-2.3.5. Invalid layouts and inputs abort, naming the key; valid ones pass.
+// Invalid layouts and inputs abort, naming the key; valid ones pass.
 TEST (MeshHierarchy, InvalidLayoutsAbort)
 {
     auto msgs = [] (const gust::MeshInputs& m, const gust::TerrainInputs& t) {
@@ -639,7 +639,7 @@ TEST (MeshHierarchy, InvalidLayoutsAbort)
 }
 
 // ---------------------------------------------------------------------------
-// UT-2.3.6. A coarse level gathered onto one box with ParallelCopy equals the
+// A coarse level gathered onto one box with ParallelCopy equals the
 // distributed level bit for bit: node heights (ghost nodes included), detJ,
 // the face areas, z_cc and the quality report; on 1, 2 and 4 ranks.
 TEST (MeshHierarchy, GatheredLevelEqualsDistributed)

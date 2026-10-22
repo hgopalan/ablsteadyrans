@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# ERF reference solutions on NLR Kestrel (development plan rev. 6, sub-phase 1.1).
+# ERF reference solutions on NLR Kestrel.
 #
 #   erf_references.sh build   cpu|gpu          build ERF at the pinned commit
-#   erf_references.sh smoke   cpu|gpu          RT-1.1.1: ERF's `ctest -L rans`
+#   erf_references.sh smoke   cpu|gpu          ERF's `ctest -L rans`
 #                                              (run inside an allocation)
 #   erf_references.sh submit  cpu|gpu CASE...  submit reference runs ("all" = every case)
 #   erf_references.sh archive cpu|gpu CASE     time-average the finished run into an
@@ -102,7 +102,7 @@ build)
     ;;
 
 smoke)
-    # RT-1.1.1: guards the reference generation. Needs compute nodes.
+    # Guards the reference generation. Needs compute nodes.
     if [ -z "${SLURM_JOB_ID:-}" ]; then
         echo "run inside an allocation, e.g. salloc -A \$GUST_ACCOUNT -N 1 -t 01:00:00" >&2
         exit 2

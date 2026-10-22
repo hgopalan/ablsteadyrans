@@ -2,7 +2,7 @@
 #define GUST_DUAL_H_
 
 // Forward-mode dual numbers (value, derivative) for the closure's analytic
-// source Jacobian (sub-phase 1.9): a kernel templated on the scalar type gives
+// source Jacobian: a kernel templated on the scalar type gives
 // the derivative d/dk of the very expressions it evaluates, so the Jacobian
 // cannot drift from the residual. Only the operations the closure kernels use
 // are provided. Device-usable.

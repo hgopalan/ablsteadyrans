@@ -1,7 +1,7 @@
 #ifndef GUST_CLOSUREWAKE_H_
 #define GUST_CLOSUREWAKE_H_
 
-// The realizability cap of the k-L closure for separated and wake flows (beyond the plan):
+// The realizability cap of the k-L closure for separated and wake flows:
 //
 //   nu_t <= cap,  cap = C_r k / S   (turb.realizability = C_r > 0; S = sqrt(2 S_ij S_ij)),
 //

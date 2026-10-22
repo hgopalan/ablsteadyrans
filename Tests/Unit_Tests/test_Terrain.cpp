@@ -1,4 +1,4 @@
-// The stage over terrain (sub-phase 1.16): the no-flux value of w on the
+// The stage over terrain: the no-flux value of w on the
 // ground and the top (Omega = 0), the Rayleigh layer's field selection and
 // height coordinate, and their readers.
 #include "BoundaryConditions.H"
@@ -76,7 +76,7 @@ amrex::FArrayBox host_copy (const amrex::MultiFab& mf, const amrex::MFIter& mfi)
 } // namespace
 
 // ---------------------------------------------------------------------------
-// Beyond the plan (1.16): over a 60 m hill the ground and top faces of w take
+// Over a 60 m hill the ground and top faces of w take
 // the no-flux value: after the fill, Omega (omega_from_w) vanishes on every
 // ground and top face to round-off (it is not zero before), the two ghost
 // layers mirror about that value, the Dirichlet rows of the residual are zero
@@ -171,7 +171,7 @@ TEST (Terrain, GroundAndTopCarryNoFlux)
 }
 
 // ---------------------------------------------------------------------------
-// Beyond the plan (1.16): the Rayleigh layer's fields and height coordinate.
+// The Rayleigh layer's fields and height coordinate.
 // With bc.rayleigh_fields = w theta the layer damps w towards 0 and theta
 // towards the sounding at the absolute height, leaves u, v and k alone (the
 // sponge is off), and the implicit diagonal matches; with

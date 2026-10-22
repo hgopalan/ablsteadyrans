@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run GUST on a hill deck and apply ERF's own checks (RT-1.16.1, RT-1.16.2).
+"""Run GUST on a hill deck and apply ERF's own checks (rt_steady_hill2d, rt_steady_hill3d).
 
     check_steady_hill.py --erf-check check_hill.py|check_hill3d.py [--orders N] -- COMMAND [ARGS ...]
 

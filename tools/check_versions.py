@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check external/VERSIONS (sub-phase 1.1).
+"""Check external/VERSIONS.
 
     check_versions.py [--root DIR]
 

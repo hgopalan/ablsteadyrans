@@ -1,4 +1,4 @@
-// gust_refavg: build or verify an ERF reference archive (sub-phase 1.1).
+// gust_refavg: build or verify an ERF reference archive.
 //
 //   gust_refavg refavg.plotfiles="plt07920 plt08640" refavg.output=ref \
 //       refavg.case=Neutral_ABL_Flat refavg.erf_sha=<40 hex> \

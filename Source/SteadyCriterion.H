@@ -8,9 +8,8 @@
 
 namespace gust {
 
-//! The definition of "steady" (plan sub-phase 1.2). The comments name the
-//! input key each value will be read from once the steady driver exists
-//! (sub-phase 1.13); until then the defaults are the definition.
+//! The definition of "steady". The comments name the input key each value
+//! is read from (Driver.H).
 struct SteadyParams
 {
     //! steady.residual_tol: every scaled residual must be below this.

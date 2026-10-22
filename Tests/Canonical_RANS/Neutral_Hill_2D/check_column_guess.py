@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The converged-column first guess removes the inertial spin-up (sub-phase 2.1b).
+"""The converged-column first guess removes the inertial spin-up (rt_column_guess_spinup).
 
     check_column_guess.py PROFILE_CHK COLUMN_CHK
 

@@ -1,7 +1,6 @@
-// Domain boundary conditions (sub-phase 1.8): UT-1.8.1 (pressure types as
-// ERF's get_fft_bc), UT-1.8.2 (inflow mapping by height above a sloping
-// inlet), and the ghost fills, Dirichlet rows, implicit-side folds, damping
-// layers, inflow profiles and input checks.
+// Domain boundary conditions: pressure types as ERF's get_fft_bc, inflow
+// mapping by height above a sloping inlet, and the ghost fills, Dirichlet
+// rows, implicit-side folds, damping layers, inflow profiles and input checks.
 #include "BoundaryConditions.H"
 #include "MassFlux_K.H"
 #include "ImplicitOperator.H"
@@ -131,7 +130,7 @@ double node_mean (const amrex::FArrayBox& z, int t, int i, int j, int k)
 }
 
 // ---------------------------------------------------------------------------
-// UT-1.8.1. The Poisson boundary types equal ERF's get_fft_bc for every face
+// The Poisson boundary types equal ERF's get_fft_bc for every face
 // type on every face it may take, periodic directions included: periodic
 // where the geometry is, odd (Dirichlet) for outflow, even (Neumann)
 // otherwise. get_fft_bc is the copied ERF function, called with ERF's names.
@@ -423,7 +422,7 @@ TEST(InflowProfile, FileTableWithAndWithoutK)
 }
 
 // ---------------------------------------------------------------------------
-// UT-1.8.2. Inflow by height above the ground over a sloping inlet: the x
+// Inflow by height above the ground over a sloping inlet: the x
 // faces are inflow and outflow, the ground a ridge whose height varies along
 // the inlet. After fill_ghosts every inflow face point of u holds the log-law
 // wind at its height above the ground under it (the mean of the ground

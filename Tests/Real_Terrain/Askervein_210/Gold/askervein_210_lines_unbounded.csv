@@ -1,4 +1,4 @@
-# 10 m speeds of rt_steady_askervein_210 with bc.inflow_tke_length = unbounded (the inflow k before the closure's cap; #43's Phase 2 run, steady after 96 level-0 iterations)
+# 10 m speeds of rt_steady_askervein_210 with bc.inflow_tke_length = unbounded (the inflow k before the closure's cap; #43's line LU-SGS run, steady after 96 level-0 iterations)
 line,d,x,y,speed
 A,-841,-869.80,-338.90,8.947076
 A,-608,-710.90,-168.50,8.109090

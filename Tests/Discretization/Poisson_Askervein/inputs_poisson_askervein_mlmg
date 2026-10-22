@@ -1,5 +1,6 @@
-# RT-1.11.1: the RT-1.10.1 projection (Tests/Supporting_Files/Tools/poisson_projection.cpp)
-# with back end B: AMReX's MLTerrainPoisson under MLMG. ERF's Askervein mesh
+# The projection of inputs_poisson_askervein
+# (Tests/Supporting_Files/Tools/poisson_projection.cpp) with back end B:
+# AMReX's MLTerrainPoisson under MLMG. ERF's Askervein mesh
 # (Real_Terrain/Askervein/inputs_anel) coarsened to 30 x 30 cells of 200 m,
 # 18 layers from 20 m growing by 1.08, basic terrain following.
 # terrain.file is given on the command line (extern_erf/askervein.txt).

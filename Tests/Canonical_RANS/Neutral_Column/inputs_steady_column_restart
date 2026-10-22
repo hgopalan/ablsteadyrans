@@ -9,7 +9,7 @@
 # u* = 0.35 m/s and H = 1000 m: at steady the wall stress balances the force
 # exactly, u*^2 = F H, the stress profile is u*^2 (1 - z/H) and the lowest
 # cells follow the log law within 1 %. The k-L closure with the uncapped
-# geometric length and the logarithmic face mean (as RT-1.9.1). The first
+# geometric length and the logarithmic face mean (as rt_closure_column). The first
 # guess is the log law of the inflow profile (not an inflow: the initializer
 # uses it on the periodic domain). Nothing varies horizontally, so the
 # lagged x/y neighbours of the z-line sweeps are exact and the CFL cap can
@@ -38,7 +38,7 @@ turb.face_mean       = logarithmic
 forcing.pressure_gradient = 1.225e-4 0. 0.
 
 steady.stage                = simplec
-steady.sweep                = zjacobi   # Phase 1 sweep (the CPU default is lusgs since sub-phase 2.6)
+steady.sweep                = zjacobi   # z-line Jacobi sweep (the CPU default is lusgs)
 steady.cfl0                 = 1.
 steady.cfl_max              = 50.
 steady.residual_drop_orders = 6

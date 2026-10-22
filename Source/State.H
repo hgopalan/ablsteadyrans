@@ -38,7 +38,7 @@ struct State
 //! Heights of a flat, uniformly spaced grid: z = prob_lo[2] + k dz, ghost
 //! nodes included (extrapolated linearly), computed as fma(k, dz, z0). The
 //! top node can differ from prob_hi[2] in the last bit; code that needs the
-//! domain top uses Geometry::ProbHi(2). Terrain replaces this in sub-phase 1.4.
+//! domain top uses Geometry::ProbHi(2). A terrain mesh (Mesh.H) replaces this.
 void init_flat_z_phys_nd (amrex::MultiFab& z_phys_nd, const amrex::Geometry& geom);
 
 //! Geometry and cell-centred BoxArray for the mesh inputs. Boxes are split in

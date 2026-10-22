@@ -1,11 +1,11 @@
-// The Newton preconditioner (plan sub-phase 3.3): UT-3.3.1 (apply is one
-// SIMPLEC iteration on the linearized system, on a terrain mesh in several
-// boxes, shared faces included), UT-3.3.2 (a constant shift of p leaves the
-// preconditioned solve unchanged), UT-3.3.3 (GMRES iterations per Newton
-// step grow by less than 50 % from CFL 10 to 1e4 with simplec, not with the
-// identity), and beyond the plan: the reader of steady.newton_preconditioner,
-// the range checks, the setup contract, the linearity of apply in r and the
-// identity-vs-simplec regression in the continuation loop on the open hill.
+// The Newton preconditioner: apply is one SIMPLEC iteration on the linearized
+// system, on a terrain mesh in several boxes, shared faces included; a
+// constant shift of p leaves the preconditioned solve unchanged; GMRES
+// iterations per Newton step grow by less than 50 % from CFL 10 to 1e4 with
+// simplec, not with the identity; and also the reader of
+// steady.newton_preconditioner, the range checks, the setup contract, the
+// linearity of apply in r and the identity-vs-simplec regression in the
+// continuation loop on the open hill.
 #include "BoundaryConditions.H"
 #include "Continuation.H"
 #include "Driver.H"
@@ -210,9 +210,10 @@ struct OpenHill
     }
 };
 
-// The column of UT-3.1.2 (test_Newton.cpp): 2 x 2 x 32 cells, 1600 m deep,
-// a neutral surface layer (z0 = 0.1 m) on the ground, a slip top, Coriolis
-// with a 10 m/s geostrophic wind and fixed diffusivities of 5 m^2/s.
+// The column of Newton.ColumnConvergesQuadratically (test_Newton.cpp):
+// 2 x 2 x 32 cells, 1600 m deep, a neutral surface layer (z0 = 0.1 m) on the
+// ground, a slip top, Coriolis with a 10 m/s geostrophic wind and fixed
+// diffusivities of 5 m^2/s.
 struct Column
 {
     PCase c;
@@ -304,7 +305,7 @@ double mean_of (const std::vector<int>& v)
 } // namespace
 
 // ---------------------------------------------------------------------------
-// UT-3.3.1 (changed from the plan). The preconditioner's apply on r = -R(q)
+// The preconditioner's apply on r = -R(q)
 // equals the increment of one iteration of the SIMPLEC stage from q
 // (SimplecStage::iterate, the same sweep and dtau), on a terrain mesh in
 // several boxes (max_grid 4: 3 x 2 boxes, so shared x and y faces between
@@ -388,7 +389,7 @@ TEST(NewtonPreconditioner, ApplyIsOneSimplecIteration)
             }
             const double scale = static_cast<double>(inc.norm0(0, 0));
             const double err = max_diff(d, inc);
-            amrex::Print() << "UT-3.3.1 sweep " << static_cast<int>(kind) << " field " << f << ": max |increment| " << scale
+            amrex::Print() << "sweep " << static_cast<int>(kind) << " field " << f << ": max |increment| " << scale
                            << ", max |apply - increment| " << err << "\n";
             EXPECT_GT(scale, 0) << f;
             EXPECT_LE(err, tol(1e-9, 2e-3) * scale) << static_cast<int>(kind) << " " << f;
@@ -398,7 +399,7 @@ TEST(NewtonPreconditioner, ApplyIsOneSimplecIteration)
 }
 
 // ---------------------------------------------------------------------------
-// UT-3.3.2 (changed from the plan). A constant shift of p leaves the
+// A constant shift of p leaves the
 // preconditioned solve unchanged: on the periodic hill (singular Poisson)
 // (a) apply(r) = apply(r + c on r_p) (a net source in the continuity part
 // is projected out, no abort), and dq's p has zero J-weighted mean;
@@ -463,7 +464,7 @@ TEST(NewtonPreconditioner, ConstantPressureShiftLeavesTheSolveUnchanged)
     copy_state(q0, h.q);
     const auto i0 = nk.direction(q0, &dtau, d0, pc.get());
     const auto ic = nk.direction(qc, &dtau, dc, pc.get());
-    amrex::Print() << "UT-3.3.2: GMRES iterations from q " << i0.gmres_iterations << ", from q + c " << ic.gmres_iterations
+    amrex::Print() << "GMRES iterations from q " << i0.gmres_iterations << ", from q + c " << ic.gmres_iterations
                    << "\n";
     EXPECT_EQ(i0.gmres_status, 0);
     EXPECT_EQ(ic.gmres_status, 0);
@@ -488,8 +489,7 @@ TEST(NewtonPreconditioner, ConstantPressureShiftLeavesTheSolveUnchanged)
 }
 
 // ---------------------------------------------------------------------------
-// Beyond the plan (from the numerics review): the default preconditioner is
-// linear in r. On the stratified periodic hill (gravity 9.81, theta 290 to
+// The default preconditioner is linear in r. On the stratified periodic hill (gravity 9.81, theta 290 to
 // 350 K, so theta's convection couples to du), apply(s r) = s apply(r) for
 // s = 2, -1 and 1e3, to the inner Poisson tolerance. The mutant check: the
 // stage's denominators (step 3 with du itself and the corrected transport)
@@ -544,7 +544,7 @@ TEST(NewtonPreconditioner, ApplyIsLinearInR)
 }
 
 // ---------------------------------------------------------------------------
-// UT-3.3.3. GMRES iterations per Newton step on the open hill (9 x 6 x 8
+// GMRES iterations per Newton step on the open hill (9 x 6 x 8
 // cells in six boxes, a 30 m hill, inflow/outflow, the wall law; four
 // Newton steps at a fixed CFL, rtol 1e-3, restart 200) at CFL 10, 1e2, 1e3
 // and 1e4. With the simplec preconditioner the mean grows by less than 50 %
@@ -554,13 +554,12 @@ TEST(NewtonPreconditioner, ApplyIsLinearInR)
 // (18 to 381: the pressure increment vanishes with dtau,
 // NewtonPreconditioner.H). The identity needs 15-25 times the iterations
 // at every CFL; its growth (164 to 228, 39 %) is within the bound on this
-// case, as its continuity rows carry no pseudo-time term at any CFL (the
-// PR's variations from the plan).
+// case, as its continuity rows carry no pseudo-time term at any CFL.
 TEST(NewtonPreconditioner, IterationsBoundedOverCfl)
 {
     const double cfls[] = {1e1, 1e2, 1e3, 1e4};
     std::vector<double> sc, st, id;
-    amrex::Print() << "UT-3.3.3: CFL, mean GMRES iterations per Newton step (simplec, simplec with the stage's d, identity)\n";
+    amrex::Print() << "CFL, mean GMRES iterations per Newton step (simplec, simplec with the stage's d, identity)\n";
     for (const double cfl : cfls) {
         const bool ends = (cfl == cfls[0] || cfl == cfls[3]);
         sc.push_back(mean_of(open_hill_steps(cfl, Pc::simplec)));
@@ -576,8 +575,8 @@ TEST(NewtonPreconditioner, IterationsBoundedOverCfl)
 }
 
 // ---------------------------------------------------------------------------
-// Beyond the plan: the identity-vs-simplec regression inside the
-// continuation loop of sub-phase 3.2 (Continuation.H) on the open hill: both
+// The identity-vs-simplec regression inside the
+// pseudo-transient continuation loop (Continuation.H) on the open hill: both
 // converge to 1e-8 of the first residual, to the same state (1e-6 of the
 // speed scale), the identity in the steps and with the first residual
 // test_Continuation.cpp pins (8 accepted steps, 11.328), simplec in at most
@@ -624,7 +623,7 @@ TEST(NewtonPreconditioner, ContinuationIdentityVersusSimplec)
 }
 
 // ---------------------------------------------------------------------------
-// Beyond the plan: steady.newton_preconditioner (default simplec; identity;
+// steady.newton_preconditioner (default simplec; identity;
 // any other value aborts naming the key), the factory (null for identity),
 // the constructor's range checks and apply before setup.
 TEST(NewtonPreconditioner, ReaderFactoryAndRangeChecks)

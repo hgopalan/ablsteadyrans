@@ -1,4 +1,4 @@
-// RT-1.11.2: the Tucker wall distance on a terrain mesh (test-only tool; the
+// The Tucker wall distance on a terrain mesh (test-only tool; the
 // application has no turbulence model to use it yet).
 //
 //   wall_distance <deck> [key=value ...]

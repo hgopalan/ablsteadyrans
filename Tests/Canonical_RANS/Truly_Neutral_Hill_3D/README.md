@@ -1,7 +1,7 @@
 # Truly_Neutral_Hill_3D
 
 ## Purpose
-RT-2.2.1. A truly neutral variant of ERF's Neutral_Hill_3D, run to round-off with two different sweeps, whose
+A truly neutral variant of ERF's Neutral_Hill_3D, run to round-off with two different sweeps, whose
 steady states must agree to 1e-8. The conventionally neutral deck (`Neutral_Hill_3D`) keeps entraining the
 inversion and has no fixed point to that tolerance, hence the variant: theta = 300 K, `forcing.gravity = 0`,
 Rayleigh damping of w alone, 32 x 32 x 16 over the same domain, four boxes.
@@ -19,7 +19,7 @@ It also carries the old-against-new test of the default `solver.poisson_backend`
 with `solver.poisson_backend = gmres_fft` (the default before `gmres_mlmg`), and `check_line_match.py` compares it
 with `rt_steady_hill3d_neutral_lusgs` (the default, `gmres_mlmg`, checked in its log) at 1e-8.
 
-RT-2.5.1 runs the z-line Jacobi deck a third time with grid sequencing (`mesh.hierarchy_levels=3
+`rt_steady_hill3d_neutral_sequencing` runs the z-line Jacobi deck a third time with grid sequencing (`mesh.hierarchy_levels=3
 steady.sequencing=1` on the command line: 8 x 8 and 16 x 16 to the loose stop, then 32 x 32 to the strict stop),
 and `check_line_match.py` compares it with `rt_steady_hill3d_neutral_zjacobi` at 1e-8. The checker counts only
 `PREFIX<step>`, not the per-level plotfiles `PREFIX_level<l>_<step>` a hierarchy run also writes.

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Sub-phase 3.5: the one-line mutants of the SIMPLEC <-> Newton switching
+The one-line mutants of the SIMPLEC <-> Newton switching
 (Source/NewtonStage.cpp and the switch rules in Source/Driver.cpp).
 
 Run against Driver.* and NewtonStage.* by the shared runner tools/mutants.py

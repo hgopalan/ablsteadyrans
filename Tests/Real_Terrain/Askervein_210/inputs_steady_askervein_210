@@ -1,4 +1,4 @@
-# RT-2.6.1: Askervein with ERF's own setup (Exec/CanonicalTests/Real_Terrain/
+# Askervein with ERF's own setup (Exec/CanonicalTests/Real_Terrain/
 # Askervein/inputs_anel at the pinned ERF commit), to steady with the SIMPLEC
 # stage, for the comparison with ERF's URANS average on lines A and AA.
 #   * Mesh: ERF's, 300 x 300 x 18 cells over 6 km x 6 km (20 m), a 20 m first
@@ -14,7 +14,7 @@
 #   * Rayleigh damping of w in ERF's top 250 m (from 499 m, 0.2 1/s; ERF's
 #     sin^2 profile over the flat levels, here over the physical height).
 #   * First guess: the inflow profile with the mass-consistent projection of
-#     RT-1.16.3.
+#     inputs_steady_askervein.
 # The sweep, the sweep count and the CFL cap are the defaults of the build.
 mesh.n_cell        = 300 300 18
 mesh.prob_lo       = -3000. -3000. 0.

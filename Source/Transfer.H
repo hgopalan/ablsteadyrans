@@ -2,7 +2,7 @@
 #define GUST_TRANSFER_H_
 
 // Transfer operators between the levels of the horizontal grid hierarchy
-// (sub-phase 2.4; MeshHierarchy.H). Level lc is coarser than level lf by
+// (MeshHierarchy.H). Level lc is coarser than level lf by
 // r = 2^(lc - lf) in x and y; z is never coarsened, so every transfer works
 // per zeta-level k and nothing is interpolated in the vertical.
 //

@@ -1,7 +1,7 @@
 #ifndef GUST_SMOOTHNESS_H_
 #define GUST_SMOOTHNESS_H_
 
-// Smoothness handling around the Newton stage (plan sub-phase 3.4).
+// Smoothness handling around the Newton stage.
 //
 // Newton's Jacobian-vector products are forward differences of the full
 // residual (Residual.H, jvp). Where the residual has a kink, a difference
@@ -18,8 +18,8 @@
 // Rt_crit. (The neutral band |N^2| <= machine epsilon, L = l_g, is a jump of
 // relative size y(epsilon)/2: 8e-10 at k = 1e-3, about 1 at k = epsilon,
 // where nu_t is negligible.) Freezing the branch would only replace the
-// state's own decisions by those of the switch point (plan rev. 6 freezes
-// it too; docs/solution_algorithm.rst gives the measured cost).
+// state's own decisions by those of the switch point
+// (docs/solution_algorithm.rst gives the measured cost).
 //
 // Before the switch to Newton (enter):
 //   1. with turb.frozen_switch = 1 (the default), the closure's floor

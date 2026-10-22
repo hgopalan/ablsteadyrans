@@ -1,5 +1,5 @@
-# Pinned versions of the codes GUST builds on or compares with
-# (development plan rev. 6, sub-phase 1.1). One "name sha" per line.
+# Pinned versions of the codes GUST builds on or compares with.
+# One "name sha" per line.
 # tools/check_versions.py checks the amrex entry against the submodule.
 #
 # erf:             reference solutions and copied files (extern_erf/)

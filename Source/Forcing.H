@@ -1,7 +1,7 @@
 #ifndef GUST_FORCING_H_
 #define GUST_FORCING_H_
 
-// Momentum sources (sub-phase 1.6): Boussinesq buoyancy about a hydrostatic
+// Momentum sources: Boussinesq buoyancy about a hydrostatic
 // reference, and the optional Coriolis and geostrophic forcing.
 //
 // Pressure is the kinematic perturbation p' = (p - p_ref) / rho_0 about a
@@ -18,10 +18,10 @@
 // depend on x or y: a horizontal gradient of p_ref would otherwise be dropped,
 // which is why it is built here from a 1-D profile rather than taken as a
 // field. A state at rest with theta = theta_ref and p' = 0 is in exact
-// discrete balance on any terrain (UT-1.6.4). Where theta departs from
-// theta_ref, the hydrostatic part of p' is differenced along the sloping
-// coordinate surfaces like any pressure, with the truncation error that
-// brings over steep terrain.
+// discrete balance on any terrain (Residual.RestOverSteepTerrainIsBalanced).
+// Where theta departs from theta_ref, the hydrostatic part of p' is
+// differenced along the sloping coordinate surfaces like any pressure, with
+// the truncation error that brings over steep terrain.
 //
 // Coriolis, as in ERF (ERF_MakeMomSources.cpp), with f_c = 4 pi / T:
 //   S_u = f_c (v sin(phi) - w cos(phi)),  S_v = -f_c u sin(phi),  S_w = f_c u cos(phi),
@@ -76,7 +76,7 @@ struct CoriolisOptions
     amrex::Real vg{0};
 };
 
-//! Every forcing of a run (sub-phase 1.15): the buoyancy, the Coriolis and
+//! Every forcing of a run: the buoyancy, the Coriolis and
 //! geostrophic options and a constant kinematic pressure-gradient force
 //! (m/s^2, the acceleration -(1/rho_0) grad p_large added to every momentum
 //! equation: ERF's abl_pressure_grad). Inputs forcing.*:

@@ -124,7 +124,7 @@ Jacobian makes, which then misses :math:`\partial L/\partial N^2` by about 30 %.
 Stratification gate
 -------------------
 
-*Beyond the plan.* In a nearly neutral layer, under an inversion for example, :math:`N^2` can be round-off or
+In a nearly neutral layer, under an inversion for example, :math:`N^2` can be round-off or
 numerical noise of either sign. With ``turb.ri_gate`` :math:`= Ri_0 > 0` the length :math:`L` and :math:`R_t`
 (and through :math:`R_t` the stability functions and the heat diffusivity) use
 
@@ -156,7 +156,7 @@ It is off by default (:doc:`results`).
 Eddy-viscosity cap for separated flow
 -------------------------------------
 
-*Beyond the plan.* A one-equation closure with an algebraic length keeps :math:`\nu_t` large in the shear layer
+A one-equation closure with an algebraic length keeps :math:`\nu_t` large in the shear layer
 that leaves a crest, so the flow reattaches too soon behind steep terrain (no separation behind the Bolund
 escarpment or the Ishihara–Zhou ridge with the default closure). With ``turb.realizability`` :math:`= C_r > 0` the
 new eddy viscosity is capped before the relaxation of ``turb.nut_relax``:
@@ -185,7 +185,7 @@ reads follows the cap (:math:`\mathrm{d}\,\mathrm{cap}/\mathrm{d}k = \mathrm{cap
 Near-ground blend towards upwind
 --------------------------------
 
-*Beyond the plan.* With the cap, the second-order limited convection can leave a steady run at a fixed,
+With the cap, the second-order limited convection can leave a steady run at a fixed,
 unconverged state (the rough Ishihara–Zhou ridge stalls at a relative residual of 0.17 with
 ``van_leer`` and ``van_albada``; first-order upwind converges). With ``convection.hybrid_sigma_max``
 :math:`= \sigma_\mathrm{max} > 0` the momentum and θ convection of the residual become

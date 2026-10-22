@@ -1,8 +1,8 @@
-// Sub-phase 1.11: the Tucker (2003) wall distance (Source/WallDistance.cpp).
-//   UT-1.11.3 Tucker distance against the exact distance, with ERF's check
+// The Tucker (2003) wall distance (Source/WallDistance.cpp).
+//   Tucker distance against the exact distance, with ERF's check
 //   tolerances (Neutral_Hill_2D/check_hill.py, Neutral_Hill_3D/check_hill3d.py)
 //   on ERF's decks: flat ground, the 2-D ridge, the 3-D hill.
-// Beyond the plan: non-periodic sides (where the mesh bug fixed in this PR
+// Also: non-periodic sides (where the mesh bug fixed in this PR
 // broke the solve), both back ends, the ghost fill.
 #include "PoissonTestHelpers.H"
 #include "WallDistance.H"
@@ -102,7 +102,7 @@ PCase ridge_case (double hmax, int max_grid = 64)
     return c;
 }
 
-// UT-1.11.3, flat: ERF's flat-fitted check (hmax = 1e-6): the distance is the
+// Flat: ERF's flat-fitted check (hmax = 1e-6): the distance is the
 // height above the ground, max relative error <= 3e-3 and <= 0.1 m where
 // d < 100 m (single precision: 1e-2 and 0.5 m).
 void flat_check (const std::string& backend)
@@ -117,7 +117,7 @@ void flat_check (const std::string& backend)
 TEST (WallDistance, FlatGroundIsTheHeight) { flat_check("gmres_fft"); }
 TEST (PoissonBWallDistance, FlatGroundIsTheHeight) { flat_check("mlmg"); }
 
-// Beyond the plan: on flat ground the distance converges at second order
+// On flat ground the distance converges at second order
 // (max error 0.122, 0.031, 0.0076 m on 32, 64, 128 layers: Delta^2/(8H) of the
 // discrete solution's offset). Double precision.
 TEST (WallDistance, FlatGroundSecondOrder)
@@ -140,7 +140,7 @@ TEST (WallDistance, FlatGroundSecondOrder)
     EXPECT_GE(order_of(err, 1), 1.9) << err[1] << " " << err[2];
 }
 
-// UT-1.11.3, ridge: ERF's ridge check: max relative error <= 0.15, mean <= 0.03,
+// Ridge: ERF's ridge check: max relative error <= 0.15, mean <= 0.03,
 // and <= 0.2 vertical cells where d < 100 m.
 TEST (WallDistance, RidgeWithinErfTolerances)
 {
@@ -156,7 +156,7 @@ TEST (WallDistance, RidgeWithinErfTolerances)
     EXPECT_LE(e.max_abs_near / c.geom.CellSize(2), 0.2);
 }
 
-// UT-1.11.3, 3-D hill: ERF's Neutral_Hill_3D deck (64 x 64 x 20 over 5120 m x
+// 3-D hill: ERF's Neutral_Hill_3D deck (64 x 64 x 20 over 5120 m x
 // 5120 m x 800 m, BTF, h = 100 / (1 + (r/500)^2)) with ERF's tolerances (max
 // relative 0.15, mean 0.03, 0.2 cells near the ground), every cell checked;
 // periodic as in ERF and with Neumann (non-periodic) sides, where the mesh bug
@@ -186,7 +186,7 @@ void hill3d_check (const std::string& backend)
 TEST (WallDistance, Hill3dWithinErfTolerances) { hill3d_check("gmres_fft"); }
 TEST (PoissonBWallDistance, Hill3dWithinErfTolerances) { hill3d_check("mlmg"); }
 
-// Beyond the plan: fill_ghosts fills every ghost cell, corners and the
+// fill_ghosts fills every ghost cell, corners and the
 // ghosts between boxes included: odd copies below a Dirichlet ground, even
 // copies at Neumann faces (checked on a linear field).
 TEST (WallDistance, GhostFillFollowsTheBoundaryConditions)

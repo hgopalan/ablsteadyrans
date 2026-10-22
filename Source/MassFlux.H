@@ -2,7 +2,7 @@
 #define GUST_MASSFLUX_H_
 
 // Volume fluxes, divergence and pressure gradient on the terrain-following
-// C-grid (sub-phase 1.6).
+// C-grid.
 //
 // The state holds the Cartesian velocity: u on x-faces, v on y-faces and w on
 // z-faces. A z-face follows the terrain, so the flux through it per unit

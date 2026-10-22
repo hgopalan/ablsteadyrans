@@ -22,10 +22,10 @@ field statistics of `z` and `detJ` and the quality report with a JSON gold (`--w
 - Askervein: statistics and quality report match `Gold/askervein_mesh.json`.
 - Steep ridge: the report matches its gold, including both warnings (STF capped, top not flat).
 - 2-D hill: the plotfile matches `Gold/hill2d_plt00000` at relative 1e-12 (1e-5 in single precision). The
-  plotfile holds cell fields only; UT-1.4.7 compares the nodal heights with ERF.
+  plotfile holds cell fields only; `Mesh.MetricsEqualErf` compares the nodal heights with ERF.
 
 The three golds were written by gust: they detect changes, they do not show correctness. Correctness of
-these code paths comes from UT-1.4.7 (ERF's own output) and the closed-form unit tests.
+these code paths comes from `Mesh.MetricsEqualErf` (ERF's own output) and the closed-form unit tests.
 
 ## Gold files
 | Gold | How it was made |

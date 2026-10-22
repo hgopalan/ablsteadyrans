@@ -1,4 +1,4 @@
-// UT-1.3.1: ParmParse parsing of every namespace, including unknown-key
+// ParmParse parsing of every namespace, including unknown-key
 // detection. The abort itself is exercised by the deck tests in Tests/Infrastructure/Input_Validation.
 #include "Inputs.H"
 
@@ -61,7 +61,7 @@ struct ScopedKeys
 
 TEST (Inputs, OwnedNamespacesAreThoseOfThisVersion)
 {
-    // The plan's eight plus the stage's forcing, convection and simplec (1.15).
+    // The original eight plus the SIMPLEC stage's forcing, convection and simplec.
     const std::vector<std::string> expect{
         "mesh", "terrain", "init", "turb", "bc", "steady", "solver", "io", "forcing", "convection", "simplec"};
     EXPECT_EQ(gust::owned_namespaces(), expect);

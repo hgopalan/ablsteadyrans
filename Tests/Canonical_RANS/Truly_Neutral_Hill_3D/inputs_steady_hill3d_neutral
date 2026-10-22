@@ -1,4 +1,4 @@
-# RT-2.2.1: a truly neutral variant of ERF's Neutral_Hill_3D
+# A truly neutral variant of ERF's Neutral_Hill_3D
 # (inputs_steady_hill3d) with a true fixed point, so that two sweeps can be
 # compared to 1e-8: theta constant (300 K, no inversion, no gradient at the
 # top), forcing.gravity = 0 (as inputs_steady_askervein), Rayleigh damping
@@ -51,7 +51,7 @@ forcing.vg              = 0.
 turb.tke_floor = 1.e-6
 
 steady.stage                   = simplec
-steady.sweep                   = zjacobi   # Phase 1 sweep (the CPU default is lusgs since sub-phase 2.6)
+steady.sweep                   = zjacobi   # z-line Jacobi sweep (the CPU default is lusgs)
 steady.cfl0                    = 1.
 steady.cfl_max                 = 4.
 steady.zline_sweeps            = 16

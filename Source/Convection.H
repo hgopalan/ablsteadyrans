@@ -1,13 +1,13 @@
 #ifndef GUST_CONVECTION_H_
 #define GUST_CONVECTION_H_
 
-// Convection operator on the terrain-following C-grid (sub-phase 1.5):
+// Convection operator on the terrain-following C-grid:
 //   C(q) = (1/J) [ d_xi (F_x q) + d_eta (F_y q) + d_zeta (F_z q) ]
 // over the control volume of q (CVFluxes.H), with q at the control-volume
 // faces from a limited MUSCL reconstruction on the upwind side.
 //
 // The transport fluxes F are the volume fluxes through the cell faces per
-// unit index area (the fluxes face_divergence sums; sub-phase 1.6 computes
+// unit index area (the fluxes face_divergence sums; MassFlux.H computes
 // them from the velocity): F_x = a_x u on x-faces,
 // F_y = a_y v on y-faces, F_z = Omega on z-faces (the flux through the sloped
 // face, w - z_x u - z_y v; a_z = 1). A velocity component's control volume
@@ -52,7 +52,7 @@ struct ConvectionOptions
 //! Problems with the options, one message per problem (empty when valid).
 std::vector<std::string> check_convection_options (const ConvectionOptions& opt);
 
-//! The convection options of a run (sub-phase 1.15), inputs convection.*:
+//! The convection options of a run, inputs convection.*:
 //! limiter (van_leer | van_albada | upwind) for the momentum and theta
 //! equations (k is always bounded upwind), smooth_eps_velocity (m/s) and
 //! smooth_eps_theta (K), the van Albada eps of each.

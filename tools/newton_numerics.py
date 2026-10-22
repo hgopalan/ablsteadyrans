@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Re-derive the two numerical claims of the Newton-Krylov core (sub-phase 3.1).
+"""Re-derive the two numerical claims of the Newton-Krylov core.
 
 1. The step of the forward-difference Jacobian-vector product. For
    R(q) = A q + B(q, q) the forward difference

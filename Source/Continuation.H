@@ -1,8 +1,8 @@
 #ifndef GUST_CONTINUATION_H_
 #define GUST_CONTINUATION_H_
 
-// Pseudo-transient continuation around the Newton–Krylov step (plan
-// sub-phase 3.2). One continuation step from q:
+// Pseudo-transient continuation around the Newton–Krylov step. One
+// continuation step from q:
 //
 //   1. dtau = local_dtau(q, CFL_n) (PseudoTime.H), or no pseudo-time term
 //      (D = 0, plain Newton) once the switch to infinite dtau is made;
@@ -29,8 +29,8 @@
 //      steady.newton_cfl_cut (from infinite dtau: cfl_cut cfl_max; never
 //      below the smallest normal Real) and
 //      retries, up to steady.newton_max_retries times. Then the step
-//      returns ContinuationStatus::failed (sub-phase 3.5 falls back to
-//      SIMPLEC on it).
+//      returns ContinuationStatus::failed (the Newton stage falls
+//      back to SIMPLEC on it, NewtonStage.H).
 //
 // The SER inputs are the driver's (steady.cfl0, cfl_max, ser_exponent,
 // ser_max_growth: SteadyOptions, Driver.H). The new inputs (steady.*, read by

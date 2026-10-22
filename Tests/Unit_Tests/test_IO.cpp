@@ -1,5 +1,5 @@
-// UT-1.3.2: plotfile round trip (cell-centred variables and nodal z_phys_nd).
-// UT-1.3.3: checkpoint/restart round trip, onto a different box layout.
+// Plotfile round trip (cell-centred variables and nodal z_phys_nd).
+// Checkpoint/restart round trip, onto a different box layout.
 #include "FileMagic.H"
 #include "StateIO.H"
 #include "State.H"
@@ -170,7 +170,8 @@ TEST (IO, CheckpointRestartIsBitIdenticalOnANewLayout)
 }
 
 // A checkpoint written before the solution fields had two ghost cells (one,
-// up to sub-phase 1.11) restarts bit for bit: only valid data is restored.
+// before the MUSCL convection operators) restarts bit for bit: only valid
+// data is restored.
 TEST (IO, CheckpointWithOneGhostCellRestarts)
 {
     const auto mesh = test_mesh();

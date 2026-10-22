@@ -1,7 +1,7 @@
 # Grid_Hierarchy
 
 ## Purpose
-The horizontal-only grid hierarchy (sub-phase 2.3): coarser x/y levels over the same vertical layers, each with its
+The horizontal-only grid hierarchy: coarser x/y levels over the same vertical layers, each with its
 own smoothed ground. The case builds the hierarchy on the Askervein mesh and on a steep ridge. It checks each
 level's `z` and `detJ` and the quality report of every level. It also checks that a restart rebuilds the
 hierarchy, and that invalid hierarchy inputs stop the run.
@@ -32,7 +32,7 @@ Check scripts: `Supporting_Files/check_mesh.py` (shared with `Terrain_Mesh`) and
 All carry the labels `regression;smoke`.
 
 ## Expected Results
-- RT-2.3.1 / RT-2.3.2, Askervein: level 0's `z` and `detJ` statistics and every level's quality report (per-level
+- Askervein: level 0's `z` and `detJ` statistics and every level's quality report (per-level
   headers and the summary table included) match `Gold/askervein_hierarchy_mesh.json`. Levels 1 and 2 match their
   gold plotfiles at relative 1e-12 (1e-5 in single precision).
 - Unsmoothed coarse grounds: levels 1 and 2 cap STF at 9 and 10 z-levels against level 0's 8, so the report gives
@@ -43,7 +43,7 @@ All carry the labels `regression;smoke`.
 - Each abort message names its input.
 
 The golds were written by gust: they detect changes. The coarse grounds were checked against an independent
-rebuild in the unit tests (UT-2.3.2).
+rebuild in the unit tests (`MeshHierarchy.GroundSmoothingPasses`).
 
 ## Gold files
 | Gold | How it was made |

@@ -1,7 +1,7 @@
 #ifndef GUST_NEWTON_PRECONDITIONER_H_
 #define GUST_NEWTON_PRECONDITIONER_H_
 
-// The Newton preconditioner of sub-phase 3.3: one SIMPLEC iteration
+// The Newton preconditioner: one SIMPLEC iteration
 // (Simplec.H) on the Newton system linearized at q,
 //
 //   (D + J) dq = r,
@@ -9,7 +9,8 @@
 // from dq = 0, in the hook of Newton.H (NewtonPreconditioner). With r the
 // right-hand side of a Newton step, r = -R(q), and the stage's pressure
 // denominators (PressureDenominator::stage, below) it is the increment of one
-// iteration of the SIMPLEC stage from q, off the Dirichlet rows (UT-3.3.1).
+// iteration of the SIMPLEC stage from q, off the Dirichlet rows
+// (NewtonPreconditioner.ApplyIsOneSimplecIteration).
 // apply(dq, r):
 //
 //   1. the momentum predictor, (1/dtau + A1) du* = r_u (Predictor.H): A1,
@@ -46,7 +47,7 @@
 //
 // The denominators d of step 2 (PressureDenominator). stage: the SIMPLEC
 // d = a_P - sum a_nb of the predictor (PredictorFields), with which apply
-// is one iteration of the stage (UT-3.3.1). diagonal (the default, and the
+// is one iteration of the stage. diagonal (the default, and the
 // one steady.newton_preconditioner = simplec uses): d = a_P, the SIMPLE
 // denominator, on the faces where the stage's d > 0. Why: the transport
 // weights cancel in a_P - sum a_nb, so in the interior the stage's d is
@@ -54,17 +55,18 @@
 // and the pressure increment dp = alpha_p p' vanishes as dtau grows: as a
 // preconditioner of the steady Newton system the stage's iteration leaves
 // the pressure to GMRES, whose iterations then grow with the CFL (on the 3-D
-// hill of UT-3.3.3 from 18 at CFL 10 to 360-381 at 1e4, more than the
-// identity's 163.5-227.5). With d = a_P (which carries the transport and
-// diffusion diagonal) the pressure increment does not depend on dtau and the
-// iterations stay at 10-10.5 from CFL 10 to 1e4 (the SIMPLE preconditioner of
-// Elman, Howle, Shadid, Shuttleworth and Tuminaro, J. Comput. Phys. 227,
-// 2008, with the predictor's line sweeps as the momentum solve). Neither
-// helps where the pressure plays no part: on the horizontally uniform
-// column of UT-3.1.2 the stiff part at large CFL is the Ekman balance of
-// the rotation and the vertical diffusion, which the predictor's
-// point-implicit rotation (Predictor.H) does not resolve, and both need
-// about as many iterations as the identity (docs/results.rst).
+// hill of NewtonPreconditioner.IterationsBoundedOverCfl from 18 at CFL 10 to
+// 360-381 at 1e4, more than the identity's 163.5-227.5). With d = a_P (which
+// carries the transport and diffusion diagonal) the pressure increment does
+// not depend on dtau and the iterations stay at 10-10.5 from CFL 10 to 1e4
+// (the SIMPLE preconditioner of Elman, Howle, Shadid, Shuttleworth and
+// Tuminaro, J. Comput. Phys. 227, 2008, with the predictor's line sweeps as
+// the momentum solve). Neither helps where the pressure plays no part: on the
+// horizontally uniform column of Newton.ColumnConvergesQuadratically the stiff
+// part at large CFL is the Ekman balance of the rotation and the vertical
+// diffusion, which the predictor's point-implicit rotation (Predictor.H) does
+// not resolve, and both need about as many iterations as the identity
+// (docs/results.rst).
 //
 // The sweeps are the stage's: steady.zline_sweeps of steady.sweep (zjacobi
 // or lusgs, with steady.line_*), simplec.* for the correction, the rotation
@@ -75,14 +77,16 @@
 // the finite-difference truncation of step 3 and the Poisson tolerance
 // (NewtonPreconditioner.ApplyIsLinearInR); in single precision step 3's
 // difference of the theta convections (theta ~ 300 K) keeps about one digit,
-// which FGMRES tolerates (UT-3.3.3 passes in single).
+// which FGMRES tolerates (NewtonPreconditioner.IterationsBoundedOverCfl
+// passes in single).
 //
 // The pressure gauge (Newton.H): in a domain without a Dirichlet pressure
 // face the Poisson problem is singular. The J-weighted mean of its
 // right-hand side, a net source of r_p the linearized continuity rows cannot
 // carry, is projected out (the stage aborts on it instead), and dp is
 // returned with zero J-weighted mean, so the FGMRES update keeps the mean of
-// p. A constant added to q's p leaves setup and apply unchanged (UT-3.3.2).
+// p. A constant added to q's p leaves setup and apply unchanged
+// (NewtonPreconditioner.ConstantPressureShiftLeavesTheSolveUnchanged).
 //
 // setup(q, dtau) rebuilds everything that depends on the linearization point
 // and the step, once per Newton step: q's copy with its ghost cells and wall

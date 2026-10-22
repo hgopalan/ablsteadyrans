@@ -1,17 +1,16 @@
-// Sub-phase 2.4: transfer operators between the levels of the grid
+// Transfer operators between the levels of the grid
 // hierarchy (Transfer.H).
-//   UT-2.4.1 restriction conserves the face mass flux (coarse = sum of fine);
+//   restriction conserves the face mass flux (coarse = sum of fine);
 //            the coarse divergence is the J-weighted mean of the fine one
-//   UT-2.4.2 prolongation + projection gives a divergence-free field
-//   UT-2.4.3 prolongation of bilinear fields is exact (flat terrain), up to
+//   prolongation + projection gives a divergence-free field
+//   prolongation of bilinear fields is exact (flat terrain), up to
 //            the domain faces and across a periodic seam
-//   UT-2.4.4 prolonged k >= k_floor
-//   beyond the plan: a gathered level gives the transfers of the distributed
+//   prolonged k >= k_floor
+//   also: a gathered level gives the transfers of the distributed
 //            one bit for bit; restrict(prolong(c)) on flat ground is the
-//            closed-form smoother S_x S_y (UT-2.4.5, UT-2.4.6); the target's
-//            node heights come from the hierarchy (UT-2.4.7); a coarse
-//            direction one cell wide gives a constant (UT-2.4.8); a wrong
-//            level pair aborts (UT-2.4.9)
+//            closed-form smoother S_x S_y; the target's node heights come
+//            from the hierarchy; a coarse direction one cell wide gives a
+//            constant; a wrong level pair aborts
 // The pinned values are computed on the host from closed forms, in double
 // precision, from host copies of the fields gathered on every rank.
 #include "BoundaryConditions.H"
@@ -211,7 +210,7 @@ double max_abs (const std::vector<double>& v)
 } // namespace
 
 // ---------------------------------------------------------------------------
-// UT-2.4.1. Restriction conserves the face mass flux: every coarse face
+// Restriction conserves the face mass flux: every coarse face
 // carries the sum of the fluxes of the fine faces it covers,
 //   a_x,c u_c r = sum a_x,f u_f,  a_y,c v_c r = sum a_y,f v_f,
 //   a_z,c Omega_c r^2 = sum a_z,f Omega_f,
@@ -349,7 +348,7 @@ TEST (Transfer, RestrictionConservesFaceFlux)
 }
 
 // ---------------------------------------------------------------------------
-// UT-2.4.3. Prolongation of a field bilinear in x and y is exact on flat
+// Prolongation of a field bilinear in x and y is exact on flat
 // terrain, at every fine point: up to a non-periodic domain face (linear
 // extrapolation in the half cell next to it) and across a periodic seam. In
 // the periodic direction the field is a tent of period L with its two kinks
@@ -416,7 +415,7 @@ TEST (Transfer, ProlongationOfBilinearFieldsIsExact)
 }
 
 // ---------------------------------------------------------------------------
-// beyond the plan: restrict(prolong(c)) on flat ground. Bilinear
+// restrict(prolong(c)) on flat ground. Bilinear
 // interpolation is not conservative, so the round trip is not the identity:
 // for r = 2 it is the smoother S_x S_y with, along a cell-centred direction,
 //   (S c)_I = (c_{I-1} + 6 c_I + c_{I+1}) / 8
@@ -491,7 +490,7 @@ TEST (Transfer, RoundTripIsTheClosedFormSmoother)
 }
 
 // ---------------------------------------------------------------------------
-// UT-2.4.4. The prolonged k is at least the floor: a coarse k that dips
+// The prolonged k is at least the floor: a coarse k that dips
 // below the floor (and below 0) gives fine values equal to the bilinear
 // interpolant where it is above the floor and to the floor exactly where it
 // is not; the clipped count is the number of such cells.
@@ -548,7 +547,7 @@ TEST (Transfer, ProlongedTkeIsAboveTheFloor)
 }
 
 // ---------------------------------------------------------------------------
-// UT-2.4.2. Prolongation + projection gives a divergence-free field: the
+// Prolongation + projection gives a divergence-free field: the
 // divergence left is the Poisson solver's residual, below its tolerance in
 // the norm its back end stops on (gmres_mlmg: the J-weighted 2-norm, the
 // default; gmres_fft: the plain 2-norm). The Dirichlet normal velocities of
@@ -638,10 +637,10 @@ TEST (Transfer, ProlongationAndProjectionIsDivergenceFree)
 }
 
 // ---------------------------------------------------------------------------
-// beyond the plan (UT-2.3.6 for the transfers): with the coarse levels
-// gathered onto one box (gather_from = 1) the restriction, the
-// interpolation and, into the distributed level 0, the whole prolongation
-// give the distributed hierarchy's results bit for bit, over the hill.
+// MeshHierarchy.GatheredLevelEqualsDistributed for the transfers: with the
+// coarse levels gathered onto one box (gather_from = 1) the restriction, the
+// interpolation and, into the distributed level 0, the whole prolongation give
+// the distributed hierarchy's results bit for bit, over the hill.
 TEST (Transfer, GatheredLevelEqualsDistributed)
 {
     TCase a = case_inputs(false, true, true);
@@ -719,7 +718,7 @@ TEST (Transfer, GatheredLevelEqualsDistributed)
 }
 
 // ---------------------------------------------------------------------------
-// beyond the plan: restrict_state and prolong_fields set the target State's
+// restrict_state and prolong_fields set the target State's
 // node heights (ghost nodes included) to its level's, bit for bit, whatever
 // they held before. Over the hill, where the levels' grounds differ.
 TEST (Transfer, TargetNodeHeightsComeFromTheHierarchy)
@@ -754,7 +753,7 @@ TEST (Transfer, TargetNodeHeightsComeFromTheHierarchy)
 }
 
 // ---------------------------------------------------------------------------
-// beyond the plan: a non-periodic direction one coarse cell wide. 32 x 4
+// A non-periodic direction one coarse cell wide. 32 x 4
 // cells, periodic x, walls in y, three levels: level 2 is one cell wide in
 // y, so the field is constant along y there and the interpolation reads
 // that cell only (no second point to extrapolate with). A tent in x,
@@ -823,7 +822,7 @@ TEST (Transfer, OneCellDirectionIsConstant)
 }
 
 // ---------------------------------------------------------------------------
-// beyond the plan: a level pair that is not fine < coarse aborts, naming the
+// A level pair that is not fine < coarse aborts, naming the
 // rule, in restrict_state and prolong_fields.
 TEST (Transfer, WrongLevelPairsAbort)
 {

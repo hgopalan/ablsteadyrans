@@ -1,10 +1,12 @@
-// Sub-phase 1.10: the Poisson layer, back end A (ERF's TerrainPoisson + GMRES
+// The Poisson layer, back end A (ERF's TerrainPoisson + GMRES
 // + FFT preconditioner).
-//   UT-1.10.1 manufactured phi, all BC combinations, order >= 1.9
-//   UT-1.10.2 variable coefficients        UT-1.10.3 coefficient 1 = plain operator
-//   UT-1.10.4 Neumann faces carry no flux  UT-1.10.5 projected divergence
-//   UT-1.10.6 mirror symmetry
-// Beyond the plan: preconditioner effect, singular problems, input and BC checks.
+//   manufactured phi, all BC combinations, order >= 1.9
+//   variable coefficients
+//   coefficient 1 = plain operator
+//   Neumann faces carry no flux
+//   projected divergence
+//   mirror symmetry
+// Also: preconditioner effect, singular problems, input and BC checks.
 //
 // Manufactured solutions, with s = (z - h)/(z_top - h) and f(x, y) a product of
 // lateral factors chosen per BC (periodic, Neumann: cos, Dirichlet: sin):
@@ -39,7 +41,7 @@ using namespace gust::ptest;
 using gust::PoissonFace;
 
 
-// UT-1.10.1: second order for every lateral BC (periodic, Neumann, Dirichlet)
+// Second order for every lateral BC (periodic, Neumann, Dirichlet)
 // with a Dirichlet or a Neumann top, on a stretched STF mesh over a 60 m hill
 // (2-D, three resolutions), and for one 3-D combination (two resolutions).
 TEST (Poisson, ManufacturedSecondOrderAllBCs)
@@ -76,7 +78,7 @@ TEST (Poisson, ManufacturedSecondOrderAllBCs)
     EXPECT_GE(order_of(err, 0), tol(1.9, 1.8)) << "3-D: " << err[0] << " " << err[1];
 }
 
-// Beyond the plan: ERF's ground treatment is first order on sloped ground when
+// ERF's ground treatment is first order on sloped ground when
 // the solution has a tangential gradient there (the mirror below the ground
 // sets d phi / d zeta = 0 in the cross terms; the Neumann condition on a slope
 // does not). Pinned, so a change to the ground treatment shows: on flat ground
@@ -112,7 +114,7 @@ TEST (Poisson, GroundNeumannIsFirstOrderOnSlopes)
     }
 }
 
-// UT-1.10.2: variable coefficients. The anisotropic operator
+// Variable coefficients. The anisotropic operator
 // div(diag(1, 1, beta_v) grad phi), beta_v = 1, 0.5, 0.1, on a flat stretched
 // mesh and over the 60 m hill (z_cross = beta_h: the cross part of the z-face
 // flux takes the horizontal coefficient); without z_cross the hill case does
@@ -161,7 +163,7 @@ TEST (Poisson, VariableCoefficientsSecondOrder)
     EXPECT_GE(order_of(err, 1), tol(1.9, 1.6)) << "varying beta: " << err[1] << " " << err[2];
 }
 
-// UT-1.10.3: coefficients equal to 1 give the plain operator bit for bit: the
+// Coefficients equal to 1 give the plain operator bit for bit: the
 // same iterations, solution and fluxes as no coefficients at all.
 TEST (Poisson, UnitCoefficientsAreThePlainOperator)
 {
@@ -283,7 +285,7 @@ double slab_max_abs (const amrex::MultiFab& mf, int d, int m)
     return s;
 }
 
-// UT-1.10.4: no flux through the Neumann faces, terrain cross term included,
+// No flux through the Neumann faces, terrain cross term included,
 // on a ramp that crosses them (slope 0.15, where the cross term is not small),
 // nor through the ground; so the whole flux leaves through the Dirichlet top:
 // sum_cells J (A phi) = -sum_top a_z F_z (discrete divergence theorem).
@@ -313,7 +315,7 @@ TEST (Poisson, NeumannFacesCarryNoFlux)
     EXPECT_NEAR(inside, top, tol(1e-12, 1e-4) * std::abs(top));
 }
 
-// Beyond the plan: the operator and the fluxes agree cell by cell,
+// The operator and the fluxes agree cell by cell,
 // A phi = -face_divergence(F), with varying coefficients and z_cross on the
 // ramp (so the cross terms and the split matter).
 TEST (Poisson, OperatorMatchesFluxDivergence)
@@ -356,7 +358,7 @@ TEST (Poisson, OperatorMatchesFluxDivergence)
     }
 }
 
-// UT-1.10.5: projection. A face field U with no normal component on the
+// Projection. A face field U with no normal component on the
 // Neumann faces and the ground; rhs = div U; then U + flux(phi) has divergence
 // equal to the solve's residual, below the solver tolerance.
 TEST (Poisson, ProjectedFieldIsDivergenceFree)
@@ -388,7 +390,7 @@ TEST (Poisson, ProjectedFieldIsDivergenceFree)
     EXPECT_NEAR(div.norm2(), res.final_residual, tol(1e-3, 1e-1) * res.final_residual + tol(1e-14, 1e-6) * div0);
 }
 
-// UT-1.10.6: symmetric terrain and right-hand side give a mirror-symmetric
+// Symmetric terrain and right-hand side give a mirror-symmetric
 // solution: phi(i) = phi(n - 1 - i) to 1e-12 of max |phi|.
 TEST (Poisson, MirrorSymmetry)
 {
@@ -424,7 +426,7 @@ TEST (Poisson, MirrorSymmetry)
 // solution for a right-hand side symmetric in x (and in y) is symmetric in x
 // (and in y) to round-off. The cross kernel's metrics are read off the
 // mesh's x- and y-edges separately; a node index mixed up between them
-// (as in sub-phase 1.10's first transcription) breaks the y symmetry at the
+// (as in the first transcription) breaks the y symmetry at the
 // 1e-4 level.
 TEST (Poisson, SplitOperatorKeepsTheMirrorSymmetries)
 {
@@ -472,7 +474,7 @@ TEST (Poisson, SplitOperatorKeepsTheMirrorSymmetries)
     EXPECT_LE(worst_y, tol(1e-12, 1e-5) * big);
 }
 
-// Beyond the plan: the FFT preconditioner, with the counts measured when the
+// The FFT preconditioner, with the counts measured when the
 // test was written (bounds 10 % above them):
 //  * isotropic: 19 iterations; without the preconditioner more than 10 times as many;
 //  * beta_v / beta_h = 0.1, told the ratio (dz' = dz sqrt(10)): 16, at most 3
@@ -506,7 +508,7 @@ TEST (Poisson, PreconditionerCutsIterations)
     EXPECT_LE(solve_ms(c, ms, bc, &beta).res.iterations, 32);
 }
 
-// Beyond the plan: with no Dirichlet face the problem is singular; the
+// With no Dirichlet face the problem is singular; the
 // J-weighted mean of the right-hand side is removed and reported, and phi
 // comes back with zero J-weighted mean.
 TEST (Poisson, SingularProblemRemovesTheMean)
@@ -527,7 +529,7 @@ TEST (Poisson, SingularProblemRemovesTheMean)
     EXPECT_NEAR(amrex::MultiFab::Dot(c.mesh.detJ, 0, phi, 0, 1, 0), 0.0, tol(1e-10, 1e-3) * phi.norm2());
 }
 
-// Beyond the plan: options, BCs and non-convergence are refused with the
+// Options, BCs and non-convergence are refused with the
 // input named.
 TEST (Poisson, ChecksNameTheInput)
 {
@@ -557,7 +559,7 @@ TEST (Poisson, ChecksNameTheInput)
     EXPECT_TRUE(gust::check_poisson_bc(make_bc(PoissonFace::neumann, PoissonFace::periodic, PoissonFace::dirichlet), c.geom).empty());
     EXPECT_FALSE(gust::check_poisson_bc(make_bc(PoissonFace::periodic, PoissonFace::periodic, PoissonFace::dirichlet), c.geom).empty());
     EXPECT_FALSE(gust::check_poisson_bc(make_bc(PoissonFace::neumann, PoissonFace::neumann, PoissonFace::dirichlet), c.geom).empty());
-    // A Dirichlet ground is valid (the Tucker distance, sub-phase 1.11).
+    // A Dirichlet ground is valid (the Tucker distance).
     EXPECT_TRUE(gust::check_poisson_bc(make_bc(PoissonFace::neumann, PoissonFace::periodic, PoissonFace::dirichlet,
                                                     PoissonFace::dirichlet), c.geom).empty());
 

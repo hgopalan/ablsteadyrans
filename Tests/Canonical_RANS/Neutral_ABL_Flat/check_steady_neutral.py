@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run GUST on the Neutral_ABL_Flat deck and apply ERF's checks (RT-1.15.2).
+"""Run GUST on the Neutral_ABL_Flat deck and apply ERF's checks (rt_steady_neutral_flat).
 
     check_steady_neutral.py -- COMMAND [ARGS ...]
 

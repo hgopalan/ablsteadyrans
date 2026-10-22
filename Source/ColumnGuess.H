@@ -1,7 +1,7 @@
 #ifndef GUST_COLUMNGUESS_H_
 #define GUST_COLUMNGUESS_H_
 
-// The converged-column first guess (sub-phase 2.1b, init.first_guess =
+// The converged-column first guess (init.first_guess =
 // column): the deck's horizontally uniform column is solved as a 1-D
 // problem on the deck's vertical grid and its converged u, v, theta and k
 // profiles are returned as a table by height above the ground. The
