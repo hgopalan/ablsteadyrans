@@ -9,8 +9,9 @@
 # rans is the full RANS run. LIMITERS (default "van_leer") repeats each rans run per convection.limiter;
 # MESH=100k replaces each deck's mesh by one of about 100 K cells, the paper's CFD budget (run on 4 ranks
 # as the paper's 4 processors): runs <case>_100k_<mode>.
-# CASES (default all but askervein_stable and bsb_wn) picks cases: askervein askervein_stable bolund_270
-# bolund_239 bolund_90 bsb bsb_wn (askervein_stable: rans only; its mc runs are askervein's).
+# CASES (default askervein bolund_270 bolund_239 bolund_90 bsb_srtm) picks cases: askervein askervein_stable
+# bolund_270 bolund_239 bolund_90 bsb_srtm bsb bsb_wn bsb_wn_consistent (askervein_stable: rans only; its mc runs
+# are askervein's).
 set -u
 ROOT=$(cd "$(dirname "$0")/../../.." && pwd)
 BIN=$(cd "$1" && pwd)/gust; WN=$2; RUN=$3; NP=${4:-8}
@@ -18,7 +19,7 @@ D=$ROOT/Tests/Real_Terrain/WindNinja2019
 T=$ROOT/Tests/Real_Terrain/WindNinja2019/windninja2019.py
 mkdir -p "$RUN" && RUN=$(cd "$RUN" && pwd)
 [ -f "$RUN/masts.csv" ] || python3 "$T" prepare "$WN" "$RUN"
-for c in ${CASES:-askervein bolund_270 bolund_239 bolund_90 bsb_wn_consistent}; do
+for c in ${CASES:-askervein bolund_270 bolund_239 bolund_90 bsb_srtm}; do
   case $c in
     askervein*) terr="terrain.file=$ROOT/extern_erf/askervein.txt"; samp="--erf_terrain $ROOT/extern_erf/askervein.txt"; site=askervein; k=210; z0=0.03 ;;
     bolund_*)  terr="terrain.file=$RUN/bolund.xyz"; samp="--terrain $RUN/bolund.xyz"; site=bolund; k=${c#bolund_}; z0=0.01 ;;
@@ -26,7 +27,7 @@ for c in ${CASES:-askervein bolund_270 bolund_239 bolund_90 bsb_wn_consistent}; 
                [ -f "$RUN/bsb_wn.xyz" ] || python3 "$T" smooth "$WN/test_cases/big_butte.asc" "$RUN/bsb_wn.xyz" \
                  --sigma 120 --cap 2050 --soft 150
                terr="terrain.file=$RUN/bsb_wn.xyz"; samp="--terrain $RUN/bsb_wn.xyz"; site=bsb; k=222; z0=0.01 ;;
-    bsb)       terr="terrain.file=$RUN/bsb.xyz"; samp="--terrain $RUN/bsb.xyz"; site=bsb; k=222; z0=0.01 ;;
+    bsb|bsb_srtm) terr="terrain.file=$RUN/bsb.xyz"; samp="--terrain $RUN/bsb.xyz"; site=bsb; k=222; z0=0.01 ;;
   esac
   # The 100 K mesh: n_cell, max_grid_size, dz0 and stretch_ratio (top unchanged).
   mesh100=""

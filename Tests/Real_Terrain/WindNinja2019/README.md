@@ -11,8 +11,8 @@ consistent) and GUST - CFD (steady RANS) next to the observations and the paper'
 |---|---|
 | `inputs_askervein` | Askervein, 8.9 m/s from 210° at 10 m; 256 × 256 × 64 cells, 23.4 m, 1 m first layer; masts on lines A, AA, B at 10 m. |
 | `inputs_bolund_270`, `inputs_bolund_239`, `inputs_bolund_90` | Bolund cases 1, 3, 4 (10.9 m/s from 270°, 8.7 m/s from 239°, 7.6 m/s from 90°, at 5 m); 256 × 128 × 48 cells, 1.6 m, 0.5 m first layer; line B (cases 1, 4) or A (case 3) at 5 m. |
-| `inputs_bsb_wn_consistent` | Big Southern Butte, 8.3 m/s from 222° at 3 m, on the paper's 68 m cells and smoothed terrain (`bsb_wn.xyz`), 272 × 296 × 20 cells; an uncapped length and a no-slip lid moving at the inflow's top speed keep the inflow from drifting over the 18.7 km fetch; transects TSW, TWSW at 3 m. |
-| `inputs_askervein_stable`, `inputs_bsb`, `inputs_bsb_wn`, `inputs_bsb_wn_flat`, `inputs_bsb_wn_flat_consistent`, `inputs_bsb_wn_precursor` | Diagnostics, not part of the comparison: Askervein with a lapse rate; the Butte on the SRTM terrain with 1 m first cells (does not reach the steady verdict); the paper-like Butte with a slip top (its inflow drifts by −18.5 %); the horizontal-homogeneity tests of the two Butte inflows on flat ground; a precursor column. |
+| `inputs_bsb_srtm` | Big Southern Butte, 8.3 m/s from 222° at 3 m, on the unsmoothed SRTM terrain (`bsb.xyz`), 272 × 296 × 40 cells: 68 m horizontally (the paper's), a 4 m first layer; an uncapped length and a no-slip lid moving at the inflow's top speed keep the inflow from drifting over the 18.7 km fetch; transects TSW, TWSW at 3 m. |
+| `inputs_askervein_stable`, `inputs_bsb_wn_consistent`, `inputs_bsb`, `inputs_bsb_wn`, `inputs_bsb_wn_flat`, `inputs_bsb_wn_flat_consistent`, `inputs_bsb_wn_precursor` | Diagnostics, not part of the comparison: Askervein with a lapse rate; the Butte on the paper-like mesh (smoothed terrain `bsb_wn.xyz`, 68 m first layer: its lee does not separate, see Expected Results); the Butte on the SRTM terrain with 1 m first cells and a slip top; the paper-like Butte with a slip top (its inflow drifts by −18.5 %); the horizontal-homogeneity tests of the two Butte inflows on flat ground; a precursor column. |
 | `windninja2019.py` | `prepare` (masts and terrain from windninja-tools), `smooth` (the paper-like Butte terrain), `sample` (speed-up at the masts and along the transects), `plot` (the paper's figures), `stats` (windward / ridge / lee RMSE, bias and MAPE). |
 | `run_all.sh` | Runs the cases one at a time (GUST - Fast and GUST - CFD), samples and plots them. |
 | `sweep.sh`, `sweep_variants.txt` | One-change variants of a case (a file of `name key=value ...` lines). |
@@ -75,10 +75,18 @@ With the recommended setting, on 8 ranks of an Apple M2 Pro laptop (not idle; in
 | Bolund case 1 | 365 | 2.9 min | 2.27 / 1.25 |
 | Bolund case 3 | 361 | 2.9 min | 1.47 / 0.64 |
 | Bolund case 4 | 815 | 6.0 min | 1.01 / 1.23 |
-| Big Southern Butte | 158 | 1.3 min | 3.34 / 3.22 |
+| Big Southern Butte (`inputs_bsb_srtm`) | 863 | 14 min | 3.74 / 2.89 |
 
-The mass-consistent runs take 2–5 s. Known differences: the Butte lee is faster than measured with both modes,
-and the Bolund case 4 lee mast is slower than measured with the cap (bias −2.4 m/s).
+The mass-consistent runs take 2–5 s. Known differences: the Bolund case 4 lee mast is slower than measured with the
+cap (bias −2.4 m/s); on the Butte two lee-flank masts (R20, R21) are 0.6–0.8 lower in speed-up than measured.
+
+**Why the Butte runs on the SRTM terrain.** On the paper-like mesh (`inputs_bsb_wn_consistent`: the terrain smoothed
+to the paper's Figure 14, which lowers the summit by about 200 m, and a 68 m first layer) the lee does not separate:
+every lee mast keeps the inflow direction and the lee speed-up is too high (lee RMSE 3.53 m/s, bias +2.0). With a 4 m
+first layer on the same terrain the lee RMSE is 2.90 m/s; on the unsmoothed terrain with the 4 m layer it is
+2.58 m/s (bias −1.05, MAPE 32 % against 72 %), the flow turns against the inflow near the ground in the lee as the
+lee masts measured, and R19, TSW9 and R14 come within 0.1 of their measured speed-ups. Turning the inflow by
+±10° changes the lee RMSE by about ±0.2 m/s. The cost is 863 fine-level iterations (14 min) against 158 (1.3 min).
 
 ## CTest
 None (the runs take minutes; the unit tests cover the new options).

@@ -255,7 +255,9 @@ only. On the benchmarks (``Tests/Real_Terrain/WindNinja2019``, ``IshiharaZhou``,
      - 1.25 / 0.64 / 1.23 m/s
 
 Bolund case 4 (flow from the east, the lee over the escarpment) is slower than measured in the lee with the
-cap. The lee of Big Southern Butte stays faster than measured with both settings.
+cap. On Big Southern Butte the lee separates only on the unsmoothed terrain with a 4 m first layer
+(``Tests/Real_Terrain/WindNinja2019/inputs_bsb_srtm``: lee RMSE 2.58 m/s against 3.53 m/s on the paper-like mesh,
+with 68 m first cells and smoothed terrain).
 
 The comparison uses data made openly available by N. Wagenbrenner (windninja-tools, the Big Southern Butte
 database and Wagenbrenner et al. 2019), T. Ishihara and Q. Zhou (the ridge wind-tunnel data) and ERCOFTAC (the
