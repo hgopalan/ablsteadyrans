@@ -29,3 +29,6 @@ README lists its CTest names.
   from ERF; the others are change detectors written by GUST itself.
 - `Gold/` folders are exempt from the whitespace and spelling checks (`.gitattributes`, `.codespellrc`).
 - The full list of tests and what each checks is in `docs/testing.rst`.
+- `inputs_reference` is the master input reference: every input with its default, range and meaning, as comments
+  to copy into a deck. It is generated from `docs/inputs.rst` (`tools/input_reference.py --write`) and checked by
+  the CTest `input_reference_current`.

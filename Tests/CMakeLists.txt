@@ -1210,3 +1210,17 @@ add_test(NAME drift_check_selftest
          WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/tools)
 set_tests_properties(drift_check_selftest PROPERTIES LABELS unit
                 ENVIRONMENT PYTHONDONTWRITEBYTECODE=1)
+
+# The master input reference (Tests/inputs_reference) is what
+# tools/input_reference.py --write gives from docs/inputs.rst, and the keys of
+# docs/inputs.rst are the keys the readers in Source/ query.
+add_test(NAME input_reference_current
+         COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tools/input_reference.py --check
+         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+set_tests_properties(input_reference_current PROPERTIES LABELS unit
+                     ENVIRONMENT PYTHONDONTWRITEBYTECODE=1)
+# The check's own tests, on a throw-away docs/ and Source/.
+add_test(NAME input_reference_selftest
+         COMMAND ${Python3_EXECUTABLE} -m unittest -v test_input_reference
+         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/tools)
+set_tests_properties(input_reference_selftest PROPERTIES LABELS unit ENVIRONMENT PYTHONDONTWRITEBYTECODE=1)

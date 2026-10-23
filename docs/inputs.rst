@@ -4,6 +4,11 @@ Input reference
 This page lists every input of GUST. The first table is a quick reference; the sections after it give the
 allowed range and meaning of each input, grouped by namespace.
 
+The same keys, with their defaults and the text of the detailed tables, are in ``Tests/inputs_reference``: a
+commented file to copy lines from into a deck. It is generated from this page (``tools/input_reference.py
+--write``); the CTest ``input_reference_current`` fails when the two differ, or when this page and the keys read in
+``Source/`` disagree.
+
 Input file format
 -----------------
 
@@ -310,7 +315,7 @@ Quick reference
      - Iteration limit
    * - ``steady.residual_tol``
      - ``5e-5``
-     - Absolute residual tolerance
+     - Scaled residual tolerance
    * - ``steady.residual_drop_orders``
      - ``4``
      - Required residual drop (orders of magnitude)
@@ -402,7 +407,7 @@ Quick reference
      - ``gmres_mlmg``
      - Poisson solver
    * - ``solver.poisson_reltol``, ``solver.poisson_abstol``
-     - ``1e-10``, ``0``
+     - ``1e-10`` (``1e-5`` single), ``0``
      - Relative and absolute tolerance
    * - ``solver.poisson_max_iter``
      - ``200``
@@ -517,7 +522,7 @@ Quick reference
    * - ``terrain.hierarchy_passes``
      - ``1``
      - Integer from 0 to 64; only with ``mesh.hierarchy_levels`` > 1. The ground of level :math:`l` is smoothed by
-       this number times :math:`2^l - 1` passes (:doc:`grid_hierarchy`).
+       this number times :math:`(2^l - 1)` passes (:doc:`grid_hierarchy`).
 
 ``init``
 --------
@@ -561,7 +566,7 @@ A restart cannot be combined with ``init.*`` keys.
    * - ``init.column_tol``
      - ``1e-8``
      - Finite, > 0; ``column`` only. Convergence tolerance of the single-column solve: the largest relative change
-       of :math:`u, v, k` over a step. Raised to 100 machine epsilon in single precision (1.2e-5).
+       of :math:`u, v, k` over a step. Raised to at least 100 machine epsilon (1.2e-5 single, 2.2e-14 double).
    * - ``init.column_max_iterations``
      - ``5000``
      - ≥ 1; ``column`` only. The run stops if a column has not converged after this many steps. The limit applies
@@ -595,8 +600,8 @@ A restart cannot be combined with ``init.*`` keys.
    * - ``init.column_rib_max``
      - ``4``
      - Finite, > 0; a stratified column only. The upper bound of the bulk Richardson number of the column's surface
-       solve (ERF's value). With Businger–Dyer's stable functions the bound is also at most 0.19, below their 0.2
-       limit (:ref:`stratified column <column-stability>`).
+       solve (ERF's value). With Businger–Dyer's stable functions the bound used is min(``init.column_rib_max``, 0.19),
+       below their 0.2 limit (:ref:`stratified column <column-stability>`).
    * - ``init.column_rib_min``
      - ``-4``
      - Finite, < 0; a stratified column only. The lower bound (ERF's value).
@@ -646,7 +651,7 @@ types, the inflow profile and the sounding; the other keys act in the SIMPLEC st
    * - ``bc.inflow_direction``
      - ``0``
      - Finite (degrees). The direction the wind blows towards, counter-clockwise from the x axis. ``log_law`` and
-       ``power_law`` only; a ``file`` profile gives u and v itself.
+       ``power_law`` only; refused with ``file``, whose profile gives u and v itself.
    * - ``bc.inflow_file``
      - none
      - Required with ``file``: rows of ``z u v theta [k]`` (4 or 5 columns, at least 2 rows), z increasing from
@@ -661,7 +666,7 @@ types, the inflow profile and the sounding; the other keys act in the SIMPLEC st
        :math:`k` is not stored in the checkpoint.
    * - ``bc.theta_profile_z``, ``bc.theta_profile``
      - ``0``, ``300``
-     - Lists of equal length: heights increasing from 0 (m) and θ > 0 (K). The reference sounding.
+     - Lists of equal length: finite, strictly increasing heights (m) and θ > 0 (K). The reference sounding.
    * - ``bc.zhi_theta_grad``
      - ``0``
      - Finite (K/m): θ gradient through a ``slip_wall`` or ``geostrophic`` top.
@@ -687,11 +692,11 @@ types, the inflow profile and the sounding; the other keys act in the SIMPLEC st
      - Finite, ≥ 0 (1/s); needs ``bc.sponge_width`` > 0.
    * - ``bc.surface_z0``
      - 0.1 m
-     - > 0. Roughness length of the wall model. The ``bc.surface_*`` keys need ``bc.zlo = surface_layer``.
+     - Finite, > 0. Roughness length of the wall model. The ``bc.surface_*`` keys need ``bc.zlo = surface_layer``.
    * - ``bc.surface_zref``
      - ``0``
-     - ≤ 0: each column's first cell centre. Otherwise a height between the first and last cell-centre heights of
-       every column (m).
+     - Finite. ≤ 0: each column's first cell centre. Otherwise a height between the first and last cell-centre
+       heights of every column (m).
    * - ``bc.surface_stability``
      - ``neutral``
      - ``neutral`` or ``heat_flux``.
@@ -740,7 +745,7 @@ See :doc:`governing_equations`. Read with the SIMPLEC stage only.
      - Finite, ≥ 0 (m/s²). 0 switches buoyancy off.
    * - ``forcing.theta0``
      - ``300``
-     - Finite, > 0 (K). Boussinesq reference temperature.
+     - Finite, > 0 (K). Boussinesq reference temperature. Refused with ``forcing.gravity = 0``.
    * - ``forcing.coriolis``
      - ``0``
      - 0 or 1: the Coriolis force.
@@ -749,7 +754,8 @@ See :doc:`governing_equations`. Read with the SIMPLEC stage only.
      - In [−90, 90] (degrees). With ``coriolis = 1`` only.
    * - ``forcing.rotation_period``
      - ``86400``
-     - Finite, > 0 (s); :math:`f = 4\pi\sin\varphi/T`. With ``coriolis = 1`` only.
+     - Finite, > 0 (s); :math:`f = 4\pi\sin\varphi/T`. With ``coriolis = 1`` only. The default is the solar day (ERF's
+       value); the sidereal day, 86164 s, gives an f 0.27 % larger.
    * - ``forcing.coriolis_3d``
      - ``1``
      - 0 or 1: the :math:`\cos\varphi` terms on :math:`u` and :math:`w`. With ``coriolis = 1`` only.
@@ -786,10 +792,12 @@ See :doc:`turbulence_model`. Read with the SIMPLEC stage only.
      - Finite, ≤ 0: :math:`R_t` is smoothed below this value.
    * - ``turb.Rt_min``
      - ``-3``
-     - Finite, < ``turb.Rt_crit`` and > −3.6: the smoothed :math:`R_t` stays above it.
+     - Finite, < ``turb.Rt_crit`` and > −3.598: the smoothed :math:`R_t` stays above it. :math:`c_\mu` has its pole at
+       −3.5987 and grows without bound as ``turb.Rt_min`` approaches it (:doc:`turbulence_model`).
    * - ``turb.max_geom_lscale``
      - 30 m
-     - Finite, > 0: the harmonic cap of :math:`l_g` (about :math:`\kappa \times 0.1` of the boundary-layer depth);
+     - Finite, > 0: the harmonic cap of :math:`l_g` (about :math:`\kappa \times 0.1\delta`, the :math:`l_g` at the
+       top of the surface layer, :math:`\delta` the boundary-layer depth);
        also the cap of the inflow profile's length with ``bc.inflow_tke_length = closure``.
    * - ``turb.tke_floor``
      - ``0``
@@ -858,10 +866,11 @@ See :doc:`discretization`. Read with the SIMPLEC stage only. :math:`k` always us
        and tapers to 0 at 1.5 times it (recommended: 2.5 terrain heights).
    * - ``convection.hybrid_relax``
      - ``0.1``
-     - In (0, 1]: under-relaxation of :math:`\sigma` per iteration.
+     - In (0, 1]: under-relaxation of :math:`\sigma` per iteration. Refused unless ``hybrid_sigma_max`` > 0.
    * - ``convection.hybrid_freeze``
      - ``1e-2``
-     - 0 (never) or in (0, 1): :math:`\sigma` is frozen once the relative residual falls below it.
+     - 0 (never) or in (0, 1): :math:`\sigma` is frozen once the relative residual falls below it. Refused unless
+       ``hybrid_sigma_max`` > 0.
 
 ``steady``
 ----------
@@ -890,7 +899,8 @@ writes them and stops; the other ``steady.*`` keys are then refused.
    * - ``steady.residual_drop_orders``
      - ``4``
      - ≥ 0 and ≤ the largest decimal exponent of the precision (308 double, 38 single). Every residual must also
-       drop this many orders below its reference.
+       drop this many orders below its reference. Round-off limits the reachable drop to about 15 orders in double
+       and 6 to 7 in single; a larger value runs to ``steady.max_iterations``.
    * - ``steady.residual_ref_iterations``
      - ``5``
      - ≥ 1. The reference is the largest residual over this many first iterations. During them the CFL stays at
@@ -957,7 +967,9 @@ writes them and stops; the other ``steady.*`` keys are then refused.
    * - ``steady.zline_sweeps``
      - ``2``
      - Sweeps per iteration: 2 to 100 with ``zjacobi``, 1 to 100 with ``lusgs``. With ``zjacobi`` the stable CFL
-       grows with the sweeps: 2.4 with 4, 3.7 with 8, 6.1 with 16.
+       grows with the sweeps: 0.9 with 2 (the default), 2.4 with 4, 3.7 with 8, 6.1 with 16 (a Fourier analysis,
+       :doc:`results`). The ``zjacobi`` default cap of 10 is above the 2-sweep value; see :doc:`results` for the
+       runs that set it.
    * - ``steady.line_ghosts``
      - ``lagged``
      - ``lagged`` or ``zero``; ``lusgs`` only. ``lagged``: neighbours across a box face take the previous pass's
@@ -1036,13 +1048,13 @@ writes them and stops; the other ``steady.*`` keys are then refused.
    * - ``steady.newton_cfl_cut``
      - ``0.25``
      - > 0 and < 1. A rejected or skipped attempt multiplies the CFL by this factor (from infinite
-       :math:`\Delta\tau`: ``steady.cfl_max`` times it) and retries.
+       :math:`\Delta\tau`: ``steady.newton_cfl_max`` times it) and retries.
    * - ``steady.newton_max_retries``
      - ``4``
      - Integer, ≥ 1. Retries of one continuation step; after the last the step returns *failed*.
    * - ``steady.newton_dtau_inf_at_cap``
      - ``1``
-     - 0 or 1. 1: once the CFL reaches ``steady.cfl_max``, the next steps run without a pseudo-time term
+     - 0 or 1. 1: once the CFL reaches ``steady.newton_cfl_max``, the next steps run without a pseudo-time term
        (:math:`D = 0`, plain Newton) until an attempt fails. 0: the CFL stays at the cap.
    * - ``steady.newton_ptc_growth``
      - ``1``
@@ -1051,13 +1063,14 @@ writes them and stops; the other ``steady.*`` keys are then refused.
 
 The ``steady.newton_*`` and ``steady.switch_*`` keys are read with ``steady.stage = simplec_newton``; with
 ``simplec`` they abort as keys with no effect. Their defaults are provisional. The last seven rows are the pseudo-transient
-continuation of :doc:`solution_algorithm`; its CFL ramp reuses ``steady.cfl_max`` and the SER keys, and in the
-Newton stage starts at ``steady.cfl_max``.
+continuation of :doc:`solution_algorithm`. In the Newton stage its CFL ramps from ``steady.cfl_max`` to
+``steady.newton_cfl_max`` with the SER keys; the SER law's residual term takes ``steady.newton_cfl_max`` as its
+starting CFL, so ``steady.ser_exponent`` rarely limits the ramp there.
 
 ``simplec``
 -----------
 
-See :doc:`solution_algorithm`. Read with ``steady.stage = simplec`` only.
+See :doc:`solution_algorithm`. Read with ``steady.stage = simplec`` or ``simplec_newton``.
 
 .. list-table::
    :header-rows: 1
@@ -1086,7 +1099,7 @@ See :doc:`solution_algorithm`. Read with ``steady.stage = simplec`` only.
      - 0 (off), or finite and ≥ 1; refused unless ``simplec.w_vnn_cap`` > 0. The safety factor :math:`s` that lowers the
        cap on sloping ground so the pressure operator stays definite (:doc:`solution_algorithm`). 0 is the cap of
        #32, which can stall where thin cells meet steep slopes; the run then warns over terrain when the mesh
-       aspect ratio is above 50.78. Changes the path, not the answer. May change across a restart.
+       aspect ratio is above the tested 50.78. Changes the path, not the answer. May change across a restart.
 
 ``solver``
 ----------
@@ -1108,7 +1121,9 @@ otherwise.
    * - ``solver.poisson_reltol``
      - ``1e-10`` (``1e-5`` single)
      - ≥ 10 machine epsilon and < 1. Converged when the residual is below this fraction of the initial one. In
-       single precision use about :math:`4\varepsilon N_z^2`.
+       single precision the rounding floor of the residual is about :math:`\varepsilon N_z^2/2`
+       (:math:`\varepsilon` the machine epsilon, :math:`N_z` the vertical cells; 2e-4 on 64 layers), so the default
+       1e-5 lies below it once :math:`N_z` > 13; use about :math:`4\varepsilon N_z^2` there.
    * - ``solver.poisson_abstol``
      - ``0``
      - Finite, ≥ 0. Converged when the residual is below this value.
@@ -1143,10 +1158,10 @@ otherwise.
      - Checkpoint prefix; not empty.
    * - ``io.write_plotfile``
      - ``1``
-     - 0 or 1.
+     - 0 or 1: write the plotfile at the end of the run.
    * - ``io.write_checkpoint``
      - ``1``
-     - 0 or 1.
+     - 0 or 1: write the checkpoint at the end of the run.
    * - ``io.turb_plot_file``
      - none
      - Prefix of the turbulence plotfile with ERF's variable names (:doc:`output`). Needs the SIMPLEC stage.
@@ -1177,7 +1192,7 @@ The separate tool ``gust_refavg`` (:doc:`references`) reads only the ``refavg`` 
      - Case name, one word.
    * - ``refavg.erf_sha``
      - required
-     - Full 40-character ERF commit.
+     - Full 40-character ERF commit, lower-case hexadecimal.
    * - ``refavg.machine``
      - ``local``
      - ``kestrel-cpu``, ``kestrel-gpu`` or ``local``.
