@@ -21,9 +21,9 @@ The three runs use `Supporting_Files/check_steady_hill.py --erf-check check_hill
 `rt_steady_hill2d`, `rt_steady_hill2d_lusgs`, `rt_steady_hill2d_column`, `rt_column_guess_spinup` (label
 `regression`, double precision only). The LU-SGS and column runs share `<build>/Tests/run/rt_steady_hill2d_column`
 so the spin-up check can read both histories. `rt_steady_hill2d_restart_first`, `rt_steady_hill2d_restart_continued`,
-`rt_steady_hill2d_restart_straight`, `rt_steady_hill2d_restart_matches` (label `regression;smoke`, double
-precision only): 5 iterations continued to 10 from the checkpoint against 10 straight, at relative 1e-10
-(measured 1.5e-12; 8.5e-4 without the restart's ghost fill).
+`rt_steady_hill2d_restart_straight`, `rt_steady_hill2d_restart_matches` (label `regression;smoke`): 5 iterations
+continued to 10 from the checkpoint against 10 straight, bit for bit (8.5e-4 without the ghost fill before the first
+step, 1.5e-12 with a fill that is not a fixed point).
 
 ## Expected Results
 - ERF's checks: the wall distance against the exact distance to the ridge, finite fields, k >= 0, the length-scale

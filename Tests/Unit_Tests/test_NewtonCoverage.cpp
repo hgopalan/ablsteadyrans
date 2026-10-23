@@ -207,27 +207,24 @@ void residual_of_refill (const HillCase& hc, gust::State& q, gust::ResidualField
 } // namespace
 
 // ---------------------------------------------------------------------------
-// On a 30 m hill with bc.zlo = surface_layer one ghost fill is not a fixed
-// point: the surface state reads the ground w face, which the no-flux rule
-// then resets from the u, v ghosts (a second fill moves R by about 1e-5). So
-// R(q) and R(fill(q)) differ, and a forward difference of R(fill(q + eps v))
-// against R(q) carries that difference over eps. With the base point
-// R(fill(q)), NewtonOperator::apply matches the central difference of
-// q -> R(fill(q)) to 1e-5 (2.6e-8 to 4.8e-8 measured) on one box and on six
-// uneven boxes, with x periodic and with inflow / outflow; with the base
-// point R(q) it is off by more than 1 (322 and 568 measured), which shows the case exercises the
-// non-idempotent fill. Flat ground under the wall law and the hill with a
-// slip ground agree either way. The wall law's ghost gradient depends on q,
-// so the operator must also refill q + eps v (a refill = false mutant fails
-// here).
+// On a 30 m hill with bc.zlo = surface_layer, NewtonOperator::apply matches
+// the central difference of q -> R(fill(q)) to 1e-5 (2.5e-8 to 4.6e-8
+// measured) on one box and on six uneven boxes, with x periodic and with
+// inflow / outflow. The ghost fill is a fixed point
+// (BoundaryConditions.TerrainFillIsAFixedPoint), so the base point R(q) of a
+// filled q is R(fill(q)) and gives the same operator bit for bit. Before the
+// fill was a fixed point the base point R(q) was off by more than 1 (322 and
+// 568 measured). Flat ground under the wall law and the hill with a slip
+// ground too. The wall law's ghost gradient depends on q, so the operator
+// must also refill q + eps v (a refill = false mutant fails here).
 TEST(Newton, TerrainWallLawOperatorMatchesCentralDifference)
 {
-    struct Config { FaceType ground; bool perx; double hill; bool nonidempotent; };
+    struct Config { FaceType ground; bool perx; double hill; };
     const Config configs[] = {
-        {FaceType::surface_layer, true, 30, true},
-        {FaceType::surface_layer, false, 30, true},
-        {FaceType::surface_layer, false, 0, false},
-        {FaceType::slip_wall, false, 30, false},
+        {FaceType::surface_layer, true, 30},
+        {FaceType::surface_layer, false, 30},
+        {FaceType::surface_layer, false, 0},
+        {FaceType::slip_wall, false, 30},
     };
     amrex::Print() << "Terrain J v: ground, periodic x, hill, boxes, error with R(fill(q)), with R(q)\n";
     for (const auto& cf : configs) {
@@ -247,11 +244,47 @@ TEST(Newton, TerrainWallLawOperatorMatchesCentralDifference)
             amrex::Print() << std::setprecision(3) << "  " << static_cast<int>(cf.ground) << " " << cf.perx << " "
                            << cf.hill << " " << hc.c.ba.size() << "  " << e << "  " << eq << "\n";
             EXPECT_LT(e, tol(1e-5, 1e-1)) << static_cast<int>(cf.ground) << " " << cf.perx << " " << cf.hill << " " << max_grid;
-            if (kDouble && cf.nonidempotent) {
-                EXPECT_GT(eq, 1.0) << cf.perx << " " << max_grid;
-            } else if (!cf.nonidempotent) {
-                EXPECT_EQ(eq, e) << static_cast<int>(cf.ground) << " " << cf.hill << " " << max_grid;
+            EXPECT_EQ(eq, e) << static_cast<int>(cf.ground) << " " << cf.perx << " " << cf.hill << " " << max_grid;
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// The ghost fill is a fixed point: fill(fill(q)) = fill(q) on every field and
+// every ghost cell, bit for bit, and so R(fill(fill(q))) = R(fill(q)). On the
+// 30 m hill under the wall law, periodic and inflow/outflow in x, on one box and
+// on six (box seams in x and y). Before the wall model took the ground cell's
+// normal velocity from the no-flux rule on the cell's own u and v, it read the
+// ground w face, which the fill then rewrites, and a second fill moved the
+// ghosts by up to 1e-4 and R by about 1e-5. HillCase's q is filled once.
+TEST(BoundaryConditions, TerrainFillIsAFixedPoint)
+{
+    for (const bool perx : {true, false}) {
+        for (const int max_grid : {64, 4}) {
+            HillCase hc(max_grid, FaceType::surface_layer, perx, 30);
+            gust::State q2;
+            gust::State zero;
+            zero.define(hc.c.ba, hc.c.dm);
+            combine_fill(q2, hc.q, zero, 0, hc);
+            for (int f = 0; f < 6; ++f) {
+                const amrex::MultiFab& a = field(hc.q, f);
+                const amrex::MultiFab& b = field(q2, f);
+                amrex::MultiFab d(a.boxArray(), a.DistributionMap(), 1, a.nGrowVect());
+                amrex::MultiFab::Copy(d, b, 0, 0, 1, d.nGrowVect());
+                amrex::MultiFab::Subtract(d, a, 0, 0, 1, d.nGrowVect());
+                EXPECT_EQ(d.norminf(0, d.nGrow()), 0) << "field " << f << " periodic x " << perx << " boxes "
+                                                      << hc.c.ba.size();
             }
+            gust::ResidualFields R1, R2;
+            gust::residual(hc.q, hc.in, hc.c.mesh, hc.c.geom, R1);
+            gust::residual(q2, hc.in, hc.c.mesh, hc.c.geom, R2);
+            for (int f = 0; f < 6; ++f) {
+                amrex::MultiFab d(rfield(R1, f).boxArray(), rfield(R1, f).DistributionMap(), 1, 0);
+                amrex::MultiFab::Copy(d, rfield(R2, f), 0, 0, 1, 0);
+                amrex::MultiFab::Subtract(d, rfield(R1, f), 0, 0, 1, 0);
+                EXPECT_EQ(d.norminf(0, 0), 0) << "residual " << f << " periodic x " << perx << " boxes " << hc.c.ba.size();
+            }
+            amrex::Gpu::streamSynchronize();
         }
     }
 }

@@ -335,8 +335,16 @@ SimplecStage::SimplecStage (const SimplecOptions& opt, int sweeps, const Residua
     m_mon.assign(m_specs.size(), 0);
 }
 
-void SimplecStage::init (State&)
+void SimplecStage::init (State& q)
 {
+    // The ghosts from the boundary conditions before the driver's first local
+    // dtau, which reads u and v below the ground and above the top (Omega on
+    // those faces; z_x u_f != 0 over terrain) before iterate fills them: on a
+    // fresh start the initializer's ghosts, after a restart the zeros of
+    // State::define (the checkpoint restores valid points only), on a level of
+    // grid sequencing the ghosts from before the prolongation's projection. The
+    // fill is a fixed point, so a restart continues the run bit for bit.
+    m_in.bc->fill_ghosts(q, m_in.surface, m_in.buoyancy);
     // The stage's state lives in q and the closure's history (both
     // checkpointed by the application). The driver's step limit reads nu()
     // before the first residual of the next iteration: the diffusivity of

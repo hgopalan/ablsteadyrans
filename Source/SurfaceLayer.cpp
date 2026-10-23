@@ -71,6 +71,25 @@ void tangential_wind (amrex::Array4<amrex::Real const> const& u, amrex::Array4<a
     for (int d = 0; d < 3; ++d) { ut[d] = U[d] - un * n[d]; }
 }
 
+// The same for the cell on the ground, with w on the ground face taken from
+// the no-flux rule on the cell's own centre u and v (w_g = z_x u_c + z_y v_c,
+// the slope of the column) instead of the ground w face. The fill writes that
+// face (and the u, v ghosts it is computed from) after the wall model, so the
+// wall model reads no value the fill writes, and the fill is a fixed point.
+// Over flat ground both are 0.
+AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE
+void tangential_wind_ground (amrex::Array4<amrex::Real const> const& u, amrex::Array4<amrex::Real const> const& v,
+                             amrex::Array4<amrex::Real const> const& w, int i, int j, int k, amrex::Real zx,
+                             amrex::Real zy, const amrex::Real n[3], amrex::Real ut[3]) noexcept
+{
+    const amrex::Real half = amrex::Real(0.5);
+    const amrex::Real uc = half * (u(i, j, k) + u(i + 1, j, k));
+    const amrex::Real vc = half * (v(i, j, k) + v(i, j + 1, k));
+    const amrex::Real U[3] = {uc, vc, half * ((zx * uc + zy * vc) + w(i, j, k + 1))};
+    const amrex::Real un = U[0] * n[0] + U[1] * n[1] + U[2] * n[2];
+    for (int d = 0; d < 3; ++d) { ut[d] = U[d] - un * n[d]; }
+}
+
 // u - kappa U / den(u): the MOST relation for u*, den = max(ln((d+z0)/z0) - psi_m(d/L), den_min),
 // den_min the floor m of bc.surface_denominator_floor.
 template <bool QNSE>
@@ -142,7 +161,13 @@ void columns (const State& q, const SurfaceLayerOptions& opt, const BuoyancyOpti
             // Clamped: the host has refused a z_ref outside every column.
             const int k = amrex::max(0, amrex::min(nz - 2, reference_interval(h, nz, zr)));
             amrex::Real ua[3], ub[3];
-            tangential_wind(u, v, w, i, j, klo + k, n, ua);
+            // The reference interval's lower cell is the ground cell when k = 0
+            // (data, not an option).
+            if (k == 0) {
+                tangential_wind_ground(u, v, w, i, j, klo, zx, zy, n, ua);
+            } else {
+                tangential_wind(u, v, w, i, j, klo + k, n, ua);
+            }
             tangential_wind(u, v, w, i, j, klo + k + 1, n, ub);
             // Interpolation in ln(d + z0), d = h / |A|.
             const amrex::Real ia = amrex::Real(1) / area;

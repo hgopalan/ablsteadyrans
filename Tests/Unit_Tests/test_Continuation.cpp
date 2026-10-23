@@ -271,7 +271,8 @@ TEST(Continuation, LineSearchRejectsOvershoot)
         amrex::Print() << "  " << r.step << "  " << r.residual << "  " << r.lambda << "  " << r.residual_new / r.residual << "\n";
     }
     ASSERT_EQ(rec.size(), static_cast<std::size_t>(nsteps));
-    EXPECT_NEAR(static_cast<double>(rec[0].residual), 99.496, 1e-3);
+    // 99.496 before the wall model took the ground cell's w from the no-flux rule (audit A2).
+    EXPECT_NEAR(static_cast<double>(rec[0].residual), 99.886, 1e-3);
     int first_backtrack = -1;
     for (int n = 0; n < nsteps; ++n) {
         EXPECT_EQ(rec[n].outcome, AttemptOutcome::accepted) << n;
@@ -808,7 +809,8 @@ TEST(Continuation, HillSameOnAnyRankCount)
             hist[L].push_back(r.residual);
             hist[L].push_back(r.residual_new);
         }
-        EXPECT_NEAR(static_cast<double>(pt.records().front().residual), 11.328, 1e-3);
+        // 11.328 before the wall model took the ground cell's w from the no-flux rule (audit A2).
+        EXPECT_NEAR(static_cast<double>(pt.records().front().residual), 11.332, 1e-3);
         EXPECT_LE(pt.state().r_last, amrex::Real(1e-8) * pt.state().r0);
     }
     EXPECT_EQ(hist[0], hist[1]);
