@@ -298,6 +298,10 @@ std::vector<std::string> check_boundary_inputs (const BoundaryInputs& in, const 
         only_for("inflow_zref", K::power_law);
         only_for("inflow_alpha", K::power_law);
         only_for("inflow_file", K::file);
+        // A file profile gives u and v itself (InflowProfile.H).
+        if (given("inflow_direction") && in.inflow.kind == K::file) {
+            err.emplace_back("bc.inflow_direction has no effect with bc.inflow_profile = file");
+        }
     } else {
         for (const char* k : {"inflow_profile", "inflow_ustar", "inflow_z0", "inflow_speed", "inflow_zref",
                               "inflow_alpha", "inflow_direction", "inflow_file", "inflow_tke_length"}) {

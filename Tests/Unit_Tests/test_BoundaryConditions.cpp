@@ -1116,6 +1116,11 @@ TEST(BoundaryInputs, KeysAreReadAndChecked)
         {"bc.inflow_ustar", [] (BoundaryInputs& b) { b.given = {"inflow_ustar"}; }},
         {"bc.inflow_file", [] (BoundaryInputs& b) { b.given = {"inflow_file"}; }},
         {"bc.inflow_speed", [] (BoundaryInputs& b) { b.inflow.kind = InflowProfileOptions::Kind::log_law; b.given = {"inflow_speed"}; }},
+        // A file profile gives u and v itself: the direction would be read and ignored.
+        {"bc.inflow_direction", [] (BoundaryInputs& b) {
+             b.inflow.kind = InflowProfileOptions::Kind::file;
+             b.inflow.file = "profile.txt";
+             b.given = {"inflow_file", "inflow_direction"}; }},
         {"bc.surface_z0", [] (BoundaryInputs& b) { b.face[2] = FaceType::slip_wall; b.given = {"surface_z0"}; }},
         {"bc.surface_denominator_floor", [] (BoundaryInputs& b) { b.face[2] = FaceType::slip_wall; b.given = {"surface_denominator_floor"}; }},
         {"bc.rayleigh_dampcoef", [] (BoundaryInputs& b) { b.rayleigh_dampcoef = 0; b.given = {}; }},
