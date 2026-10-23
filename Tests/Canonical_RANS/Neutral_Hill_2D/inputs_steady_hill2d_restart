@@ -1,0 +1,65 @@
+# The 2-D hill of inputs_steady_hill2d without an iteration cap, the
+# initializer or the turbulence plotfile: the restart test gives
+# steady.max_iterations, init.first_guess and io.restart on the command line
+# (a run of 5 iterations, continued to 10, against 10 straight, over terrain).
+# ERF's Neutral_Hill_2D (Exec/CanonicalTests/Canonical_RANS/
+# Neutral_Hill_2D/inputs_hill) to steady with the SIMPLEC stage: the Witch of
+# Agnesi ridge (100 m high, half-width 500 m) on 128 x 1 x 64 cells over
+# 5120 m x 40 m x 1000 m (dx 40 m, dz 15.625 m), periodic, the surface layer
+# (z0 = 0.1 m), a slip top with ERF's 0.03 K/m, the sounding of the flat case
+# (inversion from 700 m), the geostrophic wind (10, 0) m/s at latitude 90
+# (f = 1e-4 1/s), Rayleigh damping of w and theta over the top 300 m
+# (0.2 1/s; ERF damps w alone in its time-accurate run, the pseudo-time
+# iteration needs theta's half of the gravity-wave oscillator damped too),
+# 16 z-line sweeps at a CFL cap of 4 (the lagged sweeps' threshold, docs/
+# solver.rst), ERF's closure defaults, the wall distance as the height above
+# the terrain (erf.wall_dist_type = terrain_height). With
+# init.first_guess = profile on the command line, the first guess is the log
+# law with u* = 0.35 m/s.
+mesh.n_cell        = 128 1 64
+mesh.prob_lo       = -2560. 0. 0.
+mesh.prob_hi       =  2560. 40. 1000.
+mesh.is_periodic   = 1 1 0
+mesh.max_grid_size = 64 1
+
+terrain.type            = agnesi
+terrain.hill_shape      = ridge_x
+terrain.hill_height     = 100.
+terrain.hill_half_width = 500.
+terrain.smoothing       = 0
+
+bc.zlo = surface_layer
+bc.zhi = slip_wall
+bc.surface_z0 = 0.1
+bc.theta_profile_z = 0. 700. 1000.
+bc.theta_profile   = 300. 300. 309.
+bc.zhi_theta_grad  = 0.03
+bc.inflow_profile   = log_law
+bc.inflow_ustar     = 0.35
+bc.inflow_z0        = 0.1
+bc.inflow_direction = 0.
+bc.rayleigh_zdamp    = 700.
+bc.rayleigh_dampcoef = 0.2
+bc.rayleigh_fields   = w theta
+
+forcing.coriolis        = 1
+forcing.coriolis_3d     = 0
+forcing.latitude        = 90.
+forcing.rotation_period = 125663.7061435917
+forcing.geostrophic     = 1
+forcing.ug              = 10.
+forcing.vg              = 0.
+
+turb.tke_floor = 1.e-6
+
+steady.stage                   = simplec
+steady.sweep                   = zjacobi   # z-line Jacobi sweep (the CPU default is lusgs)
+steady.cfl0                    = 1.
+steady.cfl_max                 = 4.
+steady.zline_sweeps            = 16
+simplec.rotation_relax         = 1.   # with the planar-mean split 1 converges in half the iterations of 0.3 (docs/solver.rst)
+steady.residual_ref_iterations = 100
+steady.residual_drop_orders    = 2
+
+io.plot_file      = steady_hill2d_restart_plt
+io.chk_file       = steady_hill2d_restart_chk

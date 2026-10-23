@@ -378,7 +378,10 @@ Switching and fallback
 - **Restart.** The checkpoint holds ``<checkpoint>/NewtonStage``, the continuation state and the smoothness state
   (written before the stage is left at the end of a run); a restart inside the stage continues it. With
   ``steady.newton_preconditioner = identity`` the restart is bit for bit; with ``simplec`` it agrees to about 1e-4 of
-  the relative residual (the cause is not found). A ``steady.stage = simplec`` checkpoint continues with
+  the relative residual. On the 2-D hill the restarted Newton stage's solution differs by about 2e-9 after three steps.
+  The cause: the stage fills the ghost cells on entry (``NewtonStage::init``) where the run it continues does not, and
+  over terrain the fill moves the ground w face slightly (the fill is not a fixed point); Newton–Krylov amplifies
+  that. A ``steady.stage = simplec`` checkpoint continues with
   ``simplec_newton`` (the Newton stage starts with an empty account); the reverse aborts, naming ``steady.stage``.
 - **Grid sequencing.** The coarse levels run SIMPLEC only (their loose stop ends them first); the Newton stage is level
   0's.
@@ -633,7 +636,9 @@ Stage switching, restart and reproducibility
   ``steady.switch_residual`` with the monitors settled, back when the residual grows by ``steady.switch_back_growth``
   over a window, and back at once when the Newton stage asks (`Switching and fallback`_).
 - **Restart.** The driver records every iteration (stage, CFL, residuals, monitors, wall time, allocation units) in
-  the checkpoint. A restarted run reproduces the uninterrupted run bit for bit on the same ranks and box layout.
+  the checkpoint. A restarted run reproduces the uninterrupted run on the same ranks and box layout: bit for bit
+  over flat ground, to round-off over terrain (1.5e-12 measured on the 2-D hill). The restart restores the valid points and fills the
+  ghost cells before the first step.
   The checkpoint also records :math:`H`. A checkpoint written before it did (driver history format 1 or 2) had
   its norms scaled with ``mesh.prob_hi`` z; on a stretched mesh the restart multiplies the stored reference and
   residuals by :math:`H` / ``prob_hi`` z and says so in the log. That run then continues in the new scale, and so

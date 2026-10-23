@@ -654,6 +654,13 @@ Current tests
        command line), continued to 80 from the checkpoint (the driver and closure histories restored, the inflow keys
        of the deck accepted on the restart) against 80 straight on the same two ranks: the plotfiles identical under
        ``amrex_fcompare`` at relative 1e-14.
+   * - ``rt_steady_hill2d_restart_first``, ``…_continued``, ``…_straight``, ``…_matches``
+     - The same chain over terrain: 5 iterations of the 2-D hill (``inputs_steady_hill2d_restart``), continued to 10
+       from the checkpoint, against 10 straight on two ranks, at relative 1e-10. The restart fills the ghost cells
+       before the first step, whose local Δτ reads u and v below the ground and above the top (Ω on those faces).
+       Without that fill the runs differ by 8.5e-4 (v) and the test fails; with it, by 1.5e-12. The remaining
+       round-off comes from the ground fill, which is not a fixed point over terrain. Labels ``regression;smoke``, about
+       1.5 s on two ranks. Double precision only.
    * - ``rt_steady_neutral_flat``
      - The application on ERF's Neutral_ABL_Flat (``Tests/Canonical_RANS/Neutral_ABL_Flat/inputs_steady_neutral_flat``: 8 × 8 × 64,
        geostrophic wind 10 m/s at latitude 90°, f = 1e-4 1/s, the sounding's inversion from 700 m, slip top with

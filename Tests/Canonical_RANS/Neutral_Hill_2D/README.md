@@ -11,6 +11,7 @@ with different solver settings and first guesses.
 | `inputs_steady_hill2d` | Jacobi sweeps (16 sweeps, CFL cap 4), log-law first guess. |
 | `inputs_steady_hill2d_lusgs` | Line LU-SGS sweeps (two symmetric sweeps, CFL cap 16). |
 | `inputs_steady_hill2d_column` | The LU-SGS deck started from the converged column (`init.first_guess = column`). |
+| `inputs_steady_hill2d_restart` | The Jacobi deck for the restart chain (iterations and first guess on the command line). |
 | `check_column_guess.py` | Compares the Driver histories of the LU-SGS profile run and the column run. |
 
 The three runs use `Supporting_Files/check_steady_hill.py --erf-check check_hill.py --orders 2` (shared with
@@ -19,7 +20,10 @@ The three runs use `Supporting_Files/check_steady_hill.py --erf-check check_hill
 ## CTest
 `rt_steady_hill2d`, `rt_steady_hill2d_lusgs`, `rt_steady_hill2d_column`, `rt_column_guess_spinup` (label
 `regression`, double precision only). The LU-SGS and column runs share `<build>/Tests/run/rt_steady_hill2d_column`
-so the spin-up check can read both histories.
+so the spin-up check can read both histories. `rt_steady_hill2d_restart_first`, `rt_steady_hill2d_restart_continued`,
+`rt_steady_hill2d_restart_straight`, `rt_steady_hill2d_restart_matches` (label `regression;smoke`, double
+precision only): 5 iterations continued to 10 from the checkpoint against 10 straight, at relative 1e-10
+(measured 1.5e-12; 8.5e-4 without the restart's ghost fill).
 
 ## Expected Results
 - ERF's checks: the wall distance against the exact distance to the ridge, finite fields, k >= 0, the length-scale

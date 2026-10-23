@@ -740,6 +740,38 @@ gust_add_test(NAME rt_steady_column_restart_matches NP 1 LABELS "regression;smok
               FIXTURES_REQUIRED steady_column_continued steady_column_straight
               COMMAND ${FCOMPARE} --rel_tol 1e-14 --abs_tol 1e-300 steady_column_restart_plt00080
                       straight/steady_column_restart_plt00080)
+# The same over terrain: the 2-D hill, 5 iterations continued to 10 from the
+# checkpoint against 10 straight. The restart restores valid points only, and
+# the first step's local dtau reads the u and v ghosts below the ground and
+# above the top (Omega at those faces, z_x u_f != 0 on the slope), so the
+# restart fills the ghosts first. Without that fill the runs differ by up to
+# 8.5e-4 (v, relative); with it, by round-off (1.5e-12). The fill over terrain
+# is not a fixed point: it writes the ground w face from a u* that read the
+# previous ground w, so the restart's fill moves that face by about 5e-7
+# (relative) against the run it continues, and the iteration damps it to 1e-12
+# by iteration 10. The margin depends on the restart point (a restart after one
+# iteration differs by 3e-10 at iteration 6), so keep the checkpoint at 5 or later.
+# Double precision only: in single precision the round-off is above the
+# tolerance (bit for bit needs the fill to be a fixed point).
+if(GUST_PRECISION STREQUAL "DOUBLE")
+    set(SHR_DIR ${CMAKE_CURRENT_BINARY_DIR}/run/rt_steady_hill2d_restart)
+    gust_add_test(NAME rt_steady_hill2d_restart_first NP 2 LABELS "regression;smoke" RUN_DIR ${SHR_DIR}
+                  FIXTURES_SETUP steady_hill2d_first
+                  COMMAND $<TARGET_FILE:gust> ${HILL2D_CASE}/inputs_steady_hill2d_restart steady.max_iterations=5
+                          init.first_guess=profile ${GUST_TEST_AMREX_FLAGS})
+    gust_add_test(NAME rt_steady_hill2d_restart_continued NP 2 LABELS "regression;smoke" RUN_DIR ${SHR_DIR}
+                  FIXTURES_REQUIRED steady_hill2d_first FIXTURES_SETUP steady_hill2d_continued
+                  COMMAND $<TARGET_FILE:gust> ${HILL2D_CASE}/inputs_steady_hill2d_restart steady.max_iterations=10
+                          io.restart=steady_hill2d_restart_chk00005 ${GUST_TEST_AMREX_FLAGS})
+    gust_add_test(NAME rt_steady_hill2d_restart_straight NP 2 LABELS "regression;smoke" RUN_DIR ${SHR_DIR}/straight
+                  FIXTURES_SETUP steady_hill2d_straight
+                  COMMAND $<TARGET_FILE:gust> ${HILL2D_CASE}/inputs_steady_hill2d_restart steady.max_iterations=10
+                          init.first_guess=profile ${GUST_TEST_AMREX_FLAGS})
+    gust_add_test(NAME rt_steady_hill2d_restart_matches NP 1 LABELS "regression;smoke" RUN_DIR ${SHR_DIR}
+                  FIXTURES_REQUIRED steady_hill2d_continued steady_hill2d_straight
+                  COMMAND ${FCOMPARE} --rel_tol 1e-10 --abs_tol 1e-300 steady_hill2d_restart_plt00010
+                          straight/steady_hill2d_restart_plt00010)
+endif()
 # The column's target wind carried into the 3-D run (init.column_target_*), neutral and with a
 # stable column (L = 1000 m) whose flux and theta the run takes (bc.surface_stability = heat_flux). The 3-D wind at
 # 10 m is the target to 0.5 % and, stable, the 3-D surface's L is 1000 m to 2 %.
