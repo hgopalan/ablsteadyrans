@@ -341,8 +341,9 @@ void SimplecStage::init (State&)
     // checkpointed by the application). The driver's step limit reads nu()
     // before the first residual of the next iteration: the diffusivity of
     // the last accepted closure fields, nu_molecular + the history, so a
-    // restart continues bit for bit (zero before the first iteration of a
-    // fresh start, as the run it would continue).
+    // restart's first step limit is the one the run would have taken (zero
+    // before the first iteration of a fresh start, as the run it would
+    // continue).
     if (m_closure != nullptr && m_closure->has_history()) {
         const amrex::MultiFab& h = m_closure->history();
         amrex::MultiFab::Copy(m_cf.nut, h, 0, 0, 1, amrex::min(h.nGrow(), m_cf.nut.nGrow()));

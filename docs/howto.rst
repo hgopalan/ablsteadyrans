@@ -38,7 +38,8 @@ iterations:
   ``mesh.max_grid_size`` may change.
 - ``steady.max_iterations`` counts the iterations of the whole run, restarts included.
 - The run stops if it would overwrite the checkpoint it read. Change ``io.chk_file`` if needed.
-- A restarted run reproduces the uninterrupted run bit for bit on the same ranks and box layout.
+- A restarted run reproduces the uninterrupted run on the same ranks and box layout: bit for bit over flat ground,
+  to round-off over terrain (1.5e-12 measured on the 2-D hill).
 
 Use your own terrain
 --------------------
