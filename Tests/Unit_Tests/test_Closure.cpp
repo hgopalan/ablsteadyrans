@@ -357,12 +357,25 @@ TEST(Closure, InputsAreReadAndChecked)
     EXPECT_EQ(c.Cmu0_pow3, amrex::Real(0.55) * amrex::Real(0.55) * amrex::Real(0.55));
     EXPECT_EQ(gust::closure_constants(ClosureOptions{}).tke_floor, std::numeric_limits<amrex::Real>::epsilon());
     EXPECT_TRUE(gust::check_closure_options(o).empty());
+    // The lower bound of turb.Rt_min sits just above the pole of c_mu
+    // (Axell and Liungman's Eq. 31: 1 + 0.308 Rt + 0.00837 Rt^2 = 0 at
+    // Rt = -3.5987); an accepted value keeps its denominator positive.
+    {
+        ClosureOptions near = o;
+        near.Rt_min = amrex::Real(-3.5975);
+        EXPECT_TRUE(gust::check_closure_options(near).empty());
+        const double r = -3.5975;
+        EXPECT_GT(1 + 0.308 * r + 0.00837 * r * r, 0);
+    }
     struct Bad { const char* key; void (*mutate) (ClosureOptions&); };
     const Bad bads[] = {
         {"turb.Cmu0", [] (ClosureOptions& b) { b.Cmu0 = 0; }},
         {"turb.Cb", [] (ClosureOptions& b) { b.Cb = -1; }},
         {"turb.Rt_crit", [] (ClosureOptions& b) { b.Rt_crit = amrex::Real(0.1); }},
         {"turb.Rt_min", [] (ClosureOptions& b) { b.Rt_min = amrex::Real(-3.7); }},
+        // Between the poles of c_mu (-3.5987) and c_mu' (-3.6101): c_mu there is
+        // negative (-2777 at the floor for Rt -> -infinity with -3.599).
+        {"turb.Rt_min", [] (ClosureOptions& b) { b.Rt_min = amrex::Real(-3.599); }},
         {"turb.Rt_min", [] (ClosureOptions& b) { b.Rt_min = b.Rt_crit; }},
         {"turb.max_geom_lscale", [] (ClosureOptions& b) { b.max_geom_lscale = 0; }},
         {"turb.tke_floor", [] (ClosureOptions& b) { b.tke_floor = -1; }},

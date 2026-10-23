@@ -809,6 +809,17 @@ Current tests
        1e-4 %). Label ``nightly``; double only.
    * - ``drift_check_selftest``
      - The ``extern_erf`` drift check on a throw-away ERF repository (:doc:`extraction`).
+   * - ``input_reference_current``, ``input_reference_selftest``
+     - ``tools/input_reference.py --check``: ``Tests/inputs_reference`` is what ``--write`` gives from the
+       detailed tables of :doc:`inputs`; every table row names a key and no key appears twice; the quick-reference
+       keys and their literal defaults match the detailed tables; every namespace has a section; and the keys of
+       the tables are the keys the readers in ``Source/`` name (a ``ParmParse`` variable's or temporary's
+       ``query``, ``get``, ``contains`` and ``count`` calls, the readers' key arrays and loop lists, and
+       ``"ns.key"`` literals; a key passed to a helper is found through the reader's key array). The self-test
+       runs the check on a throw-away tree: a key read but not documented (by ``pp``, another variable, a
+       temporary, a key array or a loop list), a row with no reader, a placeholder key not read, malformed and
+       duplicate rows, a quick-reference default that differs, a namespace with no section, a stale reference and
+       a CRLF checkout. Label ``unit``.
    * - ``erf_plotfile_selftest``
      - ``extern_erf/erf_plotfile.py`` (a local change, :doc:`extraction`) on hand-made one-box plotfiles in double
        and float, little- and big-endian: every value read back exactly. The upstream reader fails the two float

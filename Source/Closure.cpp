@@ -137,8 +137,12 @@ std::vector<std::string> check_closure_options (const ClosureOptions& opt)
     bad(opt.Cmu0, "Cmu0", "finite and > 0", [&] { return opt.Cmu0 > 0; });
     bad(opt.Cb, "Cb", "finite and > 0", [&] { return opt.Cb > 0; });
     bad(opt.Rt_crit, "Rt_crit", "finite and <= 0", [&] { return opt.Rt_crit <= 0; });
-    bad(opt.Rt_min, "Rt_min", "finite, < turb.Rt_crit and > -3.6 (the stability functions have poles near -3.61)",
-        [&] { return !std::isnan(opt.Rt_crit) && opt.Rt_min < opt.Rt_crit && opt.Rt_min > amrex::Real(-3.6); });
+    // c_mu = (Cmu0 + 0.108 Rt) / (1 + 0.308 Rt + 0.00837 Rt^2) has its pole at
+    // Rt = -3.5987, c_mu' = Cmu0 / (1 + 0.277 Rt) at -3.6101; the smoothed Rt
+    // tends to Rt_min, so Rt_min must lie above the first (ERF's -3.6 bound,
+    // extern_erf/ERF_RANSClosure.H, lies between the two).
+    bad(opt.Rt_min, "Rt_min", "finite, < turb.Rt_crit and > -3.598 (c_mu has its pole at -3.5987)",
+        [&] { return !std::isnan(opt.Rt_crit) && opt.Rt_min < opt.Rt_crit && opt.Rt_min > amrex::Real(-3.598); });
     bad(opt.max_geom_lscale, "max_geom_lscale", "finite and > 0 (m)", [&] { return opt.max_geom_lscale > 0; });
     bad(opt.tke_floor, "tke_floor", "0 (machine epsilon) or >= machine epsilon (m^2/s^2)",
         [&] { return opt.tke_floor == 0 || opt.tke_floor >= std::numeric_limits<amrex::Real>::epsilon(); });
