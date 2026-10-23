@@ -65,8 +65,10 @@ From AL01, Eqs. 31–32:
    c_\mu = \frac{C_{\mu 0} + 0.108\,R_t}{1 + 0.308\,R_t + 0.00837\,R_t^2}, \qquad
    c_\mu' = \frac{C_{\mu 0}}{1 + 0.277\,R_t} .
 
-The poles of :math:`c_\mu` and :math:`c_\mu'` lie near :math:`R_t = -3.6`. Below ``turb.Rt_crit``, :math:`R_t` is smoothly mapped
-towards ``turb.Rt_min`` (the map of Burchard and Petersen) so that it never reaches them.
+The poles of :math:`c_\mu` and :math:`c_\mu'` lie at :math:`R_t = -3.5987` and :math:`-3.6101`. Below
+``turb.Rt_crit``, :math:`R_t` is smoothly mapped towards ``turb.Rt_min`` (the map of Burchard and Petersen) so that
+it never reaches them; ``turb.Rt_min`` must therefore lie above :math:`-3.598`. Near the pole :math:`c_\mu` grows
+without bound (1.5 at the default :math:`-3`, 7.3 at :math:`-3.5`, 78 at :math:`-3.59`).
 
 Neutral wall layer
 ------------------
