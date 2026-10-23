@@ -1,0 +1,701 @@
+# GUST master input reference (all inputs, with defaults, ranges and meaning).
+#
+# Generated from docs/inputs.rst by tools/input_reference.py --write; do not
+# edit by hand. The CTest input_reference_current checks that this file, the
+# docs and the keys read in Source/ agree.
+#
+# Every line is a comment. Copy the key lines you need into a deck, remove the
+# leading "# " and set the values. A key line reads "# namespace.key = default",
+# with a note after it where the default has a unit or a condition;
+# "# required" means the key has no default, "# none" that it is off or empty
+# unless given. The indented text below each key is its range and meaning. A key
+# that has no effect with the other inputs is refused, as are unknown and
+# repeated keys (docs/inputs.rst). Units are SI (m, s, K) unless the text says
+# otherwise.
+
+
+# ==================================================================================================================
+# mesh
+# ==================================================================================================================
+#
+# mesh.n_cell =    # required
+#     Three integers ≥ 1: cells in x, y and z.
+#
+# mesh.prob_lo = 0 0 0
+#     Three finite values: the low corner of the domain (m). The z value must be 0.
+#
+# mesh.prob_hi =    # required
+#     Three finite values, each greater than prob_lo: the high corner of the domain (m).
+#
+# mesh.is_periodic = 0 0 0
+#     Three values, each 0 or 1. z must be 0.
+#
+# mesh.max_grid_size = 64
+#     One or two integers ≥ 1: the largest box size in x and y. Boxes are never split in z.
+#
+# mesh.dz0 = 0
+#     Finite, ≥ 0 (m). First layer thickness of a stretched grid; 0 gives uniform layers. Without mesh.stretch_ratio
+#     it must not exceed prob_hi z / n_cell z (docs/terrain_coordinates.rst).
+#
+# mesh.stretch_ratio =    # none
+#     Finite, ≥ 1; needs mesh.dz0 > 0. A fixed ratio between successive layers; the top is then where the layers
+#     end, and prob_hi z only sets the computational spacing.
+#
+# mesh.zlevels_file =    # none
+#     A file of n_cell z + 1 increasing heights starting at 0. Not together with mesh.dz0.
+#
+# mesh.hierarchy_levels = 1
+#     Integer from 1 to 10: the levels L of the grid hierarchy (docs/grid_hierarchy.rst). With L > 1, n_cell and
+#     max_grid_size in x and y must be divisible by 2^(L-1), and the coarsest level must be larger than 1 × 1 cells.
+#     The box layout of level 0 can then differ from L = 1, which changes results in the last bits. The solver uses
+#     the coarse levels only with steady.sequencing = 1. May change across a restart.
+
+# ==================================================================================================================
+# terrain
+# ==================================================================================================================
+#
+# terrain.type = flat
+#     flat, agnesi (analytic hill), xyz (point cloud) or erf_grid (ERF's terrain file)
+#     (docs/terrain_coordinates.rst).
+#
+# terrain.file =    # required for xyz, erf_grid
+#     The point file (x y z per line) or ERF's structured terrain file.
+#
+# terrain.smoothing = 1
+#     0 (BTF), 1 (STF) or 2 (Sullivan).
+#
+# terrain.gamma_m = 0.5
+#     > 0 and < 1; STF only. Smallest layer thickness as a fraction of the flat layer.
+#
+# terrain.hill_height =    # required for agnesi
+#     Finite, > 0 (m).
+#
+# terrain.hill_half_width =    # required for agnesi
+#     Finite, > 0 (m). Distance from the crest at which the hill is half as high.
+#
+# terrain.hill_shape = ridge_x
+#     ridge_x (a ridge along y, varying in x), ridge_y or round; agnesi only.
+#
+# terrain.idw_neighbors = 6
+#     ≥ 1; xyz only. Points used for each height.
+#
+# terrain.idw_power = 2
+#     Finite, > 0; xyz only. Weight exponent p in d^(-p).
+#
+# terrain.hierarchy_passes = 1
+#     Integer from 0 to 64; only with mesh.hierarchy_levels > 1. The ground of level l is smoothed by this number
+#     times (2^l - 1) passes (docs/grid_hierarchy.rst).
+
+# ==================================================================================================================
+# init
+# ==================================================================================================================
+# See docs/initial_conditions.rst. The keys other than init.first_guess are refused with init.first_guess = none. A
+# restart cannot be combined with init.* keys.
+#
+# init.first_guess = none
+#     none (fluid at rest), profile (the inflow profile by height above the ground) or column (the steady
+#     single-column profile; needs a horizontal forcing and steady.stage = simplec or simplec_newton, see
+#     docs/initial_conditions.rst for the full list).
+#
+# init.projection = 1
+#     0 or 1: the mass-consistent adjustment. With 0, init.alpha_h and init.alpha_v are refused.
+#
+# init.alpha_h = 1
+#     Finite, > 0. Horizontal transmissivity α_h.
+#
+# init.alpha_v = 1
+#     Finite, > 0. Vertical transmissivity α_v. Only α_v/α_h matters. Ratios below 0.1 need more than the default
+#     solver.poisson_max_iter. With α_v ≠ α_h the adjustment uses the gmres_fft back end.
+#
+# init.z_agl_min = 0
+#     Finite, ≥ 0 (m). Lowest height above the ground at which the profile is evaluated.
+#
+# init.k_decay_height = 0
+#     Finite, ≥ 0 (m). Height z_i above which the initial k decays; 0: no decay. Not with column.
+#
+# init.obrien = 0
+#     0 or 1. The O'Brien correction of the vertical velocity before the adjustment.
+#
+# init.column_tol = 1e-8
+#     Finite, > 0; column only. Convergence tolerance of the single-column solve: the largest relative change of u,
+#     v, k over a step. Raised to at least 100 machine epsilon (1.2e-5 single, 2.2e-14 double).
+#
+# init.column_max_iterations = 5000
+#     ≥ 1; column only. The run stops if a column has not converged after this many steps. The limit applies to each
+#     column solved: the surface search and the target wind solve several (the log gives the total).
+#
+# init.column_stability = mol
+#     mol, heat_flux or surface_temperature; column only. How the column's surface sets θ (stratified column,
+#     docs/initial_conditions.rst). heat_flux takes bc.surface_heat_flux and needs bc.surface_stability = heat_flux.
+#     Any non-neutral surface needs forcing.gravity > 0 and a Rayleigh layer on θ (bc.rayleigh_zdamp > 0, theta in
+#     bc.rayleigh_fields).
+#
+# init.column_mol = 0
+#     0 (neutral: θ held at the sounding, the column before this input) or finite with |L| ≥ 1 (m); mol only. The
+#     Obukhov length L (> 0 stable, < 0 unstable). With bc.surface_stability = heat_flux the 3-D run takes the
+#     column's flux (bc.surface_heat_flux is then refused).
+#
+# init.column_surface_theta = 0
+#     Finite, > 0 (K), required with surface_temperature and only there: the surface potential temperature.
+#
+# init.column_target_u = 0
+# init.column_target_v = 0
+#     Finite (m/s); column only. A target wind at init.column_target_height: the geostrophic wind and the column's
+#     Rayleigh reference wind are turned and scaled by the ratio of the target to the column's wind there, the
+#     pressure gradient by that ratio times its magnitude, until they agree to 1e-4; the run then uses that forcing.
+#     Both 0: off (giving them as 0 is refused). Refused with what would hold the 3-D wind to the deck's inflow
+#     profile: a Rayleigh layer on u and v, a sponge or an inflow face; and with a stratified column unless
+#     bc.surface_stability = heat_flux.
+#
+# init.column_target_height = 0
+#     Finite, > 0 (m) with a target wind, and only then: its height above the ground, at most the top cell centre.
+#     Below the first cell centre the wind is MOST's profile; above, linear in ln(z + z_0) between centres.
+#
+# init.column_rib_max = 4
+#     Finite, > 0; a stratified column only. The upper bound of the bulk Richardson number of the column's surface
+#     solve (ERF's value). With Businger–Dyer's stable functions the bound used is min(init.column_rib_max, 0.19),
+#     below their 0.2 limit (stratified column, docs/initial_conditions.rst).
+#
+# init.column_rib_min = -4
+#     Finite, < 0; a stratified column only. The lower bound (ERF's value).
+
+# ==================================================================================================================
+# bc
+# ==================================================================================================================
+# See docs/boundary_conditions.rst. Read when init.first_guess is not none or with the SIMPLEC stage; refused
+# otherwise. A key that has no effect for the chosen boundary types is refused. The initial field uses the boundary
+# types, the inflow profile and the sounding; the other keys act in the SIMPLEC stage.
+#
+# The wall model and the inflow profile's equilibrium k and ν_t use the turbulence model's turb.Cmu0 and turb.kappa,
+# and the inflow profile its turb.max_geom_lscale. Without the SIMPLEC stage (turb.* is then refused) they use the
+# defaults, 0.5562, 0.41 and 30 m.
+#
+# bc.xlo = periodic
+# bc.xhi = periodic
+# bc.ylo = periodic
+# bc.yhi = periodic
+#     periodic exactly when mesh.is_periodic is 1 in that direction; otherwise inflow, outflow, slip_wall or
+#     no_slip_wall.
+#
+# bc.zlo = surface_layer
+#     surface_layer, slip_wall or no_slip_wall.
+#
+# bc.zhi = slip_wall
+#     slip_wall, no_slip_wall or geostrophic (needs Coriolis with geostrophic forcing).
+#
+# bc.xlo_wall_velocity = 0 0 0
+# bc.xhi_wall_velocity = 0 0 0
+# bc.ylo_wall_velocity = 0 0 0
+# bc.yhi_wall_velocity = 0 0 0
+# bc.zlo_wall_velocity = 0 0 0
+# bc.zhi_wall_velocity = 0 0 0
+#     Three finite values (m/s): the velocity of a no_slip_wall face (<face> is xlo … zhi). The normal component
+#     must be 0.
+#
+# bc.inflow_profile = log_law
+#     log_law, power_law or file. The inflow keys need an inflow face, a damping layer, init.first_guess or a
+#     restart.
+#
+# bc.inflow_ustar = 0.4    # m/s
+#     Finite, > 0; log_law only.
+#
+# bc.inflow_z0 = 0.1    # m
+#     Finite, > 0. Roughness of the log law, and of the equilibrium k of every profile type. Normally equal to
+#     bc.surface_z0.
+#
+# bc.inflow_speed = 10    # m/s
+# bc.inflow_zref = 10    # m
+# bc.inflow_alpha = 0.14
+#     power_law only. Speed finite and ≥ 0; height and exponent finite and > 0.
+#
+# bc.inflow_direction = 0
+#     Finite (degrees). The direction the wind blows towards, counter-clockwise from the x axis. log_law and
+#     power_law only; refused with file, whose profile gives u and v itself.
+#
+# bc.inflow_file =    # none
+#     Required with file: rows of z u v theta [k] (4 or 5 columns, at least 2 rows), z increasing from 0, θ > 0, k ≥
+#     0.
+#
+# bc.inflow_tke_length = closure
+#     closure or unbounded: the length l of the equilibrium k and ν_t (docs/boundary_conditions.rst). closure: the
+#     turbulence model's κ(z + z_0) capped by turb.max_geom_lscale. unbounded: κ(z + z_0), the form before this
+#     input (for the log law, k = u_*^2/C_μ0^2 at every height). Refused with a k column in bc.inflow_file (no
+#     effect). A checkpoint written before this input continues unchanged only with unbounded: the inflow k is not
+#     stored in the checkpoint.
+#
+# bc.theta_profile_z = 0
+# bc.theta_profile = 300
+#     Lists of equal length: finite, strictly increasing heights (m) and θ > 0 (K). The reference sounding.
+#
+# bc.zhi_theta_grad = 0
+#     Finite (K/m): θ gradient through a slip_wall or geostrophic top.
+#
+# bc.rayleigh_zdamp = 0    # off
+#     In [0, top level): start height of the Rayleigh layer (m); > 0 needs bc.rayleigh_dampcoef > 0. The top level
+#     is mesh.prob_hi z, or where the layers end with mesh.stretch_ratio or mesh.zlevels_file.
+#
+# bc.rayleigh_dampcoef = 0
+#     Finite, ≥ 0 (1/s); needs bc.rayleigh_zdamp > 0.
+#
+# bc.rayleigh_fields = u v w theta tke
+#     One or more of u v w theta tke; needs bc.rayleigh_zdamp > 0.
+#
+# bc.rayleigh_height = absolute
+#     absolute or above_ground: the height used for the layer's coefficient and for θ's reference (u, v, k always
+#     use the height above the ground).
+#
+# bc.sponge_width = 0    # off
+#     Finite, ≥ 0 (m); > 0 needs an inflow or outflow face and bc.sponge_strength > 0.
+#
+# bc.sponge_strength = 0
+#     Finite, ≥ 0 (1/s); needs bc.sponge_width > 0.
+#
+# bc.surface_z0 = 0.1    # m
+#     Finite, > 0. Roughness length of the wall model. The bc.surface_* keys need bc.zlo = surface_layer.
+#
+# bc.surface_zref = 0
+#     Finite. ≤ 0: each column's first cell centre. Otherwise a height between the first and last cell-centre
+#     heights of every column (m).
+#
+# bc.surface_stability = neutral
+#     neutral or heat_flux.
+#
+# bc.surface_heat_flux = 0
+#     Finite (K m/s); heat_flux only.
+#
+# bc.surface_wall_k = dirichlet
+#     dirichlet or source.
+#
+# bc.surface_denominator_floor = log_law
+#     log_law (m = min(ln((d + z_0)/z_0), 1)) or one (m = 1): the floor of the MOST denominator. They differ only
+#     where ln((d + z_0)/z_0) < 1.
+#
+# bc.surface_stable_functions = businger_dyer
+#     businger_dyer or qnse: the stable side (z/L > 0) of φ_m, φ_h, ψ_m, ψ_h (stable functions,
+#     docs/boundary_conditions.rst), for the wall model and the column. qnse needs bc.surface_stability = heat_flux
+#     or a stratified column (init.column_stability), otherwise the run stops.
+#
+# bc.surface_qnse_am = 2.5
+# bc.surface_qnse_bm = 0.2
+#     a_m, b_m of φ_m = (1 + a_m ζ)/(1 + b_m ζ): b_m > 0, a_m ≥ b_m, finite. qnse only (otherwise the run stops).
+#
+# bc.surface_qnse_ah = 2.5
+# bc.surface_qnse_bh = 0.2
+#     a_h, b_h of φ_h, as a_m, b_m. qnse only.
+
+# ==================================================================================================================
+# forcing
+# ==================================================================================================================
+# See docs/governing_equations.rst. Read with the SIMPLEC stage only.
+#
+# forcing.gravity = 9.81
+#     Finite, ≥ 0 (m/s²). 0 switches buoyancy off.
+#
+# forcing.theta0 = 300
+#     Finite, > 0 (K). Boussinesq reference temperature. Refused with forcing.gravity = 0.
+#
+# forcing.coriolis = 0
+#     0 or 1: the Coriolis force.
+#
+# forcing.latitude = 0
+#     In [−90, 90] (degrees). With coriolis = 1 only.
+#
+# forcing.rotation_period = 86400
+#     Finite, > 0 (s); f = 4π sin φ/T. With coriolis = 1 only. The default is the solar day (ERF's value); the
+#     sidereal day, 86164 s, gives an f 0.27 % larger.
+#
+# forcing.coriolis_3d = 1
+#     0 or 1: the cos φ terms on u and w. With coriolis = 1 only.
+#
+# forcing.geostrophic = 0
+#     0 or 1: geostrophic forcing. Needs coriolis = 1 and a non-zero latitude.
+#
+# forcing.ug = 0
+# forcing.vg = 0
+#     Finite (m/s): the geostrophic wind. With geostrophic = 1 only.
+#
+# forcing.pressure_gradient = 0 0 0
+#     Three finite values (m/s²): a constant pressure-gradient force on u, v, w.
+
+# ==================================================================================================================
+# turb
+# ==================================================================================================================
+# See docs/turbulence_model.rst. Read with the SIMPLEC stage only.
+#
+# turb.Cmu0 = 0.5562
+#     Finite, > 0: C_μ0; also used by the wall k and the inflow profile's equilibrium k.
+#
+# turb.Cb = 0.35
+#     Finite, > 0: C_b of the stable and unstable length scales.
+#
+# turb.Rt_crit = -1
+#     Finite, ≤ 0: R_t is smoothed below this value.
+#
+# turb.Rt_min = -3
+#     Finite, < turb.Rt_crit and > −3.598: the smoothed R_t stays above it. c_μ has its pole at −3.5987 and grows
+#     without bound as turb.Rt_min approaches it (docs/turbulence_model.rst).
+#
+# turb.max_geom_lscale = 30    # m
+#     Finite, > 0: the harmonic cap of l_g (about κ × 0.1δ, the l_g at the top of the surface layer, δ the
+#     boundary-layer depth); also the cap of the inflow profile's length with bc.inflow_tke_length = closure.
+#
+# turb.tke_floor = 0
+#     0 (machine epsilon) or ≥ machine epsilon (m²/s²): lower bound on k.
+#
+# turb.sigma_k = 1
+#     Finite, > 0: γ_k = ν_mol + ν_t/σ_k.
+#
+# turb.nu_molecular = 0
+# turb.alpha_molecular = 0
+#     Finite, ≥ 0 (m²/s): molecular viscosity and heat diffusivity.
+#
+# turb.kappa = 0.41
+#     Finite, > 0: von Kármán constant; also used by the wall law and the inflow profile's ν_t.
+#
+# turb.nut_relax = 1
+#     In (0, 1]: under-relaxation of ν_t (1: none).
+#
+# turb.frozen_switch = 1
+#     0 or 1: freeze the k-floor decisions of the closure from the switch to Newton to the end of the Newton stage
+#     (docs/solution_algorithm.rst). With steady.stage = simplec it aborts as a key with no effect.
+#
+# turb.ri_gate = 0
+#     0 (off) or finite, ≥ 1e-6 and ≤ 1: Ri_0 of the stratification gate N^2 → N^2 Ri^2/(Ri^2 + Ri_0^2) in the
+#     closure (docs/turbulence_model.rst).
+#
+# turb.realizability = 0
+#     0 (off) or finite, ≥ 0.01 and ≤ 10: C_r of the cap ν_t ≤ C_r k/S, applied to the new ν_t before turb.nut_relax
+#     (nut-cap, docs/turbulence_model.rst). 0.309 is about C_μ0^2 (the log-layer value) for the default turb.Cmu0.
+#
+# turb.face_mean = arithmetic
+#     arithmetic or logarithmic (docs/discretization.rst).
+#
+# turb.wall_distance = terrain_height
+#     terrain_height or tucker.
+
+# ==================================================================================================================
+# convection
+# ==================================================================================================================
+# See docs/discretization.rst. Read with the SIMPLEC stage only. k always uses first-order upwinding.
+#
+# convection.limiter = van_leer
+#     van_leer, van_albada or upwind, for momentum and θ.
+#
+# convection.smooth_eps_velocity = 1e-5
+#     > 0 (m/s), with a finite square: the ε of van_albada for momentum.
+#
+# convection.smooth_eps_theta = 1e-5
+#     The same for θ (K).
+#
+# convection.hybrid_sigma_max = 0
+#     0 (off) or finite, > 0 and ≤ 1: the largest blend σ of the momentum and θ convection towards first-order
+#     upwind (hybrid-convection, docs/turbulence_model.rst). Needs turb.realizability > 0; not with
+#     convection.limiter = upwind, steady.stage = simplec_newton or io.restart.
+#
+# convection.hybrid_height =    # none
+#     Finite, > 0 (m), required with hybrid_sigma_max > 0: the blend acts below this height above the ground and
+#     tapers to 0 at 1.5 times it (recommended: 2.5 terrain heights).
+#
+# convection.hybrid_relax = 0.1
+#     In (0, 1]: under-relaxation of σ per iteration. Refused unless hybrid_sigma_max > 0.
+#
+# convection.hybrid_freeze = 1e-2
+#     0 (never) or in (0, 1): σ is frozen once the relative residual falls below it. Refused unless hybrid_sigma_max
+#     > 0.
+
+# ==================================================================================================================
+# steady
+# ==================================================================================================================
+# See docs/solution_algorithm.rst. With steady.stage = none the application builds the mesh and initial field,
+# writes them and stops; the other steady.* keys are then refused.
+#
+# The steady.newton_* and steady.switch_* keys are read with steady.stage = simplec_newton; with simplec they abort
+# as keys with no effect. Their defaults are provisional. The last seven rows are the pseudo-transient continuation
+# of docs/solution_algorithm.rst. In the Newton stage its CFL ramps from steady.cfl_max to steady.newton_cfl_max
+# with the SER keys; the SER law's residual term takes steady.newton_cfl_max as its starting CFL, so
+# steady.ser_exponent rarely limits the ramp there.
+#
+# steady.stage = none
+#     none, simplec or simplec_newton: SIMPLEC, then the Newton stage once the switch rules allow it, with the
+#     fallback to SIMPLEC (docs/solution_algorithm.rst).
+#
+# steady.max_iterations = 10000
+#     ≥ 1. Iteration limit over the whole run, restarts included. With grid sequencing it applies to each level.
+#
+# steady.residual_tol = 5e-5
+#     Finite, > 0. Every scaled residual must be below it. The scales divide by the depth of the layers, not
+#     mesh.prob_hi z (convergence-criteria, docs/solution_algorithm.rst).
+#
+# steady.residual_drop_orders = 4
+#     ≥ 0 and ≤ the largest decimal exponent of the precision (308 double, 38 single). Every residual must also drop
+#     this many orders below its reference. Round-off limits the reachable drop to about 15 orders in double and 6
+#     to 7 in single; a larger value runs to steady.max_iterations.
+#
+# steady.residual_ref_iterations = 5
+#     ≥ 1. The reference is the largest residual over this many first iterations. During them the CFL stays at
+#     steady.cfl0 (for grid sequencing see steady.sequencing_hold).
+#
+# steady.monitor_rel_tol = 1e-3
+#     Finite, > 0. Relative tolerance of the monitors.
+#
+# steady.monitor_window = 50
+#     ≥ 2. Monitor window (iterations).
+#
+# steady.confidence = 0
+#     0 (off) or finite, > 0 and ≤ 1: the run is also steady when this share of the cells meet the residual
+#     criterion cell by cell and every monitor criterion is met (confidence stop, docs/solution_algorithm.rst).
+#     SIMPLEC stage only.
+#
+# steady.confidence_height = 0
+#     0 (anywhere) or finite, > 0 (m), only with steady.confidence > 0: every cell that does not meet the criterion
+#     must also lie within this height above the ground.
+#
+# steady.cfl0 = 1
+#     Finite, > 0. CFL number of the first iterations.
+#
+# steady.cfl_max = 8    # with lusgs, 10 with zjacobi
+#     Finite, ≥ steady.cfl0. Largest CFL number. The default depends on steady.sweep (the sweep and CFL-cap study on
+#     Askervein, docs/results.rst); a given value is used with either sweep.
+#
+# steady.ser_exponent = 1
+#     Finite, ≥ 0. Exponent p of the CFL ramp; 0 holds the CFL at cfl0.
+#
+# steady.ser_max_growth = 2
+#     Finite, ≥ 1. Largest CFL growth factor per iteration.
+#
+# steady.switch_window = 20
+#     ≥ 1. Iterations below switch_residual before a switch to the next stage; no other switch within this many
+#     iterations of the last one (hysteresis), except the Newton stage's own hand-back.
+#
+# steady.switch_residual = 1e-4
+#     > 0 and ≤ 1. Relative residual at which the Newton stage starts (it was 1e-2 and unused before the Newton
+#     stage).
+#
+# steady.switch_back_growth = 10
+#     Finite, > 1. Residual growth over a window that returns the run to the previous stage.
+#
+# steady.switch_monitor_tol = 1e-2
+#     0 (off), or > 0 and < 1. The switch to Newton also needs every monitor to have changed by at most this
+#     fraction of max(|value|, scale) over the window.
+#
+# steady.newton_fallback_failures = 2
+#     Integer, ≥ 1. Consecutive failed Newton steps (every retry used) after which the run goes back to SIMPLEC.
+#     After three such fallbacks the run stays in SIMPLEC.
+#
+# steady.newton_cfl_max = 128
+#     Finite, ≥ steady.cfl_max (with simplec_newton). The Newton stage's CFL cap: from steady.cfl_max the CFL is
+#     multiplied by steady.ser_max_growth per accepted step up to this cap, then (with steady.newton_dtau_inf_at_cap
+#     = 1) Δ τ is infinite. The preconditioner of an infinite Δ τ uses this CFL.
+#
+# steady.sweep =    # lusgs (CPU build), zjacobi (GPU build)
+#     zjacobi (z-line Jacobi) or lusgs (line LU-SGS). The default depends on the build (the sweep and CFL-cap study
+#     on Askervein, docs/results.rst): a GPU build keeps zjacobi until the sweeps are measured on H100. zjacobi
+#     reproduces the solver used before line LU-SGS became the CPU default. A restart takes the current default, not
+#     the sweep of the run that wrote the checkpoint: give steady.sweep = zjacobi to continue a run that used the
+#     old default. The steady.line_* keys need lusgs, so a deck that gives them should also give steady.sweep.
+#
+# steady.zline_sweeps = 2
+#     Sweeps per iteration: 2 to 100 with zjacobi, 1 to 100 with lusgs. With zjacobi the stable CFL grows with the
+#     sweeps: 0.9 with 2 (the default), 2.4 with 4, 3.7 with 8, 6.1 with 16 (a Fourier analysis, docs/results.rst).
+#     The zjacobi default cap of 10 is above the 2-sweep value; see docs/results.rst for the runs that set it.
+#
+# steady.line_ghosts = lagged
+#     lagged or zero; lusgs only. lagged: neighbours across a box face take the previous pass's values. zero: each
+#     box sweeps on its own, without communication.
+#
+# steady.line_overlap = 0
+#     Integer from 0 to 8, and at most the narrowest box width (on every hierarchy level with grid sequencing); > 0
+#     only with line_ghosts = zero. Columns by which each box's swept region is grown.
+#
+# steady.line_order = sequential
+#     sequential or diagonal; lusgs only. diagonal runs one column per GPU thread with the same result.
+#
+# steady.line_alternate = 0
+#     0 or 1; lusgs only, with zline_sweeps ≥ 2. 1 reverses the y direction on every second sweep.
+#
+# steady.sequencing = 0
+#     0 or 1. 1: grid sequencing over the mesh.hierarchy_levels levels (docs/solution_algorithm.rst). Needs
+#     mesh.hierarchy_levels ≥ 2 and at least 2 cells in x and y on the coarsest level. init.* then acts on the
+#     coarsest level only, and steady.max_iterations applies to each level. On a restart the coarse levels are
+#     skipped and the steady.sequencing* keys have no effect (the log says so).
+#
+# steady.sequencing_drop_orders = 2
+#     Finite, > 0 and ≤ steady.residual_drop_orders; with sequencing = 1 only. A coarse level stops once every
+#     residual is this many orders below its reference, or below steady.residual_tol.
+#
+# steady.sequencing_monitor_tol = 0    # off
+#     0, or finite, > 0 and < 1; with sequencing = 1 only. A coarse level also stops once every monitor changed by
+#     at most this fraction over steady.monitor_window iterations.
+#
+# steady.sequencing_hold = 0
+#     0 or 1; with sequencing = 1 only. 0: the seeded levels (all but the coarsest) skip the reference hold and ramp
+#     the CFL from their first iteration. 1: every level holds the CFL at steady.cfl0 for its first
+#     steady.residual_ref_iterations iterations. A restart keeps the setting of the checkpoint.
+#
+# steady.sequencing_cfl_start = cfl0
+#     cfl0 or previous; with sequencing = 1 only. The CFL of a seeded level's first iteration: steady.cfl0, or the
+#     CFL the previous level reached (at least steady.cfl0). previous needs steady.sequencing_hold = 0.
+#
+# steady.machine = local
+#     local, kestrel-cpu or kestrel-gpu: allocation-unit rate (0, 10, 100 AU per node-hour).
+#
+# steady.nodes = 1
+#     ≥ 1. Nodes of the run, for the allocation units.
+#
+# steady.newton_gmres_restart = 30
+#     Integer from 5 to 200. GMRES restart length of the Newton step.
+#
+# steady.newton_fd_eps_scale =    # √(ε_mach)
+#     ≥ ε_mach^(3/4) and ≤ 1e-2. Relative step of the Jacobian–vector product.
+#
+# steady.newton_krylov_rtol = 1e-2
+#     > 0 and < 1. GMRES tolerance in each Newton step.
+#
+# steady.newton_mem_budget_gb = 70
+#     > 0 and ≤ 80. Krylov memory per rank (GB); the run stops if the estimate exceeds it.
+#
+# steady.newton_gmres_max_iters = 2000
+#     Integer, ≥ 1. GMRES iteration limit of one Newton step (all restarts). A solve that reaches it is unconverged;
+#     its update goes through the usual usability rule.
+#
+# steady.newton_preconditioner = simplec
+#     identity or simplec; any other value aborts and names the key. The preconditioner of each GMRES solve of the
+#     Newton step (docs/solution_algorithm.rst). simplec: one SIMPLEC iteration with steady.sweep and
+#     steady.zline_sweeps. identity: none.
+#
+# steady.newton_armijo_c = 1e-4
+#     > 0 and < 0.5. Armijo constant c of the continuation's line search.
+#
+# steady.newton_backtrack = 0.5
+#     > 0 and < 1. Backtracking factor β: λ = 1, β, β^2, …
+#
+# steady.newton_lambda_min = 1e-2
+#     > 0 and < 1. The smallest λ tried; below it the attempt is rejected.
+#
+# steady.newton_cfl_cut = 0.25
+#     > 0 and < 1. A rejected or skipped attempt multiplies the CFL by this factor (from infinite Δ τ:
+#     steady.newton_cfl_max times it) and retries.
+#
+# steady.newton_max_retries = 4
+#     Integer, ≥ 1. Retries of one continuation step; after the last the step returns failed.
+#
+# steady.newton_dtau_inf_at_cap = 1
+#     0 or 1. 1: once the CFL reaches steady.newton_cfl_max, the next steps run without a pseudo-time term (D = 0,
+#     plain Newton) until an attempt fails. 0: the CFL stays at the cap.
+#
+# steady.newton_ptc_growth = 1
+#     Finite, ≥ 1. At a finite Δ τ, when no λ meets the Armijo condition, accept the full step if |R| grows by at
+#     most this factor. 1: off. Not used at infinite Δ τ.
+
+# ==================================================================================================================
+# simplec
+# ==================================================================================================================
+# See docs/solution_algorithm.rst. Read with steady.stage = simplec or simplec_newton.
+#
+# simplec.pressure_reltol = 1e-3
+#     ≥ 10 machine epsilon and < 1: relative tolerance of the pressure-correction solve. Looser values can be
+#     unstable in stratified flow.
+#
+# simplec.alpha_p = 1
+#     > 0 and ≤ 1: pressure under-relaxation.
+#
+# simplec.rotation_relax = 0.3
+#     > 0 and ≤ 1: step of the point-implicit rotation, in inertial times. 1 often converges faster (the hill cases
+#     use it).
+#
+# simplec.w_vnn_cap = 0    # off
+#     0, or finite and ≥ 16: the cap V on the vertical VNN number of the w rows. Changes the path, not the answer.
+#     May change across a restart.
+#
+# simplec.w_vnn_cap_slope_margin = 4
+#     0 (off), or finite and ≥ 1; refused unless simplec.w_vnn_cap > 0. The safety factor s that lowers the cap on
+#     sloping ground so the pressure operator stays definite (docs/solution_algorithm.rst). 0 is the cap of #32,
+#     which can stall where thin cells meet steep slopes; the run then warns over terrain when the mesh aspect ratio
+#     is above the tested 50.78. Changes the path, not the answer. May change across a restart.
+
+# ==================================================================================================================
+# solver
+# ==================================================================================================================
+# See docs/solution_algorithm.rst. Read when init.first_guess is not none or with the SIMPLEC stage; refused
+# otherwise.
+#
+# solver.poisson_backend = gmres_mlmg
+#     gmres_mlmg (GMRES with multigrid), mlmg (multigrid alone) or gmres_fft (ERF's operator with an FFT
+#     preconditioner).
+#
+# solver.poisson_reltol = 1e-10    # 1e-5 single
+#     ≥ 10 machine epsilon and < 1. Converged when the residual is below this fraction of the initial one. In single
+#     precision the rounding floor of the residual is about ε N_z^2/2 (ε the machine epsilon, N_z the vertical
+#     cells; 2e-4 on 64 layers), so the default 1e-5 lies below it once N_z > 13; use about 4ε N_z^2 there.
+#
+# solver.poisson_abstol = 0
+#     Finite, ≥ 0. Converged when the residual is below this value.
+#
+# solver.poisson_max_iter = 200
+#     ≥ 1. GMRES iterations, or multigrid cycles with mlmg; the run stops when it is reached.
+#
+# solver.poisson_restart = 50
+#     ≥ 1. GMRES restart length; not with mlmg.
+#
+# solver.poisson_precond = fft
+#     fft or none; only with gmres_fft.
+#
+# solver.poisson_verbose = 0
+#     ≥ 0. 1 prints each solve; 2 also prints the residual at each GMRES restart.
+
+# ==================================================================================================================
+# io
+# ==================================================================================================================
+#
+# io.plot_file = plt
+#     Plotfile prefix; not empty.
+#
+# io.chk_file = chk
+#     Checkpoint prefix; not empty.
+#
+# io.write_plotfile = 1
+#     0 or 1: write the plotfile at the end of the run.
+#
+# io.write_checkpoint = 1
+#     0 or 1: write the checkpoint at the end of the run.
+#
+# io.turb_plot_file =    # none
+#     Prefix of the turbulence plotfile with ERF's variable names (docs/output.rst). Needs the SIMPLEC stage.
+#
+# io.restart =    # none
+#     Checkpoint directory to restart from (docs/running.rst).
+
+# ==================================================================================================================
+# refavg (reference-averaging tool)
+# ==================================================================================================================
+# The separate tool gust_refavg (docs/references.rst) reads only the refavg namespace.
+#
+# refavg.plotfiles =    # required
+#     At least 3 single-level plotfiles with the same variables, domain and box layout, in increasing time.
+#
+# refavg.output =    # required
+#     Archive directory to create; must not exist.
+#
+# refavg.case =    # required
+#     Case name, one word.
+#
+# refavg.erf_sha =    # required
+#     Full 40-character ERF commit, lower-case hexadecimal.
+#
+# refavg.machine = local
+#     kestrel-cpu, kestrel-gpu or local.
+#
+# refavg.nodes = 1
+#     ≥ 1.
+#
+# refavg.ranks = 1
+#     ≥ 1. MPI ranks (CPU) or GPUs of the run.
+#
+# refavg.wall_seconds = 0
+#     Finite, ≥ 0.
+#
+# refavg.inputs_files =    # none
+#     Files to copy into the archive; each must exist, with distinct names.
+#
+# refavg.verify =    # none
+#     Instead of building, check this archive and print its metadata. The other keys are then refused.

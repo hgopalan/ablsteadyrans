@@ -80,7 +80,8 @@ and every finding is resolved.
 
 ### Documentation and clean-up
 - Detail goes in the Sphinx documentation (`docs/`); `README.md` stays short and points there.
-- An input-table row in `docs/inputs.rst` for every new key, matching its range check.
+- An input-table row in `docs/inputs.rst` for every new key, matching its range check; then
+  `tools/input_reference.py --write` regenerates `Tests/inputs_reference` (CTest `input_reference_current`).
 - `make -C docs html` builds without warnings (`-W`) before pushing.
 - `codespell`, no trailing whitespace, `git diff --check` clean (`extern_erf/` and `Tests/**/Gold/` are exempt in
   `.gitattributes`: they stay byte-identical to their source).
