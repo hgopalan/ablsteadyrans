@@ -892,3 +892,52 @@ TEST (Mesh, GhostNodesStandForTheirImages)
 }
 
 } // namespace
+
+// The Agnesi ground's ghost nodes as written (audit G6): in a periodic
+// direction each is its periodic image (equal to what FillBoundary gives,
+// bit for bit), and outside a non-periodic face the nearest domain node.
+// The three hill shapes on a domain not centred at the origin, on boxes of 8 cells, with x periodic and
+// y not, then the reverse. Before, the periodic ghosts were clamped to the
+// face node: off by 2.52 m (x periodic) and 4.05 m (y periodic) here, for
+// the shapes that vary along the periodic direction.
+TEST(Mesh, AgnesiGhostNodesWrapInPeriodicDirections)
+{
+    for (const int per : {0, 1}) {
+        for (const std::string shape : {"round", "ridge_x", "ridge_y"}) {
+            MeshCase s;
+            s.in.mesh.n_cell = amrex::IntVect(24, 20, 4);
+            s.in.mesh.prob_lo = {-300, -200, 0};
+            s.in.mesh.prob_hi = {2100, 1800, 400};
+            s.in.mesh.is_periodic = {per == 0 ? 1 : 0, per == 1 ? 1 : 0, 0};
+            s.in.mesh.max_grid_size = {8, 8};
+            s.in.terrain.type = "agnesi";
+            s.in.terrain.hill_shape = shape;
+            s.in.terrain.hill_height = 150;
+            s.in.terrain.hill_half_width = 400;
+            s.make();
+            gust::fill_terrain_surface(s.z, s.geom, s.in.terrain);
+            amrex::MultiFab ref(s.z.boxArray(), s.z.DistributionMap(), 1, s.z.nGrowVect());
+            amrex::MultiFab::Copy(ref, s.z, 0, 0, 1, s.z.nGrowVect());
+            ref.FillBoundary(s.geom.periodicity());
+            amrex::MultiFab::Subtract(ref, s.z, 0, 0, 1, s.z.nGrowVect());
+            EXPECT_EQ(ref.norminf(0, ref.nGrow()), 0) << shape << " periodic " << per;
+            amrex::Gpu::streamSynchronize();
+            // The ghosts outside the non-periodic faces take the face node.
+            const int d = 1 - per;
+            const int hi = s.geom.Domain().bigEnd(d) + 1;
+            for (amrex::MFIter mfi(s.z); mfi.isValid(); ++mfi) {
+                const auto z = s.z.const_array(mfi);
+                const amrex::Box gb = mfi.fabbox();
+                amrex::LoopOnCpu(gb, [&] (int i, int j, int k) {
+                    const int m = (d == 0) ? i : j;
+                    if (k != 0 || (m >= 0 && m <= hi)) { return; }
+                    const int mc = (m < 0) ? 0 : hi;
+                    const int ic = (d == 0) ? mc : i, jc = (d == 1) ? mc : j;
+                    if (gb.contains(amrex::IntVect(ic, jc, 0))) {
+                        EXPECT_EQ(z(i, j, 0), z(ic, jc, 0)) << shape << " " << i << " " << j;
+                    }
+                });
+            }
+        }
+    }
+}

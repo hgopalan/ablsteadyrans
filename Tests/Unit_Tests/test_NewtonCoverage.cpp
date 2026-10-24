@@ -7,6 +7,7 @@
 // diagnostics; and a non-uniform dtau on the faces. test_Newton.cpp holds the
 // core's own tests.
 #include "BoundaryConditions.H"
+#include "Closure.H"
 #include "Inputs.H"
 #include "Newton.H"
 #include "Residual.H"
@@ -659,11 +660,11 @@ TEST(Newton, NonUniformDtauOnFaces)
 // outside two non-periodic faces), the faces reversed, heat flux of both signs
 // (the Newton solve for u*), bc.surface_zref above the first centre (the k > 0
 // interval, and periodic with some columns in each), a geostrophic top; one box,
-// 3 x 2 and uneven 3-cell boxes; the fill and the homogeneous fill of the
+// 3 x 2 boxes split evenly and unevenly; the fill and the homogeneous fill of the
 // perturbation. With the old ground-cell wind every configuration with k = 0
 // fails (ghosts off by 0.002 to 0.055).
 namespace {
-struct Cfg { const char* name; bool perx, pery, heat; double qflux, zref; bool geo, reverse; };
+struct Cfg { const char* name; bool perx, pery, heat; double qflux, zref; bool geo, reverse; double xc = 450; };
 
 struct HillXY
 {
@@ -681,7 +682,8 @@ struct HillXY
         c.in.mesh.prob_hi = {amrex::Real(Lx), amrex::Real(Ly), amrex::Real(H)};
         c.in.mesh.is_periodic = {cf.perx ? 1 : 0, cf.pery ? 1 : 0, 0};
         c.in.mesh.max_grid_size = {max_grid, max_grid};
-        c.make([=] (double x, double y) { return 30 * std::exp(-((x - 450) * (x - 450) + 0.5 * (y - 300) * (y - 300)) / (150.0 * 150.0)); });
+        const double xc = cf.xc;
+        c.make([=] (double x, double y) { return 30 * std::exp(-((x - xc) * (x - xc) + 0.5 * (y - 300) * (y - 300)) / (150.0 * 150.0)); });
         c.z.FillBoundary(c.geom.periodicity());
         c.mesh.build_from_ground(c.in, c.geom, c.z);
         gust::trtest::smooth_vertical_ghost_nodes(c);
@@ -758,6 +760,129 @@ TEST(BoundaryConditions, TerrainFillIsAFixedPointInMoreConfigurations)
                 const double dq = max_ghost_diff(hc.q, q2, f), dv = max_ghost_diff(hc.v, v2, f);
                 EXPECT_EQ(dq, 0) << cf.name << " " << mg << " " << f;
                 EXPECT_EQ(dv, 0) << cf.name << " " << mg << " " << f;
+            }
+            amrex::Gpu::streamSynchronize();
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Every copy of a ghost cell holds the same value (audit G3). After the fill
+// on 3 x 2 boxes, split evenly (3 cells) and unevenly (4 + 2 in y), each ghost
+// cell equals the value one box over the whole domain gives the same cell:
+// its own column inside the domain (the periodic image in a periodic
+// direction) or, outside a non-periodic face, the one box's ghost there. The
+// configurations of TerrainFillIsAFixedPointInMoreConfigurations; the fill and
+// the homogeneous fill of the perturbation. Before, the outermost lateral
+// ghost layer differed by up to 5.0 m/s for u and 0.24 for the perturbation's w.
+namespace {
+//! The largest |a - ref| over the cells of a's fabs the reference reached
+//! (marked cells were not reached).
+double max_diff_reached (const amrex::MultiFab& a, const amrex::MultiFab& ref, amrex::Real marker)
+{
+    amrex::MultiFab d(a.boxArray(), a.DistributionMap(), 1, a.nGrowVect());
+    for (amrex::MFIter mfi(d, false); mfi.isValid(); ++mfi) {
+        const auto x = a.const_array(mfi), r = ref.const_array(mfi);
+        const auto e = d.array(mfi);
+        amrex::ParallelFor(mfi.fabbox(), [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
+        {
+            e(i, j, k) = (r(i, j, k) == marker) ? amrex::Real(0) : std::abs(x(i, j, k) - r(i, j, k));
+        });
+    }
+    return static_cast<double>(d.norminf(0, d.nGrow()));
+}
+
+double max_ghost_copy_diff (gust::State& a, gust::State& one, int f, const amrex::Geometry& geom)
+{
+    const amrex::MultiFab& x = field(a, f);
+    const amrex::MultiFab& s = field(one, f);
+    const amrex::Real marker = std::numeric_limits<amrex::Real>::max();
+    amrex::MultiFab ref(x.boxArray(), x.DistributionMap(), 1, x.nGrowVect());
+    ref.setVal(marker);
+    const int ng = x.nGrow();
+    const amrex::IntVect src_ng(geom.isPeriodic(0) ? 0 : ng, geom.isPeriodic(1) ? 0 : ng, ng);
+    ref.ParallelCopy(s, 0, 0, 1, src_ng, x.nGrowVect(), geom.periodicity());
+    return max_diff_reached(x, ref, marker);
+}
+} // namespace
+
+TEST(BoundaryConditions, GhostCopiesAgreeAcrossBoxes)
+{
+    const Cfg cfgs[] = {
+        {"inout_x_inout_y", false, false, false, 0, 0, false, false},
+        {"reverse_x", false, true, false, 0, 0, false, true},
+        {"heat_unstable", false, true, true, 0.1, 0, false, false},
+        {"heat_stable", false, true, true, -0.02, 0, false, false},
+        {"zref_100", false, true, false, 0, 100, false, false},
+        {"zref_100_heat_xy", false, false, true, 0.05, 100, false, false},
+        {"geostrophic_top", true, true, false, 0, 0, true, false},
+        {"all_periodic_zref60", true, true, false, 0, 60, false, false},
+    };
+    for (const auto& cf : cfgs) {
+        HillXY one(64, cf);
+        for (const int mg : {4, 3}) {
+            HillXY hc(mg, cf);
+            for (int f = 0; f < 6; ++f) {
+                const double dq = max_ghost_copy_diff(hc.q, one.q, f, hc.c.geom);
+                const double dv = max_ghost_copy_diff(hc.v, one.v, f, hc.c.geom);
+                EXPECT_EQ(dq, 0) << cf.name << " " << mg << " " << f;
+                EXPECT_EQ(dv, 0) << cf.name << " " << mg << " " << f;
+            }
+            amrex::Gpu::streamSynchronize();
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// The residual does not depend on the box layout where an inflow face crosses
+// terrain (audit A3, from Pressel's review). The hill sits on the inflow face
+// (and on the inflow / outflow y faces), nu_t comes from the closure with the
+// realizability cap C_r k / S (turb.realizability = 0.309), and R on 3 x 2
+// boxes, split evenly and unevenly, equals R on one box to 1e-12 of its norm
+// per field (0 measured). The closure evaluates nu_t in the first lateral
+// ghost layer from the strain there, which reads the second layer: the inflow
+// face points of u. Before every ghost copy held one value those came from
+// the clamped heights, and R differed by up to 1.6e-5 of its norm (w).
+TEST(BoundaryConditions, ResidualWithClosureAtInflowSeamsIsLayoutFree)
+{
+    const Cfg cfgs[] = {
+        {"hill_on_inflow_x", false, true, false, 0, 0, false, false, 0},
+        {"hill_on_inflow_xy", false, false, false, 0, 0, false, false, 0},
+        {"hill_on_inflow_reverse", false, true, false, 0, 0, false, true, 900},
+    };
+    gust::ClosureOptions opt;
+    opt.nu_molecular = amrex::Real(1.5e-5);
+    opt.realizability = amrex::Real(0.309);   // nu_t capped by C_r k / S: the strain enters nu_t
+    const gust::Closure closure(opt);
+    auto run = [&] (HillXY& h, gust::ResidualFields& R, amrex::MultiFab& dist) {
+        h.in.momentum.limiter = gust::Limiter::van_leer;
+        h.in.theta.limiter = gust::Limiter::van_leer;
+        h.in.nu = nullptr;
+        h.in.gamma_theta = nullptr;
+        h.in.gamma_tke = nullptr;
+        h.in.closure = &closure;
+        gust::height_above_ground(h.q.z_phys_nd, dist);
+        h.in.wall_distance = &dist;
+        gust::residual(h.q, h.in, h.c.mesh, h.c.geom, R);
+    };
+    for (const auto& cf : cfgs) {
+        HillXY one(64, cf);
+        gust::ResidualFields R1;
+        amrex::MultiFab d1;
+        run(one, R1, d1);
+        for (const int mg : {4, 3}) {
+            HillXY hc(mg, cf);
+            gust::ResidualFields R;
+            amrex::MultiFab dd;
+            run(hc, R, dd);
+            for (int f = 0; f < 6; ++f) {
+                const amrex::MultiFab& a = rfield(R1, f);
+                amrex::MultiFab d(a.boxArray(), a.DistributionMap(), 1, 0);
+                d.setVal(0.0);
+                d.ParallelCopy(rfield(R, f), 0, 0, 1, 0, 0);
+                amrex::MultiFab::Subtract(d, a, 0, 0, 1, 0);
+                const double n = static_cast<double>(a.norminf(0, 0)), e = static_cast<double>(d.norminf(0, 0));
+                EXPECT_LE(e, tol(1e-12, 1e-4) * n) << cf.name << " " << mg << " " << f;
             }
             amrex::Gpu::streamSynchronize();
         }

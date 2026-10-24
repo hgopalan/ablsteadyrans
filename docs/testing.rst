@@ -976,6 +976,10 @@ GoogleTest suite
        copy of a domain node agrees. Before ``fill_ghost_columns`` the corners outside a wall and a periodic side held
        the clamped corner column (up to 8 m off) and the row below the ground of periodic ghost columns was
        extrapolated from the clamped columns (STF, Sullivan).
+   * - ``Mesh.AgnesiGhostNodesWrapInPeriodicDirections``
+     - The Agnesi ground as written, before any exchange: each ghost node in a periodic direction is its periodic
+       image, bit for bit, and outside a non-periodic face the face node. Round hill and both ridges on a domain not
+       centred at the origin, x periodic and then y. Before audit A3 the periodic ghosts were clamped (2.5 m and 4.1 m off).
    * - ``SimilarityFunctions.MatchTheReferenceTable``
      - ERF's similarity functions (the copied ``ERF_MOSTUtils.H``, byte-identical by the drift check): Businger–Dyer
        ψ and φ and Jimenez ψ against a Python table of the same formulas, z/L from −5 to 5, to 1e-14 (single 1e-6);
@@ -1614,8 +1618,14 @@ GoogleTest suite
        \mathrm{fill}(q)` on every field and ghost cell and :math:`R` likewise, bit for bit (audit A2; before, a second
        fill moved a ghost by up to 0.056 and :math:`R` by 1e-5). ``…InMoreConfigurations``: a hill varying in x and y,
        inflow/outflow in x and y, reversed faces, heat flux of both signs, ``bc.surface_zref`` above the first centre,
-       a geostrophic top, one box, 3 × 2 and uneven 3-cell boxes, the fill and the homogeneous fill (from Aaron's
+       a geostrophic top, one box, 3 × 2 boxes split evenly and unevenly, the fill and the homogeneous fill (from Aaron's
        review; with the old ground-cell wind every configuration that uses the ground cell fails).
+       ``BoundaryConditions.GhostCopiesAgreeAcrossBoxes``: in those configurations, on 3 × 2 boxes split evenly and
+       unevenly, every ghost cell equals the value one box over the domain gives it, bit for bit (audit A3; before, the
+       outermost lateral ghost layer differed by up to 5.0 m/s for u). ``…ResidualWithClosureAtInflowSeamsIsLayoutFree``:
+       with the hill on the inflow faces and the closure's realizability cap, :math:`R` on those layouts equals
+       :math:`R` on one box to 1e-12 of its norm (before, the cap's strain in the first lateral ghost layer read inflow
+       face points from the clamped heights, and :math:`R` differed by up to 1.6e-5 of its norm).
        ``Newton.TerrainWallLawOperatorMatchesCentralDifference``: there the operator matches a central difference of
        :math:`q \mapsto R(\mathrm{fill}(q))` to 1e-5 on one and six boxes (2.5e-8 to 4.6e-8 measured), and the
        base point :math:`R(q)` gives the same operator bit for bit (the fill is a fixed point; before audit A2 it was

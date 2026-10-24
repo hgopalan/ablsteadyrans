@@ -202,15 +202,15 @@ void columns (const State& q, const SurfaceLayerOptions& opt, const BuoyancyOpti
                 invL = F.inv_L(ustar);
             }
             const amrex::Real d0 = h0 * ia;
-            us(i, j, 0) = ustar;
-            sp(i, j, 0) = U;
-            zr_a(i, j, 0) = zr;
-            d0_a(i, j, 0) = d0;
-            il(i, j, 0) = invL;
-            ar(i, j, 0) = area;
+            us(i, j, klo) = ustar;
+            sp(i, j, klo) = U;
+            zr_a(i, j, klo) = zr;
+            d0_a(i, j, klo) = d0;
+            il(i, j, klo) = invL;
+            ar(i, j, klo) = area;
             const amrex::Real c = ustar * ustar / U * area;
-            dg(i, j, 0) = c;
-            for (int m = 0; m < 3; ++m) { ta(i, j, 0, m) = c * ut[m]; }
+            dg(i, j, klo) = c;
+            for (int m = 0; m < 3; ++m) { ta(i, j, klo, m) = c * ut[m]; }
             amrex::Real kwall = ustar * ustar * inv_cmu2;
             if constexpr (HEAT) {
                 // Axell and Liungman 2001, Eq. 16, as ERF: only an upward
@@ -218,7 +218,7 @@ void columns (const State& q, const SurfaceLayerOptions& opt, const BuoyancyOpti
                 kwall = inv_cmu2 * std::pow(ustar * ustar * ustar + kappa * amrex::max(gq_c, amrex::Real(0)) * d0,
                                             amrex::Real(2) / amrex::Real(3));
             }
-            kw(i, j, 0) = kwall;
+            kw(i, j, klo) = kwall;
         });
     }
 }
@@ -440,15 +440,15 @@ void set_ground_fluxes (const SurfaceState& s, const SurfaceLayerOptions& opt, a
         const auto gk = Gtke.array(mfi);
         amrex::ParallelFor(amrex::surroundingNodes(cb, 0), [=] AMREX_GPU_DEVICE (int i, int j, int) noexcept
         {
-            gu(i, j, k0) = half * (ta(i - 1, j, 0, 0) + ta(i, j, 0, 0));
+            gu(i, j, k0) = half * (ta(i - 1, j, k0, 0) + ta(i, j, k0, 0));
         });
         amrex::ParallelFor(amrex::surroundingNodes(cb, 1), [=] AMREX_GPU_DEVICE (int i, int j, int) noexcept
         {
-            gv(i, j, k0) = half * (ta(i, j - 1, 0, 1) + ta(i, j, 0, 1));
+            gv(i, j, k0) = half * (ta(i, j - 1, k0, 1) + ta(i, j, k0, 1));
         });
         amrex::ParallelFor(cb, [=] AMREX_GPU_DEVICE (int i, int j, int) noexcept
         {
-            gt(i, j, k0) = -qs * ar(i, j, 0);
+            gt(i, j, k0) = -qs * ar(i, j, k0);
             gk(i, j, k0) = 0;
         });
     }
@@ -472,12 +472,12 @@ void apply_wall_k (const SurfaceState& s, const SurfaceLayerOptions& opt, const 
         if (dirichlet) {
             amrex::ParallelFor(cb, [=] AMREX_GPU_DEVICE (int i, int j, int) noexcept
             {
-                r(i, j, k0) = amrex::max(us(i, j, 0), us_min) / d0(i, j, 0) * (t(i, j, k0) - kw(i, j, 0));
+                r(i, j, k0) = amrex::max(us(i, j, k0), us_min) / d0(i, j, k0) * (t(i, j, k0) - kw(i, j, k0));
             });
         } else {
             amrex::ParallelFor(cb, [=] AMREX_GPU_DEVICE (int i, int j, int) noexcept
             {
-                r(i, j, k0) += amrex::max(us(i, j, 0), us_min) / d0(i, j, 0) * (t(i, j, k0) - kw(i, j, 0));
+                r(i, j, k0) += amrex::max(us(i, j, k0), us_min) / d0(i, j, k0) * (t(i, j, k0) - kw(i, j, k0));
             });
         }
     }
@@ -506,13 +506,13 @@ void apply_wall_to_implicit (const SurfaceState& s, Loc loc, const Mesh& mesh, c
         if (loc == Loc::xface) {
             amrex::ParallelFor(gb, [=] AMREX_GPU_DEVICE (int i, int j, int) noexcept
             {
-                a(i, j, k0, coef_P) += half * (dg(i - 1, j, 0) + dg(i, j, 0)) * dzinv
+                a(i, j, k0, coef_P) += half * (dg(i - 1, j, k0) + dg(i, j, k0)) * dzinv
                                      / stencil::interp<stencil::CC, stencil::XF>(J, i, j, k0);
             });
         } else if (loc == Loc::yface) {
             amrex::ParallelFor(gb, [=] AMREX_GPU_DEVICE (int i, int j, int) noexcept
             {
-                a(i, j, k0, coef_P) += half * (dg(i, j - 1, 0) + dg(i, j, 0)) * dzinv
+                a(i, j, k0, coef_P) += half * (dg(i, j - 1, k0) + dg(i, j, k0)) * dzinv
                                      / stencil::interp<stencil::CC, stencil::YF>(J, i, j, k0);
             });
         }
@@ -538,12 +538,12 @@ void apply_wall_k_to_implicit (const SurfaceState& s, const SurfaceLayerOptions&
             amrex::ParallelFor(cb, [=] AMREX_GPU_DEVICE (int i, int j, int) noexcept
             {
                 for (int n = 0; n < n_implicit_coefs; ++n) { a(i, j, k0, n) = 0; }
-                a(i, j, k0, coef_P) = amrex::max(us(i, j, 0), us_min) / d0(i, j, 0);
+                a(i, j, k0, coef_P) = amrex::max(us(i, j, k0), us_min) / d0(i, j, k0);
             });
         } else {
             amrex::ParallelFor(cb, [=] AMREX_GPU_DEVICE (int i, int j, int) noexcept
             {
-                a(i, j, k0, coef_P) += amrex::max(us(i, j, 0), us_min) / d0(i, j, 0);
+                a(i, j, k0, coef_P) += amrex::max(us(i, j, k0), us_min) / d0(i, j, k0);
             });
         }
     }

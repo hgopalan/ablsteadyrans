@@ -201,12 +201,29 @@ public:
     [[nodiscard]] bool has_inflow () const;
     [[nodiscard]] bool damping_on () const { return m_in.rayleigh_zdamp > 0 || m_in.sponge_width > 0; }
 
+    //! The slabs outside the domain of one layout, each with the box that
+    //! owns it (the ghost-copy exchange at the end of fill_ghosts).
+    struct GhostSlabs
+    {
+        amrex::BoxArray ba;               //!< the field's layout (index type included)
+        amrex::DistributionMapping dm;
+        amrex::BoxArray slabs;
+        amrex::DistributionMapping slab_dm;
+        amrex::Vector<int> owner;         //!< the box of ba each slab belongs to
+    };
+
 private:
+    [[nodiscard]] const GhostSlabs& ghost_slabs (const amrex::MultiFab& mf) const;
+    void sync_ghost_copies (amrex::MultiFab& mf) const;
+
     BoundaryInputs m_in;
     amrex::Geometry m_geom;
     const Mesh& m_mesh;   //!< the run's mesh; it outlives this object and its copies
     CoriolisOptions m_coriolis;
     InflowProfile m_profile;
+    //! Built once per layout: a new BoxArray per fill would rebuild AMReX's
+    //! copy pattern every time. The cache holds its layouts (no id reuse).
+    mutable std::vector<GhostSlabs> m_ghost_slabs;
 };
 
 } // namespace gust
