@@ -330,6 +330,11 @@ void fill_terrain_surface (amrex::MultiFab& z_phys_nd, const amrex::Geometry& ge
         const amrex::Real xcen = amrex::Real(0.5) * (plo[0] + phi[0]);
         const amrex::Real ycen = amrex::Real(0.5) * (plo[1] + phi[1]);
         const int dir = (t.hill_shape == "ridge_x") ? 0 : (t.hill_shape == "ridge_y") ? 1 : 2;
+        // A ghost node takes the hill at the node it stands for: its periodic
+        // image in a periodic direction, the nearest domain node otherwise
+        // (the valid nodes, the periodic face node n included, are their own).
+        const bool perx = geom.isPeriodic(0), pery = geom.isPeriodic(1);
+        const int nx = domhi_x - domlo_x, ny = domhi_y - domlo_y;
         for (amrex::MFIter mfi(z_phys_nd); mfi.isValid(); ++mfi) {
             // The ground slab, in a tile that holds it (a layout split in z
             // has boxes without the ground).
@@ -342,7 +347,7 @@ void fill_terrain_surface (amrex::MultiFab& z_phys_nd, const amrex::Geometry& ge
             if (dir == 0) {
                 amrex::ParallelFor(zbx, [=] AMREX_GPU_DEVICE (int i, int j, int) noexcept
                 {
-                    const int ii = amrex::min(amrex::max(i, domlo_x), domhi_x);
+                    const int ii = perx ? (i < domlo_x ? i + nx : (i > domhi_x ? i - nx : i)) : amrex::min(amrex::max(i, domlo_x), domhi_x);
                     const amrex::Real x = (plo[0] + ii * dx[0] - xcen);
                     const amrex::Real x_L = x / L;
                     z(i, j, k0) = hm / (1 + x_L * x_L);
@@ -350,7 +355,7 @@ void fill_terrain_surface (amrex::MultiFab& z_phys_nd, const amrex::Geometry& ge
             } else if (dir == 1) {
                 amrex::ParallelFor(zbx, [=] AMREX_GPU_DEVICE (int i, int j, int) noexcept
                 {
-                    const int jj = amrex::min(amrex::max(j, domlo_y), domhi_y);
+                    const int jj = pery ? (j < domlo_y ? j + ny : (j > domhi_y ? j - ny : j)) : amrex::min(amrex::max(j, domlo_y), domhi_y);
                     const amrex::Real y = (plo[1] + jj * dx[1] - ycen);
                     const amrex::Real y_L = y / L;
                     z(i, j, k0) = hm / (amrex::Real(1) + y_L * y_L);
@@ -358,8 +363,8 @@ void fill_terrain_surface (amrex::MultiFab& z_phys_nd, const amrex::Geometry& ge
             } else {
                 amrex::ParallelFor(zbx, [=] AMREX_GPU_DEVICE (int i, int j, int) noexcept
                 {
-                    const int ii = amrex::min(amrex::max(i, domlo_x), domhi_x);
-                    const int jj = amrex::min(amrex::max(j, domlo_y), domhi_y);
+                    const int ii = perx ? (i < domlo_x ? i + nx : (i > domhi_x ? i - nx : i)) : amrex::min(amrex::max(i, domlo_x), domhi_x);
+                    const int jj = pery ? (j < domlo_y ? j + ny : (j > domhi_y ? j - ny : j)) : amrex::min(amrex::max(j, domlo_y), domhi_y);
                     const amrex::Real x = (plo[0] + ii * dx[0] - xcen);
                     const amrex::Real y = (plo[1] + jj * dx[1] - ycen);
                     const amrex::Real r = std::sqrt(x * x + y * y);

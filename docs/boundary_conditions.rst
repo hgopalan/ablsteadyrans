@@ -234,3 +234,9 @@ values :math:`g_1, g_2` along the face normal:
      - the centred difference at :math:`c_0` equals :math:`G`
 
 The directions are filled in the order x, y, z, so corner ghosts get values too.
+Every copy of a ghost cell then holds one value. In its outermost lateral ghost layer a box lacks some of what the
+rules read (the node heights have one lateral ghost layer, the wall law's gradient two), so after the fill each cell
+outside the domain takes the value of the box whose column it is in, and the ghost images of cells inside the domain
+are refreshed from the neighbouring boxes (audit A3). No valid cell changes. The results then do not depend on the box
+layout. Before, they did where an inflow face crosses terrain at a box seam and ``turb.realizability`` is on: the
+cap's strain in the first lateral ghost layer read inflow face points computed from the clamped heights.

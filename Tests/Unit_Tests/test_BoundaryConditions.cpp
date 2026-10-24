@@ -630,6 +630,11 @@ TEST(BoundaryFill, GroundGradientIsTheWallLaw)
         d02.ParallelCopy(s.d0, 0, 0, 1, amrex::IntVect(0), ng2, c.geom.periodicity());
         il2.ParallelCopy(s.inv_L, 0, 0, 1, amrex::IntVect(0), ng2, c.geom.periodicity());
         ta2.ParallelCopy(s.tau, 0, 0, 3, amrex::IntVect(0), ng2, c.geom.periodicity());
+        // The node heights of those columns (three lateral ghost nodes, the
+        // periodic images; the fab's own have one): the fill gives each ghost
+        // column the value of the box that owns it, at its own heights.
+        amrex::MultiFab z3(q.z_phys_nd.boxArray(), q.z_phys_nd.DistributionMap(), 1, amrex::IntVect(3, 3, 1));
+        z3.ParallelCopy(q.z_phys_nd, 0, 0, 1, amrex::IntVect(0, 0, 1), amrex::IntVect(3, 3, 1), c.geom.periodicity());
         const similarity_funs sfuns;   // MOST's phi_m, phi_h (ERF's; its branches are
         // both evaluated by the compiler, so the invalid trap is off while they are called).
         // QNSE (bc.surface_stable_functions = qnse) on this stable side: (1 + 2.5 zeta)/(1 + 0.2 zeta), written out.
@@ -637,7 +642,7 @@ TEST(BoundaryFill, GroundGradientIsTheWallLaw)
         auto phi_h = [&] (double zt) { return qnse ? (1 + 2.5 * zt) / (1 + 0.2 * zt) : double(sfuns.calc_phi_h(static_cast<amrex::Real>(zt))); };
         const auto prev_fpe = amrex::disableFPExcept(amrex::FPExcept::invalid);
         for (amrex::MFIter mfi(q.p, false); mfi.isValid(); ++mfi) {
-            const auto z = host_copy(q.z_phys_nd, mfi);
+            const auto z = host_copy(z3, mfi);
             const auto u = host_copy(q.u, mfi), v = host_copy(q.v, mfi), t = host_copy(q.theta, mfi), k = host_copy(q.tke, mfi);
             const auto us = host_copy(us2, mfi), d0 = host_copy(d02, mfi), ta = host_copy(ta2, mfi), il = host_copy(il2, mfi);
             amrex::Box gb = mfi.validbox();

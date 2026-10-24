@@ -8,6 +8,7 @@
 #include "Stencil_K.H"
 
 
+#include <AMReX_BoxList.H>
 #include <AMReX_ParmParse.H>
 
 #include <algorithm>
@@ -542,6 +543,7 @@ void fill_field (amrex::MultiFab& q, int f, int d, const BoundaryInputs& in, con
 
 namespace {
 void fill_no_flux_w (State& q, const BoundaryInputs& in, const amrex::Geometry& geom);
+
 } // namespace
 
 void BoundaryConditions::fill_ghosts (State& q, const SurfaceLayerOptions* surface_opt, const BuoyancyOptions& buoyancy,
@@ -639,6 +641,77 @@ void BoundaryConditions::fill_ghosts (State& q, const SurfaceLayerOptions* surfa
         fill_field<stencil::CC>(q.theta, f_theta, d, m_in, q.z_phys_nd, m_geom, prof, m_coriolis, gg, homogeneous);
         fill_field<stencil::CC>(q.tke, f_tke, d, m_in, q.z_phys_nd, m_geom, prof, m_coriolis, gg, homogeneous);
     }
+    for (auto* mf : fields) { sync_ghost_copies(*mf); }
+}
+
+const BoundaryConditions::GhostSlabs& BoundaryConditions::ghost_slabs (const amrex::MultiFab& mf) const
+{
+    for (const GhostSlabs& g : m_ghost_slabs) {
+        if (g.ba == mf.boxArray() && g.dm == mf.DistributionMap()) { return g; }
+    }
+    // A run has a few layouts (four index types per level); a long series of
+    // others (tests) starts the cache again.
+    if (m_ghost_slabs.size() >= 64) { m_ghost_slabs.clear(); }
+    const amrex::Box dom = amrex::convert(m_geom.Domain(), mf.ixType());
+    const amrex::IntVect ng = mf.nGrowVect();
+    const amrex::BoxArray& ba = mf.boxArray();
+    const amrex::DistributionMapping& dm = mf.DistributionMap();
+    amrex::BoxList bl(mf.ixType());
+    amrex::Vector<int> pmap, owner;
+    for (int b = 0; b < static_cast<int>(ba.size()); ++b) {
+        const amrex::Box vb = ba[b];
+        amrex::Box ext = vb;
+        for (int d = 0; d < AMREX_SPACEDIM; ++d) {
+            if (m_geom.isPeriodic(d)) { continue; }
+            if (vb.smallEnd(d) == dom.smallEnd(d)) { ext.growLo(d, ng[d]); }
+            if (vb.bigEnd(d) == dom.bigEnd(d)) { ext.growHi(d, ng[d]); }
+        }
+        for (const amrex::Box& s : amrex::boxDiff(ext, dom)) {
+            bl.push_back(s);
+            pmap.push_back(dm[b]);
+            owner.push_back(b);
+        }
+    }
+    GhostSlabs g;
+    g.ba = ba;
+    g.dm = dm;
+    if (!bl.isEmpty()) {
+        g.slabs = amrex::BoxArray(std::move(bl));
+        g.slab_dm = amrex::DistributionMapping(std::move(pmap));
+    }
+    g.owner = std::move(owner);
+    m_ghost_slabs.push_back(std::move(g));
+    return m_ghost_slabs.back();
+}
+
+//! Make every copy of a ghost cell hold one value. A box fills the ghosts of
+//! its whole fab, but in its outermost lateral ghost layer some of what the
+//! rules read is not in the fab (the heights have one lateral ghost layer, the
+//! wall law's gradient two), so the box's value there differed from the one
+//! the box owning that column computes. Each cell outside the domain takes the
+//! value of the box whose (lateral) column it is in: the box touching that
+//! face, the slab outside it, across its valid extent along the face (the
+//! periodic images of those in a periodic direction). The ghost images of
+//! cells inside the domain are then the neighbours' again (the face fills
+//! rewrote a nodal face point in the lateral ghost columns). No valid cell
+//! changes. Some of the cells that change are read: the inflow face points
+//! and the corners at a box seam where an inflow face crosses terrain.
+void BoundaryConditions::sync_ghost_copies (amrex::MultiFab& mf) const
+{
+    const GhostSlabs& g = ghost_slabs(mf);
+    if (!g.slabs.empty()) {
+        amrex::MultiFab slab(g.slabs, g.slab_dm, 1, 0, amrex::MFInfo(), mf.Factory());
+        for (amrex::MFIter mfi(slab, false); mfi.isValid(); ++mfi) {
+            const amrex::Box& bx = mfi.validbox();
+            slab[mfi].copy<amrex::RunOn::Device>(mf[g.owner[mfi.index()]], bx, 0, bx, 0, 1);
+        }
+        // A nodal face shared at a seam (or with its periodic image) is in two
+        // slabs; which one ParallelCopy writes last is not fixed. Both are equal
+        // because every update keeps the shared faces synchronised
+        // (OverrideSync), which this relies on.
+        mf.ParallelCopy(slab, 0, 0, 1, amrex::IntVect(0), mf.nGrowVect(), m_geom.periodicity());
+    }
+    mf.FillBoundary(m_geom.periodicity());
 }
 
 namespace {

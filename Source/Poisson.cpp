@@ -231,7 +231,7 @@ public:
     void add_cross (amrex::MultiFab& lhs, amrex::MultiFab const& x)
     {
         const auto dxinv = m_geom.InvCellSizeArray();
-        const int ktop = m_geom.Domain().bigEnd(2) + 1;
+        const int k0 = m_geom.Domain().smallEnd(2), ktop = m_geom.Domain().bigEnd(2) + 1;
         const bool top_open = m_bc.face[amrex::Orientation(2, amrex::Orientation::high)] != PoissonFace::neumann;
         for (amrex::MFIter mfi(lhs, amrex::TilingIfNotGPU()); mfi.isValid(); ++mfi) {
             const amrex::Box bx = mfi.tilebox();
@@ -244,7 +244,7 @@ public:
             amrex::ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
             {
                 auto face = [&] (int kf) -> amrex::Real {
-                    if (kf == 0 || (kf == ktop && !top_open)) { return amrex::Real(0); }
+                    if (kf == k0 || (kf == ktop && !top_open)) { return amrex::Real(0); }
                     return az(i, j, kf) * d(i, j, kf) * z_face_cross(i, j, kf, xa, zp, dxinv[0], dxinv[1]);
                 };
                 y(i, j, k) += (face(k + 1) - face(k)) * dxinv[2] / J(i, j, k);
@@ -256,7 +256,7 @@ public:
     void add_cross_flux (amrex::MultiFab& fz, amrex::MultiFab const& x)
     {
         const auto dxinv = m_geom.InvCellSizeArray();
-        const int ktop = m_geom.Domain().bigEnd(2) + 1;
+        const int k0 = m_geom.Domain().smallEnd(2), ktop = m_geom.Domain().bigEnd(2) + 1;
         const bool top_open = m_bc.face[amrex::Orientation(2, amrex::Orientation::high)] != PoissonFace::neumann;
         for (amrex::MFIter mfi(fz, amrex::TilingIfNotGPU()); mfi.isValid(); ++mfi) {
             const amrex::Box bx = mfi.tilebox();
@@ -266,7 +266,7 @@ public:
             const auto d = m_dcross->const_array(mfi);
             amrex::ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
             {
-                if (k == 0 || (k == ktop && !top_open)) { return; }
+                if (k == k0 || (k == ktop && !top_open)) { return; }
                 f(i, j, k) -= d(i, j, k) * z_face_cross(i, j, k, xa, zp, dxinv[0], dxinv[1]);
             });
         }
