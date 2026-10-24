@@ -348,12 +348,8 @@ void run ()
             closure.read_checkpoint(in.io.restart, ba, dm, geom);
             if (newton_stage != nullptr) { newton_stage->read_checkpoint(in.io.restart, ba, dm, geom); }
             // read_checkpoint restores the valid points only (and z_phys_nd's
-            // ghost nodes). The first step's local dtau reads u and v below
-            // the ground and above the top (Omega on those faces; z_x u_f != 0
-            // over terrain) before the stage fills them, so they are filled
-            // here from the restored state: to round-off what the continued
-            // run had (the fill over terrain is not a fixed point).
-            bc.fill_ghosts(state, res_in.surface, fopt.buoyancy, false, nullptr);
+            // ghost nodes); the stage's init fills the ghosts before the first
+            // step (SimplecStage::init, NewtonStage::init).
             amrex::Print() << "gust: driver history restored: " << driver.history().records.size()
                            << " iterations, cfl " << driver.cfl() << ", reference hold " << driver.hold_iterations()
                            << " iterations" << (driver.history().hold == 0 ? " (released: a seeded level of grid sequencing)" : "")

@@ -38,8 +38,9 @@ iterations:
   ``mesh.max_grid_size`` may change.
 - ``steady.max_iterations`` counts the iterations of the whole run, restarts included.
 - The run stops if it would overwrite the checkpoint it read. Change ``io.chk_file`` if needed.
-- A restarted run reproduces the uninterrupted run on the same ranks and box layout: bit for bit over flat ground,
-  to round-off over terrain (1.5e-12 measured on the 2-D hill).
+- A restarted run reproduces the uninterrupted run bit for bit on the same ranks and box layout, over flat ground and
+  over terrain. A checkpoint written before audit A2 (October 2026) restarts too; over terrain the continued run then
+  follows the current wall model (:doc:`boundary_conditions`), so it is not the run the checkpoint came from.
 
 Use your own terrain
 --------------------

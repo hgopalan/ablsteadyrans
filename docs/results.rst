@@ -940,40 +940,43 @@ GUST runs the same setup (``Tests/Real_Terrain/Askervein_210``):
      - Upwind masts (d ≤ −480 m)
      - Lee masts (d > 300 m)
    * - z-line Jacobi (``zjacobi``, 4 sweeps, cap 2, :math:`K` = 100), ``bc.inflow_tke_length = unbounded``
-     - 565 (533 with the closure's length)
-     - +3.0 % / +1.5 %
+     - 565 (534 with the closure's length)
+     - +2.9 % / +1.4 %
      - +0.9 to +1.5 %
-     - −4.9 to −7.5 %
+     - −5.1 to −8.2 %
    * - Line LU-SGS (``lusgs`` and its default cap 8, the default :math:`K` = 5, ``steady.sequencing = 1`` on 2 levels),
        ``bc.inflow_tke_length = unbounded``
      - 97 (42)
-     - +3.0 % / +1.5 %
+     - +2.9 % / +1.4 %
      - +0.9 to +1.5 %
-     - −4.9 to −7.5 %
+     - −5.1 to −8.2 %
    * - **The same with the closure's inflow length (the default)**
      - **95 (34)**
-     - +1.9 % / +0.4 %
-     - −0.4 to −0.6 %
-     - −6.6 to −9.2 %
+     - +1.8 % / +0.3 %
+     - −0.3 to −0.7 %
+     - −6.9 to −9.8 %
 
 *Findings.*
 
 - The two configurations reach the same lines (to 1e-4 %); the line LU-SGS configuration needs 5.6 times
   fewer level-0 iterations.
-- Up to 300 m past the hilltop every mast is within 4.5 % of ERF (4.0 % with the closure's inflow length); the four
-  lee masts beyond are 4.9–7.5 % slower (6.6–9.2 %).
+- Up to 300 m past the hilltop every mast is within 4.4 % of ERF (4.3 % with the closure's inflow length); the four
+  lee masts beyond are 5.1–8.2 % slower (6.9–9.8 %).
   GUST's second-order advection (MUSCL with van Leer) against ERF's fifth order sets the wake there; the
   same trend (second-order upwind gives lower lee speeds than a higher-order scheme) is reported for WindNinja by
   Wagenbrenner et al. (2019).
 - A tighter verdict (six orders instead of four, 270 iterations) changes no line speed by more than 1e-4 %.
+- Since audit A2 the wall model takes the ground cell's wind parallel to the ground (:doc:`boundary_conditions`),
+  which makes the ghost fill a fixed point. The 10 m line speeds moved by at most 0.7 % (mean −0.13 %), most in the
+  lee; the level-0 iterations did not change. Against the 40 measured masts the RMSE moved from 1.28 to 1.27 m/s.
 - The speeds are sampled 10 m above the ground, linear in :math:`\ln(z + z_0)` between the two cell centres
   around 10 m (``tools/askervein_lines.py``), the same way for both codes; the ground under a column is ERF's
   terrain file, within 1.4 m of the mesh's own ground at the mast columns.
 - The upwind and hilltop excess came from the inflow :math:`k`: with the unbounded length :math:`\kappa(z + z_0)`
   it grew with height on ERF's power-law profile (about 9 m²/s² at 316 m, against 0.31 in ERF). The closure's
   capped length (``bc.inflow_tke_length = closure``, the default) gives 0.31; the upwind masts then agree within
-  0.6 % and the hilltops within 2 %. With less turbulence coming in, the wake mixes less and the lee masts move
-  further (to −9.2 %, 0.8 points inside the 10 % lee tolerance). Other contributions in the lee: ERF's own inflow
+  0.7 % and the hilltops within 2 %. With less turbulence coming in, the wake mixes less and the lee masts move
+  further (to −9.8 %, 0.2 points inside the 10 % lee tolerance). Other contributions in the lee: ERF's own inflow
   :math:`k` (about 20 % below ours at 18 m, above it from 38 to 169 m), the unsteadiness that ERF's time average
   includes and a steady solve cannot, and the advection scheme.
 

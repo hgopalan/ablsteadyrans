@@ -579,7 +579,7 @@ TEST(NewtonPreconditioner, IterationsBoundedOverCfl)
 // pseudo-transient continuation loop (Continuation.H) on the open hill: both
 // converge to 1e-8 of the first residual, to the same state (1e-6 of the
 // speed scale), the identity in the steps and with the first residual
-// test_Continuation.cpp pins (8 accepted steps, 11.328), simplec in at most
+// test_Continuation.cpp pins (8 accepted steps, 11.343), simplec in at most
 // as many steps with at most a fifth of the GMRES iterations. The
 // preconditioner is set up once per attempt, with that attempt's dtau (the
 // infinite dtau at the cap: the step from steady.cfl_max).
@@ -598,7 +598,7 @@ TEST(NewtonPreconditioner, ContinuationIdentityVersusSimplec)
     EXPECT_TRUE(ra.converged);
     EXPECT_TRUE(rb.converged);
     EXPECT_EQ(ra.steps, 8);
-    EXPECT_NEAR(static_cast<double>(pa.records().front().residual), 11.328, 1e-3);
+    EXPECT_NEAR(static_cast<double>(pa.records().front().residual), 11.343, 1e-3);   // 11.328 before audit A2
     EXPECT_LE(rb.steps, ra.steps);
     int ia = 0, ib = 0;
     for (const auto& r : pa.records()) { ia += r.gmres_iterations; }

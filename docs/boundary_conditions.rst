@@ -68,6 +68,17 @@ similarity theory (MOST). In each column,
 - :math:`u_*`: friction velocity.
 - :math:`U = \max(|\mathbf U_t|, 0.1~\mathrm{m/s})`: wind speed parallel to the ground at the reference height
   (``bc.surface_zref``; by default the first cell centre).
+  :math:`\mathbf U_t = \mathbf U - (\mathbf U\cdot\mathbf n)\,\mathbf n` is the cell-centre wind with its
+  component along the ground normal :math:`\mathbf n` removed, interpolated in :math:`\ln(d + z_0)` between two
+  centres. In the cell on the ground the centre wind is taken parallel to the ground,
+  :math:`(u_c,\, v_c,\, z_x u_c + z_y v_c)`: the no-flux rule (:math:`\Omega = 0`) applied to the cell's own centre
+  :math:`u_c, v_c`, which is exact for a flow along a uniform slope; the cell's :math:`w` faces are not read. The ghost
+  fill writes the ground :math:`w` face and the :math:`u, v` ghosts after the wall model, so the wall model reads no
+  value the fill writes, and a second fill changes nothing. Over flat ground the vertical part is projected out
+  either way. (Before audit A2 the vertical part was the mean of the ground and top :math:`w` faces; the ground face
+  is written by the fill from the wall law's ghosts, so the fill was not a fixed point.) A reference height between
+  the last two cell centres reads the top :math:`w` face, which the fill writes too; over a top that is not flat the
+  fill is then a fixed point only to that face's change.
 - :math:`d = h/|A|`: distance from the ground along its normal, with :math:`|A| = \sqrt{1 + z_x^2 + z_y^2}`.
 - :math:`z_0`: roughness length (``bc.surface_z0``).
 - :math:`q`: kinematic surface heat flux (``bc.surface_heat_flux``).

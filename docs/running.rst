@@ -41,7 +41,7 @@ Set ``io.restart`` to a checkpoint directory (:doc:`howto` has a step-by-step re
 - With grid sequencing, a restart continues level 0 only.
 - A restart with the SIMPLEC stage needs a checkpoint written by the stage. The checkpoint holds the solver history
   and the turbulence model's state, so the continued run reproduces an uninterrupted one on the same ranks and box
-  layout: bit for bit over flat ground, to round-off over terrain (1.5e-12 measured on the 2-D hill).
+  layout, bit for bit, over flat ground and over terrain.
 - The run stops if it would write a checkpoint with the name of the one it read.
 
 AMReX runtime flags

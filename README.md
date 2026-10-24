@@ -21,8 +21,7 @@ steady Reynolds-averaged Navier–Stokes (RANS) solver for the atmospheric bound
   stretched vertical layers for thin near-ground cells. The pressure equation uses a terrain-aware multigrid
   solver that handles high cell aspect ratios.
 - **A clear definition of steady.** Residuals must fall by a set number of orders and the monitored quantities
-  must settle; the run says why it stopped. Restarts continue the uninterrupted run (bit for bit over flat ground,
-  to round-off over terrain).
+  must settle; the run says why it stopped. Restarts continue bit for bit on the same ranks and box layout.
 
 GUST reuses components of [ERF](https://github.com/erf-model/ERF) (the k–L closure, the terrain-following mesh and
 Poisson operator, the surface layer), and its initializer builds on

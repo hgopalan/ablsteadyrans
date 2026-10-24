@@ -72,12 +72,14 @@ With the recommended setting, on 8 ranks of an Apple M2 Pro laptop (not idle; in
 | Case | GUST - CFD iterations (finest level) | Time | RMSE all masts, Fast / CFD (m/s) |
 |---|---|---|---|
 | Askervein | 150 | 3.5 min | 1.71 / 0.97 |
-| Bolund case 1 | 365 | 2.9 min | 2.27 / 1.25 |
+| Bolund case 1 | 448 | 2.9 min | 2.27 / 1.25 |
 | Bolund case 3 | 361 | 2.9 min | 1.47 / 0.64 |
 | Bolund case 4 | 815 | 6.0 min | 1.01 / 1.23 |
 | Big Southern Butte (`inputs_bsb_srtm`) | 863 | 14 min | 3.74 / 2.89 |
 
-The mass-consistent runs take 2–5 s. Known differences: the Bolund case 4 lee mast is slower than measured with the
+Re-measured after audit A2 (the wall model's ground-cell wind parallel to the ground, October 2026): Bolund case 1
+needs 448 iterations (365 before) with the same RMSE (1.25 m/s, lee bias +2.11 m/s); its time is from before. The
+other rows predate that change. The mass-consistent runs take 2–5 s. Known differences: the Bolund case 4 lee mast is slower than measured with the
 cap (bias −2.4 m/s); on the Butte two lee-flank masts (R20, R21) are 0.6–0.8 lower in speed-up than measured.
 
 **Why the Butte runs on the SRTM terrain.** On the paper-like mesh (`inputs_bsb_wn_consistent`: the terrain smoothed

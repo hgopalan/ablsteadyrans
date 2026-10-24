@@ -476,22 +476,9 @@ NewtonKrylov::NewtonKrylov (const NewtonOptions& opt, const ResidualInputs& in, 
 void NewtonKrylov::base_residual (const State& q, ResidualFields& R0) const
 {
     // R0 = R(fill(q)), the base point of every jvp (which refills q + eps dq).
-    // On terrain with bc.zlo = surface_layer one fill is not a fixed point
-    // (the surface state reads the ground w face, which the no-flux rule then
-    // resets from the u, v ghosts), so differencing against R(q) would add
-    // (R(fill(q)) - R(q)) / eps to every J v. A second fill of a copy gives
-    // the same function on both sides of the difference. Where the fill is
-    // idempotent (flat ground, the walls) R0 is R(q) bit for bit.
-    State qf;
-    qf.define(q.p.boxArray(), q.p.DistributionMap());
-    auto to = qf.fields();
-    const auto from = const_cast<State&>(q).fields();
-    for (std::size_t n = 0; n < to.size(); ++n) {
-        amrex::MultiFab::Copy(*to[n].mf, *from[n].mf, 0, 0, 1, to[n].mf->nGrowVect());
-    }
-    m_in.bc->fill_ghosts(qf, m_in.surface, m_in.buoyancy);
-    residual(qf, m_in, m_mesh, m_geom, R0);
-    amrex::Gpu::streamSynchronize();   // qf goes out of scope
+    // q's ghosts are filled and the fill is a fixed point (the wall model
+    // reads no value the fill writes), so R(fill(q)) is R(q) bit for bit.
+    residual(q, m_in, m_mesh, m_geom, R0);
 }
 
 NewtonStepInfo NewtonKrylov::solve (State& q, const amrex::MultiFab* dtau, NewtonPreconditioner* pc,

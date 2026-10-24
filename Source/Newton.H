@@ -161,10 +161,8 @@ const char* newton_preconditioner_name (NewtonPreconditionerKind kind) noexcept;
 //! A = T^-1 (D + J) S with the interface amrex::GMRES<NewtonVector,
 //! NewtonOperator> needs. It references q, R0, in, mesh and geom, which must
 //! outlive it and keep their layout; q's ghost cells must be filled and R0
-//! must be R(fill(q)), the residual of a copy of q after one more ghost fill
-//! (apply differences R(fill(q + eps dq)) against it). Where the fill is
-//! idempotent (flat ground, walls, inflow and outflow) that is R(q); on
-//! terrain with bc.zlo = surface_layer it is not (NewtonKrylov::step).
+//! must be R(fill(q)) (apply differences R(fill(q + eps dq)) against it). The
+//! fill is a fixed point, so with q filled that is R(q).
 class NewtonOperator
 {
 public:
@@ -311,7 +309,7 @@ public:
     [[nodiscard]] const ResidualInputs& residual_inputs () const { return m_in; }
 
 private:
-    //! R0 = R(fill(q)) on a copy of q (q's ghost cells already filled).
+    //! R0 = R(fill(q)) = R(q) (q's ghost cells already filled; the fill is a fixed point).
     void base_residual (const State& q, ResidualFields& R0) const;
     //! fill(q), R0, the GMRES solve; use(op, x) when the update is usable.
     NewtonStepInfo solve (State& q, const amrex::MultiFab* dtau, NewtonPreconditioner* pc,
