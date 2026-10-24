@@ -1249,6 +1249,11 @@ GoogleTest suite
      - The same state on one box and on 2 × 2 boxes (the lagged neighbours cross the box seams
        through the ghost exchange) gives the same corrected u, v, w, :math:`a_P`, :math:`d` and face step to 1e-12
        (single 1e-5).
+   * - ``Predictor.CoriolisMeanIsRankIndependent``
+     - Audit A4: with the Coriolis coupling on, six boxes on their ranks and in reverse give the same u and v update
+       bit for bit (the level mean is a fixed-order sum; with the atomic sum it differed by 2.2e-16 on 2 and 4 ranks).
+       On one rank the two maps are the same, so only the 2- and 4-rank runs can fail. The mean's value is pinned by
+       ``Simplec.PointImplicitCouplingsArePinned``.
    * - ``Predictor.WVnnCapAddsToTheWDiagonalAndD``
      - The w rows' VNN cap (``simplec.w_vnn_cap``, :doc:`solution_algorithm`) on the boundary-condition state
        of ``Predictor.DirichletRowsAreSetExactly`` with :math:`\Delta\tau` of 400–1600 s (an uncapped VNN above the cap): with :math:`V = 16` every
@@ -1487,7 +1492,9 @@ GoogleTest suite
    * - ``Transfer.GatheredLevelEqualsDistributed``
      - With levels 1 and 2 gathered onto one box, restriction and interpolation between every pair, and
        ``prolong_state`` into level 0, give the distributed hierarchy's results bit for bit, over the hill, on 1, 2
-       and 4 ranks.
+       and 4 ranks. Both hierarchies use one rank map for level 0: ``DistributionMapping(ba)`` follows each rank's
+       memory at the call, and the Poisson solve's sums differ in the last bits between maps (found in audit A4,
+       where a cache that keeps memory changed the map).
    * - ``Transfer.RoundTripIsTheClosedFormSmoother``
      - restrict(prolong(c)) on flat ground, periodic in x or in y, against the closed form:
        :math:`(c_{I-1} + 6c_I + c_{I+1})/8` along a cell-centred direction (the identity in the first and last cells
@@ -1580,7 +1587,11 @@ GoogleTest suite
        layout) restarts bit-identical.
    * - ``Reductions.*``
      - The sum gives the same bits on 1, 2 and 4 ranks and within 16 ε Σ\|x\| of the exact sum; the maximum
-       handles NaN and −0.
+       handles NaN and −0. Audit A4: ``…DotCountsEachFaceOnceOnAnyLayout`` and ``…LevelSumsCountEachFaceOnceOnAnyLayout``
+       on an x-face field, x periodic and not, three layouts, the boxes on their ranks and in reverse: the same bits
+       for both rank maps and the exact sum over the distinct faces to 1e-13. ``…ResidualRmsDoesNotDependOnTheLayout``:
+       ``stage_norms`` gives the same six norms on the three layouts to 1e-13, and for u the exact RMS (before, a
+       box-seam face and both copies of a periodic face counted twice).
    * - ``Newton.JvpEpsSweepAgainstQuadraticResidual``
      - On a residual that is exactly quadratic in q (upwind convection, Coriolis, slip walls), the analytic :math:`Jv`
        and :math:`B(v,v)` from central differences; the sweep of ``steady.newton_fd_eps_scale`` from 1e-2 to 3.2e-12

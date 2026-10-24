@@ -1,5 +1,6 @@
 #include "Poisson.H"
 #include "PoissonCross_K.H"
+#include "Reductions.H"
 
 #include <ERF_TerrainPoisson.H>
 
@@ -33,10 +34,11 @@ bool is_dirichlet_anywhere (const PoissonBC& bc)
     return false;
 }
 
-// J-weighted mean of the valid cells of mf.
+// J-weighted mean of the valid cells of mf, summed in a fixed order (the
+// same bits for any ranks).
 amrex::Real weighted_mean (const amrex::MultiFab& mf, const amrex::MultiFab& J)
 {
-    return amrex::MultiFab::Dot(J, 0, mf, 0, 1, 0) / J.sum(0);
+    return static_cast<amrex::Real>(deterministic_dot(J, 0, mf, 0, nullptr) / static_cast<double>(deterministic_sum(J, 0)));
 }
 
 [[noreturn]] void abort_all (const std::vector<std::string>& err)

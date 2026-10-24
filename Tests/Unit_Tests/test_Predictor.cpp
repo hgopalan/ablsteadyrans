@@ -30,7 +30,8 @@ using gust::Loc;
 using gust::ptest::PCase;
 using gust::trtest::tol;
 
-PCase make_mesh (int nx, int ny, int nz, double H0, bool periodic_x = true, bool periodic_y = true, int max_grid = 0)
+PCase make_mesh (int nx, int ny, int nz, double H0, bool periodic_x = true, bool periodic_y = true, int max_grid = 0,
+                 bool reverse_ranks = false)
 {
     gust::ptest::Manufactured ms;
     ms.Lx = 1000;
@@ -41,6 +42,11 @@ PCase make_mesh (int nx, int ny, int nz, double H0, bool periodic_x = true, bool
     PCase c = gust::ptest::make_case(nx, ny, nz, px, py, ms, 0, true);
     if (max_grid > 0) {   // several boxes in x and y
         c.in.mesh.max_grid_size = {max_grid, max_grid};
+        if (reverse_ranks) {   // the boxes on the ranks in reverse order
+            const auto ba = gust::make_box_array(c.in.mesh);
+            c.pmap.resize(ba.size());
+            for (int b = 0; b < ba.size(); ++b) { c.pmap[b] = (ba.size() - 1 - b) % amrex::ParallelDescriptor::NProcs(); }
+        }
         c.make([ms] (double x, double y) { return ms.h(x, y); });
     }
     // The helper clamps the lateral ghost nodes to the domain; a periodic
@@ -64,7 +70,7 @@ void define_state (gust::State& q, const PCase& c)
 // FillBoundary never fills a ghost cell that is outside the valid z range of
 // every box, so the rows below the ground and above the top would keep
 // independent values on the two copies of a periodic seam face).
-void fill_random (amrex::MultiFab& mf, double lo, double hi, unsigned seed, const PCase& c)
+void fill_random (amrex::MultiFab& mf, double lo, double hi, unsigned seed, const PCase& c, bool seed_per_box = false)
 {
     const int ng = mf.nGrow();
     amrex::BoxArray ext_ba = amrex::convert(c.ba, amrex::IntVect(0));
@@ -74,6 +80,9 @@ void fill_random (amrex::MultiFab& mf, double lo, double hi, unsigned seed, cons
     std::mt19937 gen(seed);
     std::uniform_real_distribution<double> dist(lo, hi);
     for (amrex::MFIter mfi(ext, false); mfi.isValid(); ++mfi) {
+        // seed_per_box: each box's values from its own index, so they do not
+        // depend on which rank holds it (the default draws in rank order).
+        if (seed_per_box) { gen.seed(seed + 7919U * static_cast<unsigned>(mfi.index())); }
         const amrex::Box b = mfi.fabbox();
         amrex::FArrayBox f(b, 1, amrex::The_Pinned_Arena());
         amrex::LoopOnCpu(b, [&] (int i, int j, int k) { f(amrex::IntVect(i, j, k)) = static_cast<amrex::Real>(dist(gen)); });
@@ -98,12 +107,12 @@ amrex::FArrayBox host_copy (const amrex::MultiFab& mf, const amrex::MFIter& mfi)
 
 // A state with a smooth, non-uniform wind (so that the residual and the
 // transport are not trivial), uniform theta, k = 1.
-void fill_state (gust::State& q, const PCase& c, unsigned seed)
+void fill_state (gust::State& q, const PCase& c, unsigned seed, bool seed_per_box = false)
 {
-    fill_random(q.u, 5, 10, seed, c);
-    fill_random(q.v, -2, 2, seed + 1, c);
-    fill_random(q.w, -0.5, 0.5, seed + 2, c);
-    fill_random(q.p, -5, 5, seed + 3, c);
+    fill_random(q.u, 5, 10, seed, c, seed_per_box);
+    fill_random(q.v, -2, 2, seed + 1, c, seed_per_box);
+    fill_random(q.w, -0.5, 0.5, seed + 2, c, seed_per_box);
+    fill_random(q.p, -5, 5, seed + 3, c, seed_per_box);
     q.theta.setVal(300.0);
     q.tke.setVal(1.0);
 }
@@ -113,12 +122,12 @@ struct Coefficients
 {
     amrex::MultiFab nu, gt, gk;
     gust::ResidualInputs in;
-    void make (const PCase& c, double numax, unsigned seed)
+    void make (const PCase& c, double numax, unsigned seed, bool seed_per_box = false)
     {
         for (auto* mf : {&nu, &gt, &gk}) { mf->define(c.ba, c.dm, 1, 1); }
-        fill_random(nu, 0.5 * numax, numax, seed, c);
-        fill_random(gt, 0.5 * numax, numax, seed + 1, c);
-        fill_random(gk, 0.5 * numax, numax, seed + 2, c);
+        fill_random(nu, 0.5 * numax, numax, seed, c, seed_per_box);
+        fill_random(gt, 0.5 * numax, numax, seed + 1, c, seed_per_box);
+        fill_random(gk, 0.5 * numax, numax, seed + 2, c, seed_per_box);
         in.nu = &nu;
         in.gamma_theta = &gt;
         in.gamma_tke = &gk;
@@ -1167,6 +1176,59 @@ TEST (Predictor, IndependentOfTheBoxLayout)
     amrex::MultiFab::Copy(dap, ap3.ap_w, 0, 0, 1, 0);
     amrex::MultiFab::Subtract(dap, ap1.ap_w, 0, 0, 1, 0);
     EXPECT_GT(max_abs(dap), 0);
+}
+
+// ---------------------------------------------------------------------------
+// The Coriolis coupling's horizontal mean of the other residual (audit A4,
+// U2): the same boxes on their ranks and in reverse give the same predictor
+// update bit for bit (on 2 and 4 ranks the two maps group the boxes
+// differently). The mean is a sum in a fixed order (deterministic_level_sums);
+// before, every face added atomically into one address per level, an order
+// that changes from run to run on a GPU and with the ranks on a CPU.
+TEST (Predictor, CoriolisMeanIsRankIndependent)
+{
+    PCase c1 = make_mesh(12, 8, 6, 60, true, false, 4);
+    PCase c2 = make_mesh(12, 8, 6, 60, true, false, 4, true);
+    ASSERT_EQ(c1.ba.size(), 6);
+    gust::State q1, q2;
+    define_state(q1, c1);
+    define_state(q2, c2);
+    fill_state(q1, c1, 61, true);
+    fill_state(q2, c2, 61, true);
+    Coefficients co1, co2;
+    co1.make(c1, 1.0, 67, true);
+    co2.make(c2, 1.0, 67, true);
+    for (gust::ResidualInputs* in : {&co1.in, &co2.in}) {
+        in->coriolis.enabled = true;
+        in->coriolis.latitude = 45;
+        in->coriolis.three_d = false;
+    }
+    gust::BoundaryInputs bin;
+    bin.face = {gust::FaceType::periodic, gust::FaceType::slip_wall, gust::FaceType::slip_wall,
+                gust::FaceType::periodic, gust::FaceType::slip_wall, gust::FaceType::slip_wall};
+    const gust::BoundaryConditions bc1(bin, c1.geom, c1.mesh, co1.in.coriolis), bc2(bin, c2.geom, c2.mesh, co1.in.coriolis);
+    bc1.fill_ghosts(q1, nullptr, co1.in.buoyancy);
+    bc2.fill_ghosts(q2, nullptr, co2.in.buoyancy);
+    co1.in.bc = &bc1;
+    co2.in.bc = &bc2;
+    amrex::MultiFab dtau1(c1.ba, c1.dm, 1, 0), dtau2(c2.ba, c2.dm, 1, 0);
+    fill_random(dtau1, 0.5, 2.0, 71, c1, true);
+    fill_random(dtau2, 0.5, 2.0, 71, c2, true);
+    amrex::Array<amrex::MultiFab, 3> df1, df2;
+    gust::face_dtau(dtau1, c1.mesh, c1.geom, df1);
+    gust::face_dtau(dtau2, c2.mesh, c2.geom, df2);
+    Problem p1, p2;
+    p1.make(q1, co1, c1, Equation::u);
+    p2.make(q2, co2, c2, Equation::u);
+    gust::PredictorFields ap1, ap2;
+    gust::momentum_predictor(q1, p1.R, {&p1.F[0], &p1.F[1], &p1.F[2]}, co1.in, df1, c1.mesh, c1.geom, 2, ap1);
+    gust::momentum_predictor(q2, p2.R, {&p2.F[0], &p2.F[1], &p2.F[2]}, co2.in, df2, c2.mesh, c2.geom, 2, ap2);
+    for (auto [a, b] : std::initializer_list<std::pair<const amrex::MultiFab*, const amrex::MultiFab*>>{{&q1.u, &q2.u}, {&q1.v, &q2.v}}) {
+        amrex::MultiFab on1(a->boxArray(), a->DistributionMap(), 1, 0);
+        on1.ParallelCopy(*b, 0, 0, 1, 0, 0);
+        amrex::MultiFab::Subtract(on1, *a, 0, 0, 1, 0);
+        EXPECT_EQ(max_abs(on1), 0);
+    }
 }
 
 // ---------------------------------------------------------------------------
