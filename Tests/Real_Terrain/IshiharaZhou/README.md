@@ -41,8 +41,12 @@ With the recommended setting (8 ranks, Apple M2 Pro):
 
 | Surface | Reversed flow near the ground | Tunnel reattachment | LES | U rms vs tunnel | Iterations, time |
 |---|---|---|---|---|---|
-| smooth (line at 5 m) | 42 to 170 m behind the crest | 150–200 m | 45–180 m | 0.30 m/s | 600, 40 s |
+| smooth (line at 5 m) | 42 to 170 m behind the crest | 150–200 m | 45–180 m | 0.30 m/s | 596, 40 s |
 | rough (line at 7 m) | 47 to 173 m | 250–300 m | 37–239 m | 0.58 m/s | 417, 31 s |
+
+The smooth row was re-measured after audit A2 (the wall model's ground-cell wind parallel to the ground, October
+2026): 596 iterations (600 before), the same reversed-flow extent and U rms 0.302 m/s; its time is from before. The
+rough row predates that change.
 
 With the default closure the smooth ridge does not separate (U rms 0.80 m/s) and the rough one separates from 59
 to 122 m (0.70 m/s). On the rough surface the tunnel's lowest points at the foot of the ridge (7 m) are 60 % below

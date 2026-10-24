@@ -793,8 +793,10 @@ Current tests
        grid sequencing over two levels, the last three on the command line) to the steady verdict; measured: 95 level-0 iterations and 34 on level 1 (four
        ranks). The 10 m speeds on lines A and AA (``tools/askervein_lines.py check``) must be within 5 % of ERF's
        URANS average (``Gold/erf_urans_lines_10m.csv``) up to 300 m past the hilltop, and within 10 % at the four
-       lee masts beyond (measured: 4.00 % and 9.21 %; the lee margin is 0.8 points, so a change of the closure or
-       the advection that crosses it needs a review, not a wider tolerance). ``rt_askervein_210_lines_gold`` checks
+       lee masts beyond (measured: 4.31 % and 9.85 %; the lee margin is 0.15 points, so a change of the closure, the
+       wall model or the advection that crosses it needs a review, not a wider tolerance. It was 4.00 % and 9.21 %
+       before audit A2 took the ground cell's wind parallel to the ground; against the 40 measured masts that change
+       lowers the RMSE from 1.28 to 1.27 m/s and the lee bias from +2.39 to +2.36 m/s). ``rt_askervein_210_lines_gold`` checks
        the same lines against ``Gold/askervein_210_lines.csv`` to 1e-4 (the ERF tolerances alone would pass the run
        with the inflow k of ``bc.inflow_tke_length = unbounded``). The level history (cells, stop reasons, iterations within
        10 %) and the stage switches must match ``Gold/askervein_210_level_history.json``. Label ``nightly``; double
@@ -805,7 +807,7 @@ Current tests
        (measured: identical to the six digits written, on the same machine). Label ``nightly``; double only.
    * - ``rt_steady_askervein_210_zjacobi``, ``rt_askervein_210_zjacobi_matches``
      - Old against new: the same deck with the z-line Jacobi configuration of ``rt_steady_askervein`` (``zjacobi``, four sweeps, cap 2, a
-       100-iteration reference, one level; measured: 533 iterations, 565 with ``bc.inflow_tke_length = unbounded``) reaches the line LU-SGS run's lines to 0.1 % (measured:
+       100-iteration reference, one level; measured: 534 iterations, 565 with ``bc.inflow_tke_length = unbounded``) reaches the line LU-SGS run's lines to 0.1 % (measured:
        1e-4 %). Label ``nightly``; double only.
    * - ``drift_check_selftest``
      - The ``extern_erf`` drift check on a throw-away ERF repository (:doc:`extraction`).
@@ -1607,10 +1609,17 @@ GoogleTest suite
        per GMRES iteration, and its output is used; restart and tolerance reach GMRES.
        ``Newton.ColumnRestartAndToleranceSweep``: GMRES iterations against the restart length (:doc:`results`).
    * - ``Newton.*`` (``test_NewtonCoverage.cpp``)
-     - Added after #19. ``Newton.TerrainWallLawOperatorMatchesCentralDifference``: on a 30 m hill
-       under the wall law, where one ghost fill is not a fixed point, the operator matches a central difference of
-       :math:`q \mapsto R(\mathrm{fill}(q))` to 1e-5 on one and six boxes (2.6e-8 to 4.8e-8 measured), and is off by
-       more than 1 with the base point :math:`R(q)`. ``Newton.TerrainWallLawStepsReduceResidual``: four default steps
+     - Added after #19. ``BoundaryConditions.TerrainFillIsAFixedPoint``: on a 30 m hill under the wall law,
+       periodic and inflow/outflow in x, on one box and six, :math:`\mathrm{fill}(\mathrm{fill}(q)) =
+       \mathrm{fill}(q)` on every field and ghost cell and :math:`R` likewise, bit for bit (audit A2; before, a second
+       fill moved a ghost by up to 0.056 and :math:`R` by 1e-5). ``…InMoreConfigurations``: a hill varying in x and y,
+       inflow/outflow in x and y, reversed faces, heat flux of both signs, ``bc.surface_zref`` above the first centre,
+       a geostrophic top, one box, 3 × 2 and uneven 3-cell boxes, the fill and the homogeneous fill (from Aaron's
+       review; with the old ground-cell wind every configuration that uses the ground cell fails).
+       ``Newton.TerrainWallLawOperatorMatchesCentralDifference``: there the operator matches a central difference of
+       :math:`q \mapsto R(\mathrm{fill}(q))` to 1e-5 on one and six boxes (2.5e-8 to 4.6e-8 measured), and the
+       base point :math:`R(q)` gives the same operator bit for bit (the fill is a fixed point; before audit A2 it was
+       off by more than 1). ``Newton.TerrainWallLawStepsReduceResidual``: four default steps
        there reduce :math:`|R|` at every step. ``Newton.UpdateSkippedAboveRhsNorm``: the rule that skips an update.
        ``Newton.KrylovBudgetIsPerRank``: one box per rank fits a budget the total exceeds.
        ``Newton.InnerProductSameBitsWithAllBoxesOnRankZero``: the inner product with every box on rank 0 has the bits
@@ -1752,9 +1761,9 @@ GoogleTest suite
        ``NewtonStage.HandsBackForTheFinalPassAfterTheSwap``: with van Leer the stage hands the run back for the final
        SIMPLEC pass once its smooth equations have converged, thaws the closure, refuses any later switch, and the run
        stays in SIMPLEC over two more windows. ``NewtonStage.RestartInsideTheStage``: a checkpoint two steps into the
-       stage restarts it; three more steps give the uninterrupted run's records and fields bit for bit with the
-       identity preconditioner, and to 1e-3 of the relative residual with ``simplec`` (1e-4 measured; the cause of the
-       difference is not found: the preconditioner's setup and apply give the same bits on the same input). That test
+       stage restarts it; three more steps give the uninterrupted run's records (to 1e-12) and fields bit for bit with
+       either preconditioner. Before audit A2 the ``simplec`` case agreed only to 1e-4 of the relative residual: the
+       stage's entry fill, which the uninterrupted run does not make, was not a fixed point. That test
        found that the continuation's diffusivity must be the stage's own (the SIMPLEC stage's is not restored by a
        restart inside the Newton stage), and the fallback test that a failed first step must not count as converged.
    * - CTest ``rt_steady_hill2d_newton``, ``abort_newton_keys_no_newton_stage``

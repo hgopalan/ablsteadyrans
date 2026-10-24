@@ -31,10 +31,11 @@ double precision only).
 ## Expected Results
 - Line LU-SGS configuration (`lusgs` and its default cap 8, the default reference window, two levels): steady after 95
   level-0 iterations (34 on level 1; 97 and 42 with `bc.inflow_tke_length = unbounded`). z-line Jacobi configuration
-  (`zjacobi`, four sweeps, cap 2, a 100-iteration reference): 533 (565 with `unbounded`). The two agree on the lines to 1e-4 %.
-- Against ERF: within 4.00 % up to 300 m past the hilltop; the lee masts beyond are 6.6–9.2 % slower (second-order
+  (`zjacobi`, four sweeps, cap 2, a 100-iteration reference): 534 (565 with `unbounded`). The two agree on the lines to 1e-4 %.
+- Against ERF: within 4.31 % up to 300 m past the hilltop; the lee masts beyond are 6.9–9.8 % slower (second-order
   against ERF's fifth-order advection, and less inflow turbulence mixing into the wake than with the unbounded
-  inflow length, which gave 4.48 % and 4.9–7.5 %). See `docs/results.rst`, "Askervein on ERF's mesh".
+  inflow length, which gives 4.39 % and 5.1–8.2 %). Before audit A2 (the wall model's ground-cell wind parallel to
+  the ground) these were 4.00 % and 6.6–9.2 %; against the measured masts the change is within 0.03 m/s. See `docs/results.rst`, "Askervein on ERF's mesh".
 
 ## How to run
 ```bash
