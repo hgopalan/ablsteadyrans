@@ -21,7 +21,6 @@
 #include <functional>
 #include <stdexcept>
 #include <string>
-#include <utility>
 
 namespace fs = std::filesystem;
 
@@ -101,16 +100,17 @@ void uniform_map (const PCase& c, amrex::Real v, amrex::MultiFab& m)
 }
 
 // The points (a, b) where a and b differ (NaN equals NaN) over each box grown by ng, all ranks.
-long count_differ (const amrex::MultiFab& a, const amrex::MultiFab& b, const amrex::IntVect& ng)
+amrex::Long count_differ (const amrex::MultiFab& a, const amrex::MultiFab& b, const amrex::IntVect& ng)
 {
     amrex::ReduceOps<amrex::ReduceOpSum> ops;
-    amrex::ReduceData<long> data(ops);
+    amrex::ReduceData<amrex::Long> data(ops);
     const int nc = a.nComp();
     for (amrex::MFIter mfi(a, false); mfi.isValid(); ++mfi) {
         const auto x = a.const_array(mfi);
         const auto y = b.const_array(mfi);
-        ops.eval(amrex::grow(mfi.validbox(), ng), data, [=] AMREX_GPU_DEVICE (int i, int j, int k) -> amrex::GpuTuple<long> {
-            long n = 0;
+        ops.eval(amrex::grow(mfi.validbox(), ng), data,
+                 [=] AMREX_GPU_DEVICE (int i, int j, int k) -> amrex::GpuTuple<amrex::Long> {
+            amrex::Long n = 0;
             for (int m = 0; m < nc; ++m) {
                 const amrex::Real p = x(i, j, k, m), q = y(i, j, k, m);
                 if (!(p == q) && !(p != p && q != q)) { ++n; }
@@ -118,7 +118,7 @@ long count_differ (const amrex::MultiFab& a, const amrex::MultiFab& b, const amr
             return {n};
         });
     }
-    long n = amrex::get<0>(data.value());
+    amrex::Long n = amrex::get<0>(data.value());
     amrex::ParallelDescriptor::ReduceLongSum(n);
     return n;
 }
@@ -334,17 +334,16 @@ TEST(SurfaceRoughness, WaterAndLandFollowTheirOwnLogLaw)
         gust::State qw, ql;
         for (gust::State* qs : {&qw, &ql}) {
             define_state(*qs, c);
-            for (auto [dst, src] : {std::pair{&qs->u, &q.u}, {&qs->v, &q.v}, {&qs->w, &q.w}, {&qs->p, &q.p},
-                                    {&qs->theta, &q.theta}, {&qs->tke, &q.tke}}) {
-                amrex::MultiFab::Copy(*dst, *src, 0, 0, 1, 0);
-            }
+            amrex::MultiFab* const dst[6] = {&qs->u, &qs->v, &qs->w, &qs->p, &qs->theta, &qs->tke};
+            const amrex::MultiFab* const src[6] = {&q.u, &q.v, &q.w, &q.p, &q.theta, &q.tke};
+            for (int n = 0; n < 6; ++n) { amrex::MultiFab::Copy(*dst[n], *src[n], 0, 0, 1, 0); }
         }
         SurfaceLayerOptions ow, ol;
         ow.z0 = static_cast<amrex::Real>(zw);
         ol.z0 = static_cast<amrex::Real>(zl);
         bc.fill_ghosts(qw, &ow, kBuoy);
         bc.fill_ghosts(ql, &ol, kBuoy);
-        long wrong_ghost = 0, ghosts = 0;
+        amrex::Long wrong_ghost = 0, ghosts = 0;
         for (amrex::MFIter mfi(q.v, false); mfi.isValid(); ++mfi) {
             const auto m = host_copy(q.v, mfi), w = host_copy(qw.v, mfi), l = host_copy(ql.v, mfi);
             amrex::Box gb = mfi.validbox();
@@ -369,7 +368,7 @@ TEST(SurfaceRoughness, WaterAndLandFollowTheirOwnLogLaw)
     closure.evaluate(q, dist, gust::Roughness(amrex::Real(0.1), &map), kBuoy, c.mesh, c.geom, fm);
     closure.evaluate(q, dist, static_cast<amrex::Real>(zw), kBuoy, c.mesh, c.geom, fw);
     closure.evaluate(q, dist, static_cast<amrex::Real>(zl), kBuoy, c.mesh, c.geom, fl);
-    long wrong = 0, cells = 0;
+    amrex::Long wrong = 0, cells = 0;
     for (amrex::MFIter mfi(fm.length, false); mfi.isValid(); ++mfi) {
         const auto m = host_copy(fm.length, mfi), w = host_copy(fw.length, mfi), l = host_copy(fl.length, mfi);
         amrex::LoopOnCpu(mfi.validbox(), [&] (int i, int j, int k) {
