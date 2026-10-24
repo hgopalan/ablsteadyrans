@@ -196,6 +196,9 @@ Quick reference
    * - ``bc.surface_z0``
      - 0.1 m
      - Ground roughness length
+   * - ``bc.surface_z0_file``
+     - none
+     - Ground roughness map, ``x y z0`` points (instead of ``bc.surface_z0``)
    * - ``bc.surface_zref``
      - ``0``
      - Wall-model reference height (0: first cell centre)
@@ -693,6 +696,13 @@ types, the inflow profile and the sounding; the other keys act in the SIMPLEC st
    * - ``bc.surface_z0``
      - 0.1 m
      - Finite, > 0. Roughness length of the wall model. The ``bc.surface_*`` keys need ``bc.zlo = surface_layer``.
+   * - ``bc.surface_z0_file``
+     - none (``bc.surface_z0``)
+     - A file of ``x y z0`` points (``terrain.file``'s format), interpolated to the ground columns in
+       :math:`\ln z_0` with ``terrain.idw_neighbors`` and ``terrain.idw_power``
+       (:ref:`roughness map <roughness-map>`). Not with ``bc.surface_z0`` (both given aborts) or
+       ``init.first_guess = column``. Every value finite and > 0, at least ``terrain.idw_neighbors`` points, and
+       the file readable, or the run aborts naming the key. ``bc.inflow_z0`` stays the inflow's roughness.
    * - ``bc.surface_zref``
      - ``0``
      - Finite. ≤ 0: each column's first cell centre. Otherwise a height between the first and last cell-centre

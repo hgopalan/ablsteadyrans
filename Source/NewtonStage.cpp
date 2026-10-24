@@ -201,8 +201,7 @@ bool NewtonStage::differs (const State& q) const
     // equations are not the steady ones.
     if (m_closure != nullptr && m_closure->has_history() && m_closure->options().nut_relax < 1) { return true; }
     if (m_closure == nullptr || !m_closure->frozen()) { return false; }
-    const amrex::Real z0 = (m_in.surface != nullptr) ? m_in.surface->z0 : amrex::Real(0);
-    return m_closure->changed_switches(q, *m_in.wall_distance, z0, m_in.buoyancy, m_mesh, m_geom) > 0;
+    return m_closure->changed_switches(q, *m_in.wall_distance, ground_roughness(m_in.surface), m_in.buoyancy, m_mesh, m_geom) > 0;
 }
 
 void NewtonStage::run_norms (State& q)

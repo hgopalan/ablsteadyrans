@@ -61,7 +61,7 @@ int node_index (int i, int lo, int hi, bool periodic)
 
 } // namespace
 
-TerrainPoints read_xyz_points (const std::string& file)
+TerrainPoints read_xyz_points (const std::string& file, const std::string& key)
 {
     TerrainPoints p;
     std::string err;
@@ -77,18 +77,22 @@ TerrainPoints read_xyz_points (const std::string& file)
                 std::vector<std::string> tok;
                 for (std::string t; ls >> t;) { tok.push_back(t); }
                 double x = 0, y = 0, z = 0;
-                if (tok.size() == 3 && parse_number(tok[0], x) && parse_number(tok[1], y)
-                    && parse_number(tok[2], z) && std::isfinite(x) && std::isfinite(y) && std::isfinite(z)) {
-                    p.x.push_back(x);
-                    p.y.push_back(y);
-                    p.z.push_back(z);
+                if (tok.size() == 3 && parse_number(tok[0], x) && parse_number(tok[1], y) && parse_number(tok[2], z)) {
+                    if (std::isfinite(x) && std::isfinite(y) && std::isfinite(z)) {
+                        p.x.push_back(x);
+                        p.y.push_back(y);
+                        p.z.push_back(z);
+                    } else {
+                        ++p.nonfinite;
+                    }
                 }
             }
             if (p.x.empty()) { err = "holds no 'x y z' point"; }
         }
     }
     bcast(err);
-    if (!err.empty()) { fail("terrain.file = " + file + ": " + err); }
+    if (!err.empty()) { fail(key + " = " + file + ": " + err); }
+    amrex::ParallelDescriptor::Bcast(&p.nonfinite, 1, amrex::ParallelDescriptor::IOProcessorNumber());
     bcast(p.x);
     bcast(p.y);
     bcast(p.z);

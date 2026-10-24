@@ -127,9 +127,10 @@ FaceType face_type_from_name (const std::string& name, const std::string& key)
     return FaceType::periodic;
 }
 
-const char* const kSurfaceKeys[] = {"surface_z0", "surface_zref", "surface_stability", "surface_heat_flux", "surface_wall_k",
-                                    "surface_denominator_floor", "surface_stable_functions", "surface_qnse_am",
-                                    "surface_qnse_bm", "surface_qnse_ah", "surface_qnse_bh"};
+const char* const kSurfaceKeys[] = {"surface_z0", "surface_z0_file", "surface_zref", "surface_stability",
+                                    "surface_heat_flux", "surface_wall_k", "surface_denominator_floor",
+                                    "surface_stable_functions", "surface_qnse_am", "surface_qnse_bm", "surface_qnse_ah",
+                                    "surface_qnse_bh"};
 
 void use_closure_constants (BoundaryInputs& bin, SurfaceLayerOptions& surf, amrex::Real Cmu0, amrex::Real kappa,
                             amrex::Real max_geom_lscale)
@@ -544,6 +545,53 @@ void fill_field (amrex::MultiFab& q, int f, int d, const BoundaryInputs& in, con
 namespace {
 void fill_no_flux_w (State& q, const BoundaryInputs& in, const amrex::Geometry& geom);
 
+//! The wall law's gradient of u, v (components 0, 1) and theta (2) on the
+//! valid and first ghost columns of g (the surface state's slab); Z0 the
+//! roughness accessor (SurfaceRoughness.H).
+template <class Z0>
+void ground_gradients (const SurfaceState& ss, const SurfaceLayerOptions& surface_opt, amrex::MultiFab& ground_grad)
+{
+    // The wall law's gradient per column: u*/(kappa (d0 + z0)) along the
+    // tangential wind for u and v (components 0, 1), -q/(kappa u* (d0 +
+    // z0)) for theta (component 2, 0 when neutral).
+    const amrex::Real kappa = surface_opt.kappa;
+    const Roughness rough = ground_roughness(&surface_opt);
+    const amrex::Real qs = (surface_opt.stability == SurfaceLayerOptions::Stability::heat_flux)
+                               ? surface_opt.heat_flux : amrex::Real(0);
+    const StableCoefficients sc = surface_opt.stable_coefficients();
+    for (amrex::MFIter mfi(ground_grad, false); mfi.isValid(); ++mfi) {
+        const auto g = ground_grad.array(mfi);
+        const auto us = ss.ustar.const_array(mfi);
+        const auto d0 = ss.d0.const_array(mfi);
+        const auto ta = ss.tau.const_array(mfi);
+        const auto il = ss.inv_L.const_array(mfi);
+        const Z0 zf = Z0::of(rough, mfi);
+        amrex::ParallelFor(mfi.growntilebox(amrex::IntVect(1, 1, 0)), [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
+        {
+            // MOST's flux-gradient relations, phi_m and phi_h of
+            // zeta = d0/L (1 when neutral), with the wall model's clamp
+            // and bc.surface_stable_functions' stable side (data, not a branch).
+            const amrex::Real zeta = amrex::max(amrex::min(d0(i, j, k) * il(i, j, k), amrex::Real(100)), -amrex::Real(100));
+            amrex::Real phi_m, phi_h;
+            most_phi(zeta, sc, phi_m, phi_h);
+            const amrex::Real s = kappa * (d0(i, j, k) + zf(i, j));
+            const amrex::Real tmag = std::sqrt(ta(i, j, k, 0) * ta(i, j, k, 0) + ta(i, j, k, 1) * ta(i, j, k, 1)
+                                               + ta(i, j, k, 2) * ta(i, j, k, 2));
+            // The unit stress; with no stress (tmag = 0) the gradient is 0.
+            // No select or max: the compiler evaluates both sides of one
+            // and moves it past the division, and 0/0 would raise the
+            // invalid trap although discarded. The added term is below
+            // the resolution of any stress (bit-identical quotient).
+            const amrex::Real tsafe = tmag + std::numeric_limits<amrex::Real>::min();
+            const amrex::Real dir_x = ta(i, j, k, 0) / tsafe;
+            const amrex::Real dir_y = ta(i, j, k, 1) / tsafe;
+            g(i, j, k, 0) = us(i, j, k) / s * dir_x * phi_m;
+            g(i, j, k, 1) = us(i, j, k) / s * dir_y * phi_m;
+            g(i, j, k, 2) = -qs / (us(i, j, k) * s) * phi_h;
+        });
+    }
+}
+
 } // namespace
 
 void BoundaryConditions::fill_ghosts (State& q, const SurfaceLayerOptions* surface_opt, const BuoyancyOptions& buoyancy,
@@ -578,42 +626,12 @@ void BoundaryConditions::fill_ghosts (State& q, const SurfaceLayerOptions* surfa
             const amrex::Real unset = std::numeric_limits<amrex::Real>::max();
             ground_grad.define(ss->ustar.boxArray(), ss->ustar.DistributionMap(), 3, amrex::IntVect(2, 2, 0));
             ground_grad.setVal(unset);
-            // The wall law's gradient per column: u*/(kappa (d0 + z0)) along the
-            // tangential wind for u and v (components 0, 1), -q/(kappa u* (d0 +
-            // z0)) for theta (component 2, 0 when neutral).
-            const amrex::Real kappa = surface_opt->kappa, z0 = surface_opt->z0;
-            const amrex::Real qs = (surface_opt->stability == SurfaceLayerOptions::Stability::heat_flux)
-                                       ? surface_opt->heat_flux : amrex::Real(0);
-            const StableCoefficients sc = surface_opt->stable_coefficients();
-            for (amrex::MFIter mfi(ground_grad, false); mfi.isValid(); ++mfi) {
-                const auto g = ground_grad.array(mfi);
-                const auto us = ss->ustar.const_array(mfi);
-                const auto d0 = ss->d0.const_array(mfi);
-                const auto ta = ss->tau.const_array(mfi);
-                const auto il = ss->inv_L.const_array(mfi);
-                amrex::ParallelFor(mfi.growntilebox(amrex::IntVect(1, 1, 0)), [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
-                {
-                    // MOST's flux-gradient relations, phi_m and phi_h of
-                    // zeta = d0/L (1 when neutral), with the wall model's clamp
-                    // and bc.surface_stable_functions' stable side (data, not a branch).
-                    const amrex::Real zeta = amrex::max(amrex::min(d0(i, j, k) * il(i, j, k), amrex::Real(100)), -amrex::Real(100));
-                    amrex::Real phi_m, phi_h;
-                    most_phi(zeta, sc, phi_m, phi_h);
-                    const amrex::Real s = kappa * (d0(i, j, k) + z0);
-                    const amrex::Real tmag = std::sqrt(ta(i, j, k, 0) * ta(i, j, k, 0) + ta(i, j, k, 1) * ta(i, j, k, 1)
-                                                       + ta(i, j, k, 2) * ta(i, j, k, 2));
-                    // The unit stress; with no stress (tmag = 0) the gradient is 0.
-                    // No select or max: the compiler evaluates both sides of one
-                    // and moves it past the division, and 0/0 would raise the
-                    // invalid trap although discarded. The added term is below
-                    // the resolution of any stress (bit-identical quotient).
-                    const amrex::Real tsafe = tmag + std::numeric_limits<amrex::Real>::min();
-                    const amrex::Real dir_x = ta(i, j, k, 0) / tsafe;
-                    const amrex::Real dir_y = ta(i, j, k, 1) / tsafe;
-                    g(i, j, k, 0) = us(i, j, k) / s * dir_x * phi_m;
-                    g(i, j, k, 1) = us(i, j, k) / s * dir_y * phi_m;
-                    g(i, j, k, 2) = -qs / (us(i, j, k) * s) * phi_h;
-                });
+            // The wall law's gradient per column (ground_gradients).
+            if (surface_opt->z0_map != nullptr) {
+                check_roughness_map("fill_ghosts", *surface_opt->z0_map, m_mesh.detJ);
+                ground_gradients<MapZ0>(*ss, *surface_opt, ground_grad);
+            } else {
+                ground_gradients<UniformZ0>(*ss, *surface_opt, ground_grad);
             }
             ground_grad.FillBoundary(m_geom.periodicity());
             {

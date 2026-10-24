@@ -30,7 +30,7 @@ bool exists_everywhere (const std::string& name)
     return e == 1;
 }
 
-amrex::Real z0_of (const ResidualInputs& in) { return (in.surface != nullptr) ? in.surface->z0 : amrex::Real(0); }
+Roughness z0_of (const ResidualInputs& in) { return ground_roughness(in.surface); }
 
 void check_closure_inputs (const char* op, const ResidualInputs& in, const Closure* closure)
 {

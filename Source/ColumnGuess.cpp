@@ -120,6 +120,10 @@ std::vector<std::string> check_column_guess (const InitOptions& iopt, const Stea
         const bool flux_mode = iopt.column_stability == CS::heat_flux;
         const bool mol_flux = iopt.column_stability == CS::mol && iopt.column_mol != 0;
         const bool flux_given = std::find(bin.given.begin(), bin.given.end(), "surface_heat_flux") != bin.given.end();
+        if (!surf.z0_file.empty()) {
+            err.emplace_back("init.first_guess = column needs one roughness (bc.surface_z0); the column has no column of "
+                             "bc.surface_z0_file's map to take");
+        }
         if (surf.stability == SurfaceLayerOptions::Stability::heat_flux && !flux_mode && !mol_flux) {
             err.emplace_back("init.first_guess = column with bc.surface_stability = heat_flux needs init.column_stability = heat_flux "
                              "(the column takes the deck's bc.surface_heat_flux) or mol with init.column_mol (the run takes the "

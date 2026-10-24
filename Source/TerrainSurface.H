@@ -16,13 +16,15 @@ namespace gust {
 struct TerrainPoints
 {
     std::vector<double> x, y, z;
+    //! Lines with three numbers of which one is not finite (skipped).
+    long nonfinite{0};
 };
 
 //! Read an xyz point file (FastWindTerrain's format): one "x y z" per line,
 //! comma or white-space separated, '#' comments; lines that do not hold
 //! three numbers are skipped. Read on the I/O rank and broadcast. Aborts,
-//! naming terrain.file, if it cannot be read or holds no point.
-TerrainPoints read_xyz_points (const std::string& file);
+//! naming key (terrain.file by default), if it cannot be read or holds no point.
+TerrainPoints read_xyz_points (const std::string& file, const std::string& key = "terrain.file");
 
 //! Inverse-distance-weighted height at (xq, yq) from the k nearest points,
 //! weight d^-power; an input point closer than 1e-6 m returns its height.

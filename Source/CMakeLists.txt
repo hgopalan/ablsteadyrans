@@ -23,6 +23,7 @@ set(GUST_SOURCES
     Forcing.cpp
     Residual.cpp
     SurfaceLayer.cpp
+    SurfaceRoughness.cpp
     InflowProfile.cpp
     BoundaryConditions.cpp
     Closure.cpp

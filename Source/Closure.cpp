@@ -45,6 +45,32 @@ AMREX_GPU_HOST_DEVICE AMREX_FORCE_INLINE Switches decode (int code) noexcept
 //! The valid box grown by one cell in x and y only (the closure's cells).
 amrex::Box lateral_grown (const amrex::Box& vb) { return amrex::grow(vb, amrex::IntVect(1, 1, 0)); }
 
+//! The distance the geometric length reads, d + z0: with a roughness map
+//! (SurfaceRoughness.H) dist + z0(i, j) on every cell of out, ghost layers
+//! included, and z0 = 0 for the kernels (d + 0 is d + z0 exactly: the sum is
+//! the one the kernels form); without, dist and the uniform z0.
+const amrex::MultiFab& length_distance (const char* op, const amrex::MultiFab& dist, const Roughness& rough,
+                                        amrex::MultiFab& out, amrex::Real& z0)
+{
+    if (rough.map == nullptr) {
+        z0 = rough.z0;
+        return dist;
+    }
+    check_roughness_map(op, *rough.map, dist);
+    z0 = 0;
+    out.define(dist.boxArray(), dist.DistributionMap(), 1, dist.nGrowVect());
+    for (amrex::MFIter mfi(out, false); mfi.isValid(); ++mfi) {
+        const auto o = out.array(mfi);
+        const auto d = dist.const_array(mfi);
+        const MapZ0 zf = MapZ0::of(rough, mfi);
+        amrex::ParallelFor(mfi.fabbox(), [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
+        {
+            o(i, j, k) = d(i, j, k) + zf(i, j);
+        });
+    }
+    return out;
+}
+
 //! The decisions at the state, encoded, on the closure's cells: out(k, N2).
 void live_decisions (const amrex::MultiFab& tke, const amrex::MultiFab& N2, const amrex::MultiFab& dist, amrex::Real z0,
                      const ClosureConstants& c, amrex::iMultiFab& out)
@@ -323,13 +349,17 @@ void Closure::stratification (const State& q, const BuoyancyOptions& buoyancy, c
     if (m_opt.ri_gate > 0) { gate_stratification(N2, S2, m_opt.ri_gate); }
 }
 
-void Closure::evaluate (const State& q, const amrex::MultiFab& dist, amrex::Real z0, const BuoyancyOptions& buoyancy,
-                        const Mesh& mesh, const amrex::Geometry& geom, ClosureFields& f) const
+void Closure::evaluate (const State& q, const amrex::MultiFab& dist_in, const Roughness& rough,
+                        const BuoyancyOptions& buoyancy, const Mesh& mesh, const amrex::Geometry& geom,
+                        ClosureFields& f) const
 {
     const char* op = "Closure::evaluate";
     check_operator_field(op, "tke", q.tke, Loc::cell, mesh, 2);
     check_operator_field(op, "theta", q.theta, Loc::cell, mesh, 2);
-    check_operator_field(op, "dist", dist, Loc::cell, mesh, 1);
+    check_operator_field(op, "dist", dist_in, Loc::cell, mesh, 1);
+    amrex::MultiFab dz;
+    amrex::Real z0 = 0;
+    const amrex::MultiFab& dist = length_distance(op, dist_in, rough, dz, z0);
     if (std::isnan(z0) || !(z0 >= 0 && std::isfinite(z0))) {
         amrex::Abort(std::string("gust: ") + op + ": z0 = " + std::to_string(z0) + " must be finite and >= 0");
     }
@@ -467,10 +497,14 @@ void Closure::read_checkpoint (const std::string& dir, const amrex::BoxArray& ba
     (void)geom;
 }
 
-void Closure::freeze_switches (const State& q, const amrex::MultiFab& dist, amrex::Real z0, const BuoyancyOptions& buoyancy,
-                               const Mesh& mesh, const amrex::Geometry& geom, FreezeScope scope)
+void Closure::freeze_switches (const State& q, const amrex::MultiFab& dist_in, const Roughness& rough,
+                               const BuoyancyOptions& buoyancy, const Mesh& mesh, const amrex::Geometry& geom,
+                               FreezeScope scope)
 {
-    check_operator_field("Closure::freeze_switches", "dist", dist, Loc::cell, mesh, 1);
+    check_operator_field("Closure::freeze_switches", "dist", dist_in, Loc::cell, mesh, 1);
+    amrex::MultiFab dz;
+    amrex::Real z0 = 0;
+    const amrex::MultiFab& dist = length_distance("Closure::freeze_switches", dist_in, rough, dz, z0);
     amrex::MultiFab N2, S2;
     stratification(q, buoyancy, geom, N2, S2);
     m_scope = scope;
@@ -494,12 +528,15 @@ void Closure::decide (const State& q, const amrex::MultiFab& N2, const amrex::Mu
     }
 }
 
-amrex::Long Closure::changed_switches (const State& q, const amrex::MultiFab& dist, amrex::Real z0,
+amrex::Long Closure::changed_switches (const State& q, const amrex::MultiFab& dist_in, const Roughness& rough,
                                        const BuoyancyOptions& buoyancy, const Mesh& mesh, const amrex::Geometry& geom) const
 {
     const char* op = "Closure::changed_switches";
     if (!frozen()) { amrex::Abort(std::string("gust: ") + op + ": the switches are not frozen"); }
-    check_operator_field(op, "dist", dist, Loc::cell, mesh, 1);
+    check_operator_field(op, "dist", dist_in, Loc::cell, mesh, 1);
+    amrex::MultiFab dz;
+    amrex::Real z0 = 0;
+    const amrex::MultiFab& dist = length_distance(op, dist_in, rough, dz, z0);
     if (m_switches.boxArray() != q.p.boxArray() || m_switches.DistributionMap() != q.p.DistributionMap()) {
         amrex::Abort(std::string("gust: ") + op + ": the frozen switches are not on this layout");
     }
