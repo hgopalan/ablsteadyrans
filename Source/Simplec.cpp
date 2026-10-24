@@ -4,6 +4,7 @@
 #include "Convection.H"
 #include "ImplicitOperator.H"
 #include "MassFlux.H"
+#include "Reductions.H"
 
 #include <AMReX_MultiFabUtil.H>
 #include <AMReX_ParallelDescriptor.H>
@@ -371,6 +372,18 @@ std::vector<MonitorSpec> stage_monitor_specs (const ResidualInputs& in)
 }
 
 namespace {
+//! The number of distinct points of a field of the domain's index type: a
+//! nodal direction has n + 1 points, n when periodic (face n is face 0).
+double owned_points (const amrex::MultiFab& mf, const amrex::Geometry& geom)
+{
+    double n = 1;
+    for (int d = 0; d < AMREX_SPACEDIM; ++d) {
+        const int len = geom.Domain().length(d);
+        n *= static_cast<double>(mf.ixType().nodeCentered(d) && !geom.isPeriodic(d) ? len + 1 : len);
+    }
+    return n;
+}
+
 //! The scales s_q of the scaled residual norms (u, v, w, p, theta, k), shared by stage_norms and the confidence.
 void residual_scales (const JvpScales& s, amrex::Real H, amrex::Real scale[6])
 {
@@ -391,20 +404,20 @@ void stage_norms (const ResidualFields& Rf, const State& q, const SurfaceState* 
     amrex::Real scale[6];
     residual_scales(s, height, scale);
     for (int n = 0; n < 6; ++n) {
-        // Dot, not norm2 (which asserts cell-centred data); collective. The
-        // face fields count a box-seam face twice and both periodic copies,
-        // as numPts does: a consistent weighted RMS.
-        const amrex::Real n2 = std::sqrt(amrex::MultiFab::Dot(*R[n], 0, 1, 0));
-        const auto npts = static_cast<amrex::Real>(R[n]->boxArray().numPts());
-        res[static_cast<std::size_t>(n)] = n2 / std::sqrt(npts) / scale[n];
+        // The RMS over the field's points, each once: a face shared by two
+        // boxes, and a periodic face and its image, count once (the owner
+        // mask), so the value does not depend on the box layout; summed in a
+        // fixed order (deterministic_dot), so not on the ranks either.
+        const double n2 = deterministic_dot(*R[n], 0, *R[n], 0, &owner_mask(*R[n], geom.periodicity()));
+        res[static_cast<std::size_t>(n)] = static_cast<amrex::Real>(std::sqrt(n2 / owned_points(*R[n], geom))) / scale[n];
     }
     amrex::Real speed = amrex::max(q.u.norm0(0, 0, false), q.v.norm0(0, 0, false), q.w.norm0(0, 0, false));
     amrex::ParallelDescriptor::ReduceRealMax(speed);
     mon[0] = speed;
-    mon[1] = q.tke.sum(0, false) / static_cast<amrex::Real>(q.tke.boxArray().numPts());
+    mon[1] = deterministic_sum(q.tke, 0) / static_cast<amrex::Real>(q.tke.boxArray().numPts());
     if (ss != nullptr) {
         const auto& dom = geom.Domain();
-        mon[2] = ss->ustar.sum(0, false) / static_cast<amrex::Real>(dom.length(0) * dom.length(1));
+        mon[2] = deterministic_sum(ss->ustar, 0) / static_cast<amrex::Real>(dom.length(0) * dom.length(1));
     }
 }
 

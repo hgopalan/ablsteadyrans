@@ -1,6 +1,7 @@
 #include "Predictor.H"
 
 #include "Forcing.H"
+#include "Reductions.H"
 #include "Stencil_K.H"
 
 #include <AMReX_GpuContainers.H>
@@ -275,30 +276,16 @@ MomentumPredictorResult momentum_predictor (State& q, const ResidualFields& R,
             // the row's own step (the header).
             const amrex::Box& dom = geom.Domain();
             const int klo = dom.smallEnd(2), nz = dom.length(2);   // other is cell-centred in z
-            amrex::Gpu::DeviceVector<amrex::Real> dsum(static_cast<std::size_t>(nz), amrex::Real(0));
-            amrex::Real* sum_ptr = dsum.data();
-            // Every face once: a box's high face plane in its nodal direction
-            // is the next box's low plane (or, on a periodic domain, the
-            // image of the domain's low plane), kept only on a non-periodic
-            // domain edge; the count per level follows the same rule.
+            // Every face once (the owner mask: a box-seam face and the image of
+            // a periodic face counted by one box; both edge faces of a
+            // non-periodic domain), in a fixed order: the same bits for any
+            // ranks (deterministic_level_sums; atomics would add in a
+            // different order from run to run on a GPU).
             const int d_o = 1 - c;
             const bool periodic_o = geom.isPeriodic(d_o);
-            for (amrex::MFIter mfi(other, amrex::TilingIfNotGPU()); mfi.isValid(); ++mfi) {
-                amrex::Box bx = mfi.tilebox();
-                const amrex::Box& vb = mfi.validbox();
-                if (bx.bigEnd(d_o) == vb.bigEnd(d_o) && (periodic_o || vb.bigEnd(d_o) != dom.bigEnd(d_o) + 1)) {
-                    bx.growHi(d_o, -1);
-                }
-                const auto ro = other.const_array(mfi);
-                amrex::ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
-                {
-                    amrex::Gpu::Atomic::AddNoRet(sum_ptr + (k - klo), ro(i, j, k));
-                });
-            }
-            amrex::Gpu::streamSynchronize();
+            const std::vector<double> lsum = deterministic_level_sums(other, 0, owner_mask(other, geom.periodicity()), dom);
             std::vector<amrex::Real> hsum(static_cast<std::size_t>(nz));
-            amrex::Gpu::copy(amrex::Gpu::deviceToHost, dsum.begin(), dsum.end(), hsum.begin());
-            amrex::ParallelDescriptor::ReduceRealSum(hsum.data(), nz);
+            for (int k = 0; k < nz; ++k) { hsum[static_cast<std::size_t>(k)] = static_cast<amrex::Real>(lsum[static_cast<std::size_t>(k)]); }
             const amrex::Real npts_level = static_cast<amrex::Real>(dom.length(d_o) + (periodic_o ? 0 : 1))
                                            * static_cast<amrex::Real>(dom.length(c));
             for (amrex::Real& v : hsum) { v /= npts_level; }

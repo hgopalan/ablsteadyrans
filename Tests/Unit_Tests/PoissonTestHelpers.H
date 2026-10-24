@@ -47,12 +47,14 @@ struct PCase
     amrex::MultiFab z;
     gust::Mesh mesh;
     double ztop{0};
+    //! The rank of each box, when set (the default distribution otherwise).
+    amrex::Vector<int> pmap;
 
     void make (const std::function<double(double, double)>& h)
     {
         geom = gust::make_geometry(in.mesh);
         ba = gust::make_box_array(in.mesh);
-        dm = amrex::DistributionMapping(ba);
+        dm = pmap.empty() ? amrex::DistributionMapping(ba) : amrex::DistributionMapping(pmap);
         z.define(amrex::convert(ba, amrex::IntVect(1)), dm, 1, gust::ngrow_nodal);
         z.setVal(0.0);
         mesh.define(ba, dm);

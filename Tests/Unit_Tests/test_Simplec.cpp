@@ -14,6 +14,7 @@
 #include "Poisson.H"
 #include "Predictor.H"
 #include "PseudoTime.H"
+#include "Reductions.H"
 #include "Residual.H"
 #include "Simplec.H"
 #include "TransportTestHelpers.H"
@@ -163,6 +164,15 @@ void predictor_fields (const gust::State& q, const gust::ResidualInputs& in, con
     if (out != nullptr) { copy_state(*out, q1); }
 }
 
+// The RMS of a field over its distinct points (the owner mask: a box-seam
+// face and the image of a periodic face once), as stage_norms takes it.
+double distinct_rms (const amrex::MultiFab& f, const amrex::Geometry& geom)
+{
+    const auto own = f.OwnerMask(geom.periodicity());
+    const double n = static_cast<double>(own->sum(0));
+    return std::sqrt(gust::deterministic_dot(f, 0, f, 0, own.get()) / n);
+}
+
 } // namespace
 
 // ---------------------------------------------------------------------------
@@ -268,7 +278,7 @@ TEST (Simplec, OneCorrectionRemovesTheDivergence)
         const amrex::MultiFab* fields[6] = {&R3.u, &R3.v, &R3.w, &R3.p, &R3.theta, &R3.tke};
         const double scale[6] = {U * U / H, U * U / H, U * U / H, U / H, U * ts / H, U * ks / H};
         for (int n = 0; n < 6; ++n) {
-            const double rms = std::sqrt(amrex::MultiFab::Dot(*fields[n], 0, 1, 0) / double(fields[n]->boxArray().numPts()));
+            const double rms = distinct_rms(*fields[n], c.geom);
             EXPECT_NEAR(stage.residual_norms()[n], rms / scale[n], tol(1e-12, 1e-4) * (rms / scale[n] + 1e-300)) << n;
         }
     }
@@ -327,7 +337,7 @@ TEST (Simplec, ResidualScalesUseTheDepthOfTheLayers)
     const amrex::MultiFab* fields[6] = {&R3.u, &R3.v, &R3.w, &R3.p, &R3.theta, &R3.tke};
     const double scale[6] = {U * U / H, U * U / H, U * U / H, U / H, U * ts / H, U * ks / H};
     for (int n = 0; n < 6; ++n) {
-        const double rms = std::sqrt(amrex::MultiFab::Dot(*fields[n], 0, 1, 0) / double(fields[n]->boxArray().numPts()));
+        const double rms = distinct_rms(*fields[n], c.geom);
         ASSERT_GT(rms, 0) << n;
         EXPECT_NEAR(stage.residual_norms()[n], rms / scale[n], tol(1e-12, 1e-4) * (rms / scale[n])) << n;
     }

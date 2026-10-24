@@ -58,11 +58,12 @@ struct TCase
     gust::Mesh mesh;
     std::unique_ptr<gust::MeshHierarchy> h;
 
-    void make (int gather_from = 0)
+    //! rank_map: level 0's ranks (the default distribution otherwise).
+    void make (int gather_from = 0, const amrex::DistributionMapping* rank_map = nullptr)
     {
         geom = gust::make_geometry(in.mesh);
         ba = gust::hierarchy_box_array(in.mesh);
-        dm = amrex::DistributionMapping(ba);
+        dm = (rank_map != nullptr) ? *rank_map : amrex::DistributionMapping(ba);
         z.define(amrex::convert(ba, amrex::IntVect(1)), dm, 1, gust::ngrow_nodal);
         z.setVal(0.0);
         mesh.define(ba, dm);
@@ -646,8 +647,14 @@ TEST (Transfer, GatheredLevelEqualsDistributed)
     TCase a = case_inputs(false, true, true);
     a.make();
     TCase b = case_inputs(false, true, true);
-    b.make(1);
+    // Level 0 on a's ranks: DistributionMapping(ba) puts boxes on the ranks
+    // that hold the least memory when it is called, so two calls can give
+    // different maps, and the Poisson solve's reductions (rank partial sums)
+    // differ in the last bits between maps. What is compared here is the
+    // gathering of the coarse levels, not two rank maps of level 0.
+    b.make(1, &a.dm);
     ASSERT_TRUE(b.h->gathered(1));
+    ASSERT_TRUE(b.dm == a.dm);
     ASSERT_GT(a.h->boxArray(1).size(), 1);
     ASSERT_NE(a.h->boxArray(0)[0].numPts(), a.h->boxArray(0)[a.h->boxArray(0).size() - 1].numPts()) << "unequal boxes";
     // A gathered field copied back onto the distributed layout.

@@ -140,7 +140,8 @@ linearised backward Euler step:
    \mathrm{rhs} \mathrel{\mp}= f\bigl(\tau_c\langle R\rangle + \tau_\mathrm{own}(\overline R - \langle R\rangle)\bigr).
 
 - :math:`\tau_\theta = 1/(1/\Delta\tau + a_{P,\theta})`: the step allowed by the :math:`\theta` rows.
-- :math:`\langle R\rangle`: the horizontal mean, on each level, of the other component's residual;
+- :math:`\langle R\rangle`: the horizontal mean, on each level, of the other component's residual, each face
+  counted once and summed in a fixed order, so the mean has the same bits on any number of ranks or GPU threads;
   :math:`\overline R`: its local value.
 - :math:`\tau_c = 1/\max(|f|/r, a_P - \sum a_{nb})`, with :math:`r` = ``simplec.rotation_relax`` (0.3).
 - :math:`\tau_\mathrm{own}`: the row's own step.
@@ -581,7 +582,11 @@ divided by a fixed scale:
    s_{u,v,w} = \frac{U^2}{H}, \quad s_p = \frac{U}{H}, \quad s_\theta = \frac{U\,\theta_s}{H}, \quad
    s_k = \frac{U\,k_s}{H} .
 
-- :math:`r_{q,i}`: the residual of equation :math:`q` at cell or face :math:`i`; :math:`N_q`: their number.
+- :math:`r_{q,i}`: the residual of equation :math:`q` at cell or face :math:`i`; :math:`N_q`: their number. Each
+  point counts once: a face shared by two boxes, or a periodic face and its image, is one point, so the norm does
+  not depend on ``mesh.max_grid_size``. (Before audit A4 such a face counted twice. A checkpoint written before then
+  holds its reference and residuals in that norm; a restart compares them with the new norm, which differs by
+  about the share of seam faces, so the restarted run is not bit for bit the run it was.)
 - :math:`U` = 10 m/s, :math:`\theta_s` = 10 K, :math:`k_s` = 0.1 m²/s²: fixed scales, not inputs.
 - :math:`H`: the depth of the layers, from the ground level to the top level. On a uniform mesh this is
   ``mesh.prob_hi`` z; with ``mesh.stretch_ratio`` or ``mesh.zlevels_file`` it is where the layers end, which can be
@@ -642,5 +647,8 @@ Stage switching, restart and reproducibility
   residuals by :math:`H` / ``prob_hi`` z and says so in the log. That run then continues in the new scale, and so
   is not bit for bit the run it was.
 - **Reproducibility.** Norms and monitors are reduced over all ranks, so every rank reaches the same verdict at the
-  same iteration. A run on a different number of ranks agrees with the original to round-off, not bit for bit.
+  same iteration. They are sums in a fixed order, the same bits on any number of ranks for a given box layout, as
+  are the Coriolis level mean and the mean the Poisson solve removes. The pressure solver's own reductions (any
+  ``solver.poisson_backend``) are not, so a run on a different number of ranks agrees with the original to
+  round-off, not bit for bit.
   ``steady.line_order = diagonal`` reproduces ``sequential`` bit for bit.

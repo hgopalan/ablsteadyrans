@@ -1,6 +1,7 @@
 #include "TurbulenceOutput.H"
 
 #include "CVFluxes.H"
+#include "Reductions.H"
 
 #include <AMReX_ParallelDescriptor.H>
 #include <AMReX_PlotFileUtil.H>
@@ -100,7 +101,7 @@ std::string write_turbulence_plotfile (const std::string& prefix, const State& q
     amrex::Real ustar_mean = 0;
     if (surface != nullptr) {
         const auto& dom = geom.Domain();
-        ustar_mean = surface->ustar.sum(0, false) / static_cast<amrex::Real>(dom.length(0) * dom.length(1));
+        ustar_mean = deterministic_sum(surface->ustar, 0) / static_cast<amrex::Real>(dom.length(0) * dom.length(1));
     }
     if (amrex::ParallelDescriptor::IOProcessor()) {
         const std::string fname = name + "/surf_hist.dat";
