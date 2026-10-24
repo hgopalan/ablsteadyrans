@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The Bolund roughness map for bc.surface_z0_file, from the Bolund terrain
-as a terrain.type = xyz file (tools/tiff_to_xyz.py on the blind comparison's
-bolund_hill_extended.tif): one "x y z0" line per terrain point.
+as a terrain.type = xyz file (bolund.xyz of windninja2019.py prepare): one
+"x y z0" line per terrain point; lines that do not hold three numbers are skipped.
 
 The values and rules are those of the Bolund blind comparison (Bechmann et
 al. 2011; Bolund_Validation.pdf in Bolund_Measurements.zip, Section 2 and
@@ -48,7 +48,10 @@ def main(argv):
             tok = line.split("#")[0].replace(",", " ").split()
             if len(tok) != 3:
                 continue
-            x, y, z = (float(t) for t in tok)
+            try:
+                x, y, z = (float(t) for t in tok)
+            except ValueError:
+                continue
             water = classify(z, x, a.water_level, land_x_min)
             n[0 if water else 1] += 1
             fout.write(f"{tok[0]} {tok[1]} {a.z0_water if water else a.z0_land}\n")

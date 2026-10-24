@@ -1,0 +1,59 @@
+# The roughness map on two grid-sequencing levels (rt_sequencing_z0map):
+# inputs_sequencing_restart with bc.surface_z0_file = z0_two_points.xyz (given on
+# the command line, absolute) in place of bc.surface_z0. Two points, 0.0003 m at
+# x = -1000 m and 0.015 m at x = 1000 m, interpolated in ln z0 with two neighbours
+# (the terrain is agnesi: terrain.idw_* apply to the map alone); level 1 takes the
+# geometric mean of each 2 x 2 block of level 0.
+mesh.n_cell        = 32 32 16
+mesh.prob_lo       = -2560. -2560. 0.
+mesh.prob_hi       =  2560.  2560. 800.
+mesh.is_periodic   = 1 1 0
+mesh.max_grid_size = 16 16
+
+terrain.type            = agnesi
+terrain.hill_shape = round
+terrain.hill_height     = 100.
+terrain.hill_half_width = 500.
+terrain.smoothing       = 0
+
+bc.zlo = surface_layer
+bc.zhi = slip_wall
+bc.theta_profile_z = 0.
+bc.theta_profile   = 300.
+bc.inflow_profile   = log_law
+bc.inflow_ustar     = 0.35
+bc.inflow_z0        = 0.1
+bc.inflow_direction = 0.
+bc.rayleigh_zdamp    = 550.
+bc.rayleigh_dampcoef = 0.2
+bc.rayleigh_fields   = w
+
+
+forcing.gravity         = 0.
+forcing.coriolis        = 1
+forcing.coriolis_3d     = 0
+forcing.latitude        = 90.
+forcing.rotation_period = 125663.7061435917
+forcing.geostrophic     = 1
+forcing.ug              = 10.
+forcing.vg              = 0.
+
+turb.tke_floor = 1.e-6
+
+steady.stage                   = simplec
+steady.sweep                   = zjacobi   # z-line Jacobi sweep (the CPU default is lusgs)
+steady.cfl0                    = 1.
+steady.cfl_max                 = 4.
+steady.zline_sweeps            = 16
+simplec.rotation_relax         = 1.
+steady.residual_ref_iterations = 100
+steady.residual_tol            = 1.e-11
+steady.residual_drop_orders    = 8
+steady.monitor_rel_tol         = 1.e-10
+
+mesh.hierarchy_levels = 2
+steady.sequencing     = 1
+io.write_plotfile     = 0
+terrain.idw_neighbors = 2
+terrain.idw_power     = 2.
+io.turb_plot_file     = z0map_turb

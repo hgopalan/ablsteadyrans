@@ -450,7 +450,8 @@ void run ()
             if (!simplec_stage.hybrid_sigma().empty()) { plot_in.hybrid_sigma = &simplec_stage.hybrid_sigma(); }
             residual(state, plot_in, mesh, geom, R);
             const auto name = write_turbulence_plotfile(in.io.turb_plot_file, state, cf, dist, surface_layer ? &ss : nullptr,
-                                                        copt, geom, &R);
+                                                        copt, geom, &R,
+                                                        res_in.surface != nullptr ? res_in.surface->z0_map : nullptr);
             amrex::Print() << "gust: wrote " << name << "\n";
         }
         if (v.status == SteadyStatus::Diverged) { amrex::Abort("gust: the run diverged" + reasons); }

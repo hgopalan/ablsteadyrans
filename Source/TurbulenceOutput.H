@@ -28,12 +28,14 @@ namespace gust {
 //! Write <prefix>NNNNN (NNNNN = q.step). fields: the closure's evaluation at
 //! q; dist: the wall distance (cell-centred); surface: the wall state (null
 //! without a surface layer); copt: the closure's options (Cmu0,
-//! alpha_molecular); R: the residual at q (null: no residual variables).
+//! alpha_molecular); R: the residual at q (null: no residual variables);
+//! z0_map: the ground's roughness map (SurfaceRoughness.H; null: none), written
+//! as the last variable z0 on the first cells (0 above).
 //! Returns the directory name.
 std::string write_turbulence_plotfile (const std::string& prefix, const State& q, const ClosureFields& fields,
                                        const amrex::MultiFab& dist, const SurfaceState* surface,
                                        const ClosureOptions& copt, const amrex::Geometry& geom,
-                                       const ResidualFields* R = nullptr);
+                                       const ResidualFields* R = nullptr, const amrex::MultiFab* z0_map = nullptr);
 
 } // namespace gust
 

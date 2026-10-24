@@ -73,6 +73,7 @@
 #include <AMReX_iMultiFab.H>
 
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace gust {
@@ -200,6 +201,11 @@ private:
     ClosureConstants m_c;
     amrex::MultiFab m_nut_prev;      //!< relaxation history (one ghost cell)
     amrex::iMultiFab m_switches;     //!< frozen decisions, encoded (one ghost cell)
+    //! With a roughness map: d + z0 for the geometric length, built on the first call with a (dist, map) pair
+    //! and kept for later calls with the same pair (both are fixed over a level's run; a caller that changes
+    //! either in place must pass another MultiFab).
+    mutable amrex::MultiFab m_dz;
+    mutable std::pair<const amrex::MultiFab*, const amrex::MultiFab*> m_dz_of{nullptr, nullptr};
     FreezeScope m_scope{FreezeScope::all};
     //! The decisions evaluate() uses at q (N2: gated when turb.ri_gate > 0),
     //! encoded on q's layout: the state's own, the frozen ones (all), or the

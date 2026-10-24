@@ -518,10 +518,11 @@ Quick reference
      - ``ridge_x`` (a ridge along y, varying in x), ``ridge_y`` or ``round``; ``agnesi`` only.
    * - ``terrain.idw_neighbors``
      - ``6``
-     - ≥ 1; ``xyz`` only. Points used for each height.
+     - ≥ 1; ``xyz`` or ``bc.surface_z0_file`` only. Points used for each height (and each column's
+       :math:`z_0` of the roughness map).
    * - ``terrain.idw_power``
      - ``2``
-     - Finite, > 0; ``xyz`` only. Weight exponent :math:`p` in :math:`d^{-p}`.
+     - Finite, > 0; ``xyz`` or ``bc.surface_z0_file`` only. Weight exponent :math:`p` in :math:`d^{-p}`.
    * - ``terrain.hierarchy_passes``
      - ``1``
      - Integer from 0 to 64; only with ``mesh.hierarchy_levels`` > 1. The ground of level :math:`l` is smoothed by

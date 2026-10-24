@@ -67,6 +67,7 @@ struct MapZ0
     //! The accessor for box mfi.index(): mfi iterates any MultiFab on the
     //! map's DistributionMapping and box order (the ground slab, or the 3-D
     //! cells it was cut from), so the map is indexed by the global box index.
+    //! The caller checks the layout first (check_roughness_map).
     static MapZ0 of (const Roughness& r, const amrex::MFIter& mfi);
 };
 

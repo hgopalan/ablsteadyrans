@@ -4,6 +4,7 @@
 // the coarse levels take the geometric mean; the inputs are checked.
 #include "BoundaryConditions.H"
 #include "Closure.H"
+#include "ColumnGuess.H"
 #include "Residual.H"
 #include "SurfaceLayer.H"
 #include "SurfaceRoughness.H"
@@ -453,8 +454,8 @@ TEST(SurfaceRoughness, CoarseLevelsTakeTheGeometricMean)
 
 // The keys: bc.surface_z0 with bc.surface_z0_file aborts naming both; a file
 // with a value <= 0, a value that is not finite, too few points for
-// terrain.idw_neighbors, or no file, aborts naming bc.surface_z0_file; the
-// column guess refuses a map.
+// terrain.idw_neighbors, or no file, aborts naming bc.surface_z0_file (a
+// missing file already when the keys are read); the column guess refuses a map.
 TEST(SurfaceRoughness, InputsAreChecked)
 {
     {
@@ -467,12 +468,34 @@ TEST(SurfaceRoughness, InputsAreChecked)
         EXPECT_NE(what.find("bc.surface_z0 and bc.surface_z0_file cannot both be given"), std::string::npos) << what;
     }
     {
+        const std::string ok = write_points("ok.xyz", [] (std::ofstream& os) { os << "0 0 0.01\n"; });
         amrex::ParmParse pp("bc");
-        pp.add("surface_z0_file", std::string("z0.xyz"));
+        pp.add("surface_z0_file", ok);
         SurfaceLayerOptions opt;
         EXPECT_EQ(abort_message([&] { opt = gust::read_surface_layer_options(); }), "");
         while (pp.remove("surface_z0_file") > 0) {}
-        EXPECT_EQ(opt.z0_file, "z0.xyz");
+        EXPECT_EQ(opt.z0_file, ok);
+        // A file that cannot be read stops the run when the keys are read (also without a stage).
+        pp.add("surface_z0_file", std::string("no_such_z0.xyz"));
+        const std::string what = abort_message([] { (void)gust::read_surface_layer_options(); });
+        while (pp.remove("surface_z0_file") > 0) {}
+        EXPECT_NE(what.find("bc.surface_z0_file = no_such_z0.xyz: cannot be read"), std::string::npos) << what;
+        // The column guess needs one roughness.
+        gust::InitOptions iopt;
+        iopt.first_guess = gust::InitOptions::FirstGuess::column;
+        gust::SteadyOptions sopt;
+        sopt.stage = gust::StageKind::simplec;
+        gust::ForcingOptions fopt;
+        fopt.pressure_gradient = {amrex::Real(1e-4), 0, 0};
+        gust::BoundaryInputs bin;
+        SurfaceLayerOptions with_map;
+        with_map.z0_file = ok;
+        const auto has = [] (const std::vector<std::string>& err) {
+            for (const auto& e : err) { if (e.find("bc.surface_z0_file") != std::string::npos) { return true; } }
+            return false;
+        };
+        EXPECT_TRUE(has(gust::check_column_guess(iopt, sopt, fopt, bin, with_map, true)));
+        EXPECT_FALSE(has(gust::check_column_guess(iopt, sopt, fopt, bin, SurfaceLayerOptions{}, true)));
     }
     PCase c = flat_case(8, 4);
     auto read = [&] (const std::string& file, int k) {

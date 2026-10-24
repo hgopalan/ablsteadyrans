@@ -14,7 +14,7 @@ namespace gust {
 std::string write_turbulence_plotfile (const std::string& prefix, const State& q, const ClosureFields& fields,
                                        const amrex::MultiFab& dist, const SurfaceState* surface,
                                        const ClosureOptions& copt, const amrex::Geometry& geom,
-                                       const ResidualFields* R)
+                                       const ResidualFields* R, const amrex::MultiFab* z0_map)
 {
     if (fields.empty()) { amrex::Abort("gust: write_turbulence_plotfile: the closure's fields are empty"); }
     const amrex::BoxArray& ba = q.p.boxArray();
@@ -28,6 +28,11 @@ std::string write_turbulence_plotfile (const std::string& prefix, const State& q
     if (R != nullptr) {
         if (R->u.empty()) { amrex::Abort("gust: write_turbulence_plotfile: the residual fields are empty"); }
         for (const char* n : {"R_u", "R_v", "R_w", "R_p", "R_theta", "R_tke"}) { names.emplace_back(n); }
+    }
+    const int nz0 = static_cast<int>(names.size());   // the z0 component, when there is a map
+    if (z0_map != nullptr) {
+        check_roughness_map("write_turbulence_plotfile", *z0_map, q.p);
+        names.emplace_back("z0");
     }
     const int ncomp = static_cast<int>(names.size());
     amrex::MultiFab plt(ba, dm, ncomp, 0);
@@ -79,6 +84,13 @@ std::string write_turbulence_plotfile (const std::string& prefix, const State& q
                 o(i, j, k, nbase + 3) = rp(i, j, k);
                 o(i, j, k, nbase + 4) = rt(i, j, k);
                 o(i, j, k, nbase + 5) = rk(i, j, k);
+            });
+        }
+        if (z0_map != nullptr) {
+            const auto zm = z0_map->const_array(mfi.index());
+            amrex::ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i, int j, int k) noexcept
+            {
+                o(i, j, k, nz0) = (k == klo) ? zm(i, j, klo) : amrex::Real(0);
             });
         }
     }

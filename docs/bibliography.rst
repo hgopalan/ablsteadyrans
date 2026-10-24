@@ -13,6 +13,9 @@ two-equation turbulence models. *Journal of Marine Systems* 21, 29–53.
 
 Dyer, A. J. (1974). A review of flux-profile relationships. *Boundary-Layer Meteorology* 7, 363–372.
 
+Elliott, W. P. (1958). The growth of the atmospheric internal boundary layer. *Transactions, American Geophysical
+Union* 39, 1048–1054.
+
 Forthofer, J. M., Butler, B. W., Wagenbrenner, N. S. (2014). A comparison of three approaches for simulating
 fine-scale surface winds in support of wildland fire management. Part I. Model formulation and comparison against
 measurements. *International Journal of Wildland Fire* 23, 969–981.

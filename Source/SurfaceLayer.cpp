@@ -9,6 +9,7 @@
 #include <AMReX_ParmParse.H>
 
 #include <cmath>
+#include <fstream>
 #include <limits>
 #include <string>
 
@@ -307,8 +308,12 @@ SurfaceLayerOptions read_surface_layer_options ()
         amrex::Abort("gust: bc.surface_z0 and bc.surface_z0_file cannot both be given (one roughness: a value or a map)");
     }
     pp.query("surface_z0", opt.z0);
-    if (pp.query("surface_z0_file", opt.z0_file) && opt.z0_file.empty()) {
-        amrex::Abort("gust: bc.surface_z0_file is empty: give a file of 'x y z0' points");
+    if (pp.query("surface_z0_file", opt.z0_file)) {
+        if (opt.z0_file.empty()) { amrex::Abort("gust: bc.surface_z0_file is empty: give a file of 'x y z0' points"); }
+        // Checked here, so that a run that never reads the map (no stage) still refuses a missing file.
+        int readable = amrex::ParallelDescriptor::IOProcessor() ? (std::ifstream(opt.z0_file).good() ? 1 : 0) : 0;
+        amrex::ParallelDescriptor::Bcast(&readable, 1, amrex::ParallelDescriptor::IOProcessorNumber());
+        if (readable == 0) { amrex::Abort("gust: bc.surface_z0_file = " + opt.z0_file + ": cannot be read"); }
     }
     pp.query("surface_zref", opt.zref);
     pp.query("surface_heat_flux", opt.heat_flux);
