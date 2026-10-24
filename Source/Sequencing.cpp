@@ -60,7 +60,7 @@ void extend_by_zero_gradient (amrex::MultiFab& dist, const amrex::Geometry& geom
 }
 
 ResidualInputs residual_inputs (const RunSetup& s, const Closure& closure, const amrex::MultiFab& dist,
-                                const BoundaryConditions& bc)
+                                const BoundaryConditions& bc, const SurfaceLayerOptions& surf)
 {
     ResidualInputs r;
     r.closure = &closure;
@@ -72,7 +72,7 @@ ResidualInputs residual_inputs (const RunSetup& s, const Closure& closure, const
     r.buoyancy = s.fopt.buoyancy;
     r.coriolis = s.fopt.coriolis;
     r.pressure_gradient = s.fopt.pressure_gradient;
-    r.surface = s.surface_layer ? &s.surf : nullptr;
+    r.surface = s.surface_layer ? &surf : nullptr;
     r.bc = &bc;
     return r;
 }
@@ -226,9 +226,21 @@ LooseStop loose_stop (const SteadyHistory& h, const SteadyParams& p, const std::
 // ---------------------------------------------------------------------------
 LevelSolver::LevelSolver (const RunSetup& s, const Mesh& mesh, const amrex::Geometry& geom, const amrex::MultiFab& z_nd,
                           const amrex::BoxArray& ba, const amrex::DistributionMapping& dm, const std::string& label,
-                          bool newton)
-    : bc(s.bin, geom, mesh, s.fopt.coriolis), closure(s.copt)
+                          bool newton, const amrex::MultiFab* z0_fine)
+    : bc(s.bin, geom, mesh, s.fopt.coriolis), closure(s.copt), surf(s.surf)
 {
+    if (s.surface_layer && !s.surf.z0_file.empty()) {
+        if (z0_fine == nullptr) {
+            read_roughness_map(s.surf.z0_file, "bc.surface_z0_file", s.idw_neighbors, static_cast<double>(s.idw_power), geom,
+                               ba, dm, z0_map_field);
+        } else {
+            average_roughness_map(*z0_fine, geom, ba, dm, z0_map_field);
+        }
+        surf.z0_map = &z0_map_field;
+        amrex::Print() << "gust: " << label << "surface z0 map ("
+                       << (z0_fine == nullptr ? "bc.surface_z0_file" : "geometric mean of level 0") << "): "
+                       << roughness_summary(z0_map_field) << "\n";
+    }
     if (s.copt.wall_distance == WallDistanceKind::tucker) {
         dist.define(ba, dm, 1, 1);
         const PoissonResult wd = tucker_wall_distance(mesh, geom, z_nd, dist, s.popt);
@@ -237,7 +249,7 @@ LevelSolver::LevelSolver (const RunSetup& s, const Mesh& mesh, const amrex::Geom
     } else {
         height_above_ground(z_nd, dist);
     }
-    res_in = residual_inputs(s, closure, dist, bc);
+    res_in = residual_inputs(s, closure, dist, bc, surf);
     auto stage = std::make_unique<SimplecStage>(s.simplec, s.sopt.zline_sweeps, res_in, &closure, s.popt, mesh, geom, z_nd,
                                                 s.copt.tke_floor, ba, dm, line_sweep_options(s.sopt));
     m_stage = stage.get();
@@ -313,7 +325,8 @@ std::vector<LevelSummary> sequence_coarse_levels (const MeshHierarchy& h, const 
         s.cells_x = dom.length(0);
         s.cells_y = dom.length(1);
         const std::string label = "level " + std::to_string(l) + ": ";
-        LevelSolver ls(setup, h.mesh(l), h.geom(l), h.z_phys_nd(l), h.boxArray(l), h.DistributionMap(l), label);
+        LevelSolver ls(setup, h.mesh(l), h.geom(l), h.z_phys_nd(l), h.boxArray(l), h.DistributionMap(l), label, false,
+                       finest.surf.z0_map);
         auto ql = std::make_unique<State>();
         ql->define(h.boxArray(l), h.DistributionMap(l));
         if (!coarse) {

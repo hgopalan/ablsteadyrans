@@ -79,6 +79,8 @@ struct TerrainInputs
     //! xyz: nearest points used and the weight power (FastWindTerrain's defaults).
     int idw_neighbors{6};
     amrex::Real idw_power{2};
+    //! bc.surface_z0_file is given: the map is interpolated with idw_neighbors and idw_power too.
+    bool idw_for_z0_map{false};
     //! Grid hierarchy: level l's ground is smoothed by hierarchy_passes (2^l - 1)
     //! passes (MeshHierarchy.H).
     int hierarchy_passes{1};

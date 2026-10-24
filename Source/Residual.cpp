@@ -59,12 +59,11 @@ FaceMean face_mean_of (const ResidualInputs& in)
     return (in.closure != nullptr) ? in.closure->options().face_mean : in.face_mean;
 }
 
-//! Evaluate the closure at q into f (the surface layer's z0, or 0).
+//! Evaluate the closure at q into f (the surface layer's z0 or map, or 0).
 void evaluate_closure (const State& q, const ResidualInputs& in, const Mesh& mesh, const amrex::Geometry& geom,
                        ClosureFields& f)
 {
-    const amrex::Real z0 = (in.surface != nullptr) ? in.surface->z0 : amrex::Real(0);
-    in.closure->evaluate(q, *in.wall_distance, z0, in.buoyancy, mesh, geom, f);
+    in.closure->evaluate(q, *in.wall_distance, ground_roughness(in.surface), in.buoyancy, mesh, geom, f);
 }
 
 void check_inputs (const char* op, const ResidualInputs& in)

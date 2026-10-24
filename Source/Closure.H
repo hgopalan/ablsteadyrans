@@ -66,12 +66,14 @@
 #include "Forcing.H"
 #include "Mesh.H"
 #include "State.H"
+#include "SurfaceRoughness.H"
 
 #include <AMReX_Geometry.H>
 #include <AMReX_MultiFab.H>
 #include <AMReX_iMultiFab.H>
 
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace gust {
@@ -146,8 +148,10 @@ public:
 
     //! The fields at the state q (ghosts filled, two layers) with the wall
     //! distance dist (cell-centred, one ghost cell) and the roughness z0 of
-    //! the ground (0 without a surface layer). f is defined here if empty.
-    void evaluate (const State& q, const amrex::MultiFab& dist, amrex::Real z0, const BuoyancyOptions& buoyancy,
+    //! the ground (0 without a surface layer; a Real is a uniform z0, a
+    //! Roughness with a map gives each column its own, SurfaceRoughness.H).
+    //! f is defined here if empty.
+    void evaluate (const State& q, const amrex::MultiFab& dist, const Roughness& z0, const BuoyancyOptions& buoyancy,
                    const Mesh& mesh, const amrex::Geometry& geom, ClosureFields& f) const;
 
     //! Store f.nut as the relaxation history (nut_relax < 1 blends with it).
@@ -169,7 +173,7 @@ public:
     //! smoothing is clamped at Rt_crit where the state has moved past it.
     //! scope: which decisions are held (the others are taken from the state
     //! at every evaluation).
-    void freeze_switches (const State& q, const amrex::MultiFab& dist, amrex::Real z0, const BuoyancyOptions& buoyancy,
+    void freeze_switches (const State& q, const amrex::MultiFab& dist, const Roughness& z0, const BuoyancyOptions& buoyancy,
                           const Mesh& mesh, const amrex::Geometry& geom, FreezeScope scope = FreezeScope::all);
     void thaw () { m_switches.clear(); }
     [[nodiscard]] FreezeScope freeze_scope () const { return m_scope; }
@@ -178,7 +182,7 @@ public:
     //! frozen ones (every rank gets the same count); aborts when not frozen.
     //! 0 means the frozen and thawed evaluations at q agree on every valid
     //! cell (the lateral ghosts outside the domain are not counted).
-    [[nodiscard]] amrex::Long changed_switches (const State& q, const amrex::MultiFab& dist, amrex::Real z0,
+    [[nodiscard]] amrex::Long changed_switches (const State& q, const amrex::MultiFab& dist, const Roughness& z0,
                                                 const BuoyancyOptions& buoyancy, const Mesh& mesh,
                                                 const amrex::Geometry& geom) const;
     //! The frozen decisions, encoded (one ghost cell; empty when not frozen),
@@ -197,6 +201,11 @@ private:
     ClosureConstants m_c;
     amrex::MultiFab m_nut_prev;      //!< relaxation history (one ghost cell)
     amrex::iMultiFab m_switches;     //!< frozen decisions, encoded (one ghost cell)
+    //! With a roughness map: d + z0 for the geometric length, built on the first call with a (dist, map) pair
+    //! and kept for later calls with the same pair (both are fixed over a level's run; a caller that changes
+    //! either in place must pass another MultiFab).
+    mutable amrex::MultiFab m_dz;
+    mutable std::pair<const amrex::MultiFab*, const amrex::MultiFab*> m_dz_of{nullptr, nullptr};
     FreezeScope m_scope{FreezeScope::all};
     //! The decisions evaluate() uses at q (N2: gated when turb.ri_gate > 0),
     //! encoded on q's layout: the state's own, the frozen ones (all), or the

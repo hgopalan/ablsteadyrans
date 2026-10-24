@@ -13,6 +13,7 @@ consistent) and GUST - CFD (steady RANS) next to the observations and the paper'
 | `inputs_bolund_270`, `inputs_bolund_239`, `inputs_bolund_90` | Bolund cases 1, 3, 4 (10.9 m/s from 270°, 8.7 m/s from 239°, 7.6 m/s from 90°, at 5 m); 256 × 128 × 48 cells, 1.6 m, 0.5 m first layer; line B (cases 1, 4) or A (case 3) at 5 m. |
 | `inputs_bsb_srtm` | Big Southern Butte, 8.3 m/s from 222° at 3 m, on the unsmoothed SRTM terrain (`bsb.xyz`), 272 × 296 × 40 cells: 68 m horizontally (the paper's), a 4 m first layer; an uncapped length and a no-slip lid moving at the inflow's top speed keep the inflow from drifting over the 18.7 km fetch; transects TSW, TWSW at 3 m. |
 | `inputs_askervein_stable`, `inputs_bsb_wn_consistent`, `inputs_bsb`, `inputs_bsb_wn`, `inputs_bsb_wn_flat`, `inputs_bsb_wn_flat_consistent`, `inputs_bsb_wn_precursor` | Diagnostics, not part of the comparison: Askervein with a lapse rate; the Butte on the paper-like mesh (smoothed terrain `bsb_wn.xyz`, 68 m first layer: its lee does not separate, see Expected Results); the Butte on the SRTM terrain with 1 m first cells and a slip top; the paper-like Butte with a slip top (its inflow drifts by −18.5 %); the horizontal-homogeneity tests of the two Butte inflows on flat ground; a precursor column. |
+| `bolund_z0_map.py` | The Bolund roughness map for `bc.surface_z0_file` from `bolund.xyz`: 0.0003 m over water (terrain at or below the 0.75 m water level), 0.015 m over land, land for x > 327 m (the blind comparison's values and rules, Bolund_Validation.pdf). |
 | `windninja2019.py` | `prepare` (masts and terrain from windninja-tools), `smooth` (the paper-like Butte terrain), `sample` (speed-up at the masts and along the transects), `plot` (the paper's figures), `stats` (windward / ridge / lee RMSE, bias and MAPE). |
 | `run_all.sh` | Runs the cases one at a time (GUST - Fast and GUST - CFD), samples and plots them. |
 | `sweep.sh`, `sweep_variants.txt` | One-change variants of a case (a file of `name key=value ...` lines). |
@@ -47,6 +48,10 @@ In the repository (CC BY 4.0 sources):
 - Wagenbrenner, N.S., Big Southern Butte surface wind data (`bsb.sqlite`), Zenodo, doi:10.5281/zenodo.8226638:
   `bsb_obs_1700.csv`.
 
+The Bolund roughness lengths, water level and the land strip east of x = 327 m used by `bolund_z0_map.py` are
+those of the blind comparison's case description (Bolund_Validation.pdf in `Bolund_Measurements.zip`; Bechmann et
+al. 2011, *Boundary-Layer Meteorol.* 141, 245); only the numbers are used, the file is not copied.
+
 Field campaigns behind the data: Askervein (Taylor and Teunissen 1987, *Boundary-Layer Meteorol.* 39, 15),
 Bolund (Berg et al. 2011, *Boundary-Layer Meteorol.* 141, 219; Bechmann et al. 2011, the blind comparison, DTU
 Wind Energy), Big Southern Butte (Butler et al. 2015, *Atmos. Chem. Phys.* 15, 3785; Forthofer et al. 2014,
@@ -63,6 +68,14 @@ CASES="bolund_270" MODES="rans" Tests/Real_Terrain/WindNinja2019/run_all.sh buil
 BSB_ASC=~/windninja-tools/test_cases/big_butte.asc python3 Tests/Real_Terrain/WindNinja2019/windninja2019.py \
     stats wn2019-runs/*_mc.csv wn2019-runs/*_rans_van_leer.csv --masts wn2019-runs/masts.csv
 ```
+The Bolund water/land roughness (`bc.surface_z0_file`) instead of the decks' single 0.01 m: write the map once,
+then give it in a copy of the deck in place of `bc.surface_z0` (both together abort):
+```bash
+python3 -I Tests/Real_Terrain/WindNinja2019/bolund_z0_map.py wn2019-runs/bolund.xyz wn2019-runs/bolund_z0.xyz
+```
+`windninja2019.py sample --z0` is one value; it only enters below the first cell centre (0.25 m on the Bolund
+mesh), so the 5 m samples do not depend on it.
+
 `run_all.sh` writes one directory per run, `<case>_<mode>.csv` samples and `<case>.png` plots in the run
 directory. Runs are sequential (one case on the machine at a time).
 

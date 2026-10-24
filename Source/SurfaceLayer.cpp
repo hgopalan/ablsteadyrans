@@ -9,6 +9,7 @@
 #include <AMReX_ParmParse.H>
 
 #include <cmath>
+#include <fstream>
 #include <limits>
 #include <string>
 
@@ -20,17 +21,6 @@ constexpr amrex::Real kWsMin = amrex::Real(0.1);        // ERF's minimum wind sp
 constexpr amrex::Real kUstarMin = amrex::Real(0.001);   // ERF's u* floor in L
 constexpr amrex::Real kWallKUstarMin = amrex::Real(0.01);
 constexpr int kMaxNewton = 50;
-
-amrex::BoxArray ground_slab (const amrex::BoxArray& ba)
-{
-    amrex::BoxList bl;
-    for (int n = 0; n < ba.size(); ++n) {
-        amrex::Box b = ba[n];
-        b.setBig(2, b.smallEnd(2));
-        bl.push_back(b);
-    }
-    return amrex::BoxArray(bl);
-}
 
 void check_slab (const char* op, const SurfaceState& s, const amrex::MultiFab& like)
 {
@@ -113,14 +103,16 @@ struct MostRelation
     }
 };
 
-template <bool HEAT, bool FIRST_CENTRE, bool FLOOR_ONE, bool QNSE = false>
+// Z0: the roughness accessor (SurfaceRoughness.H), uniform or the map.
+template <class Z0, bool HEAT, bool FIRST_CENTRE, bool FLOOR_ONE, bool QNSE = false>
 void columns (const State& q, const SurfaceLayerOptions& opt, const BuoyancyOptions& buoy,
               const amrex::Geometry& geom, SurfaceState& s)
 {
+    const Roughness rough = ground_roughness(&opt);
     const auto dxinv = geom.InvCellSizeArray();
     const int nz = geom.Domain().length(2);
     const int klo = geom.Domain().smallEnd(2);
-    const amrex::Real zref_in = opt.zref, z0 = opt.z0, kappa = opt.kappa;
+    const amrex::Real zref_in = opt.zref, kappa = opt.kappa;
     const amrex::Real gq = (buoy.gravity / buoy.theta0) * opt.heat_flux;
     const amrex::Real inv_cmu2 = amrex::Real(1) / (opt.Cmu0 * opt.Cmu0);
     const amrex::Real eps = std::numeric_limits<amrex::Real>::epsilon();
@@ -145,8 +137,10 @@ void columns (const State& q, const SurfaceLayerOptions& opt, const BuoyancyOpti
         const auto dg = s.drag.array(mfi);
         const auto kw = s.kwall.array(mfi);
         const auto ar = s.area.array(mfi);
+        const Z0 zf = Z0::of(rough, mfi);
         amrex::ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i, int j, int) noexcept
         {
+            const amrex::Real z0 = zf(i, j);
             // Captured here, outside the constexpr-if blocks below: nvcc refuses
             // an extended device lambda whose first capture of a variable is
             // inside an if constexpr.
@@ -223,6 +217,34 @@ void columns (const State& q, const SurfaceLayerOptions& opt, const BuoyancyOpti
     }
 }
 
+// The kernel for the options: one instantiation per option set.
+template <class Z0>
+void dispatch_columns (const State& q, const SurfaceLayerOptions& opt, const BuoyancyOptions& buoyancy,
+                       const amrex::Geometry& geom, SurfaceState& s)
+{
+    const bool heat = (opt.stability == SurfaceLayerOptions::Stability::heat_flux);
+    const bool first = !(opt.zref > 0);
+    // QNSE changes only the stable psi_m of the heat-flux u* (its own kernels; neutral has no zeta).
+    const bool qnse = heat && opt.stable_functions == SurfaceLayerOptions::StableFunctions::qnse;
+    const bool one = opt.denominator_floor == SurfaceLayerOptions::DenominatorFloor::one;
+    if (qnse) {
+        if (first && one) { columns<Z0, true, true, true, true>(q, opt, buoyancy, geom, s); }
+        else if (first) { columns<Z0, true, true, false, true>(q, opt, buoyancy, geom, s); }
+        else if (one) { columns<Z0, true, false, true, true>(q, opt, buoyancy, geom, s); }
+        else { columns<Z0, true, false, false, true>(q, opt, buoyancy, geom, s); }
+    } else if (one) {
+        if (heat && first) { columns<Z0, true, true, true>(q, opt, buoyancy, geom, s); }
+        else if (heat) { columns<Z0, true, false, true>(q, opt, buoyancy, geom, s); }
+        else if (first) { columns<Z0, false, true, true>(q, opt, buoyancy, geom, s); }
+        else { columns<Z0, false, false, true>(q, opt, buoyancy, geom, s); }
+    } else {
+        if (heat && first) { columns<Z0, true, true, false>(q, opt, buoyancy, geom, s); }
+        else if (heat) { columns<Z0, true, false, false>(q, opt, buoyancy, geom, s); }
+        else if (first) { columns<Z0, false, true, false>(q, opt, buoyancy, geom, s); }
+        else { columns<Z0, false, false, false>(q, opt, buoyancy, geom, s); }
+    }
+}
+
 } // namespace
 
 std::vector<std::string> check_surface_layer_options (const SurfaceLayerOptions& opt)
@@ -274,15 +296,25 @@ SurfaceLayerOptions read_surface_layer_options ()
     // The ground is a boundary condition: its keys live in bc.surface_*.
     SurfaceLayerOptions opt;
     amrex::ParmParse pp("bc");
-    for (const char* key : {"surface_z0", "surface_zref", "surface_stability", "surface_heat_flux", "surface_wall_k",
-                            "surface_denominator_floor", "surface_stable_functions", "surface_qnse_am", "surface_qnse_bm",
-                            "surface_qnse_ah", "surface_qnse_bh"}) {
+    for (const char* key : {"surface_z0", "surface_z0_file", "surface_zref", "surface_stability", "surface_heat_flux",
+                            "surface_wall_k", "surface_denominator_floor", "surface_stable_functions", "surface_qnse_am",
+                            "surface_qnse_bm", "surface_qnse_ah", "surface_qnse_bh"}) {
         if (pp.countname(key) > 1) { amrex::Abort(std::string("gust: bc.") + key + " is given more than once"); }
         if (pp.contains(key) && pp.countval(key) != 1) {
             amrex::Abort(std::string("gust: bc.") + key + " takes exactly one value");
         }
     }
+    if (pp.contains("surface_z0") && pp.contains("surface_z0_file")) {
+        amrex::Abort("gust: bc.surface_z0 and bc.surface_z0_file cannot both be given (one roughness: a value or a map)");
+    }
     pp.query("surface_z0", opt.z0);
+    if (pp.query("surface_z0_file", opt.z0_file)) {
+        if (opt.z0_file.empty()) { amrex::Abort("gust: bc.surface_z0_file is empty: give a file of 'x y z0' points"); }
+        // Checked here, so that a run that never reads the map (no stage) still refuses a missing file.
+        int readable = amrex::ParallelDescriptor::IOProcessor() ? (std::ifstream(opt.z0_file).good() ? 1 : 0) : 0;
+        amrex::ParallelDescriptor::Bcast(&readable, 1, amrex::ParallelDescriptor::IOProcessorNumber());
+        if (readable == 0) { amrex::Abort("gust: bc.surface_z0_file = " + opt.z0_file + ": cannot be read"); }
+    }
     pp.query("surface_zref", opt.zref);
     pp.query("surface_heat_flux", opt.heat_flux);
     pp.query("surface_qnse_am", opt.qnse_am);
@@ -377,26 +409,11 @@ void compute_surface_state (const State& q, const SurfaceLayerOptions& opt, cons
         s.tau.clear();
         s.tau.define(ba2, dm, 3, ng);
     }
-    const bool heat = (opt.stability == SurfaceLayerOptions::Stability::heat_flux);
-    const bool first = !(opt.zref > 0);
-    // QNSE changes only the stable psi_m of the heat-flux u* (its own kernels; neutral has no zeta).
-    const bool qnse = heat && opt.stable_functions == SurfaceLayerOptions::StableFunctions::qnse;
-    const bool one = opt.denominator_floor == SurfaceLayerOptions::DenominatorFloor::one;
-    if (qnse) {
-        if (first && one) { columns<true, true, true, true>(q, opt, buoyancy, geom, s); }
-        else if (first) { columns<true, true, false, true>(q, opt, buoyancy, geom, s); }
-        else if (one) { columns<true, false, true, true>(q, opt, buoyancy, geom, s); }
-        else { columns<true, false, false, true>(q, opt, buoyancy, geom, s); }
-    } else if (one) {
-        if (heat && first) { columns<true, true, true>(q, opt, buoyancy, geom, s); }
-        else if (heat) { columns<true, false, true>(q, opt, buoyancy, geom, s); }
-        else if (first) { columns<false, true, true>(q, opt, buoyancy, geom, s); }
-        else { columns<false, false, true>(q, opt, buoyancy, geom, s); }
+    if (opt.z0_map != nullptr) {
+        check_roughness_map(op, *opt.z0_map, mesh.detJ);
+        dispatch_columns<MapZ0>(q, opt, buoyancy, geom, s);
     } else {
-        if (heat && first) { columns<true, true, false>(q, opt, buoyancy, geom, s); }
-        else if (heat) { columns<true, false, false>(q, opt, buoyancy, geom, s); }
-        else if (first) { columns<false, true, false>(q, opt, buoyancy, geom, s); }
-        else { columns<false, false, false>(q, opt, buoyancy, geom, s); }
+        dispatch_columns<UniformZ0>(q, opt, buoyancy, geom, s);
     }
 
     // Every column the ground fluxes read (ghost columns included) needs a
@@ -418,7 +435,7 @@ void compute_surface_state (const State& q, const SurfaceLayerOptions& opt, cons
     if (bad > 0) {
         amrex::Abort("gust: compute_surface_state: no positive, finite friction velocity at "
                      + std::to_string(bad) + " columns (surface layer heat_flux = " + std::to_string(opt.heat_flux)
-                     + ", z0 = " + std::to_string(opt.z0) + ")");
+                     + (opt.z0_map != nullptr ? ", z0 from bc.surface_z0_file" : ", z0 = " + std::to_string(opt.z0)) + ")");
     }
 }
 

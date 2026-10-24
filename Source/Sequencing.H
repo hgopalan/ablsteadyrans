@@ -141,6 +141,9 @@ struct RunSetup
     PoissonOptions popt;
     SurfaceLayerOptions surf;
     bool surface_layer{false};
+    //! terrain.idw_neighbors and terrain.idw_power: the interpolation of bc.surface_z0_file (SurfaceRoughness.H).
+    int idw_neighbors{6};
+    amrex::Real idw_power{2};
     ClosureOptions copt;
     ForcingOptions fopt;
     ConvectionInputs cin;
@@ -154,6 +157,9 @@ struct RunSetup
 //! own boundary conditions, closure and wall distance; with newton (level 0
 //! of steady.stage = simplec_newton) the Newton stage too (NewtonStage.H).
 //! setup, mesh, geom and z_nd are referenced: they must outlive the solver.
+//! With bc.surface_z0_file the level owns its roughness map (SurfaceRoughness.H):
+//! read from the file when z0_fine is null (level 0), else averaged from
+//! level 0's map z0_fine.
 //! label prefixes its log lines ("" for level 0, whose lines are those of a
 //! run without sequencing).
 class LevelSolver
@@ -161,7 +167,7 @@ class LevelSolver
 public:
     LevelSolver (const RunSetup& setup, const Mesh& mesh, const amrex::Geometry& geom, const amrex::MultiFab& z_nd,
                  const amrex::BoxArray& ba, const amrex::DistributionMapping& dm, const std::string& label,
-                 bool newton = false);
+                 bool newton = false, const amrex::MultiFab* z0_fine = nullptr);
     // res_in, the stage's copy of it and the driver's diffusivity point into
     // this object: it can be neither copied nor moved.
     LevelSolver (const LevelSolver&) = delete;
@@ -172,6 +178,9 @@ public:
     BoundaryConditions bc;
     Closure closure;
     amrex::MultiFab dist;          //!< the wall distance (one ghost cell)
+    //! The surface-layer options of this level: the run's, with z0_map set to z0_map_field when there is a map.
+    SurfaceLayerOptions surf;
+    amrex::MultiFab z0_map_field;  //!< the roughness map (empty without bc.surface_z0_file)
     ResidualInputs res_in;
 
     [[nodiscard]] Driver& driver () { return *m_driver; }

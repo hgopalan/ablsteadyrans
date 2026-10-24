@@ -4,10 +4,17 @@ Bibliography
 Axell, L. B., Liungman, O. (2001). A one-equation turbulence model for geophysical applications: comparison with
 data and the k–ε model. *Environmental Fluid Mechanics* 1, 71–106.
 
+Bechmann, A., Sørensen, N. N., Berg, J., Mann, J., Réthoré, P.-E. (2011). The Bolund experiment, part II: blind
+comparison of microscale flow models. *Boundary-Layer Meteorology* 141, 245–271. The case definitions, roughness
+and water level are in Bolund_Validation.pdf of the Bolund measurement archive (DTU Wind Energy).
+
 Burchard, H., Petersen, O. (1999). Models of turbulence in the marine environment — a comparative study of
 two-equation turbulence models. *Journal of Marine Systems* 21, 29–53.
 
 Dyer, A. J. (1974). A review of flux-profile relationships. *Boundary-Layer Meteorology* 7, 363–372.
+
+Elliott, W. P. (1958). The growth of the atmospheric internal boundary layer. *Transactions, American Geophysical
+Union* 39, 1048–1054.
 
 Forthofer, J. M., Butler, B. W., Wagenbrenner, N. S. (2014). A comparison of three approaches for simulating
 fine-scale surface winds in support of wildland fire management. Part I. Model formulation and comparison against
@@ -18,6 +25,9 @@ equations and a multigrid method. *Journal of Computational Physics* 48, 387–4
 
 Klemp, J. B. (2011). A terrain-following coordinate with smoothed coordinate surfaces. *Monthly Weather Review* 139,
 2163–2169.
+
+Mason, P. J. (1988). The formation of areally-averaged roughness lengths. *Quarterly Journal of the Royal
+Meteorological Society* 114, 399–420.
 
 Mulder, W. A., van Leer, B. (1985). Experiments with implicit upwind methods for the Euler equations. *Journal of
 Computational Physics* 59, 232–246.

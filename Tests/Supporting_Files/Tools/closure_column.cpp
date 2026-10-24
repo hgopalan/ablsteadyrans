@@ -103,6 +103,7 @@ int main (int argc, char* argv[])
         if (in.mesh.hierarchy_levels != 1) { err.emplace_back("mesh.hierarchy_levels has no effect in closure_column"); }
         gust::BoundaryInputs bin = gust::read_boundary_inputs();
         gust::SurfaceLayerOptions sopt = gust::read_surface_layer_options();
+        if (!sopt.z0_file.empty()) { amrex::Abort("closure_column: bc.surface_z0_file is not supported (one bc.surface_z0)"); }
         const gust::ClosureOptions copt = gust::read_closure_options();
         // One Cmu0 and kappa for the wall law, the wall k and the closure (the
         // state is their common equilibrium), as in the application.

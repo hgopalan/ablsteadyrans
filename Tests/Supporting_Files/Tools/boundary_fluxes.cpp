@@ -76,6 +76,7 @@ int main (int argc, char* argv[])
         if (in.mesh.hierarchy_levels != 1) { err.emplace_back("mesh.hierarchy_levels has no effect in boundary_fluxes"); }
         const gust::BoundaryInputs bin = gust::read_boundary_inputs();
         const gust::SurfaceLayerOptions sopt = gust::read_surface_layer_options();
+        if (!sopt.z0_file.empty()) { amrex::Abort("boundary_fluxes: bc.surface_z0_file is not supported (one bc.surface_z0)"); }
         amrex::Real ustar = amrex::Real(0.4), z0 = amrex::Real(0.1), direction = 0;
         {
             amrex::ParmParse pp("fixed_state");

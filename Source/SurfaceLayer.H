@@ -15,6 +15,7 @@
 //   slopes; the log law in d + z0 matches the closure's l_g = kappa (d + z0)
 //   (Closure.H) and ERF's neutral check, u = (u*/kappa) ln((z + z0)/z0);
 // - z0 the roughness, q the kinematic surface heat flux (K m/s, upward > 0),
+//   per column from a map with bc.surface_z0_file (SurfaceRoughness.H),
 //   g and theta_0 the buoyancy options' (Forcing.H), psi_m the Businger-Dyer
 //   function of ERF (extern_erf/ERF_MOSTUtils.H, unchanged), z/L clamped to
 //   [-100, 100] and the denominator kept >= m (strong convection at low wind
@@ -69,6 +70,7 @@
 #include "Mesh.H"
 #include "StabilityFunctions.H"
 #include "State.H"
+#include "SurfaceRoughness.H"
 
 #include <AMReX_Geometry.H>
 #include <AMReX_MultiFab.H>
@@ -102,8 +104,14 @@ struct SurfaceLayerOptions
     //! one m = 1 (the earlier form).
     enum class DenominatorFloor { log_law, one };
 
-    //! Roughness length z0 (m, > 0).
+    //! Roughness length z0 (m, > 0): bc.surface_z0, every column's when z0_map is null.
     amrex::Real z0{amrex::Real(0.1)};
+    //! bc.surface_z0_file: a file of "x y z0" points (empty: the uniform z0).
+    std::string z0_file;
+    //! The level's roughness map from z0_file (SurfaceRoughness.H; null: the
+    //! uniform z0). The level that owns the map sets it (LevelSolver); every
+    //! reader of these options on that level then takes z0 per column.
+    const amrex::MultiFab* z0_map{nullptr};
     //! Reference height above the ground, vertical (m); <= 0 means each
     //! column's first cell centre. Otherwise it must lie between the first
     //! and last cell-centre heights of every column.
@@ -134,7 +142,15 @@ struct SurfaceLayerOptions
 //! Problems with the options, one message per problem, naming the option.
 std::vector<std::string> check_surface_layer_options (const SurfaceLayerOptions& opt);
 
-//! Read the ground's keys, bc.surface_z0, bc.surface_zref,
+//! The roughness the closure takes from the ground: the options' map or
+//! uniform z0; 0 without a surface layer (as ERF).
+inline Roughness ground_roughness (const SurfaceLayerOptions* opt)
+{
+    if (opt == nullptr) { return Roughness(amrex::Real(0)); }
+    return Roughness(opt->z0, opt->z0_map);
+}
+
+//! Read the ground's keys, bc.surface_z0 or bc.surface_z0_file (not both), bc.surface_zref,
 //! bc.surface_stability (neutral | heat_flux), bc.surface_heat_flux and
 //! bc.surface_wall_k (dirichlet | source), bc.surface_denominator_floor
 //! (log_law | one), bc.surface_stable_functions (businger_dyer | qnse) and

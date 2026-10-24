@@ -110,6 +110,8 @@ Inputs parse_inputs ()
         pp.query("idw_neighbors", t.idw_neighbors);
         pp.query("idw_power", t.idw_power);
         pp.query("hierarchy_passes", t.hierarchy_passes);
+        // The roughness map (bc.surface_z0_file, SurfaceRoughness.H) shares the IDW keys.
+        t.idw_for_z0_map = amrex::ParmParse("bc").contains("surface_z0_file");
     }
 
     {
@@ -256,14 +258,16 @@ std::vector<std::string> validate (const Inputs& in)
             if (given(k)) { err.emplace_back(std::string("terrain.") + k + " has no effect unless terrain.type = agnesi"); }
         }
     }
-    if (t.type == "xyz") {
+    if (t.type == "xyz" || t.idw_for_z0_map) {
         if (t.idw_neighbors < 1) { err.emplace_back("terrain.idw_neighbors must be >= 1"); }
         if (!std::isfinite(t.idw_power) || !(t.idw_power > 0)) {
             err.emplace_back("terrain.idw_power must be finite and > 0");
         }
     } else {
         for (const char* k : {"idw_neighbors", "idw_power"}) {
-            if (given(k)) { err.emplace_back(std::string("terrain.") + k + " has no effect unless terrain.type = xyz"); }
+            if (given(k)) {
+                err.emplace_back(std::string("terrain.") + k + " has no effect unless terrain.type = xyz or bc.surface_z0_file is given");
+            }
         }
     }
 

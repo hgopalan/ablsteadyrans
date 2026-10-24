@@ -80,7 +80,8 @@ similarity theory (MOST). In each column,
   the last two cell centres reads the top :math:`w` face, which the fill writes too; over a top that is not flat the
   fill is then a fixed point only to that face's change.
 - :math:`d = h/|A|`: distance from the ground along its normal, with :math:`|A| = \sqrt{1 + z_x^2 + z_y^2}`.
-- :math:`z_0`: roughness length (``bc.surface_z0``).
+- :math:`z_0`: roughness length (``bc.surface_z0``, or per column from ``bc.surface_z0_file``,
+  :ref:`roughness map <roughness-map>`).
 - :math:`q`: kinematic surface heat flux (``bc.surface_heat_flux``).
 - :math:`L_O`: Obukhov length.
 - :math:`\psi_m`: ERF's Businger–Dyer stability function, or QNSE's on the stable side (below).
@@ -143,6 +144,44 @@ The wall model replaces the diffusive fluxes through the ground:
 
 The ghost cells below the ground continue the MOST profile.
 
+.. _roughness-map:
+
+**Roughness map.** ``bc.surface_z0_file`` replaces the single :math:`z_0` with one value per ground column, for a
+surface such as water beside land. The file holds ``x y z0`` points (the format of ``terrain.file``). Each ground
+column takes the inverse-distance-weighted mean of :math:`\ln z_0` over the ``terrain.idw_neighbors`` nearest
+points (weight :math:`r^{-p}`, :math:`p` = ``terrain.idw_power``) at its cell centre:
+
+.. math::
+
+   z_{0,ij} = z_{0,\mathrm{ref}}\,\exp\!\left(\frac{\sum_n w_n \ln(z_{0,n}/z_{0,\mathrm{ref}})}{\sum_n w_n}\right),
+   \qquad w_n = r_n^{-p},
+
+- :math:`z_{0,n}`: the file's value at point :math:`n`, at distance :math:`r_n` from the cell centre;
+- :math:`z_{0,\mathrm{ref}}`: the file's largest value (a file of one value then gives that value exactly).
+
+The log law depends on :math:`z_0` through :math:`\ln z_0`, so the mean is taken on that scale; an arithmetic mean
+would let a few rough points dominate a smooth neighbour. A point within :math:`10^{-6}` m of the centre gives its own
+value. Ghost columns take the column they image (periodic image, or the nearest domain column). Every reader of
+:math:`z_0` on the ground uses the column's value: the wall model above, the ghost fill's wall-law gradient, and the
+turbulence model's geometric length :math:`\kappa(d + z_0)`. The inflow profile keeps ``bc.inflow_z0``; where it
+differs from the map next to the inflow face, an internal boundary layer grows from that face (over water
+:math:`z_0 = 0.0003` m below an inflow of :math:`z_0 = 0.01` m, about 9 m deep after 200 m by Elliott's 1958 estimate),
+so the inflow should take the upstream surface's :math:`z_0` and a matching :math:`u_*`.
+
+On the coarse levels of grid sequencing (``mesh.hierarchy_levels`` > 1) a coarse column covering
+:math:`r \times r` level-0 columns takes their geometric mean,
+:math:`z_{0,c} = z_{0,\mathrm{ref}} \exp\big(\tfrac{1}{r^2}\sum \ln(z_{0}/z_{0,\mathrm{ref}})\big)`. This is a
+simple aggregation on the log-law scale, not a blending-height drag average (Mason 1988): in a column half water
+and half land it gives about 20–30 % less drag at a 0.5–1 m first centre than the area mean of the two drags. The
+coarse levels only seed level 0, which uses the map itself. The run prints the minimum, maximum and geometric mean of each level's
+map, and the turbulence plotfile (``io.turb_plot_file``) holds it as ``z0`` on the first cells. A restart reads the
+file the deck names again: the checkpoint does not record the map. ``init.first_guess = column`` needs a single
+:math:`z_0` and refuses a map.
+
+``Tests/Real_Terrain/WindNinja2019/bolund_z0_map.py`` writes the Bolund map from the Bolund terrain points: 0.0003 m over water (terrain at or
+below the 0.75 m water level) and 0.015 m over land, with land roughness east of :math:`x = 327` m, the values and
+rules of the Bolund blind comparison (Bechmann et al. 2011).
+
 Inflow profile
 --------------
 
@@ -175,7 +214,7 @@ wind's shear: shear production equals dissipation in the neutral k–L closure (
 - A :math:`k` column is used as given, and ``bc.inflow_tke_length`` is refused (it would change nothing).
 - The equilibrium is the neutral one, also above an inversion, and the height is the height above the ground (the
   closure's wall distance with ``turb.wall_distance = terrain_height``). The roughness is ``bc.inflow_z0``, which
-  should equal ``bc.surface_z0``.
+  should equal ``bc.surface_z0``, or with ``bc.surface_z0_file`` the map's :math:`z_0` next to the inflow face.
 - A log-law wind with the capped length is not a momentum equilibrium (its stress falls with height as
   :math:`(l/\kappa(z + z_0))^2`); with the unbounded length the :math:`k` equation was out of balance instead. The
   domain adjusts either way; the capped form at least balances the :math:`k` equation.

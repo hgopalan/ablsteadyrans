@@ -327,6 +327,8 @@ void run ()
         setup.popt = popt;
         setup.surf = surf;
         setup.surface_layer = surface_layer;
+        setup.idw_neighbors = in.terrain.idw_neighbors;
+        setup.idw_power = in.terrain.idw_power;
         setup.copt = copt;
         setup.fopt = fopt;
         setup.cin = cin;
@@ -440,15 +442,16 @@ void run ()
             // The closure's fields and the wall state at the final state.
             bc.fill_ghosts(state, res_in.surface, fopt.buoyancy, false, nullptr);
             ClosureFields cf;
-            closure.evaluate(state, dist, surface_layer ? surf.z0 : amrex::Real(0), fopt.buoyancy, mesh, geom, cf);
+            closure.evaluate(state, dist, ground_roughness(res_in.surface), fopt.buoyancy, mesh, geom, cf);
             SurfaceState ss;
-            if (surface_layer) { compute_surface_state(state, surf, fopt.buoyancy, mesh, geom, ss); }
+            if (surface_layer) { compute_surface_state(state, *res_in.surface, fopt.buoyancy, mesh, geom, ss); }
             ResidualFields R;
             ResidualInputs plot_in = res_in;   // the residual the run converged: with the stage's upwind blend
             if (!simplec_stage.hybrid_sigma().empty()) { plot_in.hybrid_sigma = &simplec_stage.hybrid_sigma(); }
             residual(state, plot_in, mesh, geom, R);
             const auto name = write_turbulence_plotfile(in.io.turb_plot_file, state, cf, dist, surface_layer ? &ss : nullptr,
-                                                        copt, geom, &R);
+                                                        copt, geom, &R,
+                                                        res_in.surface != nullptr ? res_in.surface->z0_map : nullptr);
             amrex::Print() << "gust: wrote " << name << "\n";
         }
         if (v.status == SteadyStatus::Diverged) { amrex::Abort("gust: the run diverged" + reasons); }

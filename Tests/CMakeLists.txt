@@ -35,6 +35,7 @@ add_executable(unit_tests
     Unit_Tests/test_MassFlux.cpp
     Unit_Tests/test_Residual.cpp
     Unit_Tests/test_SurfaceLayer.cpp
+    Unit_Tests/test_SurfaceRoughness.cpp
     Unit_Tests/test_BoundaryConditions.cpp
     Unit_Tests/test_Closure.cpp
     Unit_Tests/test_Initializer.cpp
@@ -361,6 +362,16 @@ gust_add_test(NAME rt_sequencing_restart NP 2 LABELS "regression;smoke" RUN_DIR 
                      "driver history restored: 3 iterations, cfl .*, reference hold 0 iterations \\(released" --
               COMMAND $<TARGET_FILE:gust> ${HILL3D_NEUTRAL_CASE}/inputs_sequencing_restart steady.max_iterations=6
                       io.restart=seq_chk00003 io.chk_file=seq_chk_b ${GUST_TEST_AMREX_FLAGS})
+# The roughness map on the two-level deck: each level's logged summary against the Python values
+# (README.md): level 1 is the geometric mean of level 0's 2 x 2 blocks, not a fresh IDW of the file.
+gust_add_test(NAME rt_sequencing_z0map NP 2 LABELS "regression;smoke"
+              PREFIX ${EXPECT_ABORT} --success
+                     "gust: surface z0 map \\(bc\\.surface_z0_file\\): min 0\\.000302[0-9]*, max 0\\.0148[0-9]*, geometric mean 0\\.00212[0-9]* m"
+                     "gust: level 1: surface z0 map \\(geometric mean of level 0\\): min 0\\.000313[0-9]*, max 0\\.0143[0-9]*, geometric mean 0\\.00212[0-9]* m"
+                     "gust: not steady after 3 iterations" "gust: wrote z0map_turb" --
+              COMMAND $<TARGET_FILE:gust> ${HILL3D_NEUTRAL_CASE}/inputs_sequencing_z0map steady.max_iterations=3
+                      init.first_guess=profile bc.surface_z0_file=${HILL3D_NEUTRAL_CASE}/z0_two_points.xyz
+                      ${GUST_TEST_AMREX_FLAGS})
 # Old against new steady.sequencing_hold on the same two-level deck (only
 # level 0 is seeded; seconds): with the hold (1, the default before) level 0 runs
 # its first iterations at steady.cfl0 with r = 1; without it (0, the
